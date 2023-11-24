@@ -1,0 +1,5 @@
+# Change these at your peril:
+export PROJECT_NAME=heat_pump_suitability
+export REPO_NAME=asf_heat_pump_suitability
+export DESCRIPTION=Early-stage scoping of a project to identify which homes/streets are likely to be suitable (or unsuitable) for which types of heat pumps.
+export PROJECT_OPENNESS=public
