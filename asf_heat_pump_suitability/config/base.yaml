@@ -1,0 +1,12 @@
+data_source:
+  gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
+  gb_ons_postcode_dir_file_path: "Data/ONSPD_AUG_2023_UK.csv" # Aug 2023 data
+usecols:
+  epc:
+    - COUNTRY
+    - ADDRESS1
+    - ADDRESS2
+    - POSTCODE
+    - CURR_ENERGY_RATING_NUM
+    - ENERGY_RATING_CAT
+    - UPRN
