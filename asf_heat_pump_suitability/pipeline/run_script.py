@@ -5,7 +5,7 @@ import pathlib
 from typing import Optional
 from argparse import ArgumentParser
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.pipeline import enhance_epc_functions
+from asf_heat_pump_suitability.pipeline import enhance_epc
 
 
 def run():
@@ -52,7 +52,7 @@ def main(epc_path: str, save_output: Optional[str]) -> pl.DataFrame:
         epc_df = pl.read_parquet(epc_path, columns=config["usecols"]["epc"])
 
     # Join ONSPD LSOA col
-    enhanced_epc_df = enhance_epc_functions.join_df_additional_features(epc_df)
+    enhanced_epc_df = enhance_epc.join_df_additional_features(epc_df)
 
     # Save to S3
     if save_output:
