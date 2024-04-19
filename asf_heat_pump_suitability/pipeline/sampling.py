@@ -1,10 +1,12 @@
 import polars as pl
 from typing import Dict, List, Tuple
+import s3fs
+import logging
 
 
 def filter_df_area_sample_epc(
     df: pl.DataFrame,
-    area: str = "lsoa",
+    area: str,
     country_codes: list = ["E", "S", "W"],
     min_count: int = 10,
 ) -> pl.DataFrame:
@@ -13,7 +15,7 @@ def filter_df_area_sample_epc(
 
     Args
         df (pl.DataFrame): EPC dataset
-        area (str): area-type to sample dataset by. Default `"lsoa"`
+        area (str): area-type to sample dataset by
         min_count (int): minimum count of UPRNs in areas selected. Default `10`
         country_codes (list): country codes to sample from. Default `["E", "S", "W"]`
 
@@ -69,3 +71,22 @@ def _get_dicts_sample_per_nation(df: pl.DataFrame, country_codes: list) -> List[
         df.filter(pl.col("country_code") == cc).sample(1, seed=8).to_dicts()[0]
         for cc in country_codes
     ]
+
+
+if __name__ == "__main__":
+
+    from asf_heat_pump_suitability.pipeline import run_script
+
+    epc_path = (
+        "s3://asf-daps/lakehouse/processed/epc/deduplicated/processed_dedupl-0.parquet"
+    )
+    epc = run_script.main(epc_path=epc_path, save_output=None)
+
+    # Sample by LSOA & MSOA and save
+    for oa in ["lsoa", "msoa"]:
+        sample = filter_df_area_sample_epc(epc, area=oa)
+        fs = s3fs.S3FileSystem()
+        save_path = f"s3://asf-heat-pump-suitability/outputs/epc_sample_{oa}.parquet"
+        logging.info(f"Saving {oa} sample to: {save_path}")
+        with fs.open(save_path, mode="wb") as f:
+            sample.write_parquet(f)
