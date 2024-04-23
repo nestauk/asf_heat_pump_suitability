@@ -75,7 +75,7 @@ def _get_dicts_sample_per_nation(df: pl.DataFrame, country_codes: list) -> List[
 
 if __name__ == "__main__":
 
-    from asf_heat_pump_suitability.pipeline import run_script
+    from asf_heat_pump_suitability.pipeline.enhance_epc import run_script
 
     epc_path = (
         "s3://asf-daps/lakehouse/processed/epc/deduplicated/processed_dedupl-0.parquet"

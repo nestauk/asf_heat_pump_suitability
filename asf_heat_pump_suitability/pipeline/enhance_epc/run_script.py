@@ -5,7 +5,7 @@ import pathlib
 from typing import Optional
 from argparse import ArgumentParser
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.pipeline import enhance_epc
+from asf_heat_pump_suitability.pipeline.enhance_epc import enhance_epc
 
 
 def run():
