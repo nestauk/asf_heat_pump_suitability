@@ -3,16 +3,16 @@
 ## Enhance EPC dataset
 
 To generate the enhanced EPC dataset with additional feature columns (currently LSOA and MSOA) and save to S3 `asf-heat-pump-suitability`, run:
-`python asf_heat_pump_suitability/pipeline/run_script.py --epc_path [path/to/processed/EPC] --save_output [path/to/save/output/to]`
+`python asf_heat_pump_suitability/pipeline/enhance_epc/run_script.py --epc_path [path/to/processed/EPC] --save_output [path/to/save/output/to]`
 
 Run the following line for more information on possible arguments:
-`python asf_heat_pump_suitability/pipeline/run_script.py -h`
+`python asf_heat_pump_suitability/pipeline/enhance_epc/run_script.py -h`
 
 ## Get sample EPC datasets
 
 To take a sample subset of the EPC dataset to work with, run the following command in terminal after navigating to the
 `asf_heat_pump_suitability` root folder:
-`python asf_heat_pump_suitability/pipeline/sampling.py`
+`python asf_heat_pump_suitability/pipeline/get_samples/sample_by_area.py`
 
 The script will produce two datasets which are saved to S3 in `asf-heat-pump-suitability/outputs`:
 
