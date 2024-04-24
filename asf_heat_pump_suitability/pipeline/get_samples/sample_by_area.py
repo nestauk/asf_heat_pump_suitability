@@ -9,51 +9,68 @@ def filter_df_area_sample_epc(
     area: str,
     country_codes: list = ["E", "S", "W"],
     min_count: int = 10,
+    quantiles: List[int] = [0, 0.25, 0.5, 0.75, 1],
 ) -> pl.DataFrame:
     """
-    Filter EPC dataset to sampled areas with min and max count of UPRNs.
+    Filter EPC dataset to sampled areas with count of UPRNs cut at specified quantiles.
 
     Args
         df (pl.DataFrame): EPC dataset
         area (str): area-type to sample dataset by
         min_count (int): minimum count of UPRNs in areas selected. Default `10`
         country_codes (list): country codes to sample from. Default `["E", "S", "W"]`
+        quantiles (List[int]): quantiles to sample from. Value 0 <= x <= 1.
 
     Returns
         pl.DataFrame: subset of EPC dataset with sampled areas only
     """
-    min, max = get_dicts_minmax_sample_per_nation(df, area, country_codes, min_count)
-    sample_areas = [d.get(area) for d in min]
-    sample_areas.extend([d.get(area) for d in max])
+    _dicts = get_dicts_quantile_sample_per_nation(
+        df=df,
+        area=area,
+        country_codes=country_codes,
+        min_count=min_count,
+        quantiles=quantiles,
+    )
+    sample_areas = [d.get(area) for d in _dicts]
 
     return df.filter(pl.col(area).is_in(sample_areas))
 
 
-def get_dicts_minmax_sample_per_nation(
-    df: pl.DataFrame, area: str, country_codes: list, min_count: int
+def get_dicts_quantile_sample_per_nation(
+    df: pl.DataFrame,
+    area: str,
+    country_codes: list,
+    min_count: int,
+    quantiles: List[int],
 ) -> Tuple[List[Dict]]:
     """
-    Get sample areas from EPC dataset. Get areas in each nation with min and max count of UPRNs.
+    Get sample areas from EPC dataset. Get areas in each nation with count of UPRNs cut at specified quantiles.
 
     Args
         df (pl.DataFrame): EPC dataset
         area (str): name of area-type column to sample dataset by
-        min_count (int): minimum count of UPRNs in areas selected
         country_codes (list): country codes to sample from
+        min_count (int): minimum count of UPRNs in areas selected
+        quantiles (List[int]): quantiles to sample from. Value 0 <= x <= 1.
 
     Returns
-        tuple[list[dict]]: dicts containing sample information for two sample areas per nation: min and max count of UPRNs.
+        tuple[list[dict]]: dicts containing sample information for each sample area per nation at specified quantiles
     """
     _count = df.group_by([area, "country_code"]).agg(pl.col("UPRN").count())
-    _count = _count.filter(pl.col("UPRN") >= min_count)
+    _count = _count.filter(pl.col("UPRN") >= min_count).sort(area)
 
-    # Get min and max UPRN counts
-    _min = _count.filter(UPRN=pl.col("UPRN").min().over("country_code"))
-    _max = _count.filter(UPRN=pl.col("UPRN").max().over("country_code"))
+    sample_areas = []
+    for q in quantiles:
+        _df = _count.filter(
+            UPRN=pl.col("UPRN")
+            .quantile(quantile=q, interpolation="nearest")
+            .over("country_code")
+        )
+        sample_areas.extend(
+            _get_dicts_sample_per_nation(_df, country_codes=country_codes)
+        )
 
-    return _get_dicts_sample_per_nation(
-        _min, country_codes
-    ), _get_dicts_sample_per_nation(_max, country_codes)
+    return sample_areas
 
 
 def _get_dicts_sample_per_nation(df: pl.DataFrame, country_codes: list) -> List[Dict]:
