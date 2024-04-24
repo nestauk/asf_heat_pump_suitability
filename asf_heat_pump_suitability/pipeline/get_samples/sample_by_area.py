@@ -57,7 +57,7 @@ def get_dicts_quantile_sample_per_nation(
         tuple[list[dict]]: dicts containing sample information for each sample area per nation at specified quantiles
     """
     _count = df.group_by([area, "country_code"]).agg(pl.col("UPRN").count())
-    _count = _count.filter(pl.col("UPRN") >= min_count)
+    _count = _count.filter(pl.col("UPRN") >= min_count).sort(area)
 
     sample_areas = []
     for q in quantiles:
