@@ -1,6 +1,7 @@
 data_source:
   gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
   gb_ons_postcode_dir_file_path: "Data/ONSPD_AUG_2023_UK.csv" # Aug 2023 data
+  EW_housing_characteristics_target_url: "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/housing/datasets/numberofdwellingsbyhousingcharacteristicsinenglandandwales/2021comparedwith2011/hou01tables2021.xlsx" # 2021 census, Mar 2023 update
 usecols:
   epc:
     - COUNTRY
