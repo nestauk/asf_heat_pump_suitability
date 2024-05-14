@@ -1,6 +1,8 @@
 data_source:
   gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
   gb_ons_postcode_dir_file_path: "Data/ONSPD_AUG_2023_UK.csv" # Aug 2023 data
+  UK_ons_postcode_dir: "s3://asf-heat-pump-suitability/source_data/ONSPD_AUG_2023_UK.csv"
+  EW_housing_characteristics_census: "s3://asf-heat-pump-suitability/source_data/2021census_Mar2023update_housing_characteristics_E_W.xlsx" # 2021 census, Mar 2023 update
 usecols:
   epc:
     - COUNTRY

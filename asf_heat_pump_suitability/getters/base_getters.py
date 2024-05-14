@@ -6,6 +6,23 @@ import logging
 from asf_heat_pump_suitability import config
 
 
+def get_df_from_excel_url(url: str, **kwargs) -> pl.DataFrame:
+    """
+    Get dataframe from Excel file stored at URL.
+
+    Args
+        url (str): URL location of Excel file download
+        **kwargs for pl.read_excel()
+
+    Returns
+        pl.DataFrame: dataframe from Excel file
+    """
+    content = _get_content_from_url(url)
+    df = pl.read_excel(content, **kwargs)
+
+    return df
+
+
 def get_df_from_zip_url(url: str, extract_file: str, **kwargs) -> pl.DataFrame:
     """
     Get dataframe from ZIP file stored at URL.
