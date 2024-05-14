@@ -2,6 +2,7 @@
 import random
 import polars as pl
 import balance
+import s3fs
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
@@ -95,11 +96,15 @@ sample = (
 # ## Import validation sets
 
 # %%
-# Load property_type data from census
-property_type_path = config["data_source"]["EW_housing_characteristics_target_url"]
-property_type = base_getters.get_df_from_excel_url(
-    property_type_path, sheet_name="2c", engine="calamine"
-)
+# Load target dataset from census
+target_path = config["data_source"]["EW_housing_characteristics_census"]
+fs = s3fs.S3FileSystem()
+with fs.open(target_path, mode="rb") as f:
+    content = f.read()
+
+# %%
+# Load property type data from census
+property_type = pl.read_excel(content, sheet_name="2c", engine="calamine")
 
 property_type = property_type.rename(
     property_type[2].to_dicts().pop()
@@ -111,10 +116,7 @@ property_type = property_type.rename({"Area Code": "lsoa"})
 
 # %%
 # Load tenure data from census
-tenure_path = config["data_source"]["EW_housing_characteristics_target_url"]
-tenure = base_getters.get_df_from_excel_url(
-    tenure_path, sheet_name="3c", engine="calamine"
-)
+tenure = pl.read_excel(content, sheet_name="3c", engine="calamine")
 
 tenure = tenure.rename(tenure[2].to_dicts().pop())
 tenure = tenure.slice(
@@ -217,6 +219,7 @@ def generate_df_dummies(feature_dicts):
 
 
 # %%
+# Create dummy df
 _dfs = generate_df_dummies(target_features)
 
 dummy_rows = pl.concat(_dfs, how="horizontal").with_columns(
@@ -224,16 +227,16 @@ dummy_rows = pl.concat(_dfs, how="horizontal").with_columns(
 )
 dummy_rows = dummy_rows.with_columns(
     pl.Series(name="id", values=[f"dummy_{_}" for _ in range(0, len(dummy_rows))])
-)  # create dummy df
+)
 
-
+# %%
 # Fill in null values in dummy df
 for feature in ["tenure", "property_type"]:
-    missing_vals = list(dummy_rows.drop_nulls()[feature].unique())
-    if dummy_rows[feature].is_null().sum() > 0:
-        if len(missing_vals) > 0:  # fill with random missing category first
+    missing_cats = list(dummy_rows[feature].drop_nulls().unique())
+    if dummy_rows[feature].is_null().any():
+        if len(missing_cats) > 0:  # fill with random missing category first
             dummy_rows = dummy_rows.with_columns(
-                pl.col(feature).fill_null(random.choices(missing_vals, k=1)[0])
+                pl.col(feature).fill_null(random.choices(missing_cats, k=1)[0])
             )
         else:  # otherwise, fill with category with max count in sample
             dummy_rows = dummy_rows.with_columns(
@@ -270,3 +273,5 @@ adjusted_sample.covars().plot()
 weights = adjusted_sample.df
 weights["weight_p"] = weights["weight"] / weights["weight"].sum()
 weights
+
+# %%
