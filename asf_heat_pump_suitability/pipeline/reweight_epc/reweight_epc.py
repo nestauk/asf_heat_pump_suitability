@@ -73,16 +73,8 @@ def add_col_build_year_1930(df: pl.DataFrame) -> pl.DataFrame:
     Returns:
         pl.DataFrame: EPC dataset with `build_year` column
     """
-    pre = config["mapping"]["build_year_pre_cols_epc"]
-    post = config["mapping"]["build_year_post_cols_epc"]
-
-    df = df.with_columns(
-        pl.when(pl.col("CONSTRUCTION_AGE_BAND").is_in(pre))
-        .then(pl.lit("pre_1930"))
-        .when(pl.col("CONSTRUCTION_AGE_BAND").is_in(post))
-        .then(pl.lit("post_1930"))
-        .otherwise(pl.lit("unknown"))
+    return df.with_columns(
+        pl.col("CONSTRUCTION_AGE_BAND")
+        .map_dict(config["mapping"]["pre_post_1930_epc"])
         .alias("build_year")
     )
-
-    return df
