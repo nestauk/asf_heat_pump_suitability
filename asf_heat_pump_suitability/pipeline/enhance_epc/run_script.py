@@ -6,6 +6,7 @@ from typing import Optional
 from argparse import ArgumentParser
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.enhance_epc import enhance_epc
+from asf_heat_pump_suitability.pipeline.reweight_epc import reweight_epc
 
 
 def run():
@@ -53,6 +54,8 @@ def main(epc_path: str, save_output: Optional[str]) -> pl.DataFrame:
 
     # Join ONSPD LSOA col
     enhanced_epc_df = enhance_epc.join_df_additional_features(epc_df)
+    # Prepare EPC df for reweighting
+    enhanced_epc_df = reweight_epc.add_cols_weighting_features(enhanced_epc_df)
 
     # Save to S3
     if save_output:
