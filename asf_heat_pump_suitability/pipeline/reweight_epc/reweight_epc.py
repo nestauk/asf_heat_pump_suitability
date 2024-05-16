@@ -2,6 +2,21 @@ import polars as pl
 from asf_heat_pump_suitability import config
 
 
+def add_cols_weighting_features(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Add standardised feature columns to be used for weighting, to EPC dataset.
+
+    Args:
+        df (pl.DataFrame): EPC dataset
+
+    Returns:
+        pl.DataFrame: EPC dataset with standardised feature columns
+    """
+    df = add_col_property_type(df)
+    df = add_col_nrooms(df)
+    return add_col_build_year_1930(df)
+
+
 def add_col_property_type(df: pl.DataFrame) -> pl.DataFrame:
     """
     Add `property_type` column to EPC dataset with property type categories corresponding to those from the census.
@@ -58,7 +73,7 @@ def add_col_nrooms(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns(
         pl.col("NUMBER_HABITABLE_ROOMS")
         .map_elements(lambda x: 9 if x > 9 else x, return_dtype=pl.Float32)
-        .cast(pl.Int16)
+        .cast(pl.Int8)
         .alias("number_of_rooms")
     )
 
