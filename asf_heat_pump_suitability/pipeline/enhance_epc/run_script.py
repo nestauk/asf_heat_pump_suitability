@@ -32,7 +32,7 @@ def run():
     main(**vars(args))
 
 
-def main(epc_path: str, save_output: Optional[str]) -> pl.DataFrame:
+def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     """
     Enhance EPC dataset with additional features: LSOA; MSOA.
 
