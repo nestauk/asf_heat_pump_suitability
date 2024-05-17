@@ -136,30 +136,32 @@ def get_df_target_tenure_uncensored() -> pl.DataFrame:
 
 
 def get_df_target_build_year(
+    year_label: int = 1930,
     pre_cols: list = config["mapping"]["build_year_pre_cols"],
     post_cols: list = config["mapping"]["build_year_post_cols"],
 ) -> pl.DataFrame:
     """
-    Get dataframe of counts of properties built pre- and post-1930 for all LSOAs in England and Wales. Source: Consumer
-    Data Research Centre, 2015.
+    Get dataframe of counts of properties built before and after given year for all LSOAs in England and Wales. Source:
+    Consumer Data Research Centre, 2015.
 
     Args:
+        year_label (int): build year when split occurs
         pre_cols (list): columns before age split. Default pre-1930 columns.
         post_cols (list): columns after age split. Default post-1930 columns.
 
     Returns:
-        pl.Dataframe: counts of properties built pre- and post-1930 for all LSOAs in England and Wales.
+        pl.Dataframe: counts of properties built before and after given year for all LSOAs in England and Wales.
     """
     df = pl.read_csv(config["data_source"]["EW_cdrc_dwelling_age"])
     df = (
         df.with_columns(
             [
-                pl.sum_horizontal(pre_cols).alias("pre"),
-                pl.sum_horizontal(post_cols).alias("post"),
+                pl.sum_horizontal(pre_cols).alias(f"pre_{year_label}"),
+                pl.sum_horizontal(post_cols).alias(f"post_{year_label}"),
             ]
         )
         .rename({"BP_UNKNOWN": "unknown", "AREA_CODE": "lsoa"})
-        .select(["lsoa", "pre_1930", "post_1930", "unknown"])
+        .select(["lsoa", f"pre_{year_label}", f"post_{year_label}", "unknown"])
     )
 
     return df
