@@ -53,8 +53,8 @@ def get_dict_dfs_counts() -> Dict[str, pl.DataFrame]:
     return {
         "tenure": get_target.get_df_target_tenure(),
         "property_type": get_target.get_df_target_property_type(),
-        # TODO: adding nrooms feature causes crash when running `generate_balance_target_population`
-        # "nrooms": get_target.get_df_target_nrooms(),
+        # TODO: potentially collapse nrooms categories to increase speed
+        "nrooms": get_target.get_df_target_nrooms(),
         "build_year": get_target.get_df_target_build_year(),
     }
 
@@ -71,8 +71,9 @@ def convert_df_proportions(df: pl.DataFrame) -> Dict[str, pl.DataFrame]:
     """
     cols = df.select(cs.integer()).columns
     df = df.with_columns(pl.sum_horizontal(df.select(cols)).alias("total"))
+    # Rounding the proportions cuts the run time to generate target population down
     df = df.with_columns(
-        [(pl.col(col) / pl.col("total")).alias(col) for col in cols]
+        [(pl.col(col) / pl.col("total")).round(3).alias(col) for col in cols]
     ).drop(columns=["total"])
 
     return df
