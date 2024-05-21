@@ -52,7 +52,7 @@ def add_col_property_type(df: pl.DataFrame) -> pl.DataFrame:
         .then(pl.lit("Terraced (including end-terrace) whole house or bungalow"))
         .when(pl.col("PROPERTY_TYPE").is_in(["Flat", "Maisonette"]))
         .then(pl.lit("Flat, maisonette or apartment"))
-        .when(pl.col("PROPERTY_TYPE").is_in(["Park Home"]))
+        .when(pl.col("PROPERTY_TYPE").is_in(["Park home"]))
         .then(pl.lit("A caravan or other mobile or temporary structure"))
         .alias("property_type")
     )
