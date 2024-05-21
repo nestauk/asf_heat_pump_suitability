@@ -3,7 +3,7 @@ import polars as pl
 from zipfile import ZipFile
 from io import BytesIO
 import logging
-from asf_heat_pump_suitability import config
+import s3fs
 
 
 def get_df_from_excel_url(url: str, **kwargs) -> pl.DataFrame:
@@ -39,6 +39,22 @@ def get_df_from_zip_url(url: str, extract_file: str, **kwargs) -> pl.DataFrame:
     df = pl.read_csv(ZipFile(content).open(name=extract_file), **kwargs)
 
     return df
+
+
+def get_content_from_path(path: str) -> bytes:
+    """
+    Get bytes content of file from path.
+
+    Args
+        path (str): path to file
+
+    Returns
+        bytes: bytes content of file
+    """
+    fs = s3fs.S3FileSystem()
+    with fs.open(path, mode="rb") as f:
+        content = f.read()
+    return content
 
 
 def _get_content_from_url(url: str) -> BytesIO:
