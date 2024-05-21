@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import math
+import numpy as np
+from typing import Tuple, Dict
+from collections import defaultdict
 
 # Import the EPC sample
 
@@ -63,59 +66,125 @@ print(tenure.head())
 # Choose test LSOA
 test_lsoas = ["W01000328", "E01033942", "E01012376", "W01000527", "E01002058"]
 number_of_lsoas = len(test_lsoas)
-# Initialize dictionaries to store the results
+
+
+def calculate_proportions(counts: dict) -> dict:
+    """
+    Calculate proportions for each key in a dictionary.
+    Args:
+        counts (dict): dictionary with counts for each key
+    Returns:
+        proportions (dict): dictionary with proportions for each key
+    """
+    total = sum(counts.values())
+    proportions = {k: v / total for k, v in counts.items()}
+    return proportions
+
+
+def calculate_diffs(dict1: dict, dict2: dict) -> dict:
+    """
+    Calculate differences between two dictionaries.
+    Args:
+        dict1 (dict): first dictionary
+        dict2 (dict): second dictionary
+    Returns:
+        differences (dict): dictionary with differences for each key
+    """
+    keys = set(dict1) | set(dict2)
+    differences = {k: dict1.get(k, 0) - dict2.get(k, 0) for k in keys}
+    return differences
+
+
+def calculate_rmse(proportions_diff: dict) -> float:
+    """
+    Calculate Root Mean Square Error (RMSE) from a dictionary of differences.
+    Args:
+        proportions_diff (dict): dictionary with differences for each key
+    Returns:
+        float: RMSE
+    """
+    squares = [x**2 for x in proportions_diff.values()]
+    mean_square = np.mean(squares)
+    rmse = np.sqrt(mean_square)
+    return rmse
+
+
+def calculate_mae(proportions_diff: dict) -> float:
+    """
+    Calculate Mean Absolute Error (MAE) from a dictionary of differences.
+    Args:
+        proportions_diff (dict): dictionary with differences for each key
+    Returns:
+        float: MAE
+    """
+    absolute_values = [abs(x) for x in proportions_diff.values()]
+    mae = np.mean(absolute_values)
+    return mae
+
+
+def process_lsoa(
+    sample: pl.DataFrame, tenure: pl.DataFrame, test_lsoa: str
+) -> Tuple[Dict, Dict, Dict, float, float]:
+    """
+    Process a single LSOA: calculate counts, differences, RMSE, and MAE.
+
+    Args:
+        sample (pl.DataFrame): The sample dataframe.
+        tenure (pl.DataFrame): The tenure dataframe.
+        test_lsoa (str): The LSOA to process.
+
+    Returns:
+        Tuple[Dict, Dict, Dict, float, float]: A tuple containing the counts, differences, RMSE, and MAE.
+    """
+    subset = sample.filter(pl.col(LSOA) == test_lsoa)
+    tenure_subset = tenure.filter(pl.col(LSOA) == test_lsoa)
+
+    counts_subset_epc_sample = subset.group_by(TENURE).agg(
+        [pl.col(TENURE).count().alias("count")]
+    )
+    counts = dict(
+        zip(counts_subset_epc_sample[TENURE], counts_subset_epc_sample["count"])
+    )
+
+    proportions = calculate_proportions(counts)
+
+    tenure_dict = tenure_subset.to_dicts()[0]
+    del tenure_dict[LSOA]
+    tenure_dict_proportions = calculate_proportions(tenure_dict)
+
+    counts_diff = calculate_diffs(counts, tenure_dict)
+    proportions_diff = calculate_diffs(proportions, tenure_dict_proportions)
+
+    rmse = calculate_rmse(proportions_diff)
+    mae = calculate_mae(proportions_diff)
+    return counts, counts_diff, proportions_diff, rmse, mae
+
+
+LSOA = "lsoa"
+TENURE = "tenure"
+total_counts = defaultdict(int)
+rmse_all = {}
+mae_all = {}
 counts_diff_all = {}
 proportions_diff_all = {}
 
-# Initialize the dictionary
-total_counts = {}
 # Iterate over all LSOAs
 for test_lsoa in test_lsoas:
-    # Get the subset of the sample and the tenure data for the current LSOA
-    subset = sample.filter(pl.col("lsoa") == test_lsoa)
-    tenure_subset = tenure.filter(pl.col("lsoa") == test_lsoa)
-
-    # Perform the same calculations as before
-    counts_subset_epc_sample = subset.group_by("tenure").agg(
-        [pl.col("tenure").count().alias("count")]
+    counts, counts_diff, proportions_diff, rmse, mae = process_lsoa(
+        sample, tenure, test_lsoa
     )
-    counts = dict(
-        zip(counts_subset_epc_sample["tenure"], counts_subset_epc_sample["count"])
-    )
-    total = sum(counts.values())
-    proportions = {k: v / total for k, v in counts.items()}
-
-    tenure_dict = tenure_subset.to_dicts()[0]
-    del tenure_dict["lsoa"]
-    total_lsoa = sum(tenure_dict.values())
-    print("total lsoa value:")
-    print(total_lsoa)
-    tenure_dict_proportions = {k: v / total_lsoa for k, v in tenure_dict.items()}
-
-    counts_diff = {
-        k: counts.get(k, 0) - tenure_dict.get(k, 0)
-        for k in set(counts) | set(tenure_dict)
-    }
-    proportions_diff = {
-        k: proportions.get(k, 0) - tenure_dict_proportions.get(k, 0)
-        for k in set(proportions) | set(tenure_dict_proportions)
-    }
-
-    # Store the results in the dictionaries
+    rmse_all[test_lsoa] = rmse
+    mae_all[test_lsoa] = mae
     counts_diff_all[test_lsoa] = counts_diff
     proportions_diff_all[test_lsoa] = proportions_diff
-    # Update the total counts dictionary
     for k, v in counts.items():
-        if k in total_counts:
-            total_counts[k] += v
-        else:
-            total_counts[k] = v
-# Print the total counts
-print("total counts")
-print(total_counts)
-# Now counts_diff_all and proportions_diff_all contain the differences in counts and proportions for all LSOAs
-print(counts_diff_all)
-print(proportions_diff_all)
+        total_counts[k] += v
+
+print("RMSE for each LSOA:")
+print(rmse_all)
+print("MAE for each LSOA:")
+print(mae_all)
+
 
 # Step 1: Convert the dictionary to a Polars DataFrame and transpose
 counts_df = pl.DataFrame(counts_diff_all).transpose(include_header=True)
@@ -298,9 +367,6 @@ global_min = min(min(proportions_diff_all[lsoa].values()) for lsoa in lsoas)
 global_max = max(max(proportions_diff_all[lsoa].values()) for lsoa in lsoas)
 global_min_buffer = global_min + 0.1 * global_min
 global_max_buffer = global_max + 0.1 * global_max
-
-print(f"global_min_buffer: {global_min_buffer}")
-print(f"global_max_buffer: {global_max_buffer}")
 
 # Get the color palette used by seaborn's boxplot
 palette = sns.color_palette()
