@@ -40,3 +40,18 @@ mapping:
     - BP_1993_1999
     - BP_2000_2009
     - BP_2010_2015
+  pre_post_1930_epc:
+    "England and Wales: before 1900": "pre_1930"
+    "Scotland: before 1919": "pre_1930"
+    "1900-1929": "pre_1930"
+    "1930-1949": "post_1930"
+    "1950-1966": "post_1930"
+    "1965-1975": "post_1930"
+    "1976-1983": "post_1930"
+    "1983-1991": "post_1930"
+    "1991-1998": "post_1930"
+    "1996-2002": "post_1930"
+    "2003-2007": "post_1930"
+    "2007 onwards": "post_1930"
+    "unknown": "unknown"
+    "UNKNOWN": "unknown"
