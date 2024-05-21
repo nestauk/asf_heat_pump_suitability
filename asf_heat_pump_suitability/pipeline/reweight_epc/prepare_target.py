@@ -21,7 +21,9 @@ def generate_balance_target_population(
     """
     target = {k: v[lsoa] for k, v in target_marginals.items()}
     df = rake.prepare_marginal_dist_for_raking(target)
-    return balance.Sample.from_frame(df)
+    df["weight"] = 1
+    df = balance.Sample.from_frame(df, id_column="id", weight_column="weight")
+    return df
 
 
 def get_dict_target_marginals() -> Dict[str, pl.DataFrame]:
