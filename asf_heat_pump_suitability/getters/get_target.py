@@ -36,8 +36,8 @@ def get_df_target_nrooms() -> pl.DataFrame:
 
 def get_df_target_property_type(fill_censored: int = 0) -> pl.DataFrame:
     """
-    Get dataframe of property type counts for all LSOAs in England and Wales, and fill censored values with given
-    constant. Source: census data 2021.
+    Get dataframe of property type counts for all LSOAs in England and Wales, and fill censored values (counts below 10)
+    with given constant. Source: census data 2021.
 
     Args:
         fill_censored (int): value to fill censored values with, [0-10]. Default 0.
@@ -66,8 +66,8 @@ def get_df_target_property_type(fill_censored: int = 0) -> pl.DataFrame:
 
 def get_df_target_tenure(fill_censored: int = 0) -> pl.DataFrame:
     """
-    Get dataframe of tenure type counts for all LSOAs in England and Wales, and fill censored values with given
-    constant. Source: census data 2021.
+    Get dataframe of tenure type counts for all LSOAs in England and Wales, and fill censored values (counts below 10)
+    with given constant. Source: census data 2021.
 
     Args:
         fill_censored (int): value to fill censored values with, [0-10]. Default 0.
@@ -186,7 +186,7 @@ def get_df_target_build_year(
 
 def _fill_df_censored_values(df: pl.DataFrame, val: int) -> pl.DataFrame:
     """
-    Fill censored values in a dataframe with a given value.
+    Fill censored values in a target dataframe with a given value.
 
     Args:
         df (pl.DataFrame): dataframe
