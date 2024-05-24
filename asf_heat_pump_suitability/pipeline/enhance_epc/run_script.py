@@ -18,7 +18,10 @@ def run():
     parser = ArgumentParser()
 
     parser.add_argument(
-        "--epc_path", help="S3 URI to EPC dataset", type=str, required=True
+        "--epc_path",
+        help="S3 URI to EPC dataset",
+        type=str,
+        # required=True
     )
 
     parser.add_argument(
@@ -34,7 +37,9 @@ def run():
     main(**vars(args))
 
 
-def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
+def main(
+    epc_path: Optional[str] = None, save_output: Optional[str] = None
+) -> pl.DataFrame:
     """
     Enhance EPC dataset with additional features: LSOA; MSOA.
 
@@ -45,17 +50,20 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     Returns
         pl.DataFrame: enhanced EPC dataset with additional features
     """
-    # Import processed EPC
-    logging.info(f"Loading EPC file from path: {epc_path}")
-    if pathlib.Path(epc_path).suffixes == ".csv":
-        fs = s3fs.S3FileSystem()
-        with fs.open(epc_path, mode="rb") as f:
-            epc_df = pl.read_csv(f, columns=config["usecols"]["epc"])
-    else:
-        epc_df = pl.read_parquet(epc_path, columns=config["usecols"]["epc"])
-
-    # Join ONSPD LSOA col
-    enhanced_epc_df = enhance_epc.join_df_additional_features(epc_df)
+    # # Import processed EPC
+    # logging.info(f"Loading EPC file from path: {epc_path}")
+    # if pathlib.Path(epc_path).suffixes == ".csv":
+    #     fs = s3fs.S3FileSystem()
+    #     with fs.open(epc_path, mode="rb") as f:
+    #         epc_df = pl.read_csv(f, columns=config["usecols"]["epc"])
+    # else:
+    #     epc_df = pl.read_parquet(epc_path, columns=config["usecols"]["epc"])
+    #
+    # # Join ONSPD LSOA col
+    # enhanced_epc_df = enhance_epc.join_df_additional_features(epc_df)
+    enhanced_epc_df = pl.read_parquet(
+        "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced.parquet"
+    )
 
     # Reweight EPC
     features = [
