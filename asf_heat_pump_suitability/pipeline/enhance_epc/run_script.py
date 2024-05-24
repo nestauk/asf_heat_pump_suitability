@@ -2,11 +2,13 @@ import logging
 import polars as pl
 import s3fs
 import pathlib
+from tqdm import tqdm
+import time
 from typing import Optional
 from argparse import ArgumentParser
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.enhance_epc import enhance_epc
-from asf_heat_pump_suitability.pipeline.reweight_epc import reweight_epc
+from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_target, reweight_epc
 
 
 def run():
@@ -54,14 +56,70 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
 
     # Join ONSPD LSOA col
     enhanced_epc_df = enhance_epc.join_df_additional_features(epc_df)
-    # Prepare EPC df for reweighting
+
+    # Reweight EPC
+    features = [
+        "property_type",
+        "build_year",
+        "tenure",
+    ]  # TODO: add nrooms when categories collapsed
+    enhanced_epc_df = epc_df.drop_nulls(subset=["lsoa"])
     enhanced_epc_df = reweight_epc.add_cols_weighting_features(enhanced_epc_df)
+    enhanced_epc_df = reweight_epc.drop_nulls_feature_cols(
+        df=enhanced_epc_df, features=features
+    )
+
+    lsoas = enhanced_epc_df["lsoa"].unique()
+    target_marginals = prepare_target.get_dict_target_marginals()
+    weights = {"UPRN": [], "weight": []}
+    lsoa_stats = {"lsoa": [], "time": [], "lost_rows": []}
+
+    for lsoa in tqdm(lsoas):
+        try:
+            print(lsoa)
+            start = time.time()
+            sample, lost_rows = reweight_epc.generate_balance_sample(
+                df=enhanced_epc_df,
+                features=features,
+                lsoa=lsoa,
+                target_marginals=target_marginals,
+            )
+            target = prepare_target.generate_balance_target_population(
+                target_marginals=target_marginals, lsoa=lsoa
+            )
+            reweighted_sample = reweight_epc.generate_reweighted_sample(
+                balance_sample=sample, balance_target=target
+            )
+            _uprns, _weights = reweight_epc.get_tuple_sample_weights(
+                reweighted_sample=reweighted_sample
+            )
+            weights["UPRN"].extend(_uprns)
+            weights["weight"].extend(_weights)
+            end = time.time()
+            lsoa_stats["lsoa"].append(lsoa)
+            lsoa_stats["time"].append(end - start)
+            lsoa_stats["lost_rows"].append(lost_rows)
+        except KeyError:
+            logging.info(f"No target data found for LSOA: {lsoa}. Skipping.")
+            continue
+
+    weights = pl.DataFrame(weights)
+    enhanced_epc_df = enhanced_epc_df.join(weights, how="left", on="UPRN")
+    lsoa_stats_df = pl.DataFrame(lsoa_stats)
 
     # Save to S3
-    if save_output:
-        fs = s3fs.S3FileSystem()
-        with fs.open(save_output, mode="wb") as f:
-            enhanced_epc_df.write_parquet(f)
+    fs = s3fs.S3FileSystem()
+    with fs.open(
+        "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights.parquet",
+        mode="wb",
+    ) as f:
+        enhanced_epc_df.write_parquet(f)
+
+    with fs.open(
+        "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights_stats.parquet",
+        mode="wb",
+    ) as f:
+        lsoa_stats_df.write_parquet(f)
 
     return enhanced_epc_df
 
