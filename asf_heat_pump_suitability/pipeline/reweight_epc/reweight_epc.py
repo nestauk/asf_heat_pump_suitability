@@ -91,7 +91,16 @@ def generate_balance_sample(
 
 
 def drop_nulls_feature_cols(df, features):
-    """ """
+    """
+    Drop rows with null values in any feature column from EPC dataset.
+
+    Args:
+        df (pl.DataFrame): EPC dataset
+        features (list): column names of features
+
+    Returns:
+        pl.DataFrame: EPC dataset where rows with null in any specified feature column are dropped
+    """
     df = df.with_columns(
         pl.col(["tenure", "property_type"]).replace(
             {"unknown": None}, return_dtype=pl.String
