@@ -63,7 +63,7 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
         "build_year",
         "tenure",
     ]  # TODO: add nrooms when categories collapsed
-    enhanced_epc_df = epc_df.drop_nulls(subset=["lsoa"])
+    enhanced_epc_df = enhanced_epc_df.drop_nulls(subset=["lsoa"])
     enhanced_epc_df = reweight_epc.add_cols_weighting_features(enhanced_epc_df)
     enhanced_epc_df = reweight_epc.drop_nulls_feature_cols(
         df=enhanced_epc_df, features=features
