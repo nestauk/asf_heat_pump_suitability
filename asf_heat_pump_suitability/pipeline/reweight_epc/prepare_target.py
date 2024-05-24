@@ -124,10 +124,16 @@ def _get_dict_proportions_sum_one(
             1 - sum(v.values()), round_n
         )  # Otherwise this can be e.g. 0.0010000001
         if diff != 0:
+            eligible_categories = [
+                kk for kk, vv in v.items() if vv > -diff
+            ]  # Ensure no values are converted to 0
+            if not len(eligible_categories):
+                raise ValueError(
+                    "No eligible category found for rebalancing: failed to round target proportions total to 1."
+                )
             lsoa_marginals[k][
-                random.choice(list(v.keys()))
+                random.choice(eligible_categories)
             ] += diff  # Choosing a random key to change so that we don't over bias one category more than others. Note - this means the results will be stochastic.
-    print({k: sum(v.values()) for k, v in lsoa_marginals.items()})
     return lsoa_marginals
 
 
