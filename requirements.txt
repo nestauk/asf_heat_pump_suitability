@@ -5,3 +5,4 @@ ipfn @ git+https://github.com/nestauk/ipfn.git@master
 balance
 jupytext
 fastexcel
+sklearn
