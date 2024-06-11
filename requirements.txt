@@ -5,5 +5,8 @@ ipfn @ git+https://github.com/nestauk/ipfn.git@master
 balance
 jupytext
 fastexcel
-tqdm
 sklearn
+scikit-learn
+matplotlib==3.5.2
+tqdm
+boto3
