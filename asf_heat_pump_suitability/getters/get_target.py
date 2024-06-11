@@ -34,36 +34,6 @@ def get_df_target_nrooms() -> pl.DataFrame:
     return df
 
 
-def get_df_target_property_type(fill_censored: int = 1) -> pl.DataFrame:
-    """
-    Get dataframe of property type counts for all LSOAs in England and Wales, and fill censored values (counts below 10)
-    with given constant. Source: census data 2021.
-
-    Args:
-        fill_censored (int): value to fill censored values with, [0-10]. Default 0.
-
-    Returns:
-        pl.Dataframe: counts of property type for all LSOAs in England and Wales
-    """
-    content = base_getters.get_content_from_path(
-        config["data_source"]["EW_census_housing_characteristics"]
-    )
-    df = pl.read_excel(content, sheet_name="2c", engine="calamine")
-
-    # Remove empty header rows
-    df = (
-        df.rename(df[2].to_dicts().pop())
-        .slice(
-            3,
-        )
-        .drop(["Area Name"])
-        .rename({"Area Code": "lsoa"})
-    )
-    df = _fill_df_censored_values(df, fill_censored)
-
-    return df
-
-
 def get_df_target_property_type_uncensored() -> pl.DataFrame:
     """
     Get dataframe of property type counts for all LSOAs in England and Wales. Dataframe has no censored values. Source:
@@ -118,21 +88,21 @@ def get_df_target_property_type_uncensored() -> pl.DataFrame:
     return df
 
 
-def get_df_target_tenure(fill_censored: int = 1) -> pl.DataFrame:
+def get_df_target_property_type(fill_censored: int = 1) -> pl.DataFrame:
     """
-    Get dataframe of tenure type counts for all LSOAs in England and Wales, and fill censored values (counts below 10)
+    Get dataframe of property type counts for all LSOAs in England and Wales, and fill censored values (counts below 10)
     with given constant. Source: census data 2021.
 
     Args:
         fill_censored (int): value to fill censored values with, [0-10]. Default 0.
 
     Returns:
-        pl.Dataframe: counts of tenure type for all LSOAs in England and Wales
+        pl.Dataframe: counts of property type for all LSOAs in England and Wales
     """
     content = base_getters.get_content_from_path(
         config["data_source"]["EW_census_housing_characteristics"]
     )
-    df = pl.read_excel(content, sheet_name="3c", engine="calamine")
+    df = pl.read_excel(content, sheet_name="2c", engine="calamine")
 
     # Remove empty header rows
     df = (
@@ -141,16 +111,8 @@ def get_df_target_tenure(fill_censored: int = 1) -> pl.DataFrame:
             3,
         )
         .drop(["Area Name"])
-        .rename(
-            {
-                "Area Code": "lsoa",
-                "Owned or shared ownership": "owner-occupied",
-                "Social Rented": "rental (social)",
-                "Private Rented or lives rent free": "rental (private)",
-            }
-        )
+        .rename({"Area Code": "lsoa"})
     )
-
     df = _fill_df_censored_values(df, fill_censored)
 
     return df
@@ -202,6 +164,44 @@ def get_df_target_tenure_uncensored() -> pl.DataFrame:
             pl.col(["lsoa", "owner-occupied", "rental (social)", "rental (private)"])
         )
     )
+
+    return df
+
+
+def get_df_target_tenure(fill_censored: int = 1) -> pl.DataFrame:
+    """
+    Get dataframe of tenure type counts for all LSOAs in England and Wales, and fill censored values (counts below 10)
+    with given constant. Source: census data 2021.
+
+    Args:
+        fill_censored (int): value to fill censored values with, [0-10]. Default 0.
+
+    Returns:
+        pl.Dataframe: counts of tenure type for all LSOAs in England and Wales
+    """
+    content = base_getters.get_content_from_path(
+        config["data_source"]["EW_census_housing_characteristics"]
+    )
+    df = pl.read_excel(content, sheet_name="3c", engine="calamine")
+
+    # Remove empty header rows
+    df = (
+        df.rename(df[2].to_dicts().pop())
+        .slice(
+            3,
+        )
+        .drop(["Area Name"])
+        .rename(
+            {
+                "Area Code": "lsoa",
+                "Owned or shared ownership": "owner-occupied",
+                "Social Rented": "rental (social)",
+                "Private Rented or lives rent free": "rental (private)",
+            }
+        )
+    )
+
+    df = _fill_df_censored_values(df, fill_censored)
 
     return df
 
