@@ -8,7 +8,11 @@ from typing import Optional
 from argparse import ArgumentParser
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.enhance_epc import enhance_epc
-from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_target, reweight_epc
+from asf_heat_pump_suitability.pipeline.reweight_epc import (
+    prepare_target,
+    prepare_sample,
+    reweight_epc,
+)
 
 
 def run():
@@ -18,18 +22,7 @@ def run():
     parser = ArgumentParser()
 
     parser.add_argument(
-        "--epc_path",
-        help="S3 URI to EPC dataset",
-        type=str,
-        # required=True
-    )
-
-    parser.add_argument(
-        "--save_output",
-        help="S3 path to save enhanced EPC dataset to",
-        type=str,
-        default=None,
-        required=False,
+        "--epc_path", help="S3 URI to EPC dataset", type=str, required=True
     )
 
     args = parser.parse_args()
@@ -37,54 +30,54 @@ def run():
     main(**vars(args))
 
 
-def main(
-    epc_path: Optional[str] = None, save_output: Optional[str] = None
-) -> pl.DataFrame:
+def main(epc_path: str) -> pl.DataFrame:
     """
-    Enhance EPC dataset with additional features: LSOA; MSOA.
+    Add LSOA; MSOA data to EPC dataset and weight properties per LSOA according to the following features: property
+    type; build year (pre- and post-1930 split); and tenure.
 
     Args
         epc_path (str): S3 URI to EPC dataset
-        save_output (str): S3 path to save enhanced EPC dataset to. Optional.
 
     Returns
-        pl.DataFrame: enhanced EPC dataset with additional features
+        pl.DataFrame: enhanced EPC dataset with LSOA and MSOA data and weights
     """
-    # # Import processed EPC
-    # logging.info(f"Loading EPC file from path: {epc_path}")
-    # if pathlib.Path(epc_path).suffixes == ".csv":
-    #     fs = s3fs.S3FileSystem()
-    #     with fs.open(epc_path, mode="rb") as f:
-    #         epc_df = pl.read_csv(f, columns=config["usecols"]["epc"])
-    # else:
-    #     epc_df = pl.read_parquet(epc_path, columns=config["usecols"]["epc"])
-    #
-    # # Join ONSPD LSOA col
-    # enhanced_epc_df = enhance_epc.join_df_additional_features(epc_df)
-    enhanced_epc_df = pl.read_parquet(
-        "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced.parquet"
-    )
+    # Import processed & deduplicated EPC
+    logging.info(f"Loading EPC file from path: {epc_path}")
+    if pathlib.Path(epc_path).suffixes == ".csv":
+        fs = s3fs.S3FileSystem()
+        with fs.open(epc_path, mode="rb") as f:
+            epc_df = pl.read_csv(f, columns=config["usecols"]["epc"])
+    else:
+        epc_df = pl.read_parquet(epc_path, columns=config["usecols"]["epc"])
+
+    # Join ONSPD LSOA col
+    enhanced_epc_df = enhance_epc.join_df_additional_features(epc_df)
 
     # Reweight EPC
+
     features = [
         "property_type",
         "build_year",
         "tenure",
     ]  # TODO: add nrooms when categories collapsed
+
+    # Add standardised weighting feature columns to EPC and drop rows missing data required for reweighting
     enhanced_epc_df = enhanced_epc_df.drop_nulls(subset=["lsoa"])
-    enhanced_epc_df = reweight_epc.add_cols_weighting_features(enhanced_epc_df)
-    enhanced_epc_df = reweight_epc.drop_nulls_feature_cols(
+    enhanced_epc_df = prepare_sample.add_cols_weighting_features(enhanced_epc_df)
+    enhanced_epc_df = prepare_sample.drop_nulls_feature_cols(
         df=enhanced_epc_df, features=features
     )
 
     lsoas = enhanced_epc_df["lsoa"].unique()
     target_marginals = prepare_target.get_dict_target_marginals()
-    weights = {"UPRN": [], "weight": []}
+
+    # Prepare results dicts
+    weights = {"UPRN": [], "weight": [], "proportional_weight": []}
     lsoa_stats = {"lsoa": [], "time": [], "lost_rows": []}
 
+    # Reweight LSOAs
     for lsoa in tqdm(lsoas):
         try:
-            print(lsoa)
             start = time.time()
             sample, lost_rows = reweight_epc.generate_balance_sample(
                 df=enhanced_epc_df,
@@ -95,18 +88,24 @@ def main(
             target = prepare_target.generate_balance_target_population(
                 target_marginals=target_marginals, lsoa=lsoa
             )
-            reweighted_sample = reweight_epc.generate_reweighted_sample(
+            weighted_sample = reweight_epc.generate_weighted_sample(
                 balance_sample=sample, balance_target=target
             )
-            _uprns, _weights = reweight_epc.get_tuple_sample_weights(
-                reweighted_sample=reweighted_sample
+            _weights = reweight_epc.get_dict_sample_weights(
+                weighted_sample=weighted_sample
             )
-            weights["UPRN"].extend(_uprns)
-            weights["weight"].extend(_weights)
+
+            # Add outputs weights for LSOA to dict
+            weights["UPRN"].extend(_weights["UPRN"])
+            weights["weight"].extend(_weights["weight"])
+            weights["proportional_weight"].extend(_weights["proportional_weight"])
+
+            # LSOA stats
             end = time.time()
             lsoa_stats["lsoa"].append(lsoa)
             lsoa_stats["time"].append(end - start)
             lsoa_stats["lost_rows"].append(lost_rows)
+
         except KeyError:
             logging.info(f"No target data found for LSOA: {lsoa}. Skipping.")
             continue
