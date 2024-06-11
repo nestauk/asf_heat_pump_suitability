@@ -2,78 +2,80 @@ import polars as pl
 import random
 from typing import Dict, Tuple
 import balance
-import logging
-from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_target
 
 
-def get_tuple_sample_weights(
-    reweighted_sample: balance.sample_class.Sample,
-) -> Tuple[list, list]:
+def get_dict_sample_weights(
+    weighted_sample: balance.sample_class.Sample,
+) -> Dict[str, list]:
     """
-    Get Tuple of lists containing UPRNs and weights of reweighted EPC sample rows.
+    Get dictionary mapping containing UPRNs and weights of weighted EPC sample rows.
 
     Args:
-        reweighted_sample (balance.sample_class.Sample): EPC data object with weights adjusted to target marginals for single LSOA
+        weighted_sample (balance.sample_class.Sample): EPC data with weights adjusted to target marginals for a single LSOA
 
     Returns:
-        Tuple[list, list]: UPRNs and corresponding weights
+        Dict[str, list]: dictionary mapping column names to list of UPRNs and corresponding weights
     """
-    reweighted_sample = pl.from_pandas(reweighted_sample.df)
-    df = (
-        reweighted_sample.select(["UPRN", "weight"])
-        .filter(~pl.col("UPRN").str.contains("dummy"))
-        .with_columns((pl.col("weight") / pl.col("weight").sum()).alias("weight"))
-    )
+    weighted_sample = pl.from_pandas(weighted_sample.df)
+    weighted_sample = weighted_sample.select(["UPRN", "weight"]).with_columns(
+        (pl.col("weight") / pl.col("weight").sum()).alias("proportional_weight")
+    )  # convert to proportional weight
+    weights_dict = weighted_sample.to_dict(as_series=False)
 
-    uprns = df.to_dict()["UPRN"].to_list()
-    weights = df.to_dict()["weight"].to_list()
-
-    return uprns, weights
+    return weights_dict
 
 
-def generate_reweighted_sample(
+def generate_weighted_sample(
     balance_sample: balance.sample_class.Sample,
     balance_target: balance.sample_class.Sample,
 ) -> balance.sample_class.Sample:
     """
-    Generate reweighted EPC subset object for single LSOA using target marginals.
+    Generate weighted EPC sample for single LSOA using target marginals.
 
     Args:
-        balance_sample (balance.sample_class.Sample): EPC data object for a single LSOA prepared for reweighting
+        balance_sample (balance.sample_class.Sample): EPC data object for a single LSOA prepared for weighting
         balance_target (balance.sample_class.Sample): artificial target population object generated from given marginals for single LSOA
 
     Returns:
-        balance.sample_class.Sample: EPC data object with weights adjusted to target marginals for single LSOA
+        balance.sample_class.Sample: EPC data with weights adjusted to target marginals for single LSOA
     """
     sample_w_target = balance_sample.set_target(balance_target)
-    adjusted_sample = sample_w_target.adjust(method="rake")
-    assert adjusted_sample.is_adjusted()
+    weighted_sample = sample_w_target.adjust(method="rake")
+    assert weighted_sample.is_adjusted()
 
-    return adjusted_sample
+    return weighted_sample
 
 
 def generate_balance_sample(
     df: pl.DataFrame, features: list, target_marginals: Dict[str, dict], lsoa: str
 ) -> Tuple[balance.sample_class.Sample, int]:
     """
-    Prepare EPC subset for reweighting with `balance` package for the single specified LSOA.
+    Prepare EPC subset for weighting with `balance` package for the single specified LSOA and identify the number of
+    rows lost during preprocessing for weighting. Preprocessing adds dummy rows with dummy data for any feature
+    categories present in target but not in EPC sample, and drops rows with nulls in any weighting features.
 
     Args:
         df (pl.DataFrame): EPC dataset
-        features (list): names of feature columns in EPC dataset
+        features (list): names of feature columns in EPC dataset to use in weighting
         target_marginals (Dict[str, dict]): dict of dicts containing target proportions for each feature category by LSOA
-        lsoa (str): LSOA to reweight
+        lsoa (str): code of LSOA to weight EPC data for
 
     Returns:
-        Tuple[balance.sample_class.Sample, int]: EPC data object for a single LSOA prepared for reweighting
+        Tuple[balance.sample_class.Sample, int]: EPC data sample for a single LSOA prepared for weighting with number of
+        rows lost during preprocessing
     """
+    # Get EPC sample filtered for single given LSOA
     cols = ["lsoa", "UPRN"]
     cols.extend(features)
     sample = df.select(cols).filter(pl.col("lsoa") == lsoa)
+
+    # Prepare target marginals for single LSOA
     lsoa_marginals = prepare_target.get_dict_lsoa_marginals(
         target_marginals=target_marginals, lsoa=lsoa
     )
+
+    # Remove rows from EPC sample where feature category is not present in target dataset
     len_before = len(sample)
     for feature, marginals in lsoa_marginals.items():
         missing = _generate_list_missing_from_target(
@@ -81,8 +83,12 @@ def generate_balance_sample(
         )
         sample = sample.filter(~pl.col(feature).is_in(missing))
     lost_rows = len(sample) - len_before
+
+    # Add dummy rows for feature categories missing from sample but present in target
     dummies = generate_df_dummies(lsoa_marginals=lsoa_marginals, sample=sample)
     sample = pl.concat([sample, dummies[sample.columns]])
+
+    # Convert to balance sample
     cols.remove("lsoa")
     balance_sample = sample.to_pandas()
     balance_sample = balance.Sample.from_frame(balance_sample[cols], id_column="UPRN")
@@ -90,127 +96,13 @@ def generate_balance_sample(
     return balance_sample, lost_rows
 
 
-def drop_nulls_feature_cols(df, features):
-    """
-    Drop rows with null values in any feature column from EPC dataset.
-
-    Args:
-        df (pl.DataFrame): EPC dataset
-        features (list): column names of features
-
-    Returns:
-        pl.DataFrame: EPC dataset where rows with null in any specified feature column are dropped
-    """
-    df = df.with_columns(
-        pl.col(["tenure", "property_type"]).replace(
-            {"unknown": None}, return_dtype=pl.String
-        )
-    ).drop_nulls(subset=features)
-    return df
-
-
-def add_cols_weighting_features(df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Add standardised feature columns to be used for weighting, to EPC dataset.
-
-    Args:
-        df (pl.DataFrame): EPC dataset
-
-    Returns:
-        pl.DataFrame: EPC dataset with standardised feature columns
-    """
-    df = add_col_property_type(df)
-    # df = add_col_nrooms(df)
-    df = add_col_build_year_1930(df)
-    df = df.rename({"TENURE": "tenure"})
-    return df
-
-
-def add_col_property_type(df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Add `property_type` column to EPC dataset with property type categories corresponding to those from the census.
-
-    Args:
-        df (pl.DataFrame): EPC dataset
-
-    Returns:
-        pl.DataFrame: EPC dataset with `property_type` column
-    """
-    terraced = [
-        "Mid-Terrace",
-        "End-Terrace",
-        "Enclosed Mid-Terrace",
-        "Enclosed End-Terrace",
-    ]
-
-    df = df.with_columns(
-        pl.when(
-            pl.col("PROPERTY_TYPE").is_in(["House", "Bungalow"]),
-            pl.col("BUILT_FORM") == "Detached",
-        )
-        .then(pl.lit("Detached whole house or bungalow"))
-        .when(
-            pl.col("PROPERTY_TYPE").is_in(["House", "Bungalow"]),
-            pl.col("BUILT_FORM") == "Semi-Detached",
-        )
-        .then(pl.lit("Semi-detached whole house or bungalow"))
-        .when(
-            pl.col("PROPERTY_TYPE").is_in(["House", "Bungalow"]),
-            pl.col("BUILT_FORM").is_in(terraced),
-        )
-        .then(pl.lit("Terraced (including end-terrace) whole house or bungalow"))
-        .when(pl.col("PROPERTY_TYPE").is_in(["Flat", "Maisonette"]))
-        .then(pl.lit("Flat, maisonette or apartment"))
-        .when(pl.col("PROPERTY_TYPE").is_in(["Park home"]))
-        .then(pl.lit("A caravan or other mobile or temporary structure"))
-        .alias("property_type")
-    )
-
-    return df
-
-
-def add_col_nrooms(df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Add `number_of_rooms` column to EPC dataset with categories corresponding to those from the census.
-
-    Args:
-        df (pl.DataFrame): EPC dataset
-
-    Returns:
-        pl.DataFrame: EPC dataset with `number_of_rooms` column
-    """
-    return df.with_columns(
-        pl.col("NUMBER_HABITABLE_ROOMS")
-        .map_elements(lambda x: 9 if x > 9 else x, return_dtype=pl.Float32)
-        .cast(pl.Int8)
-        .alias("number_of_rooms")
-    )
-
-
-def add_col_build_year_1930(df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Add `build_year` column to EPC dataset indicating whether property construction year is pre- or post-1930 (or unknown).
-
-    Args:
-        df (pl.DataFrame): EPC dataset
-
-    Returns:
-        pl.DataFrame: EPC dataset with `build_year` column
-    """
-    return df.with_columns(
-        pl.col("CONSTRUCTION_AGE_BAND")
-        .map_dict(config["mapping"]["pre_post_1930_epc"])
-        .alias("build_year")
-    )
-
-
 def generate_df_dummies(
     sample: pl.DataFrame, lsoa_marginals: Dict[str, dict]
 ) -> pl.DataFrame:
     """
     Generate dummy rows to add to EPC subset for single LSOA. Dummy rows contain feature categories present in target
-    dataset but missing from EPC subset. Dummy rows are required when EPC subset is missing categories to improve
-    the reweighting output.
+    dataset but missing from EPC subset. Dummy rows are required when EPC subset is missing target feature categories to
+    improve the weighting output.
 
     Args:
         sample (pl.DataFrame): EPC dataset subset to a single LSOA
@@ -220,18 +112,21 @@ def generate_df_dummies(
     Returns:
         pl.DataFrame: dummy rows for a single LSOA in the EPC dataset
     """
-    _dfs = []
+    dfs = []
+
+    # Get feature categories missing from EPC sample for each feature
     for feature, marginals in lsoa_marginals.items():
-        missing = _generate_list_missing_categories(
+        missing = _generate_list_missing_from_sample(
             feature=feature, feature_marginals=marginals, sample=sample
         )
-        _dfs.append(pl.DataFrame({feature: missing}))
+        dfs.append(pl.DataFrame({feature: missing}))
 
-    dummy_rows = pl.concat(_dfs, how="horizontal").with_columns(
+    # Generate dummy rows with missing categories
+    dummy_rows = pl.concat(dfs, how="horizontal").with_columns(
         pl.lit(sample["lsoa"].unique()[0], pl.String).alias("lsoa")
     )
 
-    # Add id to dummy rows
+    # Add id to dummy rows and fill nulls in dummy rows
     dummy_rows = dummy_rows.with_columns(
         pl.Series(name="UPRN", values=[f"dummy_{_}" for _ in range(0, len(dummy_rows))])
     )
@@ -260,54 +155,60 @@ def _fill_nulls_dummy_df(
     """
     for feature, marginals in lsoa_marginals.items():
         if dummy_rows[feature].is_null().any():
-            missing = _generate_list_missing_categories(
+            # Identify missing categories for each feature
+            missing = _generate_list_missing_from_sample(
                 feature=feature, feature_marginals=marginals, sample=sample
             )
-            if len(missing) > 0:  # fill with random missing category from feature first
+
+            # Fill nulls with random missing category from feature if exists
+            if len(missing) > 0:
                 dummy_rows = dummy_rows.with_columns(
                     pl.col(feature).fill_null(random.choices(missing, k=1)[0])
                 )
-            else:  # otherwise, fill with category with max count in sample
+            # Otherwise, fill nulls with category with max count in sample
+            else:
                 dummy_rows = dummy_rows.with_columns(
                     pl.col(feature).fill_null(
                         sample[feature].value_counts().max()[feature][0]
                     )
                 )
+
     return dummy_rows
 
 
-def _generate_list_missing_categories(
-    feature: str, feature_marginals: Dict[str, float], sample: pl.DataFrame
+def _generate_list_missing_from_sample(
+    sample: pl.DataFrame, feature: str, feature_marginals: Dict[str, float]
 ) -> list:
     """
     Generate list of categories present in target data but missing from EPC subset for the specified feature.
 
     Args:
+        sample (pl.DataFrame): EPC dataset subset to a single LSOA
         feature (str): name of feature
         feature_marginals (Dict[str, float]): dict containing target proportions for one feature for a single LSOA
-        sample (pl.DataFrame): EPC dataset subset to a single LSOA
 
     Returns:
         list: categories missing from EPC subset for a given feature
     """
-    cats = {k for k in feature_marginals.keys() if feature_marginals.get(k) > 0}
-    missing = list(cats.difference(set(sample[feature].unique())))
+    sample_cats = set(sample[feature].unique())
+    target_cats = {k for k in feature_marginals.keys() if feature_marginals.get(k) > 0}
+    missing = list(target_cats.difference(sample_cats))
     return missing
 
 
 def _generate_list_missing_from_target(
-    feature: str, feature_marginals: Dict[str, float], sample: pl.DataFrame
+    sample: pl.DataFrame, feature: str, feature_marginals: Dict[str, float]
 ) -> list:
     """
-    Generate list of categories present in target data but missing from EPC subset for the specified feature.
+    Generate list of categories present in EPC subset but missing from target data for the specified feature.
 
     Args:
+        sample (pl.DataFrame): EPC dataset subset to a single LSOA
         feature (str): name of feature
         feature_marginals (Dict[str, float]): dict containing target proportions for one feature for a single LSOA
-        sample (pl.DataFrame): EPC dataset subset to a single LSOA
 
     Returns:
-        list: categories missing from EPC subset for a given feature
+        list: categories missing from target for a given feature
     """
     sample_cats = set(sample[feature].unique())
     target_cats = {k for k in feature_marginals.keys() if feature_marginals.get(k) > 0}
