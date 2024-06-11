@@ -46,6 +46,79 @@ def calculate_diffs(dict1: dict, dict2: dict) -> dict:
     return differences
 
 
+def get_error_metrics(
+    sample_counts: dict,
+    sample_proportions: dict,
+    target_counts: dict,
+    target_proportions: dict,
+) -> dict:
+    """
+    Find the error metrics between two sets of proportion and count dictionaries
+    """
+
+    # Calculate differences between counts and proportions
+    counts_diff = calculate_diffs(sample_counts, target_counts)
+    proportions_diff = calculate_diffs(sample_proportions, target_proportions)
+
+    # Ensure the keys in tenure_dict_proportions are in the same order as in proportions
+    ordered_target_dict_proportions = {
+        key: target_proportions.get(key, 0) for key in sample_proportions
+    }
+
+    # Convert to a list
+    ordered_list_target_dict_proportions = list(
+        ordered_target_dict_proportions.values()
+    )
+
+    # Calculate RMSE and MAE without missing categories
+    rmse_without_missing_categories = root_mean_squared_error(
+        ordered_list_target_dict_proportions, list(sample_proportions.values())
+    )
+    mae_without_missing_categories = mean_absolute_error(
+        ordered_list_target_dict_proportions, list(sample_proportions.values())
+    )
+
+    # Create a copy of proportions and add a zero for the missing category
+    proportions_with_zero = sample_proportions.copy()
+
+    # Find the union of the keys in both datasets
+    all_keys = set(sample_proportions.keys()).union(set(target_proportions.keys()))
+
+    # Ensure that both dictionaries contain all keys
+    proportions_with_zero = {key: sample_proportions.get(key, 0) for key in all_keys}
+    target_dict_proportions_with_zero = {
+        key: target_proportions.get(key, 0) for key in all_keys
+    }
+
+    # Order target_dict_proportions based on proportions_with_zero
+    ordered_target_dict_proportions_with_zero = {
+        key: target_dict_proportions_with_zero[key] for key in proportions_with_zero
+    }
+
+    # Convert to a list
+    ordered_list_target_dict_proportions_with_zero = list(
+        ordered_target_dict_proportions_with_zero.values()
+    )
+    list_proportions_with_zero = list(proportions_with_zero.values())
+
+    # Calculate RMSE and MAE with missing categories
+    rmse_with_missing_categories = root_mean_squared_error(
+        ordered_list_target_dict_proportions_with_zero, list_proportions_with_zero
+    )
+    mae_with_missing_categories = mean_absolute_error(
+        ordered_list_target_dict_proportions_with_zero, list_proportions_with_zero
+    )
+
+    return {
+        "counts_diff": counts_diff,
+        "proportions_diff": proportions_diff,
+        "rmse_all_cats": rmse_without_missing_categories,
+        "mae_all_cats": mae_without_missing_categories,
+        "rmse_missing_cats": rmse_with_missing_categories,
+        "mae_missing_cats": mae_with_missing_categories,
+    }
+
+
 def process_single_lsoa(
     sample: pl.DataFrame,
     target: pl.DataFrame,
@@ -78,66 +151,18 @@ def process_single_lsoa(
     del target_dict[lsoa]
     target_dict_proportions = calculate_proportions(target_dict)
 
-    # Calculate differences between counts and proportions
-    counts_diff = calculate_diffs(counts, target_dict)
-    proportions_diff = calculate_diffs(proportions, target_dict_proportions)
-
-    # Ensure the keys in tenure_dict_proportions are in the same order as in proportions
-    ordered_target_dict_proportions = {
-        key: target_dict_proportions[key] for key in proportions
-    }
-
-    # Convert to a list
-    ordered_list_target_dict_proportions = list(
-        ordered_target_dict_proportions.values()
+    error_metrics = get_error_metrics(
+        counts, proportions, target_dict, target_dict_proportions
     )
 
-    # Calculate RMSE and MAE without missing categories
-    rmse_without_missing_categories = root_mean_squared_error(
-        ordered_list_target_dict_proportions, list_proportions
-    )
-    mae_without_missing_categories = mean_absolute_error(
-        ordered_list_target_dict_proportions, list_proportions
-    )
-
-    # Create a copy of proportions and add a zero for the missing category
-    proportions_with_zero = proportions.copy()
-
-    # Find the union of the keys in both datasets
-    all_keys = set(proportions.keys()).union(set(target_dict_proportions.keys()))
-
-    # Ensure that both dictionaries contain all keys
-    proportions_with_zero = {key: proportions.get(key, 0) for key in all_keys}
-    target_dict_proportions_with_zero = {
-        key: target_dict_proportions.get(key, 0) for key in all_keys
-    }
-
-    # Order target_dict_proportions based on proportions_with_zero
-    ordered_target_dict_proportions_with_zero = {
-        key: target_dict_proportions_with_zero[key] for key in proportions_with_zero
-    }
-
-    # Convert to a list
-    ordered_list_target_dict_proportions_with_zero = list(
-        ordered_target_dict_proportions_with_zero.values()
-    )
-    list_proportions_with_zero = list(proportions_with_zero.values())
-
-    # Calculate RMSE and MAE with missing categories
-    rmse_with_missing_categories = root_mean_squared_error(
-        ordered_list_target_dict_proportions_with_zero, list_proportions_with_zero
-    )
-    mae_with_missing_categories = mean_absolute_error(
-        ordered_list_target_dict_proportions_with_zero, list_proportions_with_zero
-    )
     return (
         counts,
-        counts_diff,
-        proportions_diff,
-        rmse_without_missing_categories,
-        mae_without_missing_categories,
-        rmse_with_missing_categories,
-        mae_with_missing_categories,
+        error_metrics["counts_diff"],
+        error_metrics["proportions_diff"],
+        error_metrics["rmse_all_cats"],
+        error_metrics["mae_all_cats"],
+        error_metrics["rmse_missing_cats"],
+        error_metrics["mae_missing_cats"],
     )
 
 
