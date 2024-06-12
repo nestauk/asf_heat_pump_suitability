@@ -4,9 +4,10 @@
 
 ### Features
 
-| Config key                               | S3 file                         | Source                                                                                     | Date        | Description                                      |
-| :--------------------------------------- | :------------------------------ | :----------------------------------------------------------------------------------------- | :---------- | :----------------------------------------------- |
-| `["data_source"]["UK_ons_postcode_dir"]` | `source_data/ONSPD_AUG_2023_UK` | [ONS](https://geoportal.statistics.gov.uk/datasets/487a5ba62c8b4da08f01eb3c08e304f6/about) | August 2023 | ONS postcode directory for UK as at August 2023. |
+| Config key                                      | S3 file                                               | Source                                                                                                                | Date        | Description                                                               |
+| :---------------------------------------------- | :---------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------- | :---------- | :------------------------------------------------------------------------ |
+| `["data_source"]["UK_ons_postcode_dir"]`        | `source_data/ONSPD_AUG_2023_UK.csv`                   | [ONS](https://geoportal.statistics.gov.uk/datasets/487a5ba62c8b4da08f01eb3c08e304f6/about)                            | August 2023 | ONS postcode directory for UK as at August 2023.                          |
+| `["data_source"]["GB_ons_garden_space_access"]` | `source_data/ONS_Apr2020_access_to_garden_space.xlsx` | [ONS](https://www.ons.gov.uk/economy/environmentalaccounts/datasets/accesstogardensandpublicgreenspaceingreatbritain) | April 2020  | Access to garden space, Great Britain. Contains avg garden size per MSOA. |
 
 ### Validation datasets
 
