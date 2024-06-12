@@ -31,7 +31,7 @@ main_error_metrics = [
     "mae_missing_cats",
 ]
 
-evaluation_feature_names = ["tenure", "property_type", "build_year"]
+evaluation_feature_names = ["tenure", "property_type", "build_year", "nrooms"]
 
 
 def parse_arguments():
@@ -177,12 +177,18 @@ def load_epc_reweights(
 
     reweighted_epc_df = pl.read_parquet(reweighted_dir)
 
-    # # Bit of cleaning to allign with target data
-    # reweighted_epc_df = reweighted_epc_df.rename({"number_of_rooms": "nrooms"})
-    # reweighted_epc_df = reweighted_epc_df.with_columns(
-    # 		pl.col("nrooms")
-    # 		.map_elements(lambda x: '9+' if x >= 9 else str(x), return_dtype=pl.String)
-    # 	)
+    # Bit of cleaning to allign with target data
+    reweighted_epc_df = reweighted_epc_df.rename({"NUMBER_HABITABLE_ROOMS": "nrooms"})
+    reweighted_epc_df = reweighted_epc_df.with_columns(
+        pl.col("nrooms").map_elements(
+            lambda x: "9+" if x >= 9 else str(x), return_dtype=pl.String
+        )
+    )
+    reweighted_epc_df = reweighted_epc_df.with_columns(
+        pl.Series(
+            name="nrooms", values=reweighted_epc_df["nrooms"].replace(None, "unknown")
+        )
+    )
     return reweighted_epc_df
 
 
@@ -234,7 +240,7 @@ if __name__ == "__main__":
 
     if args.sample:
         lsoas = reweighted_epc_df_with_target["lsoa"].unique()
-        lsoas = lsoas[0:5000]
+        lsoas = lsoas[0:500]
         reweighted_epc_df_with_target = reweighted_epc_df_with_target.filter(
             pl.col("lsoa").is_in(lsoas)
         )
