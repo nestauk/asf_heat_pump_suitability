@@ -6,7 +6,7 @@
 
 | Config key                               | S3 file                         | Source                                                                                     | Date        | Description                                                                                                          |
 | :--------------------------------------- | :------------------------------ | :----------------------------------------------------------------------------------------- | :---------- | :------------------------------------------------------------------------------------------------------------------- |
-| `["data_source"]["UK_ons_postcode_dir"]` | `source_data/ONSPD_AUG_2023_UK` | [ONS](https://geoportal.statistics.gov.uk/datasets/487a5ba62c8b4da08f01eb3c08e304f6/about) | August 2023 | ONS postcode directory for UK as at August 2023. Source of output area information and rural-urban classification^1. |
+| `["data_source"]["UK_ons_postcode_dir"]` | `source_data/ONSPD_AUG_2023_UK` | [ONS](https://geoportal.statistics.gov.uk/datasets/487a5ba62c8b4da08f01eb3c08e304f6/about) | August 2023 | ONS postcode directory for UK as at August 2023. Source of output area information and rural-urban classification^1^. |
 
 _Footnotes:_
 
