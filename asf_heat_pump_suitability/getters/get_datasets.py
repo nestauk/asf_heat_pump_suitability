@@ -7,10 +7,10 @@ def get_df_ons_pd(**kwargs) -> pl.DataFrame:
     """
     Get ONS postcode directory (ONSPD) for Great Britain.
 
-    Args
+    Args:
         **kwargs for pl.read_csv
 
-    Returns
+    Returns:
         pl.DataFrame: postcode directory for Great Britain
     """
     df = base_getters.get_df_from_zip_url(
@@ -20,4 +20,26 @@ def get_df_ons_pd(**kwargs) -> pl.DataFrame:
         **kwargs,
     )
 
+    return df
+
+
+def get_df_ons_garden_space_avg(**kwargs) -> pl.DataFrame:
+    """
+    Get raw ONS 'Access to garden space, Great Britain' dataset.
+
+    Args:
+        **kwargs for pl.read_excel
+
+    Returns:
+        pl.DataFrame: raw ONS 'Access to garden space' dataset
+    """
+    content = base_getters.get_content_from_path(
+        config["data_source"]["GB_ons_garden_space_access"]
+    )
+    df = pl.read_excel(
+        content,
+        sheet_name="MSOA gardens",
+        engine="calamine",
+        **kwargs,
+    )
     return df
