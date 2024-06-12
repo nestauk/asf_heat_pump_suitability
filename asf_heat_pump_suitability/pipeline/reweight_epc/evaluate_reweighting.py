@@ -74,15 +74,15 @@ def get_errors_for_lsoa(
     Get errors between target and unweighted, and target and weighted, for one feature and one LSOA.
 
     Args:
-            feature_name (str): The feature name to calculate errors for
-            lsoa_code (str): The LSOA
-            target_features (dict): A nested dictionary of the counts for all property features and LSOAs
-            target_marginals (dict): A nested dictionary of the proportions for all property features and LSOAs
-            epc_subset (pl.DataFrame): EPC dataset for this LSOA
+                    feature_name (str): The feature name to calculate errors for
+                    lsoa_code (str): The LSOA
+                    target_features (dict): A nested dictionary of the counts for all property features and LSOAs
+                    target_marginals (dict): A nested dictionary of the proportions for all property features and LSOAs
+                    epc_subset (pl.DataFrame): EPC dataset for this LSOA
 
     Returns:
-            dict: A dictionary containing various metrics for both the unweighted and weighted EPC data compared to
-                    the target dataset for this feature.
+                    dict: A dictionary containing various metrics for both the unweighted and weighted EPC data compared to
+                                    the target dataset for this feature.
 
     """
 
@@ -117,6 +117,10 @@ def get_errors_for_lsoa(
                 target_proportions,
             )
 
+            average_error_reduction = get_error_reduction(
+                orig_proportions, reweighted_proportions, target_proportions
+            )
+
             prop_reweighted_counts_list = (
                 epc_subset.group_by(feature_name)
                 .agg(pl.col("proportional_weight").sum())
@@ -140,10 +144,12 @@ def get_errors_for_lsoa(
             # The weights may have been all Null
             error_metrics_reweighted = {}
             error_metrics_prop_reweighted = {}
+            average_error_reduction = None
     else:
         error_metrics_orig = {}
         error_metrics_reweighted = {}
         error_metrics_prop_reweighted = {}
+        average_error_reduction = None
 
     final_metrics = {}
     for metric in main_error_metrics:
@@ -151,6 +157,7 @@ def get_errors_for_lsoa(
             "unweight": error_metrics_orig.get(metric, None),
             "reweight": error_metrics_reweighted.get(metric, None),
             "reweight-prop": error_metrics_prop_reweighted.get(metric, None),
+            "error_reduction": average_error_reduction,
         }
     return final_metrics
 
@@ -162,10 +169,10 @@ def load_epc_reweights(
     Load and slightly clean the reweighted EPC data
 
     Args:
-            reweighted_dir (str): The S3 location of the EPC data enhanced with weights
+                    reweighted_dir (str): The S3 location of the EPC data enhanced with weights
 
     Returns:
-            reweighted_epc_df (pl.DataFrame): The EPC data enhanced with weights
+                    reweighted_epc_df (pl.DataFrame): The EPC data enhanced with weights
     """
 
     reweighted_epc_df = pl.read_parquet(reweighted_dir)
@@ -185,11 +192,11 @@ def filter_epc(reweighted_epc_df: pl.DataFrame, target_features: dict) -> pl.Dat
     This helps with processing time.
 
     Args:
-            reweighted_epc_df (pl.DataFrame): The EPC data enhanced with weights
-            target_features (dict): A nested dictionary of feature counts for LSOAs in the target dataset
+                    reweighted_epc_df (pl.DataFrame): The EPC data enhanced with weights
+                    target_features (dict): A nested dictionary of feature counts for LSOAs in the target dataset
 
     Returns:
-            reweighted_epc_df (pl.DataFrame): The filtered EPC data enhanced with weights
+                    reweighted_epc_df (pl.DataFrame): The filtered EPC data enhanced with weights
     """
 
     # Get all the LSOA's in the target data
@@ -248,7 +255,7 @@ if __name__ == "__main__":
         feature_results["reweighted"] = not all(epc_subset["weight"].is_null())
         full_results[lsoa_code] = feature_results
 
-    # Save to S3
+        # Save to S3
 
     if not args.save_output:
         name = args.reweighted_dir.replace("s3://asf-heat-pump-suitability/", "")

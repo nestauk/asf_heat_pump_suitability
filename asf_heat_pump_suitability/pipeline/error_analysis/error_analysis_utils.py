@@ -119,6 +119,30 @@ def get_error_metrics(
     }
 
 
+def get_error_reduction(
+    before_proportions: dict,
+    after_proportions: dict,
+    target_proportions: dict,
+) -> dict:
+    """
+    Find the average error reduction between two sets of proportions and the target
+
+    """
+
+    error_reduction = {}
+    for key in before_proportions:
+        after_diff = after_proportions.get(key, 0) - target_proportions.get(key, 0)
+        if after_diff != 0:
+            error_reduction[key] = (
+                after_proportions.get(key, 0) - before_proportions.get(key, 0)
+            ) / after_diff
+
+    if error_reduction:
+        return np.mean(list(error_reduction.values()))
+    else:
+        return None
+
+
 def process_single_lsoa(
     sample: pl.DataFrame,
     target: pl.DataFrame,
