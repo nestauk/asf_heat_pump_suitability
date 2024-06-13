@@ -4,9 +4,16 @@
 
 ### Features
 
-| Config key                               | S3 file                         | Source                                                                                     | Date        | Description                                      |
-| :--------------------------------------- | :------------------------------ | :----------------------------------------------------------------------------------------- | :---------- | :----------------------------------------------- |
-| `["data_source"]["UK_ons_postcode_dir"]` | `source_data/ONSPD_AUG_2023_UK` | [ONS](https://geoportal.statistics.gov.uk/datasets/487a5ba62c8b4da08f01eb3c08e304f6/about) | August 2023 | ONS postcode directory for UK as at August 2023. |
+| Config key                               | S3 file                         | Source                                                                                     | Date        | Description                                                                                                                    |
+| :--------------------------------------- | :------------------------------ | :----------------------------------------------------------------------------------------- | :---------- | :----------------------------------------------------------------------------------------------------------------------------- |
+| `["data_source"]["UK_ons_postcode_dir"]` | `source_data/ONSPD_AUG_2023_UK` | [ONS](https://geoportal.statistics.gov.uk/datasets/487a5ba62c8b4da08f01eb3c08e304f6/about) | August 2023 | ONS postcode directory for UK as at August 2023. Source of output area information and rural-urban classification<sup>1</sup>. |
+
+_Footnotes:_
+
+1. Rural-urban classification codes are mapped to text descriptions according to the sources listed below:
+   - Scotland 8-fold code to text classification mapping: [Table 2.2, Scottish Government Urban Rural Classification](https://www.gov.scot/publications/scottish-government-urban-rural-classification-2020/pages/2/)
+   - Scotland 8-fold to 2-fold classification mapping: [Table 2.3, Scottish Government Urban Rural Classification](https://www.gov.scot/publications/scottish-government-urban-rural-classification-2020/pages/2/)
+   - England & Wales 10- and 2-fold code to text classification mapping: [page 19, ONS Postcode Directory (August 2023) User Guide](https://geoportal.statistics.gov.uk/datasets/a8db59f77e7542d092458426dbacfb90/about)
 
 ### Validation datasets
 
