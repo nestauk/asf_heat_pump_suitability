@@ -1,5 +1,4 @@
 import polars as pl
-from asf_heat_pump_suitability.getters import get_datasets
 from asf_heat_pump_suitability.pipeline.prepare_features import output_areas
 
 
