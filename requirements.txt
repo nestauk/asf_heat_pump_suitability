@@ -7,3 +7,5 @@ jupytext
 fastexcel
 tqdm
 sklearn
+geopandas
+shapely

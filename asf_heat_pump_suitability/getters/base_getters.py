@@ -4,6 +4,8 @@ from zipfile import ZipFile
 from io import BytesIO
 import logging
 import s3fs
+import geojson
+import geopandas as gpd
 
 
 def get_df_from_excel_url(url: str, **kwargs) -> pl.DataFrame:
@@ -71,3 +73,21 @@ def _get_content_from_url(url: str) -> BytesIO:
     content = BytesIO(res.content)
 
     return content
+
+
+def load_gdf_from_s3_geojson(s3_uri: str) -> gpd.GeoDataFrame:
+    """ """
+    fs = s3fs.S3FileSystem()
+    with fs.open(s3_uri, "rb") as f:
+        data = geojson.load(f)
+    gdf = gpd.GeoDataFrame.from_features(data["features"])
+
+    return gdf
+
+
+def list_files_s3_location(location: str) -> list:
+    """ """
+    fs = s3fs.S3FileSystem()
+    files = fs.ls(location)
+
+    return files
