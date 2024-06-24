@@ -5,6 +5,7 @@ from io import BytesIO
 import logging
 import s3fs
 import geojson
+import gzip
 import geopandas as gpd
 
 
@@ -75,12 +76,12 @@ def _get_content_from_url(url: str) -> BytesIO:
     return content
 
 
-def load_gdf_from_s3_geojson(s3_uri: str) -> gpd.GeoDataFrame:
+def load_gdf_from_s3_geojson(s3_uri: str, crs: str) -> gpd.GeoDataFrame:
     """ """
     fs = s3fs.S3FileSystem()
     with fs.open(s3_uri, "rb") as f:
         data = geojson.load(f)
-    gdf = gpd.GeoDataFrame.from_features(data["features"])
+    gdf = gpd.GeoDataFrame.from_features(data["features"], crs=crs)
 
     return gdf
 
@@ -88,6 +89,20 @@ def load_gdf_from_s3_geojson(s3_uri: str) -> gpd.GeoDataFrame:
 def list_files_s3_location(location: str) -> list:
     """ """
     fs = s3fs.S3FileSystem()
-    files = fs.ls(location)
+    # Indexing to remove directory key
+    files = fs.ls(location)[1:]
 
     return files
+
+
+def load_gdf_csv_gz(url):
+    """
+    Load GeoDataFrame from csv.gz file
+    """
+    content = _get_content_from_url(url)
+    with gzip.open(content, "r") as f:
+        json_bytes = f.read()
+    json_str = json_bytes.decode("utf-8")
+    gdf = gpd.read_file(json_str)
+
+    return gdf
