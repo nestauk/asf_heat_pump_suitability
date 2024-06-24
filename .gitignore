@@ -103,6 +103,9 @@ target/
 # Jupyter NB Checkpoints
 .ipynb_checkpoints/
 
+# Scrap notebooks for building / testing
+/asf_heat_pump_suitability/notebooks/scrap_notebooks/*
+
 # exclude /inputs and /outputs except top-level markdown
 /inputs/*
 !/inputs/*.md

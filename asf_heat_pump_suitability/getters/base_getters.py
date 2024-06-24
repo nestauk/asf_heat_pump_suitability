@@ -27,12 +27,12 @@ def get_df_from_zip_url(url: str, extract_file: str, **kwargs) -> pl.DataFrame:
     """
     Get dataframe from ZIP file stored at URL.
 
-    Args
-        url (str): URL location of ZIP file download
+    Args:
+        url (str): URL location of ZIP file load
         extract_file (str): name of file to extract
         **kwargs for pl.read_csv()
 
-    Returns
+    Returns:
         pl.DataFrame: dataset from ZIP file
     """
     content = _get_content_from_url(url)
@@ -41,12 +41,30 @@ def get_df_from_zip_url(url: str, extract_file: str, **kwargs) -> pl.DataFrame:
     return df
 
 
-def get_content_from_path(path: str) -> bytes:
+def get_df_from_zip_csv_s3(path: str, extract_file: str, **kwargs) -> pl.DataFrame:
     """
-    Get bytes content of file from path.
+    Load dataframe from csv in ZIP file stored an S3.
+
+    Args:
+        path (str): S3 URI of ZIP file load
+        extract_file (str): name of file to extract
+        **kwargs for pl.read_csv()
+
+    Returns:
+        pl.DataFrame: dataset from ZIP file
+    """
+    content = BytesIO(get_content_from_s3_path(path))
+    df = pl.read_csv(ZipFile(content).open(name=extract_file), **kwargs)
+
+    return df
+
+
+def get_content_from_s3_path(path: str) -> bytes:
+    """
+    Get bytes content of file from S3 path.
 
     Args
-        path (str): path to file
+        path (str): S3 URI to file
 
     Returns
         bytes: bytes content of file

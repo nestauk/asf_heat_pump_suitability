@@ -3,7 +3,10 @@ import polars as pl
 import s3fs
 from typing import Optional
 from argparse import ArgumentParser
-from asf_heat_pump_suitability.pipeline.prepare_features import garden_space_avg
+from asf_heat_pump_suitability.pipeline.prepare_features import (
+    garden_space_avg,
+    lat_lon,
+)
 from asf_heat_pump_suitability.pipeline.enhance_epc import prepare_epc
 
 
@@ -34,6 +37,7 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     """
     Enhance EPC dataset with additional features:
     - mean average garden size per MSOA
+    - lat/lon per UPRN
 
     Args
         epc_path (str): S3 URI to EPC dataset with weights and LSOA; MSOA columns
@@ -47,6 +51,8 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     epc_df = pl.read_parquet(epc_path)
 
     # Join enhancing features to EPC dataset
+    # Add feature: garden space avg
+    logging.info("Adding average garden size per MSOA to EPC")
     garden_space_avg_msoa_df = garden_space_avg.generate_df_garden_space_avg()
     epc_df = prepare_epc.add_col_msoa_avg_outdoor_space_property_type(epc_df)
     enhanced_epc_df = epc_df.join(
@@ -55,6 +61,14 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
         left_on=["msoa", "msoa_avg_outdoor_space_property_type"],
         right_on=["MSOA code", "msoa_avg_outdoor_space_property_type"],
     )
+
+    # Add feature: lat/long
+    logging.info("Adding lat/lon data to EPC")
+    uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
+    epc_latlon_df = epc_df.select(["UPRN"])
+
+    # Join enhanced datasets together
+    enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
 
     # Save to S3
     fs = s3fs.S3FileSystem()

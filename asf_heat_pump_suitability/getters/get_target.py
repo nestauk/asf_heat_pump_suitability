@@ -99,7 +99,7 @@ def get_df_target_property_type(fill_censored: int = 1) -> pl.DataFrame:
     Returns:
         pl.Dataframe: counts of property type for all LSOAs in England and Wales
     """
-    content = base_getters.get_content_from_path(
+    content = base_getters.get_content_from_s3_path(
         config["data_source"]["EW_census_housing_characteristics"]
     )
     df = pl.read_excel(content, sheet_name="2c", engine="calamine")
