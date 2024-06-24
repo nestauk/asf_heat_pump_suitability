@@ -8,6 +8,7 @@ data_source:
   EW_cdrc_dwelling_age: "s3://asf-heat-pump-suitability/source_data/2015cdrc_dwelling_ages_E_W.csv"
   GB_ons_garden_space_access: "s3://asf-heat-pump-suitability/source_data/ONS_Apr2020_access_to_garden_space.xlsx"
   GB_osopen_uprn_latlon: "s3://asf-heat-pump-suitability/source_data/osopenuprn_202405_csv.zip"
+  EW_census_accommodation_type: "s3://asf-heat-pump-suitability/source_data/2021census_Mar2023_accommodation_type_E_W.csv"
 usecols:
   epc:
     - COUNTRY
