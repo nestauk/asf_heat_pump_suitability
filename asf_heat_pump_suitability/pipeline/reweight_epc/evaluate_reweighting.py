@@ -6,7 +6,7 @@ Errors are calculated between the sample (unweighted and weighted) and target pr
 Run with:
 
 python asf_heat_pump_suitability/pipeline/reweight_epc/evaluate_reweighting.py
-	--reweighted_dir "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights.parquet"
+	--reweighted_path "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights.parquet"
 	--sample
 
 [remove the --sample argument to run on full dataset]
@@ -19,19 +19,11 @@ from tqdm import tqdm
 
 from argparse import ArgumentParser
 
-from asf_heat_pump_suitability.pipeline.error_analysis.error_analysis_utils import *
+from asf_heat_pump_suitability.pipeline.error_analysis import error_analysis_utils
 from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_target
+from asf_heat_pump_suitability.pipeline.enhance_epc.prepare_epc import clean_df_nrooms
 from asf_heat_pump_suitability.getters.s3_getters import save_to_s3
 from asf_heat_pump_suitability import logger
-
-main_error_metrics = [
-    "rmse_all_cats",
-    "mae_all_cats",
-    "rmse_missing_cats",
-    "mae_missing_cats",
-]
-
-evaluation_feature_names = ["tenure", "property_type", "build_year", "nrooms"]
 
 
 def parse_arguments():
@@ -39,7 +31,7 @@ def parse_arguments():
     parser = ArgumentParser()
 
     parser.add_argument(
-        "--reweighted_dir",
+        "--reweighted_path",
         help="S3 URI to weighted EPC dataset",
         type=str,
         default="s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights.parquet",
@@ -54,7 +46,7 @@ def parse_arguments():
 
     parser.add_argument(
         "--sample",
-        help="Whether to test this script on a sample or not",
+        help="Whether to test this script on a non-random sample or not",
         default=False,
         action="store_true",
     )
@@ -69,6 +61,12 @@ def get_errors_for_lsoa(
     target_features: dict,
     target_marginals: dict,
     epc_subset: pl.DataFrame,
+    error_metric_names: list = [
+        "rmse_no_missing_cats",
+        "mae_no_missing_cats",
+        "rmse_missing_cats",
+        "mae_missing_cats",
+    ],
 ) -> dict:
     """
     Get errors between target and unweighted, and target and weighted, for one feature and one LSOA.
@@ -77,8 +75,11 @@ def get_errors_for_lsoa(
                     feature_name (str): The feature name to calculate errors for
                     lsoa_code (str): The LSOA
                     target_features (dict): A nested dictionary of the counts for all property features and LSOAs
+                        For example, {'tenure': {'E01022833': {'owner-occupied': 548, 'rental (social)': 53}, 'E01013414': {}}, 'property_type': {}}
                     target_marginals (dict): A nested dictionary of the proportions for all property features and LSOAs
                     epc_subset (pl.DataFrame): EPC dataset for this LSOA
+                    error_metric_names (list): The error metric names desired in the output, defined in error_analysis_utils.get_error_metrics.
+                        Defaults to ["rmse_no_missing_cats","mae_no_missing_cats","rmse_missing_cats","mae_missing_cats",]
 
     Returns:
                     dict: A dictionary containing various metrics for both the unweighted and weighted EPC data compared to
@@ -86,113 +87,93 @@ def get_errors_for_lsoa(
 
     """
 
+    # Find target values for this feature and LSOA
     target_counts = target_features[feature_name].get(lsoa_code)
     target_proportions = target_marginals[feature_name].get(lsoa_code)
 
     if target_counts:
-        orig_counts_list = epc_subset[feature_name].value_counts().to_dict()
+        # If we have target information then calculate the errors
+
+        # Calculate the errors between the original EPC data and the target data
+        orig_counts_dict = epc_subset[feature_name].value_counts().to_dict()
         orig_counts = dict(
-            zip(orig_counts_list[feature_name], orig_counts_list["count"])
+            zip(orig_counts_dict[feature_name], orig_counts_dict["count"])
         )
-        orig_proportions = calculate_proportions(orig_counts)
-        error_metrics_orig = get_error_metrics(
+        orig_proportions = error_analysis_utils.calculate_proportions(orig_counts)
+        error_metrics_orig = error_analysis_utils.get_error_metrics(
             orig_counts, orig_proportions, target_counts, target_proportions
         )
         if not all(epc_subset["weight"].is_null()):
             # Get the sum of the weights for each feature category (not technically a 'count')
-            reweighted_counts_list = (
+            reweighted_counts_dict = (
                 epc_subset.group_by(feature_name).agg(pl.col("weight").sum()).to_dict()
             )
             reweighted_counts = dict(
                 zip(
-                    reweighted_counts_list[feature_name],
-                    reweighted_counts_list["weight"],
+                    reweighted_counts_dict[feature_name],
+                    reweighted_counts_dict["weight"],
                 )
             )
-            reweighted_proportions = calculate_proportions(reweighted_counts)
-            error_metrics_reweighted = get_error_metrics(
+            reweighted_proportions = error_analysis_utils.calculate_proportions(
+                reweighted_counts
+            )
+            error_metrics_reweighted = error_analysis_utils.get_error_metrics(
                 reweighted_counts,
                 reweighted_proportions,
                 target_counts,
                 target_proportions,
             )
-
-            average_error_reduction = get_error_reduction(
+            # Calculate the average error reduction from the original to reweighted relative to the original proportions
+            average_error_reduction = error_analysis_utils.get_error_reduction(
                 orig_proportions, reweighted_proportions, target_proportions
             )
 
-            prop_reweighted_counts_list = (
-                epc_subset.group_by(feature_name)
-                .agg(pl.col("proportional_weight").sum())
-                .to_dict()
-            )
-            prop_reweighted_counts = dict(
-                zip(
-                    prop_reweighted_counts_list[feature_name],
-                    prop_reweighted_counts_list["proportional_weight"],
-                )
-            )
-            prop_reweighted_proportions = calculate_proportions(prop_reweighted_counts)
-            error_metrics_prop_reweighted = get_error_metrics(
-                prop_reweighted_counts,
-                prop_reweighted_proportions,
-                target_counts,
-                target_proportions,
-            )
-
         else:
-            # The weights may have been all Null
+            logger.info(
+                f"All weights are null for the {feature_name} feature in LSOA {lsoa_code}"
+            )
             error_metrics_reweighted = {}
-            error_metrics_prop_reweighted = {}
             average_error_reduction = None
     else:
-        error_metrics_orig = {}
-        error_metrics_reweighted = {}
-        error_metrics_prop_reweighted = {}
-        average_error_reduction = None
+        logger.info(
+            f"No target data for the {feature_name} feature in LSOA {lsoa_code}"
+        )
+        return None
 
     final_metrics = {}
-    for metric in main_error_metrics:
+    for metric in error_metric_names:
         final_metrics[metric] = {
             "unweight": error_metrics_orig.get(metric, None),
             "reweight": error_metrics_reweighted.get(metric, None),
-            "reweight-prop": error_metrics_prop_reweighted.get(metric, None),
             "error_reduction": average_error_reduction,
         }
     return final_metrics
 
 
 def load_epc_reweights(
-    reweighted_dir: str = "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights.parquet",
+    reweighted_path: str = "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights.parquet",
 ) -> pl.DataFrame:
     """
     Load and slightly clean the reweighted EPC data
 
     Args:
-                    reweighted_dir (str): The S3 location of the EPC data enhanced with weights
+                    reweighted_path (str): The S3 location of the EPC data enhanced with weights
 
     Returns:
                     reweighted_epc_df (pl.DataFrame): The EPC data enhanced with weights
     """
 
-    reweighted_epc_df = pl.read_parquet(reweighted_dir)
+    reweighted_epc_df = pl.read_parquet(reweighted_path)
+    reweighted_epc_df = clean_df_nrooms(reweighted_epc_df)
 
-    # Bit of cleaning to allign with target data
-    reweighted_epc_df = reweighted_epc_df.rename({"NUMBER_HABITABLE_ROOMS": "nrooms"})
-    reweighted_epc_df = reweighted_epc_df.with_columns(
-        pl.col("nrooms").map_elements(
-            lambda x: "9+" if x >= 9 else str(x), return_dtype=pl.String
-        )
-    )
-    reweighted_epc_df = reweighted_epc_df.with_columns(
-        pl.Series(
-            name="nrooms", values=reweighted_epc_df["nrooms"].replace(None, "unknown")
-        )
-    )
     return reweighted_epc_df
 
 
-def filter_epc(reweighted_epc_df: pl.DataFrame, target_features: dict) -> pl.DataFrame:
+def filter_epc(
+    reweighted_epc_df: pl.DataFrame,
+    target_features: dict,
+    evaluation_feature_cols: list,
+) -> pl.DataFrame:
     """
     Filter the EPC dataset to just what is needed for calculating errors on.
     This helps with processing time.
@@ -200,6 +181,7 @@ def filter_epc(reweighted_epc_df: pl.DataFrame, target_features: dict) -> pl.Dat
     Args:
                     reweighted_epc_df (pl.DataFrame): The EPC data enhanced with weights
                     target_features (dict): A nested dictionary of feature counts for LSOAs in the target dataset
+                    evaluation_feature_cols (list): The list of EPC feature columns to evaluate on
 
     Returns:
                     reweighted_epc_df (pl.DataFrame): The filtered EPC data enhanced with weights
@@ -216,13 +198,22 @@ def filter_epc(reweighted_epc_df: pl.DataFrame, target_features: dict) -> pl.Dat
 
     # Remove unneeded columns to speed up processing
     reweighted_epc_df_with_target = reweighted_epc_df_with_target.select(
-        pl.col(evaluation_feature_names + ["lsoa", "weight", "proportional_weight"])
+        pl.col(evaluation_feature_cols + ["lsoa", "weight", "proportional_weight"])
     )
 
     return reweighted_epc_df_with_target
 
 
 if __name__ == "__main__":
+
+    error_metric_names = [
+        "rmse_no_missing_cats",
+        "mae_no_missing_cats",
+        "rmse_missing_cats",
+        "mae_missing_cats",
+    ]
+
+    evaluation_feature_cols = ["tenure", "property_type", "build_year"]
 
     args = parse_arguments()
 
@@ -234,9 +225,11 @@ if __name__ == "__main__":
 
     target_marginals = prepare_target.get_dict_target_marginals()
 
-    reweighted_epc_df = load_epc_reweights(args.reweighted_dir)
+    reweighted_epc_df = load_epc_reweights(args.reweighted_path)
 
-    reweighted_epc_df_with_target = filter_epc(reweighted_epc_df, target_features)
+    reweighted_epc_df_with_target = filter_epc(
+        reweighted_epc_df, target_features, evaluation_feature_cols
+    )
 
     if args.sample:
         lsoas = reweighted_epc_df_with_target["lsoa"].unique()
@@ -252,19 +245,24 @@ if __name__ == "__main__":
     full_results = {}
     for lsoa_code, epc_subset in tqdm(reweighted_epc_df_with_target.group_by("lsoa")):
         feature_results = {}
-        for feature_name in evaluation_feature_names:
+        for feature_name in evaluation_feature_cols:
             results = get_errors_for_lsoa(
-                feature_name, lsoa_code, target_features, target_marginals, epc_subset
+                feature_name,
+                lsoa_code,
+                target_features,
+                target_marginals,
+                epc_subset,
+                error_metric_names,
             )
             feature_results[feature_name] = results
         feature_results["num_props"] = len(epc_subset)
         feature_results["reweighted"] = not all(epc_subset["weight"].is_null())
         full_results[lsoa_code] = feature_results
 
-        # Save to S3
+    # Save to S3
 
     if not args.save_output:
-        name = args.reweighted_dir.replace("s3://asf-heat-pump-suitability/", "")
+        name = args.reweighted_path.replace("s3://asf-heat-pump-suitability/", "")
         name = f"{name.split('.parquet')[0]}_evaluation.json"
         if args.sample:
             name = f"{name.split('.json')[0]}_sample.json"

@@ -53,14 +53,34 @@ def get_error_metrics(
     target_proportions: dict,
 ) -> dict:
     """
-    Find the error metrics between two sets of proportion and count dictionaries
+    Find the error metrics for one feature (e.g. Tenure) and one LSOA between the sample and target datasets.
+
+    The RMSE and MAE outputs are in the range [0, 1], where 0 indicates very similar target and sample
+    proportions, whereas a value close to 1 indicates they are very different.
+
+    Args:
+        sample_counts (dict): The counts for each category in the sample, e.g. {'private': 43, 'rental': 21}
+        sample_proportions (dict): The proportions for each category in the sample, e.g. {'private': 0.672, 'rental': 0.328}
+        target_counts (dict): The target counts for each category, e.g. {'private': 46, 'rental': 18}
+        target_proportions (dict): The target proportions for each category, e.g. {'private': 0.719, 'rental': 0.281}
+    Returns:
+        dict: The evaluation metrics. This is as follows:
+            {
+            "counts_diff": The differences in the counts per category (sample minus target), e.g. {'private': -3, 'rental': 3}
+            "proportions_diff": The differences in the proportions per category (sample minus target), e.g. {'private': -0.047, 'rental': 0.047}
+            "rmse_no_missing_cats": The root mean squared error calculated on just the categories given in the sample proportions,
+            "mae_no_missing_cats": The mean absolute error calculated on just the categories given in the sample proportions,
+            "rmse_missing_cats": The root mean squared error calculated on all categories given in either the target or sample proportions,
+            "mae_missing_cats": The mean absolute error calculated on all categories given in either the target or sample proportions,
+            }
+
     """
 
     # Calculate differences between counts and proportions
     counts_diff = calculate_diffs(sample_counts, target_counts)
     proportions_diff = calculate_diffs(sample_proportions, target_proportions)
 
-    # Ensure the keys in tenure_dict_proportions are in the same order as in proportions
+    # Ensure the keys are in the same order as in proportions
     ordered_target_dict_proportions = {
         key: target_proportions.get(key, 0) for key in sample_proportions
     }
@@ -112,8 +132,8 @@ def get_error_metrics(
     return {
         "counts_diff": counts_diff,
         "proportions_diff": proportions_diff,
-        "rmse_all_cats": rmse_without_missing_categories,
-        "mae_all_cats": mae_without_missing_categories,
+        "rmse_no_missing_cats": rmse_without_missing_categories,
+        "mae_no_missing_cats": mae_without_missing_categories,
         "rmse_missing_cats": rmse_with_missing_categories,
         "mae_missing_cats": mae_with_missing_categories,
     }
@@ -123,22 +143,42 @@ def get_error_reduction(
     before_proportions: dict,
     after_proportions: dict,
     target_proportions: dict,
-) -> dict:
+) -> np.float64:
     """
-    Find the average error reduction between two sets of proportions and the target
+    Find the average relative error reduction for one feature (e.g. Tenure) and one LSOA before and after reweighting relative to before reweighting.
 
+    Args:
+        before_proportions (dict): The proportions of each category in the sample data before weighting, e.g. {'private': 0.672, 'rental': 0.328}
+        after_proportions (dict): The proportions of each category in the sample data after weighting.
+        target_proportions (dict): The proportions of each category in the target data.
+
+    Returns:
+        np.float64: The average relative error reduction before and after reweighting across each category for a feature in an LSOA.
+            This value is between -inf and 1
+
+        Interpreting the output:
+            - A negative value means weighting made the errors worse.
+            - A positive value means weighting improved the results.
+            - A very negative value (-inf) means weighting was much worse than no weighting.
+            - A value close to 1 means weighting made the results much better.
+            - A value of zero mean the errors with or without weighting were the same.
     """
 
-    error_reduction = {}
+    error_reduction_list = []
     for key in before_proportions:
-        after_diff = after_proportions.get(key, 0) - target_proportions.get(key, 0)
-        if after_diff != 0:
-            error_reduction[key] = (
-                after_proportions.get(key, 0) - before_proportions.get(key, 0)
-            ) / after_diff
-
-    if error_reduction:
-        return np.mean(list(error_reduction.values()))
+        before_diff = np.abs(
+            before_proportions.get(key, 0) - target_proportions.get(key, 0)
+        )
+        after_diff = np.abs(
+            after_proportions.get(key, 0) - target_proportions.get(key, 0)
+        )
+        error_reduction = before_diff - after_diff
+        if before_diff == 0:
+            before_diff = 0.0000001  # To avoid division by 0
+        # The percentage reduction in error when switching between before and after weighting
+        error_reduction_list.append(error_reduction / before_diff)
+    if error_reduction_list:
+        return np.mean(error_reduction_list)
     else:
         return None
 
@@ -183,8 +223,8 @@ def process_single_lsoa(
         counts,
         error_metrics["counts_diff"],
         error_metrics["proportions_diff"],
-        error_metrics["rmse_all_cats"],
-        error_metrics["mae_all_cats"],
+        error_metrics["rmse_no_missing_cats"],
+        error_metrics["mae_no_missing_cats"],
         error_metrics["rmse_missing_cats"],
         error_metrics["mae_missing_cats"],
     )

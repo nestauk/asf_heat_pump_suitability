@@ -17,7 +17,7 @@ import io
 from io import BytesIO
 
 from asf_heat_pump_suitability import logger, PROJECT_DIR
-from typing import List
+from typing import List, Any, NoReturn
 import requests
 
 
@@ -41,31 +41,42 @@ def get_s3_resource():
     return s3
 
 
-def save_to_s3(bucket_name, output_var, output_file_dir):
+def save_to_s3(bucket_name: str, output_var: Any, output_file_path: str) -> NoReturn:
+    """
+    Save a variable (of any type) to S3
+
+    Args:
+        bucket_name (str): Name of the S3 bucket you are saving to
+        output_var (Any): The variable you want to save
+        output_file_path (str): Name of the output path
+
+    Returns:
+        Nothing
+    """
     s3 = get_s3_resource()
 
-    obj = s3.Object(bucket_name, output_file_dir)
+    obj = s3.Object(bucket_name, output_file_path)
 
-    if fnmatch(output_file_dir, "*.csv"):
-        output_var.to_csv("s3://" + bucket_name + "/" + output_file_dir, index=False)
-    elif fnmatch(output_file_dir, "*.parquet"):
+    if fnmatch(output_file_path, "*.csv"):
+        output_var.to_csv("s3://" + bucket_name + "/" + output_file_path, index=False)
+    elif fnmatch(output_file_path, "*.parquet"):
         output_var.to_parquet(
-            "s3://" + bucket_name + "/" + output_file_dir, index=False
+            "s3://" + bucket_name + "/" + output_file_path, index=False
         )
-    elif fnmatch(output_file_dir, "*.pkl") or fnmatch(output_file_dir, "*.pickle"):
+    elif fnmatch(output_file_path, "*.pkl") or fnmatch(output_file_path, "*.pickle"):
         obj.put(Body=pickle.dumps(output_var))
-    elif fnmatch(output_file_dir, "*.gz"):
+    elif fnmatch(output_file_path, "*.gz"):
         obj.put(Body=gzip.compress(json.dumps(output_var).encode()))
-    elif fnmatch(output_file_dir, "*.txt"):
+    elif fnmatch(output_file_path, "*.txt"):
         obj.put(Body=output_var)
     elif (
-        fnmatch(output_file_dir, "*.jpg")
-        or fnmatch(output_file_dir, "*.png")
-        or fnmatch(output_file_dir, "*.jpeg")
+        fnmatch(output_file_path, "*.jpg")
+        or fnmatch(output_file_path, "*.png")
+        or fnmatch(output_file_path, "*.jpeg")
     ):
         image_data = BytesIO(output_var)
         obj.put(Body=image_data)
-    elif fnmatch(output_file_dir, "*.json"):
+    elif fnmatch(output_file_path, "*.json"):
         obj.put(Body=json.dumps(output_var, cls=CustomJsonEncoder))
     else:
         logger.error(
@@ -73,12 +84,19 @@ def save_to_s3(bucket_name, output_var, output_file_dir):
         )
 
 
-def load_s3_data(bucket_name, file_name):
+def load_s3_data(
+    bucket_name: str,
+    file_name: str,
+) -> Any:
     """
     Load data from S3 location.
 
-    bucket_name: The S3 bucket name
-    file_name: S3 key to load
+    Args:
+        bucket_name (str): Name of the S3 bucket you are saving to
+        file_name (str): S3 key to load
+
+    Returns:
+        (Any): The file you have loaded
     """
     s3 = get_s3_resource()
 
@@ -121,14 +139,20 @@ def load_s3_data(bucket_name, file_name):
         )
 
 
-def dictionary_to_s3(data_dict: dict, s3_bucket: str, s3_folder: str, file_name: str):
+def dictionary_to_s3(
+    data_dict: dict, s3_bucket: str, s3_folder: str, file_name: str
+) -> NoReturn:
     """
     Transforms a dictionary into a json and uploads to S3.
+
     Args:
-        data_dict: dictionary with the data
-        s3_bucket: S3 bucket name where to upload the file
-        s3_folder: folder where to store the file within the S3 bucket
-        file_name: name of the file
+        data_dict (dict): Dictionary to be saved.
+        s3_bucket (str): S3 bucket name where to upload the file
+        s3_folder (str): folder where to store the file within the S3 bucket
+        file_name (str): name of the file
+
+    Returns:
+        Nothing
     """
     s3_client = boto3.client("s3")
     obj = io.BytesIO(json.dumps(data_dict).encode("utf-8"))
@@ -140,10 +164,11 @@ def read_json_from_s3(bucket: str, file_path: str) -> dict:
     Reads a json file from S3 without downloading it.
 
     Args:
-        bucket: S3 bucket name
-        file_path: file path (including file name)
+        bucket (str): S3 bucket name
+        file_path (str): file path (including file name)
+
     Returns:
-        dictionary with json file data
+        (dict): The file you have loaded
     """
     s3_resource = boto3.resource("s3")
     json_file = s3_resource.Object(bucket, file_path)
