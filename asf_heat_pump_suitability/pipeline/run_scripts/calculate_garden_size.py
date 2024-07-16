@@ -1,3 +1,4 @@
+import polars as pl
 import geopandas as gpd
 from argparse import ArgumentParser
 from asf_heat_pump_suitability.pipeline.prepare_features import (
@@ -7,7 +8,7 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
 )
 
 
-def run():
+def argparser():
     """
     Create ArgumentParser and passes arguments to `main()` and runs `main()`.
     """
@@ -21,19 +22,32 @@ def run():
         required=False,
     )
 
+    parser.add_argument(
+        "--epc_path",
+        help="Path to EPC file",
+        type=str,
+        required=False,
+    )
+
     args = parser.parse_args()
 
-    main(**vars(args))
+    return args
 
 
-def main(use_mapping):
-    """ """
-    if not use_mapping:
+if __name__ == "__main__":
+    args = argparser()
+
+    # Load EPC lat/lon
+    latlon_in_epc = (
+        pl.read_parquet(args.epc_path, columns=["latlon"]).select("").to_list()
+    )
+
+    if not args.use_mapping:
         # Get land extent file boundaries
         land_file_bounds = land_extent.generate_gdf_map_file_to_bounds()
     else:
         # load files
-        land_file_bounds = gpd.read_file(use_mapping, crs="EPSG:27700")
+        land_file_bounds = gpd.read_file(args.use_mapping, crs="EPSG:27700")
 
     # Get building footprint file boundaries
     microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
@@ -44,6 +58,7 @@ def main(use_mapping):
     )
 
     prev = None
+    gardens_gdfs = []
     for i, inspire_file, ms_file in enumerate(file_matches.items()):
         # Only load INSPIRE gdf if we haven't loaded already
         if inspire_file != prev:
@@ -68,14 +83,10 @@ def main(use_mapping):
             inspire_land_file=inspire_file, microsoft_building_footprint_file=ms_file
         )
 
-        # TODO: calculate garden size from land area - building area
+        # Filter to gardens for EPC properties only
+        gardens = gardens.filter(pl.col(""))
+        gardens_gdfs.append(gardens)
         # TODO: merge with EPC
 
         # Set prev
         prev = inspire_file
-
-    return gardens
-
-
-if __name__ == "__main__":
-    run()
