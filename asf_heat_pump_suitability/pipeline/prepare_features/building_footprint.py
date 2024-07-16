@@ -84,7 +84,7 @@ def transform_gdf_building_footprints(ms_file):
         warnings.warn(
             f"There are building footprint polygons with duplicate IDs in file: {ms_file}"
         )
-    gdf["building_area"] = gdf["geometry"].area
+    gdf["building_area_m2"] = gdf["geometry"].area
 
     # TODO: do we want to drop building footprints below a certain confidence score? The dataset has confidence score
     # TODO: for some but not all footprints. Not sure how many it's available for, might be a low number

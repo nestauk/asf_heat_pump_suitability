@@ -28,19 +28,25 @@ def generate_gdf_land_building_overlay(
     Intersection
     """
     gdf = gpd.overlay(land_parcels, building_footprints, how="intersection")
-    gdf["building_intersection_area"] = gdf["geometry"].area
+    gdf["building_intersection_area_m2"] = gdf["geometry"].area
 
-    gdf["min_of_building_small"] = gdf["building_area"] * s_building_prop
-    gdf["min_of_building_large"] = gdf["building_area"] * l_building_prop
+    gdf["min_size_of_small_building"] = gdf["building_area_m2"] * s_building_prop
+    gdf["min_size_of_large_building"] = gdf["building_area_m2"] * l_building_prop
 
     gdf = gdf[
         (
-            (gdf["building_intersection_area"] <= outbuilding_size)
-            & (gdf["building_intersection_area"] >= gdf["min_of_building_small"])
+            (gdf["building_intersection_area_m2"] <= outbuilding_size)
+            & (
+                gdf["building_intersection_area_m2"]
+                >= gdf["min_size_of_small_building"]
+            )
         )
         | (
-            (gdf["building_intersection_area"] > outbuilding_size)
-            & (gdf["building_intersection_area"] >= gdf["min_of_building_large"])
+            (gdf["building_intersection_area_m2"] > outbuilding_size)
+            & (
+                gdf["building_intersection_area_m2"]
+                >= gdf["min_size_of_large_building"]
+            )
         )
     ]
 
@@ -54,11 +60,11 @@ def generate_gdf_garden_size(intersection, land_parcels):
     """
     building_size = (
         intersection.groupby("NATIONALCADASTRALREFERENCE")[
-            ["index", "building_intersection_area", "height"]
+            ["index", "building_intersection_area_m2", "height"]
         ]
         .agg(
             building_ids=("building_id", list),
-            total_building_area_m2=("building_intersection_area", "sum"),
+            total_building_area_m2=("building_intersection_area_m2", "sum"),
             max_building_height=("height", "max"),
         )
         .reset_index()
@@ -66,6 +72,10 @@ def generate_gdf_garden_size(intersection, land_parcels):
 
     gardens = land_parcels.merge(
         building_size, how="left", on="NATIONALCADASTRALREFERENCE"
+    )
+
+    gardens["garden_area_m2"] = (
+        gardens["land_area_m2"] - gardens["total_building_area_m2"]
     )
 
     return gardens

@@ -138,6 +138,6 @@ def transform_gdf_land_parcels(inspire_file):
     gdf = get_datasets.load_gdf_inspire_land_parcels(inspire_file)
     gdf = gdf[["NATIONALCADASTRALREFERENCE", "geometry"]]
     gdf = geo_utils.transform_gdf_drop_close_duplicates(gdf)
-    gdf["land_area"] = gdf["geometry"].area
+    gdf["land_area_m2"] = gdf["geometry"].area
 
     return gdf
