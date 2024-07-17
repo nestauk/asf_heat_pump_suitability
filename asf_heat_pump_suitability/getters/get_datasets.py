@@ -26,8 +26,13 @@ def get_df_ons_pd(**kwargs) -> pl.DataFrame:
     return df
 
 
-def load_gdf_ons_council_bounds():
-    """ """
+def load_gdf_ons_council_bounds() -> gpd.GeoDataFrame:
+    """
+    Load ONS council bounding polygons for the UK (CRS: WGS84).
+
+    Returns:
+        gpd.GeoDataFrame: ONS councils with bounding polygons
+    """
     gdf = base_getters.load_gdf_from_s3_geojson(
         config["data_source"]["UK_ons_lad_bounds"], crs="WGS84"
     )
@@ -35,8 +40,14 @@ def load_gdf_ons_council_bounds():
     return gdf
 
 
-def load_df_microsoft_building_footprint_links():
-    """ """
+def load_df_microsoft_building_footprint_links() -> pd.DataFrame:
+    """
+    Load Microsoft Global ML Building Footprints data links file containing URLs to all building footprint files
+    available.
+
+    Returns:
+        pd.DataFrame: Microsoft Global ML Building Footprints data links
+    """
     logging.info("Loading Microsoft building footprint data-links file")
     df = pd.read_csv(
         config["data_source"]["global_microsoft_building_footprint_links"],
@@ -46,18 +57,32 @@ def load_df_microsoft_building_footprint_links():
     return df
 
 
-def load_gdf_microsoft_building_footprints(url):
+def load_gdf_microsoft_building_footprints(url: str) -> gpd.GeoDataFrame:
     """
-    Load file Microsoft building file in CRS 27700
+    Load Microsoft building footprints file (CRS: EPSG:4326).
+
+    Args:
+        url (str): URL to Microsoft building footprint file
+
+    Returns:
+        gpd.GeoDataFrame: Microsoft building footprint polygons
     """
     gdf = base_getters.load_gdf_csv_gz(url)
-    gdf = gdf.to_crs("EPSG:27700")
 
     return gdf
 
 
-def load_gdf_inspire_land_parcels(path):
-    """ """
+def load_gdf_inspire_land_parcels(path: str) -> gpd.GeoDataFrame:
+    """
+    Load land registry's index polygons spatial data (INSPIRE) showing the geometry and extent of registered freehold
+    properties in England and Wales. CRS EPSG:27700, British National Grid.
+
+    Args:
+        path (str): path to INSPIRE land parcel file
+
+    Returns:
+        gpd.GeoDataFrame: registered land extent polygons for one council
+    """
     logging.info(f"Loading INSPIRE land parcel file: {path}")
     gdf = gpd.read_file(path, driver="GML", crs="EPSG:27700", engine="pyogrio")
 

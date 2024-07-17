@@ -7,15 +7,21 @@ from asf_heat_pump_suitability.getters import get_datasets
 from asf_heat_pump_suitability.utils import geo_utils
 
 
-def transform_df_uk_dataset_links():
-    """ """
+def transform_df_uk_dataset_links() -> gpd.GeoDataFrame:
+    """
+    Load dataset containing URLs to Microsoft Building Footprint files for the UK only. Get bounding
+    geometry of files in CRS: EPSG:27700, British National Grid.
+
+    Returns:
+        gpd.GeoDataFrame: URLs to Microsoft building footprint files for UK only with bounding geometries of files
+    """
     df = get_datasets.load_df_microsoft_building_footprint_links()
     df = df[df["Location"] == "UnitedKingdom"]
 
     transformer = _set_crs_transformer()
 
     df["ms_bbox_BNG"] = [
-        convert_quadkey_to_bng_bounds(qk, transformer) for qk in df["QuadKey"]
+        convert_quadkey_to_bounds(qk, transformer) for qk in df["QuadKey"]
     ]
     df["ms_bbox_points"] = [
         convert_bounds_to_points(bbox[0], bbox[1]) for bbox in df["ms_bbox_BNG"]
@@ -31,8 +37,17 @@ def transform_df_uk_dataset_links():
     return gdf
 
 
-def convert_quadkey_to_bng_bounds(quadkey, transformer):
-    """ """
+def convert_quadkey_to_bounds(quadkey: str, transformer: pyproj.Transformer) -> tuple:
+    """
+    Convert Microsoft QuadKey (QuadTree Key) to bounds.
+
+    Args:
+        quadkey (str): QuadKey
+        transformer (pyproj.Transformer): transformer to transform points between coordinate systems
+
+    Returns:
+        tuple: min x,y coordinates, and max x,y coordinates of QuadKey
+    """
     min_latlon, max_latlon = tile.Tile.from_quad_tree(quadkey).bounds
 
     min_lat = min_latlon.latitude
@@ -46,9 +61,16 @@ def convert_quadkey_to_bng_bounds(quadkey, transformer):
     return min_lonlat, max_lonlat
 
 
-def convert_bounds_to_points(min_lonlat, max_lonlat):
+def convert_bounds_to_points(min_lonlat: tuple, max_lonlat: tuple) -> list:
     """
-    CRS: British National Grid
+    Convert bounds to bounding points.
+
+    Args:
+        min_lonlat (tuple): minimum x, y coordinates of bounds
+        max_lonlat (tuple): maximum x, y coordinates of bounds
+
+    Returns:
+        list: points of bounding box
     """
     min_lat = min_lonlat[1]
     min_lon = min_lonlat[0]
@@ -66,21 +88,42 @@ def convert_bounds_to_points(min_lonlat, max_lonlat):
     return bbox_points
 
 
-def _set_crs_transformer(from_crs="epsg:4326", to_crs="epsg:27700"):
-    """ """
+def _set_crs_transformer(
+    from_crs: str = "epsg:4326", to_crs: str = "epsg:27700"
+) -> pyproj.Transformer:
+    """
+    Set Coordinate Reference System (CRS) transformer to convert between coordinate systems. Function will accept as
+    input and return as output coordinates using the traditional GIS order, that is longitude, latitude for geographic
+    CRS and easting, northing for most projected CRS.
+
+    Args:
+        from_crs (str): CRS to convert from
+        to_crs (str): CRS to convert to
+
+    Returns:
+        pyproj.Transformer: transformer to transform points between coordinate systems
+    """
     transformer = pyproj.Transformer.from_crs(from_crs, to_crs, always_xy=True)
 
     return transformer
 
 
-def transform_gdf_building_footprints(ms_file):
+def transform_gdf_building_footprints(ms_file: str) -> gpd.GeoDataFrame:
     """
-    Add ID and drop duplicates
+    Load and transform building footprints dataframe. Generate unique ID for each building, drop duplicate
+    geometries, and get building area (m2) for each building polygon. CRS: EPSG:27700, British National Grid.
+
+    Args:
+        ms_file (str): URL of Microsoft building footprints file
+
+    Returns:
+        gpd.GeoDataFrame: building footprints with unique IDs and area in m2
     """
     gdf = get_datasets.load_gdf_microsoft_building_footprints(ms_file)
+    gdf = gdf.to_crs("EPSG:27700")
     gdf = extend_gdf_building_footprint_id(gdf)
-    gdf = geo_utils.transform_gdf_drop_close_duplicates(gdf)
-    if len(gdf["building_id"].nunique) != len(gdf):
+    gdf = geo_utils.transform_gdf_drop_duplicates(gdf)
+    if gdf["building_id"].nunique != len(gdf):
         warnings.warn(
             f"There are building footprint polygons with duplicate IDs in file: {ms_file}"
         )
@@ -92,9 +135,15 @@ def transform_gdf_building_footprints(ms_file):
     return gdf
 
 
-def extend_gdf_building_footprint_id(gdf):
+def extend_gdf_building_footprint_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
-    Add replicable unique ID column to building footprint gdf. Use representative point
+    Assign replicable unique ID to building footprint polygons using representative point.
+
+    Args:
+        gdf (gpd.GeoDataFrame): GeoDataFrame with building footprint polygons
+
+    Returns:
+        gpd.GeoDataFrame: building footprint GeoDataFrame with unique ID column
     """
     coords = gdf.representative_point().get_coordinates()
     ids = coords["x"].astype(str) + "_" + coords["y"].astype(str)
