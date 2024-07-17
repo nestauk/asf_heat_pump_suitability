@@ -6,6 +6,9 @@ from argparse import ArgumentParser
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     garden_space_avg,
     lat_lon,
+    number_of_households,
+    land_area,
+    property_density,
 )
 from asf_heat_pump_suitability.pipeline.enhance_epc import prepare_epc
 
@@ -69,6 +72,28 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
 
     # Join enhanced datasets together
     enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
+
+    logging.info("Adding number of households data to EPC")
+    lsoa_number_of_households_df = (
+        number_of_households.prepare_df_num_of_households_ons()
+    )
+    epc_lsoa_number_of_households_df = lsoa_number_of_households_df.select(
+        ["lsoa21", "Number of households 2021"]
+    )
+    print(enhanced_epc_df.columns)
+    enhanced_epc_df = enhanced_epc_df.join(
+        epc_lsoa_number_of_households_df, how="left", on="lsoa21"
+    )
+    logging.info("Adding land area to EPC")
+    lsoa_land_area_df = land_area.prepare_df_land_area_ons()
+    epc_lsoa_land_area_df = lsoa_land_area_df.select(
+        ["lsoa21", "Land Count (Area in KM2)"]
+    )
+    enhanced_epc_df = enhanced_epc_df.join(
+        epc_lsoa_land_area_df, how="left", on="lsoa21"
+    )
+    logging.info("Adding property density to EPC")
+    enhanced_epc_df = property_density.extend_df_with_property_density(enhanced_epc_df)
 
     # Save to S3
     fs = s3fs.S3FileSystem()
