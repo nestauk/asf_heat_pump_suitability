@@ -86,8 +86,8 @@ def generate_gdf_garden_size(
     and maximum building height (where available).
 
     Args:
-        intersections (gpd.GeoDataFrame): intersections of land parcel polygons and building footprint polygons
-        land_parcels (gpd.GeoDataFrame): land parcel polygons
+        intersections_gdf (gpd.GeoDataFrame): intersections of land parcel polygons and building footprint polygons
+        land_parcels_gdf (gpd.GeoDataFrame): land parcel polygons
 
     Returns:
         gpd.GeoDataFrame: land parcels matched to building sections with total garden area (m2) calculated
