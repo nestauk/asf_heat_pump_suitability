@@ -1,7 +1,7 @@
 import pandas as pd
 import geopandas as gpd
-import shapely
 import regex as re
+from typing import List
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters, get_datasets
 from asf_heat_pump_suitability.utils import geo_utils
@@ -36,6 +36,7 @@ def generate_gdf_map_file_to_bounds(
     land_extent_location: str = config["data_source"]["EW_inspire_land_extent"],
     ladnm_col: str = "LAD23NM",
     keep_cols: list = ["LAD23NM", "LAD23CD", "geometry"],
+    save_as: str = None,
 ) -> gpd.GeoDataFrame:
     """
     Create dataframe with land extent filenames and their matching bounding polygons by matching land extent filenames
@@ -45,6 +46,7 @@ def generate_gdf_map_file_to_bounds(
         land_extent_location (str): location of land extent files. Default S3 location.
         ladnm_col (str): name of column with council (LAD) names in council polygons file
         keep_cols (list): names of columns to keep in council polygons file
+        save_as (str): path to save matched files to. Optional.
 
     Returns:
         gpd.GeoDataFrame: dataframe with land extent filenames and their matching bounding polygons
@@ -72,20 +74,44 @@ def generate_gdf_map_file_to_bounds(
         file_to_bounds, crs="EPSG:27700", geometry="geometry"
     )
     file_to_bounds = fill_nulls_file_bounds(file_to_bounds)
+    if save_as:
+        file_to_bounds.to_file(save_as, crs="EPSG:27700")
 
     return file_to_bounds
 
 
-def _standardise_list_council_names(name_series):
-    """ """
+def _standardise_list_council_names(name_series: pd.Series) -> list:
+    """
+    Standardise council names.
+
+    Args:
+        name_series (pd.Series): council names
+
+    Returns:
+        list: standardised council names
+    """
     lad_names = [
-        re.sub("[^a-zA-Z-,]+", "_", ln).lower().split(",")[0] for ln in name_series
+        # Replace spaces, full stops, numbers, other punctuation with "_"
+        re.sub("[^a-zA-Z-,]+", "_", ln).lower().split(",")[0]
+        for ln in name_series
     ]
     return lad_names
 
 
-def _match_list_file_to_name(land_extent_files, council_names):
-    """ """
+def _match_list_file_to_name(
+    land_extent_files: list, council_names: pd.Series
+) -> List[list]:
+    """
+    Match land extent files to council names. Some files will match to multiple council names e.g. the file for "Wyre"
+    will match with "Wyre" and "Wyre Forest" councils.
+
+    Args:
+        land_extent_files (list):
+        council_names (pd.Series):
+
+    Returns:
+        List[list]: lists of council names matched to file name
+    """
     matches = []
     for f in land_extent_files:
         f_matches = [lad for lad in council_names if lad in f.lower()]
@@ -96,48 +122,42 @@ def _match_list_file_to_name(land_extent_files, council_names):
     return matches
 
 
-def fill_nulls_file_bounds(gdf):
-    """ """
+def fill_nulls_file_bounds(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Fill file bounds geodata for INSPIRE land extent files with no file polygons.
+
+    Args:
+        gdf (gpd.GeoDataFrame): GeoDataFrame of INSPIRE files and file polygons
+
+    Returns:
+        gpd.GeoDataFrame: land extent files with file polygons
+    """
     missing_bbox = gdf[gdf["council_bounds_matches"].isnull()][
         "inspire_file_name"
     ].to_list()
+
     for file in missing_bbox:
-        file_polygon = get_polygon_file_bounds(f"s3://{file}")
+        land_parcels_gdf = get_datasets.load_gdf_inspire_land_parcels(f"s3://{file}")
+        file_polygon = geo_utils.get_polygon_gdf_bounds(land_parcels_gdf)
         gdf.loc[gdf["inspire_file_name"] == file, "geometry"] = file_polygon
 
     return gdf
 
 
-def get_polygon_file_bounds(path: str) -> shapely.Polygon:
-    """ """
-    gdf = get_datasets.load_gdf_inspire_land_parcels(path)
-    file_bounds = gdf["geometry"].total_bounds
+def transform_gdf_land_parcels(land_parcel_file: str) -> gpd.GeoDataFrame:
+    """
+    Load and transform land parcel file to produce GeoDataFrame with unique National Cadastral Reference, land extent
+    geometry, and land area (m2).
 
-    bounds = {
-        "minx": file_bounds[0],
-        "miny": file_bounds[1],
-        "maxx": file_bounds[2],
-        "maxy": file_bounds[3],
-    }
+    Args:
+        land_parcel_file (str): name of land parcel file
 
-    bbox_polygon = shapely.Polygon(
-        [  # TODO: needs converting to BNG
-            [bounds["minx"], bounds["miny"]],
-            [bounds["minx"], bounds["maxy"]],
-            [bounds["maxx"], bounds["maxy"]],
-            [bounds["maxx"], bounds["miny"]],
-            [bounds["minx"], bounds["miny"]],
-        ]
-    )
-
-    return bbox_polygon
-
-
-def transform_gdf_land_parcels(inspire_file):
-    """ """
-    gdf = get_datasets.load_gdf_inspire_land_parcels(inspire_file)
+    Returns:
+        gpd.GeoDataFrame: land parcel geodata
+    """
+    gdf = get_datasets.load_gdf_inspire_land_parcels(land_parcel_file)
     gdf = gdf[["NATIONALCADASTRALREFERENCE", "geometry"]]
-    gdf = geo_utils.transform_gdf_drop_close_duplicates(gdf)
+    gdf = geo_utils.transform_gdf_drop_duplicates(gdf)
     gdf["land_area_m2"] = gdf["geometry"].area
 
     return gdf
