@@ -65,7 +65,6 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     # Add feature: lat/long
     logging.info("Adding lat/lon data to EPC")
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
-    epc_latlon_df = epc_df.select(["UPRN"])
 
     # Join enhanced datasets together
     enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
