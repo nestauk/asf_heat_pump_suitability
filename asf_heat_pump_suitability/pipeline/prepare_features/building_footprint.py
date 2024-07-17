@@ -108,24 +108,24 @@ def _set_crs_transformer(
     return transformer
 
 
-def transform_gdf_building_footprints(ms_file: str) -> gpd.GeoDataFrame:
+def transform_gdf_building_footprints(building_footprint_file: str) -> gpd.GeoDataFrame:
     """
     Load and transform building footprints dataframe. Generate unique ID for each building, drop duplicate
     geometries, and get building area (m2) for each building polygon. CRS: EPSG:27700, British National Grid.
 
     Args:
-        ms_file (str): URL of Microsoft building footprints file
+        building_footprint_file (str): URL of Microsoft building footprints file
 
     Returns:
         gpd.GeoDataFrame: building footprints with unique IDs and area in m2
     """
-    gdf = get_datasets.load_gdf_microsoft_building_footprints(ms_file)
+    gdf = get_datasets.load_gdf_microsoft_building_footprints(building_footprint_file)
     gdf = gdf.to_crs("EPSG:27700")
     gdf = extend_gdf_building_footprint_id(gdf)
     gdf = geo_utils.transform_gdf_drop_duplicates(gdf)
     if gdf["building_id"].nunique != len(gdf):
         warnings.warn(
-            f"There are building footprint polygons with duplicate IDs in file: {ms_file}"
+            f"There are building footprint polygons with duplicate IDs in file: {building_footprint_file}"
         )
     gdf["building_area_m2"] = gdf["geometry"].area
 
