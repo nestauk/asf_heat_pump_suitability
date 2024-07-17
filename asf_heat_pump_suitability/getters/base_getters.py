@@ -95,7 +95,16 @@ def _get_content_from_url(url: str) -> BytesIO:
 
 
 def load_gdf_from_s3_geojson(s3_uri: str, crs: str) -> gpd.GeoDataFrame:
-    """ """
+    """
+    Load GeoDataFrame from GeoJSON on S3.
+
+    Args:
+        s3_uri (str): URI to S3 GeoJSON
+        crs (str): coordinate reference system of GeoJSON
+
+    Returns:
+        gpd.GeoDataFrame
+    """
     fs = s3fs.S3FileSystem()
     with fs.open(s3_uri, "rb") as f:
         data = geojson.load(f)
@@ -105,7 +114,15 @@ def load_gdf_from_s3_geojson(s3_uri: str, crs: str) -> gpd.GeoDataFrame:
 
 
 def list_files_s3_location(location: str) -> list:
-    """ """
+    """
+    List files in an S3 location.
+
+    Args:
+        location (str): S3 URI
+
+    Returns:
+        list: files in S3 location
+    """
     fs = s3fs.S3FileSystem()
     # Indexing to remove directory key
     files = fs.ls(location)[1:]
@@ -113,9 +130,15 @@ def list_files_s3_location(location: str) -> list:
     return files
 
 
-def load_gdf_csv_gz(url):
+def load_gdf_csv_gz(url: str) -> gpd.GeoDataFrame:
     """
-    Load GeoDataFrame from csv.gz file
+    Load GeoDataFrame from csv.gz file at URL.
+
+    Args:
+        url (str): URL to csv.gz file
+
+    Returns:
+        gpd.GeoDataFrame
     """
     content = _get_content_from_url(url)
     with gzip.open(content, "r") as f:
