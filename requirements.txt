@@ -9,3 +9,8 @@ tqdm
 sklearn
 geopandas
 shapely
+pyGeoTile
+pyproj
+pandas
+geojson
+requests
