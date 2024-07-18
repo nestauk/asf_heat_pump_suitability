@@ -28,8 +28,7 @@ def argparser() -> argparse.Namespace:
 
     parser.add_argument(
         "--use_mapping",
-        help="Path to existing land extent mapping with land extent files mapped to "
-        "LAD boundaries, and generate bboxes for building footprint files",
+        help="Path to existing mapping of land extent files to LAD boundary geometries",
         type=str,
         required=False,
     )
@@ -63,7 +62,7 @@ def argparser() -> argparse.Namespace:
 if __name__ == "__main__":
     _args = argparser()
 
-    # Load EPC lat/lon
+    # Load EPC x, y coordinates in CRS: EPSG:27700
     epc_gdf = pl.read_parquet(
         _args.epc_path, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
     )
@@ -75,7 +74,7 @@ if __name__ == "__main__":
             save_as=_args.save_land_file_bounds
         )
     else:
-        # load files
+        # Load existing file with land extent files mapped to LAD boundaries
         land_file_bounds = gpd.read_file(_args.use_mapping, crs="EPSG:27700")
 
     # Get building footprint file boundaries
@@ -91,7 +90,7 @@ if __name__ == "__main__":
     total_gardens = 0
     for land_file, building_file in tqdm(file_matches.items()):
 
-        # Only load land gdf if we haven't loaded already
+        # Only load land extent gdf if we haven't loaded already
         if land_file != prev:
             # Prepare land parcel data
             land_parcels_gdf = land_extent.transform_gdf_land_parcels(
@@ -136,5 +135,6 @@ if __name__ == "__main__":
             f"Garden size calculated for {total_gardens} EPC properties in total."
         )
 
+    # Get df of all EPC records with garden size estimates
     epc_gardens_df = pd.concat(epc_gardens, ignore_index=True)
     epc_gardens_df.to_parquet(_args.save_as, engine="pyarrow")
