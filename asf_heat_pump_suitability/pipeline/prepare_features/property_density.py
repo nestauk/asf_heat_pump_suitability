@@ -42,7 +42,7 @@ def extend_df_with_property_density(enhanced_epc_df: pl.DataFrame) -> pl.DataFra
     return enhanced_epc_df
 
 
-def replace_zeros_with_none_df(df: pl.Dataframe, column_name: str) -> pl.DataFrame:
+def replace_zeros_with_none_df(df: pl.DataFrame, column_name: str) -> pl.DataFrame:
     """
     This function replaces 0 values in the specified column of a DataFrame with None.
 
