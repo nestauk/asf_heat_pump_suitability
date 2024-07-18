@@ -42,7 +42,7 @@ def convert_quadkey_to_bounds(quadkey: str, transformer: pyproj.Transformer) -> 
     Convert Microsoft QuadKey (QuadTree Key) to bounds.
 
     Args:
-        quadkey (str): QuadKey
+        quadkey (str): Microsoft QuadKey
         transformer (pyproj.Transformer): transformer to transform points between coordinate systems
 
     Returns:
@@ -55,34 +55,34 @@ def convert_quadkey_to_bounds(quadkey: str, transformer: pyproj.Transformer) -> 
     max_lat = max_latlon.latitude
     max_lon = max_latlon.longitude
 
-    min_lonlat = transformer.transform(min_lon, min_lat)
-    max_lonlat = transformer.transform(max_lon, max_lat)
+    min_xy = transformer.transform(min_lon, min_lat)
+    max_xy = transformer.transform(max_lon, max_lat)
 
-    return min_lonlat, max_lonlat
+    return min_xy, max_xy
 
 
-def convert_bounds_to_points(min_lonlat: tuple, max_lonlat: tuple) -> list:
+def convert_bounds_to_points(min_xy: tuple, max_xy: tuple) -> list:
     """
     Convert bounds to bounding points.
 
     Args:
-        min_lonlat (tuple): minimum x, y coordinates of bounds
-        max_lonlat (tuple): maximum x, y coordinates of bounds
+        min_xy (tuple): minimum x, y coordinates of bounds
+        max_xy (tuple): maximum x, y coordinates of bounds
 
     Returns:
         list: points of bounding box
     """
-    min_lat = min_lonlat[1]
-    min_lon = min_lonlat[0]
-    max_lat = max_lonlat[1]
-    max_lon = max_lonlat[0]
+    minx = min_xy[0]
+    miny = min_xy[1]
+    maxx = max_xy[0]
+    maxy = max_xy[1]
 
     bbox_points = [
-        [min_lon, min_lat],
-        [max_lon, min_lat],
-        [max_lon, max_lat],
-        [min_lon, max_lat],
-        [min_lon, min_lat],
+        [minx, miny],
+        [maxx, miny],
+        [maxx, maxy],
+        [minx, maxy],
+        [minx, miny],
     ]
 
     return bbox_points
