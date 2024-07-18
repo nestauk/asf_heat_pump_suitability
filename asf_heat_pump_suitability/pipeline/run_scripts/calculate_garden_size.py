@@ -137,4 +137,4 @@ if __name__ == "__main__":
 
     # Get df of all EPC records with garden size estimates
     epc_gardens_df = pd.concat(epc_gardens, ignore_index=True)
-    epc_gardens_df.to_parquet(_args.save_as, engine="pyarrow")
+    epc_gardens_df.to_parquet(_args.save_epc_gardens, engine="pyarrow")
