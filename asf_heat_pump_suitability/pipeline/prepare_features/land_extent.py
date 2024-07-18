@@ -16,7 +16,7 @@ def transform_gdf_council_bounds(
     characters and spaces) and convert geometries to British National Grid CRS.
 
     Args:
-        ladnm_col (str): name of column with council (LAD) names
+        ladnm_col (str): name of column with council (LAD) names.
         keep_cols (list): names of columns to keep
 
     Returns:
@@ -39,7 +39,7 @@ def generate_gdf_map_file_to_bounds(
     save_as: str = None,
 ) -> gpd.GeoDataFrame:
     """
-    Create dataframe with land extent filenames and their matching bounding polygons by matching land extent filenames
+    Generate GeoDataFrame with land extent files and their bounding polygons by matching land extent filenames
     to ONS council polygon names.
 
     Args:
@@ -49,7 +49,7 @@ def generate_gdf_map_file_to_bounds(
         save_as (str): path to save matched files to. Optional.
 
     Returns:
-        gpd.GeoDataFrame: dataframe with land extent filenames and their matching bounding polygons
+        gpd.GeoDataFrame: GeoDataFrame with land extent files and their bounding polygons
     """
     council_bounds = transform_gdf_council_bounds(ladnm_col, keep_cols)
     land_extent_files = base_getters.list_files_s3_location(land_extent_location)
@@ -124,10 +124,10 @@ def _match_list_file_to_name(
 
 def fill_nulls_file_bounds(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
-    Fill file bounds geodata for INSPIRE land extent files with no file polygons.
+    Fill file bounds polygons for INSPIRE land extent files with no file polygons.
 
     Args:
-        gdf (gpd.GeoDataFrame): GeoDataFrame of INSPIRE files and file polygons
+        gdf (gpd.GeoDataFrame): GeoDataFrame of INSPIRE land extent files and file polygons
 
     Returns:
         gpd.GeoDataFrame: land extent files with file polygons
