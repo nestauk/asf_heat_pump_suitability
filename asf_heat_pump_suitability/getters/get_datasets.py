@@ -28,7 +28,7 @@ def get_df_ons_pd(**kwargs) -> pl.DataFrame:
 
 def load_gdf_ons_council_bounds() -> gpd.GeoDataFrame:
     """
-    Load ONS council bounding polygons for the UK (CRS: WGS84).
+    Load ONS council bounding polygons for the UK (CRS: EPSG:4326).
 
     Returns:
         gpd.GeoDataFrame: ONS councils with bounding polygons
@@ -84,7 +84,7 @@ def load_gdf_inspire_land_parcels(path: str) -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: registered land extent polygons for one council
     """
     logging.info(f"Loading INSPIRE land parcel file: {path}")
-    gdf = gpd.read_file(path, driver="GML", crs="EPSG:27700", engine="pyogrio")
+    gdf = gpd.read_file(path, engine="pyogrio")
 
     return gdf
 
@@ -113,8 +113,8 @@ def get_df_ons_garden_space_avg(**kwargs) -> pl.DataFrame:
 
 def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
     """
-    Get raw OS (Ordnance Survey) Open UPRN dataset containing latitude and longitude and x and y coordinates for all
-    UPRNs in Great Britain.
+    Get raw OS (Ordnance Survey) Open UPRN dataset containing latitude and longitude and British National Grid x and y
+    coordinates for all UPRNs in Great Britain.
 
     Args:
         **kwargs fo pl.read_csv
