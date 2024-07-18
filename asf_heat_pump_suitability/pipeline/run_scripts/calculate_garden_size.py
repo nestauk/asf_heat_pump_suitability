@@ -113,21 +113,20 @@ if __name__ == "__main__":
         gardens_gdf = garden_size.generate_gdf_garden_size(
             intersection_gdf, land_parcels_gdf
         )
-        gardens_gdf = gardens_gdf.drop(columns=["geometry"]).assign(
+        gardens_gdf = gardens_gdf.assign(
             inspire_land_extent_file=land_file,
             microsoft_building_footprint_file=building_file,
         )
 
-        # Match EPC UPRNs with land parcels using UPRN coordinates
+        # Match EPC UPRNs with land parcels and gardens using UPRN coordinates
+        # This will keep only EPC records for which garden size can be estimated
         epc_df = gpd.sjoin(
             epc_gdf,
-            land_parcels_gdf[["NATIONALCADASTRALREFERENCE", "geometry"]],
+            gardens_gdf,
             how="inner",
             predicate="intersects",
         ).drop(columns=["geometry", "index_right"])
 
-        # Match EPC UPRNs with gardens
-        epc_df = epc_df.merge(gardens_gdf, how="inner", on="NATIONALCADASTRALREFERENCE")
         epc_gardens.append(epc_df)
 
         # Set prev

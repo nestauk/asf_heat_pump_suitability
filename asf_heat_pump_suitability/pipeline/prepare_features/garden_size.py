@@ -90,7 +90,8 @@ def generate_gdf_garden_size(
         land_parcels_gdf (gpd.GeoDataFrame): land parcel polygons
 
     Returns:
-        gpd.GeoDataFrame: land parcels matched to building sections with total garden area (m2) calculated
+        gpd.GeoDataFrame: land parcels matched to building sections with total garden area (m2) calculated with geometry
+        of land parcels
     """
     building_size = (
         intersections_gdf.groupby("NATIONALCADASTRALREFERENCE")[
@@ -114,7 +115,7 @@ def generate_gdf_garden_size(
     )
 
     gardens_gdf = land_parcels_gdf.merge(
-        building_size, how="left", on="NATIONALCADASTRALREFERENCE"
+        building_size, how="inner", on="NATIONALCADASTRALREFERENCE"
     )
 
     gardens_gdf["garden_area_m2"] = (
