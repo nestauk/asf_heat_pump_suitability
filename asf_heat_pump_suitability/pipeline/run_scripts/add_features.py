@@ -8,6 +8,7 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
     lat_lon,
 )
 from asf_heat_pump_suitability.pipeline.enhance_epc import prepare_epc
+from asf_heat_pump_suitability.getters import get_datasets
 
 
 def run():
@@ -66,8 +67,14 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     logging.info("Adding lat/lon data to EPC")
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
 
+    # Add feature: conservation area flag
+    logging.info("Adding conservation area flag")
+    conservation_areas_gdf = get_datasets.load_gdf_historic_england_conservation_areas()
+
     # Join enhanced datasets together
     enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
+    epc_gdf = lat_lon.generate_gdf_uprn_coords(enhanced_epc_df)
+    # TODO: spatial join between EPC gdf and conservation areas gdf
 
     # Save to S3
     fs = s3fs.S3FileSystem()
