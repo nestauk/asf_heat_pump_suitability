@@ -66,7 +66,7 @@ if __name__ == "__main__":
     epc_gdf = pl.read_parquet(
         _args.epc_path, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
     )
-    epc_gdf = lat_lon.generate_gdf_uprn_coords(epc_gdf)
+    epc_gdf = lat_lon.generate_gdf_uprn_coords(epc_gdf)[["UPRN", "geometry"]]
 
     if not _args.use_mapping:
         # Get land extent file boundaries
