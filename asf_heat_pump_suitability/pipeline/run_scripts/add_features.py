@@ -1,11 +1,21 @@
+"""
+Enhance EPC dataset with additional features:
+- mean average garden size per MSOA
+- lat/lon per UPRN
+- Historic England conservation area flag
+"""
+
 import logging
 import polars as pl
+import pandas as pd
 import s3fs
 from typing import Optional
 from argparse import ArgumentParser
 from asf_heat_pump_suitability.pipeline.prepare_features import (
+    conservation_areas,
     garden_space_avg,
     lat_lon,
+    output_areas,
 )
 from asf_heat_pump_suitability.pipeline.enhance_epc import prepare_epc
 from asf_heat_pump_suitability.getters import get_datasets
@@ -31,25 +41,16 @@ def run():
 
     args = parser.parse_args()
 
-    main(**vars(args))
+    return args
 
 
-def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
-    """
-    Enhance EPC dataset with additional features:
-    - mean average garden size per MSOA
-    - lat/lon per UPRN
+if __name__ == "__main__":
 
-    Args
-        epc_path (str): S3 URI to EPC dataset with weights and LSOA; MSOA columns
-        save_output (str): S3 path to save enhanced EPC dataset to. Optional.
+    _args = run()
 
-    Returns
-        pl.DataFrame: enhanced EPC dataset with additional features
-    """
     # Import processed EPC
-    logging.info(f"Loading EPC file from path: {epc_path}")
-    epc_df = pl.read_parquet(epc_path)
+    logging.info(f"Loading EPC file from path: {_args.epc_path}")
+    epc_df = pl.read_parquet(_args.epc_path)
 
     # Join enhancing features to EPC dataset
     # Add feature: garden space avg
@@ -66,23 +67,50 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     # Add feature: lat/long
     logging.info("Adding lat/lon data to EPC")
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
+    enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
 
     # Add feature: conservation area flag
     logging.info("Adding conservation area flag")
-    conservation_areas_gdf = get_datasets.load_gdf_historic_england_conservation_areas()
 
-    # Join enhanced datasets together
-    enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
-    epc_gdf = lat_lon.generate_gdf_uprn_coords(enhanced_epc_df)
-    # TODO: spatial join between EPC gdf and conservation areas gdf
+    # Join LAD code to EPC
+    lad_df = get_datasets.get_df_ons_pd(columns=["pcd", "oslaua"]).rename(
+        mapping={"oslaua": "lad_code"}
+    )
+    lad_df = output_areas.standardise_col_postcode(lad_df, pcd_col="pcd").drop(
+        columns=["pcd"]
+    )
+    enhanced_epc_df = enhanced_epc_df.join(lad_df, how="left", on="POSTCODE")
+    # Convert BNG x, y coordinates to point geometries
+    enhanced_epc_gdf = lat_lon.generate_gdf_uprn_coords(enhanced_epc_df)
+
+    # Load conservation areas England and identify EPC UPRNs within or on boundaries of conservation areas
+    conservation_areas_gdf = (
+        conservation_areas.transform_gdf_conservation_areas_england()
+    )
+    enhanced_epc_df = enhanced_epc_gdf.sjoin(
+        conservation_areas_gdf, how="left", predicate="intersects"
+    ).drop(columns=["index_right", "geometry"])
+    enhanced_epc_df["in_conservation_area"] = (
+        enhanced_epc_df["in_conservation_area"].fillna(False).astype(bool)
+    )
+    # Drop duplicate UPRNs introduced in cases where UPRN matched to multiple conservation areas
+    enhanced_epc_df = enhanced_epc_df.drop_duplicates(subset="UPRN")
+
+    # Load conservation areas by LAD to identify LADs with missing conservation area data and join to EPC
+    lad_conservation_areas_df = (
+        conservation_areas.generate_gdf_conservation_areas_england_lad(
+            ladcd_col="LAD23CD"
+        )
+    )
+    enhanced_epc_df = pd.merge(
+        enhanced_epc_df,
+        lad_conservation_areas_df,
+        how="left",
+        left_on="lad_code",
+        right_on="LAD23CD",
+    )
 
     # Save to S3
     fs = s3fs.S3FileSystem()
-    with fs.open(save_output, mode="wb") as f:
+    with fs.open(_args.save_output, mode="wb") as f:
         enhanced_epc_df.write_parquet(f)
-
-    return enhanced_epc_df
-
-
-if __name__ == "__main__":
-    run()
