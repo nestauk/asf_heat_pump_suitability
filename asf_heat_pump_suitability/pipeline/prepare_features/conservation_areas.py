@@ -1,5 +1,6 @@
 import geopandas as gpd
 import pandas as pd
+import numpy as np
 
 from asf_heat_pump_suitability.getters import get_datasets
 
@@ -39,7 +40,9 @@ def generate_gdf_conservation_areas_england_lad(
     # Join conservation areas to their councils
     lad_conservation_areas_gdf = council_bounds.sjoin(
         conservation_areas_gdf, how="left", predicate="intersects"
-    )[[ladcd_col, "in_conservation_area"]]
+    )[[ladcd_col, "in_conservation_area"]].replace(
+        "No data available for publication by HE", np.nan
+    )
 
     lad_conservation_areas_gdf = lad_conservation_areas_gdf.groupby("LAD23CD").agg(
         {"in_conservation_area": "count"}
