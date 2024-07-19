@@ -133,7 +133,7 @@ def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
 
 def load_gdf_historic_england_conservation_areas() -> gpd.GeoDataFrame:
     """
-    Load GeoDataFrame with conservation area polygons from Historic England.
+    Load GeoDataFrame with conservation area polygons from Historic England (CRS: EPSG:4326).
 
     Returns:
         gpd.GeoDataFrame: polygons of conservation areas in England
@@ -141,7 +141,6 @@ def load_gdf_historic_england_conservation_areas() -> gpd.GeoDataFrame:
     gdf = gpd.read_file(
         config["data_source"]["E_historic_england_conservation_areas"],
         engine="pyogrio",
-        columns=["name", "geometry"],
     )
 
     return gdf
