@@ -129,6 +129,3 @@ def get_df_spa_offgasgrid() -> pl.DataFrame:
         config["data_source"]["UK_spa_offgasgrid"], sheet_name="Off-Gas Postcodes 2024"
     )
     return df
-
-
-get_df_spa_offgasgrid()
