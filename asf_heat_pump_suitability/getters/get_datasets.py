@@ -129,3 +129,15 @@ def get_df_spa_offgasgrid() -> pl.DataFrame:
         config["data_source"]["UK_spa_offgasgrid"], sheet_name="Off-Gas Postcodes 2024"
     )
     return df
+
+
+def get_df_historicengland_listedbuildings() -> pl.DataFrame:
+    """
+    Get raw Historic England 'Listed Buildings' dataset.
+    Returns:
+        pl.DataFrame: raw Historic England 'Listed Buildings' dataset
+    """
+    df = base_getters.load_gdf_from_s3_geojson(
+        config["data_source"]["E_historicengland_listed_buildings"], "EPSG:27700"
+    )
+    return df

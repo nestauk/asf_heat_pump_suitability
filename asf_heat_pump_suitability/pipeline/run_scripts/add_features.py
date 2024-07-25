@@ -10,6 +10,7 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
     land_area,
     property_density,
     off_gas,
+    listed_buildings,
 )
 from asf_heat_pump_suitability.pipeline.enhance_epc import prepare_epc
 
@@ -65,7 +66,6 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
         left_on=["msoa", "msoa_avg_outdoor_space_property_type"],
         right_on=["MSOA code", "msoa_avg_outdoor_space_property_type"],
     )
-
     # Add feature: lat/long
     logging.info("Adding lat/lon data to EPC")
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
@@ -73,6 +73,7 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
 
     # Join enhanced datasets together
     enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
+    enhanced_epc_df = epc_df.join(uprn_latlon_df, how="left", on="UPRN")
 
     logging.info("Adding number of households data to EPC")
     lsoa_number_of_households_df = (
@@ -81,7 +82,6 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     epc_lsoa_number_of_households_df = lsoa_number_of_households_df.select(
         ["lsoa21", "Number of households 2021"]
     )
-    print(enhanced_epc_df.columns)
     enhanced_epc_df = enhanced_epc_df.join(
         epc_lsoa_number_of_households_df, how="left", on="lsoa21"
     )
@@ -97,10 +97,21 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     enhanced_epc_df = property_density.extend_df_with_property_density(enhanced_epc_df)
     logging.info("Adding off gas grid column to EPC")
     enhanced_epc_df = off_gas.add_off_gas_feature(enhanced_epc_df)
+    logging.info("Adding listed buildings to EPC")
+    listed_buildings_df = listed_buildings.get_filtered_df_listed_buildings()
+    enhanced_epc_df_wo_geometry = (
+        listed_buildings.spatial_join_epc_with_listed_buildings(
+            enhanced_epc_df, listed_buildings_df
+        )
+    )
+    # Convert the GeoDataFrame (without geometry) to a Pandas DataFrame
+    enhanced_epc_pl_df = listed_buildings.convert_gpd_to_polars(
+        enhanced_epc_df_wo_geometry
+    )
     # Save to S3
     fs = s3fs.S3FileSystem()
     with fs.open(save_output, mode="wb") as f:
-        enhanced_epc_df.write_parquet(f)
+        enhanced_epc_pl_df.write_parquet(f)
 
     return enhanced_epc_df
 
