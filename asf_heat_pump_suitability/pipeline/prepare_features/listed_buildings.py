@@ -31,14 +31,12 @@ def transform_df_EPC_X_and_Y_to_point(
 
 def get_filtered_df_listed_buildings() -> gpd.GeoDataFrame:
     """
-    Filter out listed buildings from Historic England dataset.
+    Get and filter out listed buildings from Historic England dataset.
 
     Returns:
         gpd.GeoDataFrame: Filtered Historic England dataset with only listed buildings grade and geometry.
     """
-    # Get the Historic England dataset
     historic_england_gdf = get_df_historicengland_listedbuildings()
-    # Filter out listed buildings
     relevant_columns = ["geometry", "Grade"]
     filtered_historic_england_gdf = historic_england_gdf[relevant_columns]
 
@@ -47,7 +45,7 @@ def get_filtered_df_listed_buildings() -> gpd.GeoDataFrame:
 
 def spatial_join_epc_with_listed_buildings(
     enhanced_epc_df: pl.DataFrame, listed_buildings_df: gpd.GeoDataFrame
-) -> pl.DataFrame:
+) -> gpd.GeoDataFrame:
     """
     Spatial join EPC dataset with listed buildings dataset.
     Args:
