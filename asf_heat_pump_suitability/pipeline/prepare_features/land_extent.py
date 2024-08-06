@@ -13,7 +13,7 @@ def transform_gdf_council_bounds(
 ) -> gpd.GeoDataFrame:
     """
     Transform council (local authority district) geo dataset: standardise council names (lower and remove special
-    characters and spaces) and convert geometries to British National Grid CRS.
+    characters and spaces), CRS: British National Grid (EPSG: 27700).
 
     Args:
         ladnm_col (str): name of column with council (LAD) names.
@@ -27,7 +27,6 @@ def transform_gdf_council_bounds(
     council_bounds["council_name_std"] = _standardise_list_council_names(
         council_bounds[ladnm_col]
     )
-    council_bounds = council_bounds.to_crs(epsg="27700")
 
     return council_bounds
 

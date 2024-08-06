@@ -28,14 +28,12 @@ def get_df_ons_pd(**kwargs) -> pl.DataFrame:
 
 def load_gdf_ons_council_bounds() -> gpd.GeoDataFrame:
     """
-    Load ONS council bounding polygons for the UK (CRS: EPSG:4326).
+    Load ONS council bounding polygons for the UK (CRS: EPSG:27700).
 
     Returns:
         gpd.GeoDataFrame: ONS councils with bounding polygons
     """
-    gdf = base_getters.load_gdf_from_s3_geojson(
-        config["data_source"]["UK_ons_lad_bounds"], crs="WGS84"
-    )
+    gdf = gpd.read_file(config["data_source"]["UK_ons_lad_bounds"], crs="EPSG:27700")
 
     return gdf
 
@@ -67,7 +65,9 @@ def load_gdf_microsoft_building_footprints(url: str) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: Microsoft building footprint polygons
     """
-    gdf = base_getters.load_gdf_csv_gz(url)
+    gdf = gpd.read_file(
+        f"GeoJSONSeq:/vsigzip//vsicurl/{url}", engine="pyogrio", use_arrow=True
+    )
 
     return gdf
 

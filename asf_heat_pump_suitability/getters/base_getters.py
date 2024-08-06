@@ -128,22 +128,3 @@ def list_files_s3_location(location: str) -> list:
     files = fs.ls(location)[1:]
 
     return files
-
-
-def load_gdf_csv_gz(url: str) -> gpd.GeoDataFrame:
-    """
-    Load GeoDataFrame from csv.gz file at URL.
-
-    Args:
-        url (str): URL to csv.gz file
-
-    Returns:
-        gpd.GeoDataFrame
-    """
-    content = _get_content_from_url(url)
-    with gzip.open(content, "r") as f:
-        json_bytes = f.read()
-    json_str = json_bytes.decode("utf-8")
-    gdf = gpd.read_file(json_str)
-
-    return gdf

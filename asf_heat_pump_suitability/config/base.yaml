@@ -9,7 +9,7 @@ data_source:
   GB_ons_garden_space_access: "s3://asf-heat-pump-suitability/source_data/ONS_Apr2020_access_to_garden_space.xlsx"
   GB_osopen_uprn_latlon: "s3://asf-heat-pump-suitability/source_data/osopenuprn_202405_csv.zip"
   EW_census_accommodation_type: "s3://asf-heat-pump-suitability/source_data/2021census_Mar2023_accommodation_type_E_W.csv"
-  UK_ons_lad_bounds: "s3://asf-heat-pump-suitability/source_data/Dec2023ONS_UK_BFE_local_authority_district_polygons.geojson"
+  UK_ons_lad_bounds: "s3://asf-heat-pump-suitability/source_data/Local_Authority_Districts_December_2023_Boundaries_UK_BFE_-2600600853110041429/LAD_DEC_2023_UK_BFE.shp"
   EW_inspire_land_extent: "s3://asf-heat-pump-suitability/source_data/inspire_gml/"
   global_microsoft_building_footprint_links: "s3://asf-heat-pump-suitability/source_data/June2024_microsoft_building_footprint_dataset_links.csv"
 usecols:
