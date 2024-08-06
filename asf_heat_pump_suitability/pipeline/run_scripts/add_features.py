@@ -42,7 +42,7 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     Enhance EPC dataset with additional features:
     - mean average garden size per MSOA
     - lat/lon per UPRN
-    - number of households, land area, and property density per LSOA
+    - number of households, land area, property density and off gas properties per LSOA
 
     Args
         epc_path (str): S3 URI to EPC dataset with weights and LSOA; MSOA columns
@@ -96,7 +96,8 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     logging.info("Adding property density to EPC")
     enhanced_epc_df = property_density.extend_df_with_property_density(enhanced_epc_df)
     logging.info("Adding off gas grid column to EPC")
-    enhanced_epc_df = off_gas.add_off_gas_feature(enhanced_epc_df)
+    off_gas_postcodes = off_gas.process_off_gas_data()
+    enhanced_epc_df = off_gas.add_off_gas_feature(enhanced_epc_df, off_gas_postcodes)
     # Save to S3
     fs = s3fs.S3FileSystem()
     with fs.open(save_output, mode="wb") as f:
