@@ -81,7 +81,7 @@ if __name__ == "__main__":
     microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
 
     # Check where building footprint files and land extent files overlap
-    file_matches = garden_size.match_dict_files_land_building(
+    file_matches = garden_size.match_series_files_land_building(
         land_files_gdf=land_file_bounds, building_files_gdf=microsoft_file_bounds
     )
 
