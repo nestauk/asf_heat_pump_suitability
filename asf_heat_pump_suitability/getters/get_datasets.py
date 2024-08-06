@@ -1,6 +1,7 @@
 import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters, schemas
+from io import StringIO
 
 
 def get_df_ons_pd(**kwargs) -> pl.DataFrame:
@@ -62,4 +63,57 @@ def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
         **kwargs,
     )
 
+    return df
+
+
+def get_df_ons_number_of_households() -> pl.DataFrame:
+    """
+    Get raw ONS 'Number of households' dataset.
+
+    Args:
+        **kwargs for pl.read_excel
+
+    Returns:
+        pl.DataFrame: raw ONS 'Number of households' dataset
+    """
+    content = base_getters.get_content_from_s3_path(
+        config["data_source"]["EW_census_number_of_households"],
+    )
+    content_str = content.decode("utf-8")  # convert bytes to string
+    content_file = StringIO(content_str)  # convert string to file-like object
+    df = pl.read_csv(content_file, skip_rows=6, has_header=True)
+    # Preprocessing steps due to white space
+    # Remove the last eight rows
+    df = df.slice(0, len(df) - 9)
+    # Remove the first row
+    df = df.slice(1, len(df) - 1)
+    return df
+
+
+def get_df_ons_land_area() -> pl.DataFrame:
+    """
+    Get raw ONS 'land area' dataset.
+
+    Returns:
+        pl.DataFrame: raw ONS 'land area' dataset
+    """
+    content = base_getters.get_content_from_s3_path(
+        config["data_source"]["EW_census_land_area"],
+    )
+    content_str = content.decode("utf-8")  # convert bytes to string
+    content_file = StringIO(content_str)  # convert string to file-like object
+
+    # dtypes specificed as polars read csv wa inferring wrong data types and throwing error
+    dtypes = {
+        "LSOA21CD": pl.Utf8,
+        "LSOA21NM": pl.Utf8,
+        "Extent of the Realm (Area in KM2)": pl.Float64,
+        "Clipped to the Coastline (Area in KM2)": pl.Float64,
+        "Area of Inland Water (KM2)": pl.Float64,
+        "Land Count (Area in KM2)": pl.Float64,
+        "LTLA22CD": pl.Utf8,
+        "LTLA22NM": pl.Utf8,
+        "LTLA22NMW": pl.Utf8,
+    }
+    df = pl.read_csv(content_file, dtypes=dtypes, has_header=True)
     return df
