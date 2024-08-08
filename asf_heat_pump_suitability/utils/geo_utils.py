@@ -13,7 +13,6 @@ def transform_gdf_drop_duplicates(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: GeoDataFrame with duplicate polygon geometries dropped
     """
-    # TODO: this assumes duplicate polygons will always generate the same representative points. Is this correct?
     gdf["rep_point"] = gdf.representative_point().to_wkb()
     if gdf["rep_point"].nunique() != len(gdf):
         duplicate_count = gdf.duplicated(subset="rep_point").sum()
