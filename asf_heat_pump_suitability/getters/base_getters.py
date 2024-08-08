@@ -59,6 +59,21 @@ def get_df_from_zip_csv_s3(path: str, extract_file: str, **kwargs) -> pl.DataFra
     return df
 
 
+def get_df_from_excel_s3_path(path: str, **kwargs) -> pl.DataFrame:
+    """
+    Get dataframe from Excel file stored in s3 path.
+
+    Args
+        path (str): S3 URI to Excel file
+        **kwargs for pl.read_excel()
+    Returns
+        pl.DataFrame: dataframe from Excel file
+    """
+    content = BytesIO(get_content_from_s3_path(path))
+    df = pl.read_excel(content, **kwargs)
+    return df
+
+
 def get_content_from_s3_path(path: str) -> bytes:
     """
     Get bytes content of file from S3 path.

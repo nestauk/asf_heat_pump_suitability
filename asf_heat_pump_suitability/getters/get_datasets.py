@@ -117,3 +117,15 @@ def get_df_ons_land_area() -> pl.DataFrame:
     }
     df = pl.read_csv(content_file, dtypes=dtypes, has_header=True)
     return df
+
+
+def get_df_spa_offgasgrid() -> pl.DataFrame:
+    """
+    Get off gas grid data from Supply Point Administration dataset
+    Returns:
+        pl.DataFrame: raw off gas grid dataset
+    """
+    df = base_getters.get_df_from_excel_s3_path(
+        config["data_source"]["UK_spa_offgasgrid"], sheet_name="Off-Gas Postcodes 2024"
+    )
+    return df
