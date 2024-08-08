@@ -6,4 +6,5 @@ balance
 jupytext
 fastexcel
 tqdm
-sklearn
+scikit-learn
+xlsx2csv
