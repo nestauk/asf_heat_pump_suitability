@@ -21,14 +21,14 @@ def transform_df_uk_dataset_links() -> gpd.GeoDataFrame:
 
     transformer = _set_crs_transformer()
 
-    df["ms_bbox_BNG"] = [
-        convert_quadkey_to_bounds(qk, transformer) for qk in df["QuadKey"]
-    ]
-    df["ms_bbox_points"] = [
-        convert_bounds_to_points(bbox[0], bbox[1]) for bbox in df["ms_bbox_BNG"]
-    ]
+    # Use convertbng to convert QuadKeys where possible, otherwise use pyproj transformer
     df["geometry"] = [
-        shapely.Polygon(bbox_points) for bbox_points in df["ms_bbox_points"]
+        (
+            polygons
+            if (polygons := convertbng_quadkey_to_polygon(qk))
+            else convertpyproj_quadkey_to_polygon(qk, transformer)
+        )
+        for qk in df["QuadKey"]
     ]
 
     gdf = gpd.GeoDataFrame(df, geometry="geometry", crs="EPSG:27700").rename(
@@ -38,55 +38,45 @@ def transform_df_uk_dataset_links() -> gpd.GeoDataFrame:
     return gdf
 
 
-def convert_quadkey_to_bounds(quadkey: str, transformer: pyproj.Transformer) -> tuple:
+def convertbng_quadkey_to_polygon(quadkey: str) -> shapely.Polygon:
     """
-    Convert Microsoft QuadKey (QuadTree Key) to bounds.
+    Convert Microsoft QuadKey (QuadTree Key) to polygon in British National Grid (CRS: EPSG:27700) using convertbng for
+    conversion accuracy up to 1.1mm.
+
+    Args:
+        quadkey (str): Microsoft QuadKey
+
+    Returns:
+        shapely.Polygon
+    """
+    minlatlon, maxlatlon = tile.Tile.from_quad_tree(quadkey).bounds
+    x, y = convert_bng(
+        [minlatlon.longitude, maxlatlon.longitude],
+        [minlatlon.latitude, maxlatlon.latitude],
+    )
+    return shapely.box(xmin=x[0], ymin=y[0], xmax=x[1], ymax=y[1])
+
+
+def convertpyproj_quadkey_to_polygon(
+    quadkey: str, transformer: pyproj.Transformer
+) -> shapely.Polygon:
+    """
+    Convert Microsoft QuadKey (QuadTree Key) to polygon in British National Grid (CRS: EPSG:27700) using pyproj for
+    conversion accuracy up to 5m.
 
     Args:
         quadkey (str): Microsoft QuadKey
         transformer (pyproj.Transformer): transformer to transform points between coordinate systems
 
     Returns:
-        tuple: min x,y coordinates, and max x,y coordinates of QuadKey
+        shapely.Polygon
     """
     min_latlon, max_latlon = tile.Tile.from_quad_tree(quadkey).bounds
 
-    min_lat = min_latlon.latitude
-    min_lon = min_latlon.longitude
-    max_lat = max_latlon.latitude
-    max_lon = max_latlon.longitude
+    min_xy = transformer.transform(min_latlon.longitude, min_latlon.latitude)
+    max_xy = transformer.transform(max_latlon.longitude, max_latlon.latitude)
 
-    min_xy = transformer.transform(min_lon, min_lat)
-    max_xy = transformer.transform(max_lon, max_lat)
-
-    return min_xy, max_xy
-
-
-def convert_bounds_to_points(min_xy: tuple, max_xy: tuple) -> list:
-    """
-    Convert bounds to bounding points.
-
-    Args:
-        min_xy (tuple): minimum x, y coordinates of bounds
-        max_xy (tuple): maximum x, y coordinates of bounds
-
-    Returns:
-        list: points of bounding box
-    """
-    minx = min_xy[0]
-    miny = min_xy[1]
-    maxx = max_xy[0]
-    maxy = max_xy[1]
-
-    bbox_points = [
-        [minx, miny],
-        [maxx, miny],
-        [maxx, maxy],
-        [minx, maxy],
-        [minx, miny],
-    ]
-
-    return bbox_points
+    return shapely.box(xmin=min_xy[0], ymin=min_xy[1], xmax=max_xy[0], ymax=max_xy[1])
 
 
 def _set_crs_transformer(
