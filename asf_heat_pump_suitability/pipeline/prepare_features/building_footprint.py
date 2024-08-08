@@ -3,6 +3,7 @@ import shapely
 from pygeotile import tile
 import pyproj
 import warnings
+from convertbng.util import convert_bng
 from asf_heat_pump_suitability.getters import get_datasets
 from asf_heat_pump_suitability.utils import geo_utils
 
@@ -111,16 +112,16 @@ def _set_crs_transformer(
 def transform_gdf_building_footprints(building_footprint_file: str) -> gpd.GeoDataFrame:
     """
     Load and transform building footprints dataframe. Generate unique ID for each building, drop duplicate
-    geometries, and get building area (m2) for each building polygon. CRS: EPSG:27700, British National Grid.
+    geometries, and get building area (m2) for each building polygon. CRS: EPSG:27700, British National Grid (BNG).
 
     Args:
         building_footprint_file (str): URL of Microsoft building footprints file
 
     Returns:
-        gpd.GeoDataFrame: building footprints with unique IDs and area in m2
+        gpd.GeoDataFrame: building footprints polygons in BNG with unique IDs, and footprint area in m2
     """
     gdf = get_datasets.load_gdf_microsoft_building_footprints(building_footprint_file)
-    gdf = gdf.to_crs("EPSG:27700")
+    gdf["geometry"] = transform_geoseries_convert_bng(gdf["geometry"])
     gdf = extend_gdf_building_footprint_id(gdf)
     gdf = geo_utils.transform_gdf_drop_duplicates(gdf)
     if gdf["building_id"].nunique != len(gdf):
@@ -133,6 +134,24 @@ def transform_gdf_building_footprints(building_footprint_file: str) -> gpd.GeoDa
     # TODO: for some but not all footprints. Not sure how many it's available for, might be a low number
 
     return gdf
+
+
+def transform_geoseries_convert_bng(geos: gpd.GeoSeries) -> gpd.GeoSeries:
+    """
+    Transform GeoSeries of shapely.Polygon objects in CRS WGS84 to GeoSeries of shapely polygons in CRS EPSG:27700
+    (British National Grid) with OSTN15 adjustments for conversion accuracies within 1.1mm.
+
+    Args:
+        geos (gpd.GeoSeries): shapely polygons in CRS WGS84
+
+    Returns:
+        gpd.GeoSeries: shapely polygons in CRS EPSG:27700 (British National Grid)
+    """
+    coords = geos.get_coordinates()
+    coords["x"], coords["y"] = convert_bng(coords["x"], coords["y"])
+    # TODO: conversion back to polygons is rate-limiting step
+    s = coords.groupby(coords.index).apply(lambda l: shapely.Polygon(zip(l.x, l.y)))
+    return gpd.GeoSeries(s).set_crs(epsg=27700)
 
 
 def extend_gdf_building_footprint_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:

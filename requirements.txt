@@ -6,7 +6,7 @@ balance
 jupytext
 fastexcel
 tqdm
-sklearn
+scikit-learn
 geopandas
 shapely
 pyGeoTile
@@ -14,3 +14,4 @@ pyproj
 pandas
 geojson
 requests
+convertbng
