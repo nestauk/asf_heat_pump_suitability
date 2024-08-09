@@ -69,11 +69,9 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     # Add feature: lat/long
     logging.info("Adding lat/lon data to EPC")
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
-    epc_latlon_df = epc_df.select(["UPRN"])
 
     # Join enhanced datasets together
     enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
-    enhanced_epc_df = epc_df.join(uprn_latlon_df, how="left", on="UPRN")
 
     logging.info("Adding number of households data to EPC")
     lsoa_number_of_households_df = (
@@ -98,22 +96,34 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     logging.info("Adding off gas grid column to EPC")
     off_gas_postcodes = off_gas.process_off_gas_data()
     enhanced_epc_df = off_gas.add_off_gas_feature(enhanced_epc_df, off_gas_postcodes)
-    logging.info("Adding listed buildings to EPC")
-    listed_buildings_df = listed_buildings.get_filtered_df_listed_buildings()
-    enhanced_epc_df_wo_geometry = (
+    logging.info("Adding Historic England listed buildings to EPC")
+    listed_buildings_england_df = listed_buildings.get_filtered_df_listed_buildings(
+        "E_historicengland_listed_buildings"
+    )
+    enhanced_epc_england_listed_buildings_df = (
         listed_buildings.spatial_join_epc_with_listed_buildings(
-            enhanced_epc_df, listed_buildings_df
+            enhanced_epc_df, listed_buildings_england_df
         )
     )
-    # Convert the GeoDataFrame (without geometry) to a Pandas DataFrame
-    enhanced_epc_pl_df = listed_buildings.convert_gpd_to_polars(
-        enhanced_epc_df_wo_geometry
+    logging.info("Adding Cadw listed buildings to EPC")
+    listed_buildings_wales_df = listed_buildings.get_filtered_df_listed_buildings(
+        "W_cadw_listed_buildings"
+    )
+    enhanced_epc_wales_listed_buildings_df = (
+        listed_buildings.spatial_join_epc_with_listed_buildings(
+            enhanced_epc_df, listed_buildings_wales_df
+        )
+    )
+    logging.info(
+        "Merging Historic England and Cadw listed buildings to a single column in EPC"
+    )
+    enhanced_epc_df = listed_buildings.merge_listed_buildings_nations(
+        enhanced_epc_england_listed_buildings_df, enhanced_epc_wales_listed_buildings_df
     )
     # Save to S3
     fs = s3fs.S3FileSystem()
     with fs.open(save_output, mode="wb") as f:
-        enhanced_epc_pl_df.write_parquet(f)
-
+        enhanced_epc_df.write_parquet(f)
     return enhanced_epc_df
 
 

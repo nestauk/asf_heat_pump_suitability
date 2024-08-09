@@ -107,6 +107,20 @@ def get_content_from_s3_path(path: str) -> bytes:
     return content
 
 
+def load_gdf_from_s3_geopackage(s3_uri: str) -> gpd.GeoDataFrame:
+    """
+    Load GeoDataFrame from Geopackage on S3.
+    Args:
+        s3_uri (str): URI to S3 Geopackage
+    Returns:
+        gpd.GeoDataFrame
+    """
+    fs = s3fs.S3FileSystem()
+    with fs.open(s3_uri, "rb") as f:
+        gdf = gpd.read_file(f)
+    return gdf
+
+
 def load_gdf_from_s3_geojson(s3_uri: str, crs: str) -> gpd.GeoDataFrame:
     """
     Load GeoDataFrame from GeoJSON on S3.
