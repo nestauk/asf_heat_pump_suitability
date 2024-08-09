@@ -131,30 +131,6 @@ def get_df_spa_offgasgrid() -> pl.DataFrame:
     return df
 
 
-def get_df_historicengland_listedbuildings() -> pl.DataFrame:
-    """
-    Get raw Historic England 'Listed Buildings' dataset.
-    Returns:
-        pl.DataFrame: raw Historic England 'Listed Buildings' dataset
-    """
-    df = base_getters.load_gdf_from_s3_geopackage(
-        config["data_source"]["E_historicengland_listed_buildings"]
-    )
-    return df
-
-
-def get_df_cadw_listedbuildings() -> pl.DataFrame:
-    """
-    Get raw Cadw 'Listed Buildings' dataset.
-    Returns:
-        pl.DataFrame: raw Cadw 'Listed Buildings' dataset
-    """
-    df = base_getters.load_gdf_from_s3_geopackage(
-        config["data_source"]["W_cadw_listed_buildings"]
-    )
-    return df
-
-
 def get_df_listedbuildings(data_source_key: str) -> pl.DataFrame:
     """
     Get raw 'Listed Buildings' dataset.
