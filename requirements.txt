@@ -5,13 +5,11 @@ ipfn @ git+https://github.com/nestauk/ipfn.git@master
 balance
 jupytext
 fastexcel
-sklearn
 scikit-learn
 matplotlib==3.5.2
 tqdm
 scikit-learn
 xlsx2csv
-geopandas
+fiona
 geojson
-boto3==1.21.21
-
+geopandas

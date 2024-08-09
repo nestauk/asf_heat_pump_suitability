@@ -4,5 +4,6 @@ channels:
 dependencies:
   - pip
   - python=3.9
+  - gdal
   # Only put dependencies that are NOT available with pip here (e.g. graph-tool)
   # or that enable extra functionality such as GPU/MKL support
