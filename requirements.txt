@@ -15,3 +15,5 @@ pandas
 geojson
 requests
 convertbng
+pyogrio
+regex
