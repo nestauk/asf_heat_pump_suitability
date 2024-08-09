@@ -92,7 +92,11 @@ def generate_gdf_map_file_to_bounds(
         file_to_bounds, crs="EPSG:27700", geometry="geometry"
     )
 
-    file_to_bounds = fill_nulls_file_bounds(file_to_bounds, council_bounds)
+    use_cols.append("council_name_std")
+
+    file_to_bounds = fill_nulls_file_bounds(
+        file_to_bounds, council_bounds, ladnm_col, use_cols
+    )
 
     if save_as:
         file_to_bounds.to_file(save_as, crs="EPSG:27700")
@@ -124,13 +128,21 @@ def _match_list_file_to_name(land_extent_files: list, council_names: pd.Series) 
     return matches
 
 
-def fill_nulls_file_bounds(gdf: gpd.GeoDataFrame, council_bounds) -> gpd.GeoDataFrame:
+def fill_nulls_file_bounds(
+    gdf: gpd.GeoDataFrame,
+    council_bounds: gpd.GeoDataFrame,
+    ladnm_col: str,
+    fill_cols: list,
+) -> gpd.GeoDataFrame:
     """
     Fill missing file bounding polygons for land extent (INSPIRE) files.
 
     Args:
         gdf (gpd.GeoDataFrame): GeoDataFrame of land extent (INSPIRE) files and file polygons
         council_bounds (gpd.GeoDataFrame): GeoDataFrame of council / Local Authority District (LAD) boundaries.
+        ladnm_col (str): name of column with council (LAD) names in council polygons file
+        fill_cols (list): names of columns to fill with council (LAD) metadata (LAD code, name, geometry, and
+        standardised name).
 
     Returns:
         gpd.GeoDataFrame: land extent (INSPIRE) files with file bounding polygons
@@ -149,16 +161,16 @@ def fill_nulls_file_bounds(gdf: gpd.GeoDataFrame, council_bounds) -> gpd.GeoData
             gpd.sjoin(
                 land_parcels_gdf.sample(500).centroid.to_frame("geometry"),
                 council_bounds,
-            )["LAD23NM"]
+            )[ladnm_col]
             .value_counts()
             .index[0]
         )
         # Select council / local authority district that 'contains' majority of land centroids
-        candidate = council_bounds.loc[council_bounds["LAD23NM"] == candidate_nm]
+        candidate = council_bounds.loc[council_bounds[ladnm_col] == candidate_nm]
         # Update gdf with selected council bounds
         gdf.loc[
             gdf["inspire_file_name"] == file,
-            ["LAD23NM", "LAD23CD", "geometry", "council_name_std"],
+            fill_cols,
         ] = candidate.to_numpy()[0]
 
     return gdf
