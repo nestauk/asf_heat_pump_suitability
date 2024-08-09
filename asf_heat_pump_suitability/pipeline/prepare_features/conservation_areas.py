@@ -22,7 +22,7 @@ def transform_gdf_conservation_areas_england() -> gpd.GeoDataFrame:
 
 def generate_df_conservation_area_data_availability(
     ladcd_col: str = "LAD23CD",
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     """
     Generate dataframe of UK local authority districts (LADs) with indicator of conservation area data availability.
 
@@ -30,7 +30,7 @@ def generate_df_conservation_area_data_availability(
         ladcd_col (str): name of column in local authority district (LAD) boundaries file with LAD codes
 
     Returns:
-        pd.DataFrame: conservation area data availability per LAD in the UK
+        pl.DataFrame: conservation area data availability per LAD in the UK
     """
     cons_areas_gdf = transform_gdf_conservation_areas_england()
     council_bounds = get_datasets.load_gdf_ons_council_bounds().to_crs(epsg="27700")
@@ -44,7 +44,7 @@ def generate_df_conservation_area_data_availability(
     df["lad_conservation_area_data_available"] = df["name"].astype(bool)
     df = df.drop(columns=["name"])
 
-    return df
+    return pl.from_pandas(df)
 
 
 def generate_df_uprn_to_cons_area(epc_df: pl.DataFrame) -> pl.DataFrame:
