@@ -3,24 +3,36 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import get_datasets
 
 
-def prepare_df_ons_pd(
+def transform_df_ons_pd(
     pcd_col: str = "pcd",
     ruc_col: str = "ru11ind",
-    use_cols: list = ["pcd", "lsoa11", "msoa11", "lsoa21", "msoa21", "ru11ind"],
+    lad_col: str = "oslaua",
+    use_cols: list = [
+        "pcd",
+        "lsoa11",
+        "msoa11",
+        "lsoa21",
+        "msoa21",
+        "ru11ind",
+        "oslaua",
+    ],
 ) -> pl.DataFrame:
     """
-    Process and clean ONS postcode directory dataset: standardise postcode; clean output area columns; add new
-    `country_code` column.
+    Load and transform ONS postcode directory dataset: standardise postcode; clean output area columns; add new
+    `country_code` column; map rural-urban indicators.
 
     Args
         pcd_col (str): name of column containing postcodes. Default `"pcd"`.
         ruc_col (str): name of column containing rural-urban classification codes. Default `"ru11ind"`.
+        lad_col (str): name of column containing Local Authority District (LAD) codes. Default `"oslaua"`.
         use_cols (list): columns to import. Default `["pcd", "lsoa11", "msoa11", "lsoa21", "msoa21", "ru11ind"]`.
 
     Returns
         pl.DataFrame: processed ONS postcode directory dataset
     """
-    df = get_datasets.get_df_ons_pd(columns=use_cols)
+    df = get_datasets.get_df_ons_pd(columns=use_cols).rename(
+        mapping={lad_col: "lad_code"}
+    )
     df = standardise_col_postcode(df, pcd_col=pcd_col)
     df = _clean_col_output_area(df, area_type="lsoa")
     df = _clean_col_output_area(df, area_type="msoa")
