@@ -50,7 +50,12 @@ def generate_gdf_land_building_overlay(
     Returns:
         gpd.GeoDataFrame: intersections of land parcel polygons and building footprint polygons
     """
-    gdf = gpd.overlay(land_parcels_gdf, building_footprints_gdf, how="intersection")
+    gdf = gpd.overlay(
+        land_parcels_gdf,
+        building_footprints_gdf,
+        how="intersection",
+        keep_geom_type=False,
+    )
     gdf["building_intersection_area_m2"] = gdf["geometry"].area
 
     gdf["min_size_of_small_building"] = gdf["building_area_m2"] * s_building_prop
