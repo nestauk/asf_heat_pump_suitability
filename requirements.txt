@@ -8,3 +8,5 @@ fastexcel
 tqdm
 scikit-learn
 xlsx2csv
+geopandas
+geojson
