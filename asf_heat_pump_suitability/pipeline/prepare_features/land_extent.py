@@ -2,6 +2,8 @@ import pandas as pd
 import geopandas as gpd
 import regex as re
 from typing import List
+import logging
+from tqdm import tqdm
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters, get_datasets
 from asf_heat_pump_suitability.utils import geo_utils
@@ -9,61 +11,77 @@ from asf_heat_pump_suitability.utils import geo_utils
 
 def transform_gdf_council_bounds(
     ladnm_col: str,
-    keep_cols: list,
+    use_cols: list,
 ) -> gpd.GeoDataFrame:
     """
-    Transform council (local authority district) geo dataset: standardise council names (lower and remove special
-    characters and spaces) and convert geometries to British National Grid CRS.
+    Transform council (local authority district) geo dataset by standardising council names (lower and remove special
+    characters and spaces). CRS: British National Grid (EPSG: 27700).
 
     Args:
-        ladnm_col (str): name of column with council (LAD) names.
-        keep_cols (list): names of columns to keep
+        ladnm_col (str): name of column with council (LAD) names
+        use_cols (list): names of columns to retain
 
     Returns:
-        gpd.GeoDataFrame: dataframe of council (LAD) names with geometries in British National Grid CRS
+        gpd.GeoDataFrame: dataframe of council (LAD) names with geometries in CRS British National Grid
     """
     council_bounds = get_datasets.load_gdf_ons_council_bounds()
-    council_bounds = council_bounds[keep_cols]
+    council_bounds = council_bounds[use_cols]
     council_bounds["council_name_std"] = _standardise_list_council_names(
         council_bounds[ladnm_col]
     )
-    council_bounds = council_bounds.to_crs(epsg="27700")
 
     return council_bounds
+
+
+def _standardise_list_council_names(name_series: pd.Series) -> list:
+    """
+    Standardise council (local authority district) names.
+
+    Args:
+        name_series (pd.Series): council names
+
+    Returns:
+        list: standardised council names
+    """
+    council_names = [
+        # Replace spaces, full stops, numbers, other punctuation with "_"
+        re.sub("[^a-zA-Z-,]+", "_", nm).lower().split(",")[0]
+        for nm in name_series
+    ]
+    return council_names
 
 
 def generate_gdf_map_file_to_bounds(
     land_extent_location: str = config["data_source"]["EW_inspire_land_extent"],
     ladnm_col: str = "LAD23NM",
-    keep_cols: list = ["LAD23NM", "LAD23CD", "geometry"],
+    use_cols: list = ["LAD23NM", "LAD23CD", "geometry"],
     save_as: str = None,
 ) -> gpd.GeoDataFrame:
     """
-    Generate GeoDataFrame with land extent files and their bounding polygons by matching land extent filenames
-    to ONS council polygon names.
+    Generate GeoDataFrame with land extent (INSPIRE) files and their bounding polygons by matching land extent filenames
+    to ONS council polygon names. CRS: British National Grid (EPSG: 27700).
 
     Args:
-        land_extent_location (str): location of land extent files. Default S3 location.
+        land_extent_location (str): location of land extent (INSPIRE) files. Defaults to S3 location.
         ladnm_col (str): name of column with council (LAD) names in council polygons file
-        keep_cols (list): names of columns to keep in council polygons file
+        use_cols (list): names of columns to keep in council polygons file. Must include the following columns:
+        council/LAD name, council/LAD code, council/LAD geometry.
         save_as (str): path to save matched files to. Optional.
 
     Returns:
-        gpd.GeoDataFrame: GeoDataFrame with land extent files and their bounding polygons
+        gpd.GeoDataFrame: land extent (INSPIRE) files and their bounding polygons in British National Grid CRS
     """
-    council_bounds = transform_gdf_council_bounds(ladnm_col, keep_cols)
-    land_extent_files = base_getters.list_files_s3_location(land_extent_location)
+    council_bounds = transform_gdf_council_bounds(ladnm_col, use_cols)
+    land_extent_file_names = base_getters.list_files_s3_location(land_extent_location)
 
     matches = _match_list_file_to_name(
-        land_extent_files=land_extent_files,
+        land_extent_files=land_extent_file_names,
         council_names=council_bounds["council_name_std"],
     )
 
-    matches = pd.DataFrame(
-        {"inspire_file_name": land_extent_files, "council_bounds_matches": matches}
-    ).explode("council_bounds_matches")
-
-    file_to_bounds = matches.merge(
+    file_to_bounds = pd.DataFrame(
+        {"inspire_file_name": land_extent_file_names, "council_bounds_matches": matches}
+    ).merge(
         council_bounds,
         how="left",
         left_on="council_bounds_matches",
@@ -73,73 +91,87 @@ def generate_gdf_map_file_to_bounds(
     file_to_bounds = gpd.GeoDataFrame(
         file_to_bounds, crs="EPSG:27700", geometry="geometry"
     )
-    file_to_bounds = fill_nulls_file_bounds(file_to_bounds)
+
+    use_cols.append("council_name_std")
+
+    file_to_bounds = fill_nulls_file_bounds(
+        file_to_bounds, council_bounds, ladnm_col, use_cols
+    )
+
     if save_as:
         file_to_bounds.to_file(save_as, crs="EPSG:27700")
 
     return file_to_bounds
 
 
-def _standardise_list_council_names(name_series: pd.Series) -> list:
+def _match_list_file_to_name(land_extent_files: list, council_names: pd.Series) -> list:
     """
-    Standardise council names.
+    Match land extent (INSPIRE) file names to council names.
 
     Args:
-        name_series (pd.Series): council names
+        land_extent_files (list): land extent file names
+        council_names (pd.Series): standardised council / local authority district names
 
     Returns:
-        list: standardised council names
-    """
-    lad_names = [
-        # Replace spaces, full stops, numbers, other punctuation with "_"
-        re.sub("[^a-zA-Z-,]+", "_", ln).lower().split(",")[0]
-        for ln in name_series
-    ]
-    return lad_names
-
-
-def _match_list_file_to_name(
-    land_extent_files: list, council_names: pd.Series
-) -> List[list]:
-    """
-    Match land extent files to council names. Some files will match to multiple council names e.g. the file for "Wyre"
-    will match with "Wyre" and "Wyre Forest" councils.
-
-    Args:
-        land_extent_files (list):
-        council_names (pd.Series):
-
-    Returns:
-        List[list]: lists of council names matched to file name
+        list: council name matched to land extent (INSPIRE) file name
     """
     matches = []
     for f in land_extent_files:
-        f_matches = [lad for lad in council_names if lad in f.lower()]
-        if not len(f_matches):
-            f_matches = None
-        matches.append(f_matches)
+        match = [council for council in council_names if council in f.lower()]
+        if not len(match):
+            match = None
+        else:
+            # Select longest string match
+            match = max(match, key=len)
+        matches.append(match)
 
     return matches
 
 
-def fill_nulls_file_bounds(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def fill_nulls_file_bounds(
+    gdf: gpd.GeoDataFrame,
+    council_bounds: gpd.GeoDataFrame,
+    ladnm_col: str,
+    fill_cols: list,
+) -> gpd.GeoDataFrame:
     """
-    Fill file bounds polygons for INSPIRE land extent files with no file polygons.
+    Fill missing file bounding polygons for land extent (INSPIRE) files.
 
     Args:
-        gdf (gpd.GeoDataFrame): GeoDataFrame of INSPIRE land extent files and file polygons
+        gdf (gpd.GeoDataFrame): GeoDataFrame of land extent (INSPIRE) files and file polygons
+        council_bounds (gpd.GeoDataFrame): GeoDataFrame of council / Local Authority District (LAD) boundaries.
+        ladnm_col (str): name of column with council (LAD) names in council polygons file
+        fill_cols (list): names of columns to fill with council (LAD) metadata (LAD code, name, geometry, and
+        standardised name).
 
     Returns:
-        gpd.GeoDataFrame: land extent files with file polygons
+        gpd.GeoDataFrame: land extent (INSPIRE) files with file bounding polygons
     """
     missing_bbox = gdf[gdf["council_bounds_matches"].isnull()][
         "inspire_file_name"
     ].to_list()
 
-    for file in missing_bbox:
+    logging.info(
+        f"Filling missing council boundaries for {len(missing_bbox)} land extent (INSPIRE) files"
+    )
+    for file in tqdm(missing_bbox):
         land_parcels_gdf = get_datasets.load_gdf_inspire_land_parcels(f"s3://{file}")
-        file_polygon = geo_utils.get_polygon_gdf_bounds(land_parcels_gdf)
-        gdf.loc[gdf["inspire_file_name"] == file, "geometry"] = file_polygon
+        # Get the council name for the majority of a sample of land polygon centres
+        candidate_nm = (
+            gpd.sjoin(
+                land_parcels_gdf.sample(500).centroid.to_frame("geometry"),
+                council_bounds,
+            )[ladnm_col]
+            .value_counts()
+            .index[0]
+        )
+        # Select council / local authority district that 'contains' majority of land centroids
+        candidate = council_bounds.loc[council_bounds[ladnm_col] == candidate_nm]
+        # Update gdf with selected council bounds
+        gdf.loc[
+            gdf["inspire_file_name"] == file,
+            fill_cols,
+        ] = candidate.to_numpy()[0]
 
     return gdf
 

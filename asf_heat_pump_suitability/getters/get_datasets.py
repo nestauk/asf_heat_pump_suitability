@@ -4,6 +4,7 @@ import geopandas as gpd
 import logging
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters, schemas
+from io import StringIO
 
 
 def get_df_ons_pd(**kwargs) -> pl.DataFrame:
@@ -28,14 +29,12 @@ def get_df_ons_pd(**kwargs) -> pl.DataFrame:
 
 def load_gdf_ons_council_bounds() -> gpd.GeoDataFrame:
     """
-    Load ONS council bounding polygons for the UK (CRS: EPSG:4326).
+    Load ONS council bounding polygons for the UK (CRS: EPSG:27700).
 
     Returns:
         gpd.GeoDataFrame: ONS councils with bounding polygons
     """
-    gdf = base_getters.load_gdf_from_s3_geojson(
-        config["data_source"]["UK_ons_lad_bounds"], crs="WGS84"
-    )
+    gdf = gpd.read_file(config["data_source"]["UK_ons_lad_bounds"], crs="EPSG:27700")
 
     return gdf
 
@@ -67,7 +66,9 @@ def load_gdf_microsoft_building_footprints(url: str) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: Microsoft building footprint polygons
     """
-    gdf = base_getters.load_gdf_csv_gz(url)
+    gdf = gpd.read_file(
+        f"GeoJSONSeq:/vsigzip//vsicurl/{url}", engine="pyogrio", use_arrow=True
+    )
 
     return gdf
 
@@ -144,3 +145,80 @@ def load_gdf_historic_england_conservation_areas() -> gpd.GeoDataFrame:
     )
 
     return gdf
+
+
+def get_df_ons_number_of_households() -> pl.DataFrame:
+    """
+    Get raw ONS 'Number of households' dataset.
+
+    Args:
+        **kwargs for pl.read_excel
+
+    Returns:
+        pl.DataFrame: raw ONS 'Number of households' dataset
+    """
+    content = base_getters.get_content_from_s3_path(
+        config["data_source"]["EW_census_number_of_households"],
+    )
+    content_str = content.decode("utf-8")  # convert bytes to string
+    content_file = StringIO(content_str)  # convert string to file-like object
+    df = pl.read_csv(content_file, skip_rows=6, has_header=True)
+    # Preprocessing steps due to white space
+    # Remove the last eight rows
+    df = df.slice(0, len(df) - 9)
+    # Remove the first row
+    df = df.slice(1, len(df) - 1)
+    return df
+
+
+def get_df_ons_land_area() -> pl.DataFrame:
+    """
+    Get raw ONS 'land area' dataset.
+
+    Returns:
+        pl.DataFrame: raw ONS 'land area' dataset
+    """
+    content = base_getters.get_content_from_s3_path(
+        config["data_source"]["EW_census_land_area"],
+    )
+    content_str = content.decode("utf-8")  # convert bytes to string
+    content_file = StringIO(content_str)  # convert string to file-like object
+
+    # dtypes specificed as polars read csv wa inferring wrong data types and throwing error
+    dtypes = {
+        "LSOA21CD": pl.Utf8,
+        "LSOA21NM": pl.Utf8,
+        "Extent of the Realm (Area in KM2)": pl.Float64,
+        "Clipped to the Coastline (Area in KM2)": pl.Float64,
+        "Area of Inland Water (KM2)": pl.Float64,
+        "Land Count (Area in KM2)": pl.Float64,
+        "LTLA22CD": pl.Utf8,
+        "LTLA22NM": pl.Utf8,
+        "LTLA22NMW": pl.Utf8,
+    }
+    df = pl.read_csv(content_file, dtypes=dtypes, has_header=True)
+    return df
+
+
+def get_df_spa_offgasgrid() -> pl.DataFrame:
+    """
+    Get off gas grid data from Supply Point Administration dataset
+    Returns:
+        pl.DataFrame: raw off gas grid dataset
+    """
+    df = base_getters.get_df_from_excel_s3_path(
+        config["data_source"]["UK_spa_offgasgrid"], sheet_name="Off-Gas Postcodes 2024"
+    )
+    return df
+
+
+def get_df_historicengland_listedbuildings() -> pl.DataFrame:
+    """
+    Get raw Historic England 'Listed Buildings' dataset.
+    Returns:
+        pl.DataFrame: raw Historic England 'Listed Buildings' dataset
+    """
+    df = base_getters.load_gdf_from_s3_geojson(
+        config["data_source"]["E_historicengland_listed_buildings"], "EPSG:27700"
+    )
+    return df

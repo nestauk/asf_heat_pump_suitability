@@ -1,31 +1,29 @@
 import geopandas as gpd
 import logging
 import pandas as pd
-from collections.abc import Mapping
 
 
-def match_dict_files_land_building(
+def match_series_files_land_building(
     land_files_gdf: gpd.GeoDataFrame, building_files_gdf: gpd.GeoDataFrame
-) -> Mapping:
+) -> pd.Series:
     """
-    Get dictionary of intersecting INSPIRE land parcel files to Microsoft building footprint files.
+    Get Series of intersecting INSPIRE land parcel files and Microsoft building footprint files.
 
     Args:
         land_files_gdf (gpd.GeoDataFrame): INSPIRE land file names and file bounding polygons
         building_files_gdf (gpd.GeoDataFrame): Microsoft building footprint file names and file bounding polygons
 
     Returns:
-        Mapping: mapping where keys are INSPIRE land parcel file names and values are Microsoft building footprint file
+        pd.Series: Series where indices are INSPIRE land parcel file names and values are Microsoft building footprint files
         names
     """
     logging.info("Mapping building footprint files to INSPIRE land registry files")
-    gdf = gpd.overlay(land_files_gdf, building_files_gdf, how="intersection")
-    gdf = gdf.sort_values(by="inspire_file_name")
-    file_dict = pd.Series(
+    gdf = land_files_gdf.sjoin(building_files_gdf, how="inner", predicate="intersects")
+    file_matches = pd.Series(
         gdf["ms_url"].values, index=gdf["inspire_file_name"]
-    ).to_dict()
+    ).sort_index()
 
-    return file_dict
+    return file_matches
 
 
 def generate_gdf_land_building_overlay(
@@ -52,7 +50,12 @@ def generate_gdf_land_building_overlay(
     Returns:
         gpd.GeoDataFrame: intersections of land parcel polygons and building footprint polygons
     """
-    gdf = gpd.overlay(land_parcels_gdf, building_footprints_gdf, how="intersection")
+    gdf = gpd.overlay(
+        land_parcels_gdf,
+        building_footprints_gdf,
+        how="intersection",
+        keep_geom_type=False,
+    )
     gdf["building_intersection_area_m2"] = gdf["geometry"].area
 
     gdf["min_size_of_small_building"] = gdf["building_area_m2"] * s_building_prop

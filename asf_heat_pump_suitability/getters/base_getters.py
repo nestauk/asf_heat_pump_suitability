@@ -5,7 +5,6 @@ from io import BytesIO
 import logging
 import s3fs
 import geojson
-import gzip
 import geopandas as gpd
 
 
@@ -62,6 +61,36 @@ def get_df_from_zip_csv_s3(path: str, extract_file: str, **kwargs) -> pl.DataFra
     return df
 
 
+def get_df_from_excel_s3_path(path: str, **kwargs) -> pl.DataFrame:
+    """
+    Get dataframe from Excel file stored in s3 path.
+
+    Args
+        path (str): S3 URI to Excel file
+        **kwargs for pl.read_excel()
+    Returns
+        pl.DataFrame: dataframe from Excel file
+    """
+    content = BytesIO(get_content_from_s3_path(path))
+    df = pl.read_excel(content, **kwargs)
+    return df
+
+
+def get_df_from_csv_s3_path(path: str, **kwargs) -> pl.DataFrame:
+    """
+    Get dataframe from CSV file stored in s3 path.
+
+    Args
+        path (str): S3 URI to CSV file
+        **kwargs for pl.read_csv()
+    Returns
+        pl.DataFrame: dataframe from CSV file
+    """
+    content = BytesIO(get_content_from_s3_path(path))
+    df = pl.read_csv(content, **kwargs)
+    return df
+
+
 def get_content_from_s3_path(path: str) -> bytes:
     """
     Get bytes content of file from S3 path.
@@ -90,7 +119,6 @@ def _get_content_from_url(url: str) -> BytesIO:
     with requests.Session() as session:
         res = session.get(url)
     content = BytesIO(res.content)
-
     return content
 
 
@@ -128,22 +156,3 @@ def list_files_s3_location(location: str) -> list:
     files = fs.ls(location)[1:]
 
     return files
-
-
-def load_gdf_csv_gz(url: str) -> gpd.GeoDataFrame:
-    """
-    Load GeoDataFrame from csv.gz file at URL.
-
-    Args:
-        url (str): URL to csv.gz file
-
-    Returns:
-        gpd.GeoDataFrame
-    """
-    content = _get_content_from_url(url)
-    with gzip.open(content, "r") as f:
-        json_bytes = f.read()
-    json_str = json_bytes.decode("utf-8")
-    gdf = gpd.read_file(json_str)
-
-    return gdf

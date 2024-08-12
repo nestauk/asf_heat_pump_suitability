@@ -112,7 +112,8 @@ def main(epc_path: str) -> pl.DataFrame:
             continue
 
     weights = pl.DataFrame(weights)
-    enhanced_epc_df = enhanced_epc_df.join(weights, how="left", on="UPRN")
+    # Outer join so the dummy rows are still included (these will have a UPRN prefixed with 'dummy_')
+    enhanced_epc_df = enhanced_epc_df.join(weights, how="outer", on="UPRN")
     lsoa_stats_df = pl.DataFrame(lsoa_stats)
 
     # Save to S3

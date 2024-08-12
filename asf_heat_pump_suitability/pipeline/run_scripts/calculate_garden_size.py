@@ -28,7 +28,7 @@ def argparser() -> argparse.Namespace:
 
     parser.add_argument(
         "--use_mapping",
-        help="Path to existing mapping of land extent files to LAD boundary geometries",
+        help="Path to existing mapping of land extent files to council/LAD boundary geometries. Recommended if available.",
         type=str,
         required=False,
     )
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
 
     # Check where building footprint files and land extent files overlap
-    file_matches = garden_size.match_dict_files_land_building(
+    file_matches = garden_size.match_series_files_land_building(
         land_files_gdf=land_file_bounds, building_files_gdf=microsoft_file_bounds
     )
 
@@ -95,7 +95,7 @@ if __name__ == "__main__":
             # Prepare land parcel data
             land_parcels_gdf = land_extent.transform_gdf_land_parcels(
                 f"s3://{land_file}"
-            )  # TODO is there a cleaner way to generate the file path here without f-string
+            )
 
         # Prepare building footprints data
         building_footprints_gdf = building_footprint.transform_gdf_building_footprints(

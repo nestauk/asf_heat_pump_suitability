@@ -2,6 +2,7 @@
 Enhance EPC dataset with additional features:
 - mean average garden size per MSOA
 - lat/lon per UPRN
+- number of households, land area, property density and off gas properties per LSOA
 - Historic England conservation area flag
 """
 
@@ -14,6 +15,11 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
     garden_space_avg,
     lat_lon,
     output_areas,
+    number_of_households,
+    land_area,
+    property_density,
+    off_gas,
+    listed_buildings,
 )
 from asf_heat_pump_suitability.pipeline.enhance_epc import prepare_epc
 
@@ -42,7 +48,6 @@ def run():
 
 
 if __name__ == "__main__":
-
     _args = run()
 
     # Import processed EPC
@@ -66,7 +71,6 @@ if __name__ == "__main__":
         left_on=["msoa", "msoa_avg_outdoor_space_property_type"],
         right_on=["MSOA code", "msoa_avg_outdoor_space_property_type"],
     )
-
     # Add feature: lat/long
     logging.info("Adding lat/lon data to EPC")
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
@@ -89,6 +93,44 @@ if __name__ == "__main__":
     enhanced_epc_df = enhanced_epc_df.join(
         lad_cons_areas_df, how="left", left_on="lad_code", right_on="LAD23CD"
     )
+
+    # Add feature: property density
+    logging.info("Adding number of households data to EPC")
+    lsoa_number_of_households_df = (
+        number_of_households.prepare_df_num_of_households_ons()
+    )
+    epc_lsoa_number_of_households_df = lsoa_number_of_households_df.select(
+        ["lsoa21", "Number of households 2021"]
+    )
+    enhanced_epc_df = enhanced_epc_df.join(
+        epc_lsoa_number_of_households_df, how="left", on="lsoa21"
+    )
+
+    logging.info("Adding land area to EPC")
+    lsoa_land_area_df = land_area.prepare_df_land_area_ons()
+    epc_lsoa_land_area_df = lsoa_land_area_df.select(
+        ["lsoa21", "Land Count (Area in KM2)"]
+    )
+    enhanced_epc_df = enhanced_epc_df.join(
+        epc_lsoa_land_area_df, how="left", on="lsoa21"
+    )
+
+    logging.info("Adding property density to EPC")
+    enhanced_epc_df = property_density.extend_df_with_property_density(enhanced_epc_df)
+
+    # Add feature: off gas postcodes
+    logging.info("Adding off gas grid column to EPC")
+    off_gas_postcodes = off_gas.process_off_gas_data()
+    enhanced_epc_df = off_gas.add_off_gas_feature(enhanced_epc_df, off_gas_postcodes)
+
+    # Add feature: listed buildings
+    logging.info("Adding listed buildings to EPC")
+    listed_buildings_df = listed_buildings.get_filtered_df_listed_buildings()
+    enhanced_epc_df = listed_buildings.spatial_join_epc_with_listed_buildings(
+        enhanced_epc_df, listed_buildings_df
+    )
+    # Convert the GeoDataFrame (without geometry) to a polars DataFrame
+    enhanced_epc_df = listed_buildings.convert_gpd_to_polars(enhanced_epc_df)
 
     # Save to S3
     fs = s3fs.S3FileSystem()

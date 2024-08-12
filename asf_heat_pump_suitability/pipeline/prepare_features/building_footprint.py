@@ -3,6 +3,7 @@ import shapely
 from pygeotile import tile
 import pyproj
 import warnings
+from convertbng.util import convert_bng
 from asf_heat_pump_suitability.getters import get_datasets
 from asf_heat_pump_suitability.utils import geo_utils
 
@@ -20,14 +21,14 @@ def transform_df_uk_dataset_links() -> gpd.GeoDataFrame:
 
     transformer = _set_crs_transformer()
 
-    df["ms_bbox_BNG"] = [
-        convert_quadkey_to_bounds(qk, transformer) for qk in df["QuadKey"]
-    ]
-    df["ms_bbox_points"] = [
-        convert_bounds_to_points(bbox[0], bbox[1]) for bbox in df["ms_bbox_BNG"]
-    ]
+    # Use convertbng to convert QuadKeys where possible, otherwise use pyproj transformer
     df["geometry"] = [
-        shapely.Polygon(bbox_points) for bbox_points in df["ms_bbox_points"]
+        (
+            polygons
+            if (polygons := convertbng_quadkey_to_polygon(qk))
+            else convertpyproj_quadkey_to_polygon(qk, transformer)
+        )
+        for qk in df["QuadKey"]
     ]
 
     gdf = gpd.GeoDataFrame(df, geometry="geometry", crs="EPSG:27700").rename(
@@ -37,55 +38,45 @@ def transform_df_uk_dataset_links() -> gpd.GeoDataFrame:
     return gdf
 
 
-def convert_quadkey_to_bounds(quadkey: str, transformer: pyproj.Transformer) -> tuple:
+def convertbng_quadkey_to_polygon(quadkey: str) -> shapely.Polygon:
     """
-    Convert Microsoft QuadKey (QuadTree Key) to bounds.
+    Convert Microsoft QuadKey (QuadTree Key) to polygon in British National Grid (CRS: EPSG:27700) using convertbng for
+    conversion accuracy up to 1.1mm.
+
+    Args:
+        quadkey (str): Microsoft QuadKey
+
+    Returns:
+        shapely.Polygon
+    """
+    minlatlon, maxlatlon = tile.Tile.from_quad_tree(quadkey).bounds
+    x, y = convert_bng(
+        [minlatlon.longitude, maxlatlon.longitude],
+        [minlatlon.latitude, maxlatlon.latitude],
+    )
+    return shapely.box(xmin=x[0], ymin=y[0], xmax=x[1], ymax=y[1])
+
+
+def convertpyproj_quadkey_to_polygon(
+    quadkey: str, transformer: pyproj.Transformer
+) -> shapely.Polygon:
+    """
+    Convert Microsoft QuadKey (QuadTree Key) to polygon in British National Grid (CRS: EPSG:27700) using pyproj for
+    conversion accuracy up to 5m.
 
     Args:
         quadkey (str): Microsoft QuadKey
         transformer (pyproj.Transformer): transformer to transform points between coordinate systems
 
     Returns:
-        tuple: min x,y coordinates, and max x,y coordinates of QuadKey
+        shapely.Polygon
     """
     min_latlon, max_latlon = tile.Tile.from_quad_tree(quadkey).bounds
 
-    min_lat = min_latlon.latitude
-    min_lon = min_latlon.longitude
-    max_lat = max_latlon.latitude
-    max_lon = max_latlon.longitude
+    min_xy = transformer.transform(min_latlon.longitude, min_latlon.latitude)
+    max_xy = transformer.transform(max_latlon.longitude, max_latlon.latitude)
 
-    min_xy = transformer.transform(min_lon, min_lat)
-    max_xy = transformer.transform(max_lon, max_lat)
-
-    return min_xy, max_xy
-
-
-def convert_bounds_to_points(min_xy: tuple, max_xy: tuple) -> list:
-    """
-    Convert bounds to bounding points.
-
-    Args:
-        min_xy (tuple): minimum x, y coordinates of bounds
-        max_xy (tuple): maximum x, y coordinates of bounds
-
-    Returns:
-        list: points of bounding box
-    """
-    minx = min_xy[0]
-    miny = min_xy[1]
-    maxx = max_xy[0]
-    maxy = max_xy[1]
-
-    bbox_points = [
-        [minx, miny],
-        [maxx, miny],
-        [maxx, maxy],
-        [minx, maxy],
-        [minx, miny],
-    ]
-
-    return bbox_points
+    return shapely.box(xmin=min_xy[0], ymin=min_xy[1], xmax=max_xy[0], ymax=max_xy[1])
 
 
 def _set_crs_transformer(
@@ -111,16 +102,16 @@ def _set_crs_transformer(
 def transform_gdf_building_footprints(building_footprint_file: str) -> gpd.GeoDataFrame:
     """
     Load and transform building footprints dataframe. Generate unique ID for each building, drop duplicate
-    geometries, and get building area (m2) for each building polygon. CRS: EPSG:27700, British National Grid.
+    geometries, and get building area (m2) for each building polygon. CRS: EPSG:27700, British National Grid (BNG).
 
     Args:
         building_footprint_file (str): URL of Microsoft building footprints file
 
     Returns:
-        gpd.GeoDataFrame: building footprints with unique IDs and area in m2
+        gpd.GeoDataFrame: building footprints polygons in BNG with unique IDs, and footprint area in m2
     """
     gdf = get_datasets.load_gdf_microsoft_building_footprints(building_footprint_file)
-    gdf = gdf.to_crs("EPSG:27700")
+    gdf["geometry"] = transform_geoseries_convert_bng(gdf["geometry"])
     gdf = extend_gdf_building_footprint_id(gdf)
     gdf = geo_utils.transform_gdf_drop_duplicates(gdf)
     if gdf["building_id"].nunique != len(gdf):
@@ -133,6 +124,24 @@ def transform_gdf_building_footprints(building_footprint_file: str) -> gpd.GeoDa
     # TODO: for some but not all footprints. Not sure how many it's available for, might be a low number
 
     return gdf
+
+
+def transform_geoseries_convert_bng(geos: gpd.GeoSeries) -> gpd.GeoSeries:
+    """
+    Transform GeoSeries of shapely.Polygon objects in CRS WGS84 to GeoSeries of shapely polygons in CRS EPSG:27700
+    (British National Grid) with OSTN15 adjustments for conversion accuracies within 1.1mm.
+
+    Args:
+        geos (gpd.GeoSeries): shapely polygons in CRS WGS84
+
+    Returns:
+        gpd.GeoSeries: shapely polygons in CRS EPSG:27700 (British National Grid)
+    """
+    coords = geos.get_coordinates()
+    coords["x"], coords["y"] = convert_bng(coords["x"], coords["y"])
+    # TODO: conversion back to polygons is rate-limiting step
+    s = coords.groupby(coords.index).apply(lambda l: shapely.Polygon(zip(l.x, l.y)))
+    return gpd.GeoSeries(s).set_crs(epsg=27700)
 
 
 def extend_gdf_building_footprint_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
