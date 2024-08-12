@@ -40,9 +40,9 @@ def generate_df_conservation_area_data_availability(
         [ladcd_col, "name"]
     ].replace("No data available for publication by HE", np.nan)
 
-    df = df.groupby("LAD23CD").agg({"name": "count"})
+    df = df.groupby(ladcd_col).agg({"name": "count"})
     df["lad_conservation_area_data_available"] = df["name"].astype(bool)
-    df = df.drop(columns=["name"])
+    df = df.drop(columns=["name"]).reset_index()
 
     return pl.from_pandas(df)
 
@@ -73,7 +73,7 @@ def generate_df_uprn_to_cons_area(epc_df: pl.DataFrame) -> pl.DataFrame:
 
     # Drop duplicate UPRNs introduced in cases where UPRN matched to multiple conservation areas
     epc_df = epc_df.drop_duplicates(subset="UPRN").rename(
-        {"name": "in_conservation_area"}
+        columns={"name": "in_conservation_area"}
     )
 
     return pl.from_pandas(epc_df)
