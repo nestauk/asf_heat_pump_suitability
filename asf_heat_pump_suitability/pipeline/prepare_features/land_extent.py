@@ -99,7 +99,7 @@ def generate_gdf_map_file_to_bounds(
     )
 
     if save_as:
-        file_to_bounds.to_file(save_as, crs="EPSG:27700")
+        file_to_bounds.to_file(save_as)
 
     return file_to_bounds
 
