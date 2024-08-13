@@ -5,6 +5,12 @@ import logging
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters, schemas
 from io import StringIO
+from tenacity import retry, stop_after_attempt
+import warnings
+
+# Ignore RunTimeWarning when loading Microsoft building footprint files
+# as reading from gzipped stream should be faster than unzipping and loading data
+warnings.filterwarnings("ignore", category=RuntimeWarning, message="VSIFSeekL")
 
 
 def get_df_ons_pd(**kwargs) -> pl.DataFrame:
@@ -34,7 +40,7 @@ def load_gdf_ons_council_bounds() -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: ONS councils with bounding polygons
     """
-    gdf = gpd.read_file(config["data_source"]["UK_ons_lad_bounds"], crs="EPSG:27700")
+    gdf = gpd.read_file(config["data_source"]["UK_ons_lad_bounds"])
 
     return gdf
 
@@ -73,6 +79,7 @@ def load_gdf_microsoft_building_footprints(url: str) -> gpd.GeoDataFrame:
     return gdf
 
 
+@retry(stop=stop_after_attempt(4))
 def load_gdf_inspire_land_parcels(path: str) -> gpd.GeoDataFrame:
     """
     Load land registry's index polygons spatial data (INSPIRE) showing the geometry and extent of registered freehold
