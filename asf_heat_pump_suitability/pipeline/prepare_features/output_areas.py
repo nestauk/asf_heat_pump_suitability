@@ -22,10 +22,10 @@ def transform_df_ons_pd(
     `country_code` column; map rural-urban indicators.
 
     Args
-        pcd_col (str): name of column containing postcodes. Default `"pcd"`.
-        ruc_col (str): name of column containing rural-urban classification codes. Default `"ru11ind"`.
-        lad_col (str): name of column containing Local Authority District (LAD) codes. Default `"oslaua"`.
-        use_cols (list): columns to import. Default `["pcd", "lsoa11", "msoa11", "lsoa21", "msoa21", "ru11ind"]`.
+        pcd_col (str): name of column containing postcodes. Default "pcd".
+        ruc_col (str): name of column containing rural-urban classification codes. Default "ru11ind".
+        lad_col (str): name of column containing Local Authority District (LAD) codes. Default "oslaua".
+        use_cols (list): columns to import. Default ["pcd", "lsoa11", "msoa11", "lsoa21", "msoa21", "ru11ind", "oslaua"].
 
     Returns
         pl.DataFrame: processed ONS postcode directory dataset
@@ -55,7 +55,7 @@ def standardise_col_postcode(df: pl.DataFrame, pcd_col: str) -> pl.DataFrame:
     """
 
     df = df.with_columns(
-        pl.col(pcd_col).str.to_uppercase().str.replace(" ", "").alias("POSTCODE")
+        pl.col(pcd_col).str.to_uppercase().str.replace(r"\s+", "").alias("POSTCODE")
     )
 
     return df
