@@ -55,6 +55,7 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     # Import processed EPC
     logging.info(f"Loading EPC file from path: {epc_path}")
     epc_df = pl.read_parquet(epc_path)
+
     # Join enhancing features to EPC dataset
     # Add feature: garden space avg
     logging.info("Adding average garden size per MSOA to EPC")
@@ -66,14 +67,11 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
         left_on=["msoa", "msoa_avg_outdoor_space_property_type"],
         right_on=["MSOA code", "msoa_avg_outdoor_space_property_type"],
     )
+
     # Add feature: lat/long
     logging.info("Adding lat/lon data to EPC")
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
-    epc_latlon_df = epc_df.select(["UPRN"])
-
-    # Join enhanced datasets together
     enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
-    enhanced_epc_df = epc_df.join(uprn_latlon_df, how="left", on="UPRN")
 
     logging.info("Adding number of households data to EPC")
     lsoa_number_of_households_df = (
@@ -98,21 +96,29 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     logging.info("Adding off gas grid column to EPC")
     off_gas_postcodes = off_gas.process_off_gas_data()
     enhanced_epc_df = off_gas.add_off_gas_feature(enhanced_epc_df, off_gas_postcodes)
-    logging.info("Adding listed buildings to EPC")
-    listed_buildings_df = listed_buildings.get_filtered_df_listed_buildings()
-    enhanced_epc_df_wo_geometry = (
-        listed_buildings.spatial_join_epc_with_listed_buildings(
-            enhanced_epc_df, listed_buildings_df
-        )
+
+    # Add feature: listed buildings data
+    logging.info("Loading listed buildings for England")
+    e_listed_buildings_df = listed_buildings.transform_gdf_listed_buildings("England")
+    e_listed_buildings_df = listed_buildings.sjoin_df_epc_with_listed_buildings(
+        enhanced_epc_df, e_listed_buildings_df
     )
-    # Convert the GeoDataFrame (without geometry) to a Pandas DataFrame
-    enhanced_epc_pl_df = listed_buildings.convert_gpd_to_polars(
-        enhanced_epc_df_wo_geometry
+
+    logging.info("Loading listed buildings for Wales")
+    w_listed_buildings_df = listed_buildings.transform_gdf_listed_buildings("Wales")
+    w_listed_buildings_df = listed_buildings.sjoin_df_epc_with_listed_buildings(
+        enhanced_epc_df, w_listed_buildings_df
     )
+
+    listed_buildings_df = pl.concat(
+        [e_listed_buildings_df, w_listed_buildings_df], how="vertical"
+    )
+    enhanced_epc_df = enhanced_epc_df.join(listed_buildings_df, how="left", on="UPRN")
+
     # Save to S3
     fs = s3fs.S3FileSystem()
     with fs.open(save_output, mode="wb") as f:
-        enhanced_epc_pl_df.write_parquet(f)
+        enhanced_epc_df.write_parquet(f)
 
     return enhanced_epc_df
 

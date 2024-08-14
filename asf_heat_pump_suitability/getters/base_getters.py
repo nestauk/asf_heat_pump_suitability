@@ -107,22 +107,6 @@ def get_content_from_s3_path(path: str) -> bytes:
     return content
 
 
-def load_gdf_from_s3_geojson(s3_uri: str, crs: str) -> gpd.GeoDataFrame:
-    """
-    Load GeoDataFrame from GeoJSON on S3.
-    Args:
-        s3_uri (str): URI to S3 GeoJSON
-        crs (str): coordinate reference system of GeoJSON
-    Returns:
-        gpd.GeoDataFrame
-    """
-    fs = s3fs.S3FileSystem()
-    with fs.open(s3_uri, "rb") as f:
-        data = geojson.load(f)
-    gdf = gpd.GeoDataFrame.from_features(data["features"], crs=crs)
-    return gdf
-
-
 def _get_content_from_url(url: str) -> BytesIO:
     """
     Get BytesIO stream from URL.
