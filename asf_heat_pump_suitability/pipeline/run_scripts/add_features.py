@@ -64,7 +64,9 @@ if __name__ == "__main__":
     # Add feature: garden space avg
     logging.info("Adding average garden size per MSOA to EPC")
     garden_space_avg_msoa_df = garden_space_avg.generate_df_garden_space_avg()
-    epc_df = prepare_epc.add_col_msoa_avg_outdoor_space_property_type(epc_df)
+    enhanced_epc_df = prepare_epc.add_col_msoa_avg_outdoor_space_property_type(
+        enhanced_epc_df
+    )
     enhanced_epc_df = enhanced_epc_df.join(
         garden_space_avg_msoa_df,
         how="left",
