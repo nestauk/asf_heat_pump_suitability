@@ -3,7 +3,7 @@ Enhance EPC dataset with additional features:
 - mean average garden size per MSOA
 - lat/lon per UPRN
 - number of households, land area, property density and off gas properties per LSOA
-- Historic England conservation area flag
+- England and Wales building conservation area flag
 """
 
 import logging
@@ -76,15 +76,15 @@ if __name__ == "__main__":
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
     enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
 
-    # Add feature: conservation area flag
-    logging.info("Adding conservation area flag")
-    # Get UPRNs in conservation areas
+    # Add feature: building conservation area flag
+    logging.info("Adding building conservation area flag")
+    # Get UPRNs in building conservation areas
     uprns_in_cons_area_df = conservation_areas.generate_df_uprn_to_cons_area(
         enhanced_epc_df
     )
     enhanced_epc_df = enhanced_epc_df.join(uprns_in_cons_area_df, how="left", on="UPRN")
 
-    # Label local authorities with missing conservation area data
+    # Label local authorities with missing building conservation area data
     lad_cons_areas_df = (
         conservation_areas.generate_df_conservation_area_data_availability(
             ladcd_col="LAD23CD"
