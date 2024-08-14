@@ -132,16 +132,36 @@ def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
     return df
 
 
-def load_gdf_historic_england_conservation_areas() -> gpd.GeoDataFrame:
+def load_gdf_historic_england_conservation_areas(**kwargs) -> gpd.GeoDataFrame:
     """
-    Load GeoDataFrame with conservation area polygons from Historic England (CRS: EPSG:4326).
+    Load GeoDataFrame with building conservation area polygons from Historic England (CRS: EPSG:4326).
+
+    Args:
+        **kwargs for `gpd.read_file()`
 
     Returns:
-        gpd.GeoDataFrame: polygons of conservation areas in England
+        gpd.GeoDataFrame: polygons of building conservation areas in England
     """
     gdf = gpd.read_file(
-        config["data_source"]["E_historic_england_conservation_areas"],
-        engine="pyogrio",
+        config["data_source"]["E_historic_england_conservation_areas"], **kwargs
+    )
+
+    return gdf
+
+
+def load_gdf_welsh_gov_conservation_areas(**kwargs) -> gpd.GeoDataFrame:
+    """
+    Load GeoDataFrame with building conservation area polygons from the Welsh Government (CRS: EPSG:27700 British
+    National Grid).
+
+    Args:
+        **kwargs for `gpd.read_file()`
+
+    Returns:
+        gpd.GeoDataFrame: polygons of building conservation areas in Wales
+    """
+    gdf = gpd.read_file(
+        config["data_source"]["W_welsh_gov_conservation_areas"], **kwargs
     )
 
     return gdf
