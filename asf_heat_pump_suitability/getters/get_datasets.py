@@ -2,6 +2,7 @@ import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters, schemas
 from io import StringIO
+import geopandas as gpd
 
 
 def get_df_ons_pd(**kwargs) -> pl.DataFrame:
@@ -122,6 +123,7 @@ def get_df_ons_land_area() -> pl.DataFrame:
 def get_df_spa_offgasgrid() -> pl.DataFrame:
     """
     Get off gas grid data from Supply Point Administration dataset
+
     Returns:
         pl.DataFrame: raw off gas grid dataset
     """
@@ -131,15 +133,23 @@ def get_df_spa_offgasgrid() -> pl.DataFrame:
     return df
 
 
-def get_df_listedbuildings(data_source_key: str) -> pl.DataFrame:
+def load_gdf_listed_buildings(nation: str, **kwargs) -> gpd.GeoDataFrame:
     """
-    Get raw 'Listed Buildings' dataset.
+    Get raw Listed Buildings polygons dataset for specified nation. CRS EPSG:27700, British National Grid.
+
     Args:
-        data_source_key (str): Key to the data source in the config
+        nation (str): UK nation to load listed buildings data for. Options: "England"; "Wales".
+        **kwargs for `gpd.read_file()`
+
     Returns:
-        pl.DataFrame: raw 'Listed Buildings' dataset
+        gpd.GeoDataFrame: raw Listed Buildings dataset for specified nation
     """
-    df = base_getters.load_gdf_from_s3_geopackage(
-        config["data_source"][data_source_key]
-    )
-    return df
+    if nation.lower() == "england":
+        gdf = gpd.read_file(
+            config["data_source"]["E_historicengland_listed_buildings"], **kwargs
+        )
+    elif nation.lower() == "wales":
+        gdf = gpd.read_file(config["data_source"]["W_cadw_listed_buildings"], **kwargs)
+    else:
+        raise ValueError("Please set `nation` to either 'England' or 'Wales'.")
+    return gdf
