@@ -1,4 +1,5 @@
 import polars as pl
+import geopandas as gpd
 from asf_heat_pump_suitability.getters import get_datasets
 
 
@@ -17,3 +18,29 @@ def transform_df_osopen_uprn_latlon() -> pl.DataFrame:
     df = df.with_columns(pl.col("UPRN").cast(pl.Float64).cast(pl.String).alias("UPRN"))
 
     return df
+
+
+def generate_gdf_uprn_coords(
+    df: pl.DataFrame, x_col: str = "X_COORDINATE", y_col: str = "Y_COORDINATE"
+) -> gpd.GeoDataFrame:
+    """
+    Generate GeoDataFrame of British National Grid (BNG) coordinate point geometries for UPRNs from BNG x and y
+    coordinates.
+
+    Args:
+        df (pl.DataFrame): dataframe with x, y coordinates in BNG (CRS: EPSG:27700) and UPRNs
+        x_col (str): name of BNG x coordinate column
+        y_col (str): name of BNG y coordinate column
+
+    Returns:
+        gpd.GeoDataFrame: UPRNs with BNG coordinate point geometries
+    """
+    df = df.to_pandas()
+
+    gdf = gpd.GeoDataFrame(
+        df,
+        geometry=gpd.points_from_xy(df[x_col], df[y_col]),
+        crs="EPSG:27700",
+    )
+
+    return gdf

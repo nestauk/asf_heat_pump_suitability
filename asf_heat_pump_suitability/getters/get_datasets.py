@@ -1,8 +1,16 @@
 import polars as pl
+import pandas as pd
+import geopandas as gpd
+import logging
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters, schemas
 from io import StringIO
-import geopandas as gpd
+from tenacity import retry, stop_after_attempt
+import warnings
+
+# Ignore RunTimeWarning when loading Microsoft building footprint files
+# as reading from gzipped stream should be faster than unzipping and loading data
+warnings.filterwarnings("ignore", category=RuntimeWarning, message="VSIFSeekL")
 
 
 def get_df_ons_pd(**kwargs) -> pl.DataFrame:
@@ -23,6 +31,70 @@ def get_df_ons_pd(**kwargs) -> pl.DataFrame:
     )
 
     return df
+
+
+def load_gdf_ons_council_bounds() -> gpd.GeoDataFrame:
+    """
+    Load ONS council bounding polygons for the UK (CRS: EPSG:27700).
+
+    Returns:
+        gpd.GeoDataFrame: ONS councils with bounding polygons
+    """
+    gdf = gpd.read_file(config["data_source"]["UK_ons_lad_bounds"])
+
+    return gdf
+
+
+def load_df_microsoft_building_footprint_links() -> pd.DataFrame:
+    """
+    Load Microsoft Global ML Building Footprints data links file containing URLs to all building footprint files
+    available.
+
+    Returns:
+        pd.DataFrame: Microsoft Global ML Building Footprints data links
+    """
+    logging.info("Loading Microsoft building footprint data-links file")
+    df = pd.read_csv(
+        config["data_source"]["global_microsoft_building_footprint_links"],
+        dtype=schemas.microsoft_datalinks,
+    )
+
+    return df
+
+
+def load_gdf_microsoft_building_footprints(url: str) -> gpd.GeoDataFrame:
+    """
+    Load Microsoft building footprints file (CRS: EPSG:4326).
+
+    Args:
+        url (str): URL to Microsoft building footprint file
+
+    Returns:
+        gpd.GeoDataFrame: Microsoft building footprint polygons
+    """
+    gdf = gpd.read_file(
+        f"GeoJSONSeq:/vsigzip//vsicurl/{url}", engine="pyogrio", use_arrow=True
+    )
+
+    return gdf
+
+
+@retry(stop=stop_after_attempt(4))
+def load_gdf_inspire_land_parcels(path: str) -> gpd.GeoDataFrame:
+    """
+    Load land registry's index polygons spatial data (INSPIRE) showing the geometry and extent of registered freehold
+    properties in England and Wales. CRS EPSG:27700, British National Grid.
+
+    Args:
+        path (str): path to INSPIRE land parcel file
+
+    Returns:
+        gpd.GeoDataFrame: registered land extent polygons for one council
+    """
+    logging.info(f"Loading INSPIRE land parcel file: {path}")
+    gdf = gpd.read_file(path, engine="pyogrio")
+
+    return gdf
 
 
 def get_df_ons_garden_space_avg(**kwargs) -> pl.DataFrame:
@@ -49,8 +121,8 @@ def get_df_ons_garden_space_avg(**kwargs) -> pl.DataFrame:
 
 def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
     """
-    Get raw OS (Ordnance Survey) Open UPRN dataset containing latitude and longitude and x and y coordinates for all
-    UPRNs in Great Britain.
+    Get raw OS (Ordnance Survey) Open UPRN dataset containing latitude and longitude and British National Grid x and y
+    coordinates for all UPRNs in Great Britain.
 
     Args:
         **kwargs fo pl.read_csv

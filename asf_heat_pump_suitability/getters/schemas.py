@@ -59,3 +59,6 @@ onspd_schema = OrderedDict(
         ("msoa21", pl.String),
     ]
 )
+microsoft_datalinks = OrderedDict(
+    [("Location", str), ("QuadKey", str), ("Url", str), ("Size", str)]
+)
