@@ -75,7 +75,7 @@ if __name__ == "__main__":
         )
     else:
         # Load existing file with land extent files mapped to LAD boundaries
-        land_file_bounds = gpd.read_file(_args.use_mapping, crs="EPSG:27700")
+        land_file_bounds = gpd.read_file(_args.use_mapping)
 
     # Get building footprint file boundaries
     microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
