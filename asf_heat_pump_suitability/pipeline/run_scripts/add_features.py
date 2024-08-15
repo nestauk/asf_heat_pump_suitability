@@ -1,11 +1,20 @@
+"""
+Enhance EPC dataset with additional features:
+- mean average garden size per MSOA
+- lat/lon per UPRN
+- number of households, land area, property density and off gas properties per LSOA
+- Historic England conservation area flag
+"""
+
 import logging
 import polars as pl
 import s3fs
-from typing import Optional
 from argparse import ArgumentParser
 from asf_heat_pump_suitability.pipeline.prepare_features import (
+    conservation_areas,
     garden_space_avg,
     lat_lon,
+    output_areas,
     number_of_households,
     land_area,
     property_density,
@@ -35,33 +44,28 @@ def run():
 
     args = parser.parse_args()
 
-    main(**vars(args))
+    return args
 
 
-def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
-    """
-    Enhance EPC dataset with additional features:
-    - mean average garden size per MSOA
-    - lat/lon per UPRN
-    - number of households, land area, property density and off gas properties per LSOA
+if __name__ == "__main__":
+    _args = run()
 
-    Args
-        epc_path (str): S3 URI to EPC dataset with weights and LSOA; MSOA columns
-        save_output (str): S3 path to save enhanced EPC dataset to. Optional.
-
-    Returns
-        pl.DataFrame: enhanced EPC dataset with additional features
-    """
     # Import processed EPC
-    logging.info(f"Loading EPC file from path: {epc_path}")
-    epc_df = pl.read_parquet(epc_path)
+    logging.info(f"Loading EPC file from path: {_args.epc_path}")
+    epc_df = pl.read_parquet(_args.epc_path)
+    # Join LAD code to EPC
+    # TODO this join and the preceding 2 lines can be removed once enhance_epc/run_script.py has been re-run
+    # TODO because the updated run_script.py will join the lad_code already
+    enhanced_epc_df = output_areas.standardise_col_postcode(epc_df, pcd_col="POSTCODE")
+    onspd_df = output_areas.transform_df_ons_pd()
+    enhanced_epc_df = enhanced_epc_df.join(onspd_df, how="left", on="POSTCODE")
 
     # Join enhancing features to EPC dataset
     # Add feature: garden space avg
     logging.info("Adding average garden size per MSOA to EPC")
     garden_space_avg_msoa_df = garden_space_avg.generate_df_garden_space_avg()
     epc_df = prepare_epc.add_col_msoa_avg_outdoor_space_property_type(epc_df)
-    enhanced_epc_df = epc_df.join(
+    enhanced_epc_df = enhanced_epc_df.join(
         garden_space_avg_msoa_df,
         how="left",
         left_on=["msoa", "msoa_avg_outdoor_space_property_type"],
@@ -73,6 +77,25 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
     enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
 
+    # Add feature: conservation area flag
+    logging.info("Adding conservation area flag")
+    # Get UPRNs in conservation areas
+    uprns_in_cons_area_df = conservation_areas.generate_df_uprn_to_cons_area(
+        enhanced_epc_df
+    )
+    enhanced_epc_df = enhanced_epc_df.join(uprns_in_cons_area_df, how="left", on="UPRN")
+
+    # Label local authorities with missing conservation area data
+    lad_cons_areas_df = (
+        conservation_areas.generate_df_conservation_area_data_availability(
+            ladcd_col="LAD23CD"
+        )
+    )
+    enhanced_epc_df = enhanced_epc_df.join(
+        lad_cons_areas_df, how="left", left_on="lad_code", right_on="LAD23CD"
+    )
+
+    # Add feature: property density
     logging.info("Adding number of households data to EPC")
     lsoa_number_of_households_df = (
         number_of_households.prepare_df_num_of_households_ons()
@@ -83,6 +106,7 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     enhanced_epc_df = enhanced_epc_df.join(
         epc_lsoa_number_of_households_df, how="left", on="lsoa21"
     )
+
     logging.info("Adding land area to EPC")
     lsoa_land_area_df = land_area.prepare_df_land_area_ons()
     epc_lsoa_land_area_df = lsoa_land_area_df.select(
@@ -91,8 +115,11 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
     enhanced_epc_df = enhanced_epc_df.join(
         epc_lsoa_land_area_df, how="left", on="lsoa21"
     )
+
     logging.info("Adding property density to EPC")
     enhanced_epc_df = property_density.extend_df_with_property_density(enhanced_epc_df)
+
+    # Add feature: off gas postcodes
     logging.info("Adding off gas grid column to EPC")
     off_gas_postcodes = off_gas.process_off_gas_data()
     enhanced_epc_df = off_gas.add_off_gas_feature(enhanced_epc_df, off_gas_postcodes)
@@ -117,11 +144,5 @@ def main(epc_path: str, save_output: Optional[str] = None) -> pl.DataFrame:
 
     # Save to S3
     fs = s3fs.S3FileSystem()
-    with fs.open(save_output, mode="wb") as f:
+    with fs.open(_args.save_output, mode="wb") as f:
         enhanced_epc_df.write_parquet(f)
-
-    return enhanced_epc_df
-
-
-if __name__ == "__main__":
-    run()

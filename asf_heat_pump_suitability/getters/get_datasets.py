@@ -139,6 +139,21 @@ def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
     return df
 
 
+def load_gdf_historic_england_conservation_areas() -> gpd.GeoDataFrame:
+    """
+    Load GeoDataFrame with conservation area polygons from Historic England (CRS: EPSG:4326).
+
+    Returns:
+        gpd.GeoDataFrame: polygons of conservation areas in England
+    """
+    gdf = gpd.read_file(
+        config["data_source"]["E_historic_england_conservation_areas"],
+        engine="pyogrio",
+    )
+
+    return gdf
+
+
 def get_df_ons_number_of_households() -> pl.DataFrame:
     """
     Get raw ONS 'Number of households' dataset.
