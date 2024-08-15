@@ -4,6 +4,7 @@ from pygeotile import tile
 import pyproj
 import warnings
 from convertbng.util import convert_bng
+import numpy as np
 from asf_heat_pump_suitability.getters import get_datasets
 from asf_heat_pump_suitability.utils import geo_utils
 
@@ -137,11 +138,17 @@ def transform_geoseries_convert_bng(geos: gpd.GeoSeries) -> gpd.GeoSeries:
     Returns:
         gpd.GeoSeries: shapely polygons in CRS EPSG:27700 (British National Grid)
     """
+    # Convert to dataframe of coordinates, with one coordinate pair per row. Each point of a polygon has its own row
     coords = geos.get_coordinates()
+    # Convert coordinates to BNG
     coords["x"], coords["y"] = convert_bng(coords["x"], coords["y"])
-    # TODO: conversion back to polygons is rate-limiting step
-    s = coords.groupby(coords.index).apply(lambda l: shapely.Polygon(zip(l.x, l.y)))
-    return gpd.GeoSeries(s).set_crs(epsg=27700)
+    # Get dataframe indices at which each polygon ends
+    split_ids = coords.index.value_counts().sort_index().to_numpy().cumsum()
+    # Convert each group of polygon coordinates into a sub-array
+    # -1 required to prevent spare empty array at the end
+    splits = np.split(coords.to_numpy(), split_ids)[:-1]
+    # Convert each group of points back into a polygon
+    return gpd.GeoSeries([shapely.Polygon(pts) for pts in splits]).set_crs(epsg=27700)
 
 
 def extend_gdf_building_footprint_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
