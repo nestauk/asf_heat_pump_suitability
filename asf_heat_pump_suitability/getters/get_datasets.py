@@ -33,14 +33,17 @@ def get_df_ons_pd(**kwargs) -> pl.DataFrame:
     return df
 
 
-def load_gdf_ons_council_bounds() -> gpd.GeoDataFrame:
+def load_gdf_ons_council_bounds(**kwargs) -> gpd.GeoDataFrame:
     """
     Load ONS council bounding polygons for the UK (CRS: EPSG:27700).
+
+    Args:
+        **kwargs for gpd.read_file
 
     Returns:
         gpd.GeoDataFrame: ONS councils with bounding polygons
     """
-    gdf = gpd.read_file(config["data_source"]["UK_ons_lad_bounds"])
+    gdf = gpd.read_file(config["data_source"]["UK_ons_lad_bounds"], **kwargs)
 
     return gdf
 
