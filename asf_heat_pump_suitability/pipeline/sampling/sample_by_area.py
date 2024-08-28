@@ -3,6 +3,7 @@ from typing import Dict, List
 import s3fs
 import logging
 import argparse
+from datetime import datetime
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -119,7 +120,7 @@ if __name__ == "__main__":
     for oa in ["lsoa", "msoa"]:
         sample = filter_df_area_sample_epc(epc, area=oa)
         fs = s3fs.S3FileSystem()
-        save_path = f"s3://asf-heat-pump-suitability/outputs/epc_sample_{oa}.parquet"
+        save_path = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_epc_sample_{oa}.parquet"
         logging.info(f"Saving {oa} sample to: {save_path}")
         with fs.open(save_path, mode="wb") as f:
             sample.write_parquet(f)
