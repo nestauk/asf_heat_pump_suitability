@@ -10,6 +10,8 @@ Finally, it creates boxplots and difference plots for counts and proportions dif
 This script is intended to be run as a standalone script.
 """
 
+import s3fs
+from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.evaluation.evaluate_reweighting import *
 
 
