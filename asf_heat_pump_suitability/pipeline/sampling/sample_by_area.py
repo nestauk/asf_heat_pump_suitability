@@ -90,6 +90,7 @@ def _get_dicts_sample_per_nation(df: pl.DataFrame, country_codes: list) -> List[
     ]
 
 
+# TODO: this is broken by deleting the runscript.main function
 if __name__ == "__main__":
 
     from asf_heat_pump_suitability.pipeline.enhance_epc import run_script

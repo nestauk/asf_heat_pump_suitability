@@ -198,7 +198,7 @@ def process_single_lsoa(
             target (pl.DataFrame): The target dataframe.
             test_lsoa (str): The LSOA to process.
             lsoa (str): literally the string "lsoa"
-            target_feature_name (str): The name of the target feature.
+            feature_name (str): The name of the target feature.
 
     Returns:
             Tuple[Dict, Dict, Dict, float, float]: A tuple containing the counts, differences, RMSE, and MAE.
