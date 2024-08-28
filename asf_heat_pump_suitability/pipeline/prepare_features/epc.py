@@ -31,7 +31,8 @@ def clean_df_nrooms(
     df: pl.DataFrame, nrooms_col: str = "NUMBER_HABITABLE_ROOMS"
 ) -> pl.DataFrame:
     """
-    Cleaning the EPC number of rooms feature to allign with census target data
+    Clean the EPC number of rooms feature to align with census target data.
+
     Args:
         df (pl.DataFrame): EPC dataset with number of rooms column
         nrooms_col (str): name of number of rooms column. Default "NUMBER_HABITABLE_ROOMS".
