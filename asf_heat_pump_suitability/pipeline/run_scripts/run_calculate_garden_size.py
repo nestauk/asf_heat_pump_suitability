@@ -17,12 +17,12 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
 )
 
 
-def argparser() -> argparse.Namespace:
+def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
 
     Returns:
-        argparse.Namespace: object holding argument attributes
+        argparse.Namespace: populated `Namespace`
     """
     parser = ArgumentParser()
 
@@ -54,28 +54,26 @@ def argparser() -> argparse.Namespace:
         required=False,
     )
 
-    args = parser.parse_args()
-
-    return args
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    _args = argparser()
+    args = parse_arguments()
 
     # Load EPC x, y coordinates in CRS: EPSG:27700
     epc_gdf = pl.read_parquet(
-        _args.epc_path, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
+        args.epc_path, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
     )
     epc_gdf = lat_lon.generate_gdf_uprn_coords(epc_gdf)[["UPRN", "geometry"]]
 
-    if not _args.use_mapping:
+    if not args.use_mapping:
         # Get land extent file boundaries
         land_file_bounds = land_extent.generate_gdf_map_file_to_bounds(
-            save_as=_args.save_land_file_bounds
+            save_as=args.save_land_file_bounds
         )
     else:
         # Load existing file with land extent files mapped to LAD boundaries
-        land_file_bounds = gpd.read_file(_args.use_mapping)
+        land_file_bounds = gpd.read_file(args.use_mapping)
 
     # Get building footprint file boundaries
     microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
@@ -137,4 +135,4 @@ if __name__ == "__main__":
 
     # Get df of all EPC records with garden size estimates
     epc_gardens_df = pd.concat(epc_gardens, ignore_index=True)
-    epc_gardens_df.to_parquet(_args.save_epc_gardens, engine="pyarrow")
+    epc_gardens_df.to_parquet(args.save_epc_gardens, engine="pyarrow")
