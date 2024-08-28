@@ -4,10 +4,9 @@ import s3fs
 import pathlib
 from tqdm import tqdm
 import time
-from typing import Optional
 from argparse import ArgumentParser
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.pipeline.enhance_epc import enhance_epc
+from asf_heat_pump_suitability.pipeline.prepare_features import output_areas
 from asf_heat_pump_suitability.pipeline.reweight_epc import (
     prepare_target,
     prepare_sample,
@@ -51,7 +50,9 @@ def main(epc_path: str) -> pl.DataFrame:
         epc_df = pl.read_parquet(epc_path, columns=config["usecols"]["epc"])
 
     # Join ONSPD LSOA col
-    enhanced_epc_df = enhance_epc.join_df_additional_features(epc_df)
+    epc_df = output_areas.standardise_col_postcode(epc_df, pcd_col="POSTCODE")
+    onspd_df = output_areas.transform_df_ons_pd()
+    enhanced_epc_df = epc_df.join(onspd_df, how="left", on="POSTCODE")
 
     # Reweight EPC
 
@@ -111,7 +112,8 @@ def main(epc_path: str) -> pl.DataFrame:
             continue
 
     weights = pl.DataFrame(weights)
-    enhanced_epc_df = enhanced_epc_df.join(weights, how="left", on="UPRN")
+    # Outer join so the dummy rows are still included (these will have a UPRN prefixed with 'dummy_')
+    enhanced_epc_df = enhanced_epc_df.join(weights, how="outer", on="UPRN")
     lsoa_stats_df = pl.DataFrame(lsoa_stats)
 
     # Save to S3

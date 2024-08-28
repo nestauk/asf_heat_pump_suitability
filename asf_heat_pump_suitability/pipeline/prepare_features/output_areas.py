@@ -1,26 +1,61 @@
 import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import get_datasets
+from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
 
 
-def prepare_df_ons_pd(
+def sjoin_df_uprn_lad_code(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Geospatial join between UPRNs with x,y coordinates and local authority (LAD) boundaries to match UPRNs with the code for
+    the local authority they are located in. Null LAD codes are filled with LAD codes matched to UPRN on postcode.
+
+    Args:
+        df (pl.DataFrame): dataframe with UPRNs; x,y coordinates; and LAD code from postcode
+
+    Returns:
+        pl.DataFrame: UPRNs with matched local authority code
+    """
+    gdf = lat_lon.generate_gdf_uprn_coords(
+        df, usecols=["UPRN", "lad_code", "X_COORDINATE", "Y_COORDINATE"]
+    )
+    lad_bounds_gdf = get_datasets.load_gdf_ons_council_bounds(
+        columns=["LAD23CD", "geometry"]
+    )
+    gdf = gdf.sjoin(lad_bounds_gdf, how="left", predicate="intersects")
+    gdf["lad_code"] = gdf["LAD23CD"].fillna(gdf["lad_code"])
+    return pl.from_pandas(gdf[["UPRN", "lad_code"]])
+
+
+def transform_df_ons_pd(
     pcd_col: str = "pcd",
     ruc_col: str = "ru11ind",
-    use_cols: list = ["pcd", "lsoa11", "msoa11", "lsoa21", "msoa21", "ru11ind"],
+    lad_col: str = "oslaua",
+    use_cols: list = [
+        "pcd",
+        "lsoa11",
+        "msoa11",
+        "lsoa21",
+        "msoa21",
+        "ru11ind",
+        "oslaua",
+    ],
 ) -> pl.DataFrame:
     """
-    Process and clean ONS postcode directory dataset: standardise postcode; clean output area columns; add new
-    `country_code` column.
+    Load and transform ONS postcode directory dataset: standardise postcode; clean output area columns; add new
+    `country_code` column; map rural-urban indicators.
 
     Args
-        pcd_col (str): name of column containing postcodes. Default `"pcd"`.
-        ruc_col (str): name of column containing rural-urban classification codes. Default `"ru11ind"`.
-        use_cols (list): columns to import. Default `["pcd", "lsoa11", "msoa11", "lsoa21", "msoa21", "ru11ind"]`.
+        pcd_col (str): name of column containing postcodes. Default "pcd".
+        ruc_col (str): name of column containing rural-urban classification codes. Default "ru11ind".
+        lad_col (str): name of column containing Local Authority District (LAD) codes. Default "oslaua".
+        use_cols (list): columns to import. Default ["pcd", "lsoa11", "msoa11", "lsoa21", "msoa21", "ru11ind", "oslaua"].
 
     Returns
         pl.DataFrame: processed ONS postcode directory dataset
     """
-    df = get_datasets.get_df_ons_pd(columns=use_cols)
+    df = get_datasets.get_df_ons_pd(columns=use_cols).rename(
+        mapping={lad_col: "lad_code"}
+    )
     df = standardise_col_postcode(df, pcd_col=pcd_col)
     df = _clean_col_output_area(df, area_type="lsoa")
     df = _clean_col_output_area(df, area_type="msoa")
@@ -43,7 +78,7 @@ def standardise_col_postcode(df: pl.DataFrame, pcd_col: str) -> pl.DataFrame:
     """
 
     df = df.with_columns(
-        pl.col(pcd_col).str.to_uppercase().str.replace(" ", "").alias("POSTCODE")
+        pl.col(pcd_col).str.to_uppercase().str.replace(r"\s+", "").alias("POSTCODE")
     )
 
     return df
