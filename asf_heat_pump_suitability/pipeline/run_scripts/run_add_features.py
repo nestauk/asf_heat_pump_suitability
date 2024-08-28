@@ -3,13 +3,14 @@ Enhance EPC dataset with additional features:
 - mean average garden size per MSOA
 - lat/lon per UPRN
 - number of households, land area, property density and off gas properties per LSOA
-- Historic England conservation area flag
+- England and Wales building conservation area flag
 """
 
 import logging
 import polars as pl
 import s3fs
 from argparse import ArgumentParser
+from datetime import datetime
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     conservation_areas,
     epc,
@@ -24,7 +25,7 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
 )
 
 
-def run():
+def parse_args():
     """
     Create ArgumentParser and passes arguments to `main()` and runs `main()`.
     """
@@ -35,7 +36,7 @@ def run():
     )
 
     parser.add_argument(
-        "--save_output",
+        "--save_as",
         help="S3 path to save enhanced EPC dataset to",
         type=str,
         default=None,
@@ -48,23 +49,31 @@ def run():
 
 
 if __name__ == "__main__":
-    _args = run()
+    args = parse_args()
+    epc_path = args.epc_path
+    save_as = args.save_as
 
     # Import processed EPC
-    logging.info(f"Loading EPC file from path: {_args.epc_path}")
-    epc_df = pl.read_parquet(_args.epc_path)
-    # Join LAD code to EPC
-    # TODO this join and the preceding 2 lines can be removed once enhance_epc/run_compute_epc_weights.py has been re-run
-    # TODO because the updated run_compute_epc_weights.py will join the lad_code already
-    enhanced_epc_df = output_areas.standardise_col_postcode(epc_df, pcd_col="POSTCODE")
-    onspd_df = output_areas.transform_df_ons_pd()
-    enhanced_epc_df = enhanced_epc_df.join(onspd_df, how="left", on="POSTCODE")
+    logging.info(f"Loading EPC file from path: {epc_path}")
+    epc_df = pl.read_parquet(epc_path)
 
-    # Join enhancing features to EPC dataset
+    # Add feature: lat/long
+    logging.info("Adding lat/lon data to EPC")
+    uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
+    enhanced_epc_df = epc_df.join(uprn_latlon_df, how="left", on="UPRN")
+
+    # Replace `lad_code` from postcode with `lad_code` from geospatial join and postcode
+    logging.info("Adding LAD code with geospatial join")
+    uprn_lad_df = output_areas.sjoin_df_uprn_lad_code(enhanced_epc_df)
+    enhanced_epc_df = enhanced_epc_df.drop("lad_code").join(
+        uprn_lad_df, how="left", on="UPRN"
+    )
+
+    # Join new features to EPC dataset
     # Add feature: garden space avg
     logging.info("Adding average garden size per MSOA to EPC")
     garden_space_avg_msoa_df = garden_space_avg.generate_df_garden_space_avg()
-    epc_df = epc.add_col_msoa_avg_outdoor_space_property_type(epc_df)
+    enhanced_epc_df = epc.add_col_msoa_avg_outdoor_space_property_type(enhanced_epc_df)
     enhanced_epc_df = enhanced_epc_df.join(
         garden_space_avg_msoa_df,
         how="left",
@@ -72,20 +81,15 @@ if __name__ == "__main__":
         right_on=["MSOA code", "msoa_avg_outdoor_space_property_type"],
     )
 
-    # Add feature: lat/long
-    logging.info("Adding lat/lon data to EPC")
-    uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
-    enhanced_epc_df = enhanced_epc_df.join(uprn_latlon_df, how="left", on="UPRN")
-
-    # Add feature: conservation area flag
-    logging.info("Adding conservation area flag")
-    # Get UPRNs in conservation areas
+    # Add feature: building conservation area flag
+    logging.info("Adding building conservation area flag")
+    # Get UPRNs in building conservation areas
     uprns_in_cons_area_df = conservation_areas.generate_df_uprn_to_cons_area(
         enhanced_epc_df
     )
     enhanced_epc_df = enhanced_epc_df.join(uprns_in_cons_area_df, how="left", on="UPRN")
 
-    # Label local authorities with missing conservation area data
+    # Label local authorities with missing building conservation area data
     lad_cons_areas_df = (
         conservation_areas.generate_df_conservation_area_data_availability(
             ladcd_col="LAD23CD"
@@ -143,6 +147,8 @@ if __name__ == "__main__":
     enhanced_epc_df = enhanced_epc_df.join(listed_buildings_df, how="left", on="UPRN")
 
     # Save to S3
+    if not save_as:
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q2_EPC_weighted_features.parquet"
     fs = s3fs.S3FileSystem()
-    with fs.open(_args.save_output, mode="wb") as f:
+    with fs.open(save_as, mode="wb") as f:
         enhanced_epc_df.write_parquet(f)

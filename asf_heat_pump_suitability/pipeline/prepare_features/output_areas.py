@@ -1,6 +1,29 @@
 import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import get_datasets
+from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
+
+
+def sjoin_df_uprn_lad_code(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Geospatial join between UPRNs with x,y coordinates and local authority (LAD) boundaries to match UPRNs with the code for
+    the local authority they are located in. Null LAD codes are filled with LAD codes matched to UPRN on postcode.
+
+    Args:
+        df (pl.DataFrame): dataframe with UPRNs; x,y coordinates; and LAD code from postcode
+
+    Returns:
+        pl.DataFrame: UPRNs with matched local authority code
+    """
+    gdf = lat_lon.generate_gdf_uprn_coords(
+        df, usecols=["UPRN", "lad_code", "X_COORDINATE", "Y_COORDINATE"]
+    )
+    lad_bounds_gdf = get_datasets.load_gdf_ons_council_bounds(
+        columns=["LAD23CD", "geometry"]
+    )
+    gdf = gdf.sjoin(lad_bounds_gdf, how="left", predicate="intersects")
+    gdf["lad_code"] = gdf["LAD23CD"].fillna(gdf["lad_code"])
+    return pl.from_pandas(gdf[["UPRN", "lad_code"]])
 
 
 def transform_df_ons_pd(
