@@ -3,7 +3,7 @@ Functions to calculate suitability of different HP technologies.
 """
 
 import pandas as pd
-
+import polars as pl
 from collections import defaultdict
 
 site_regs_scores = {
@@ -139,39 +139,24 @@ multiple_props_scores = {
 }
 
 
-def get_enhanced_epc():
-    # Replace with loading enhanced sample with garden size + urban/rural
+def get_enhanced_epc() -> pl.DataFrame:
+    """
+    Load EPC dataset enhanced with weights and additional features.
 
-    import polars as pl
-    import numpy as np
-    from asf_heat_pump_suitability.pipeline.prepare_features import garden_space_avg
-    from asf_heat_pump_suitability.pipeline.enhance_epc import prepare_epc
-
-    sample = pl.read_parquet(
-        "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights_sample_10k.parquet"
+    Returns:
+        pl.DataFrame: enhanced EPC dataset
+    """
+    df = pl.read_parquet(
+        "s3://asf-heat-pump-suitability/outputs/20240827_2023_Q4_EPC_weighted_features.parquet"
     )
-    sample = prepare_epc.add_col_msoa_avg_outdoor_space_m2(sample)
-    garden_space_avg_msoa = garden_space_avg.generate_df_garden_space_avg()
-    test = sample.join(
-        garden_space_avg_msoa,
-        how="left",
-        left_on=["msoa", "msoa_avg_outdoor_space_m2"],
-        right_on=["MSOA code", "msoa_avg_outdoor_space_m2"],
-    )
-
-    epc_enhanced_data = test.to_pandas()
-    epc_enhanced_data["ruc_two_fold"] = np.random.choice(
-        ["Rural", "Urban"], len(epc_enhanced_data)
-    )
-
-    return epc_enhanced_data
+    return df
 
 
-def site_regs(conservation_zone):
+def site_regs(conservation_zone, listed_building):
     """
     Is this property NOT listed / in a conservation zone / any other planning regulations?
     """
-    if conservation_zone:
+    if conservation_zone or listed_building:
         return None
     else:
         return site_regs_scores
@@ -191,7 +176,7 @@ def grid_capacity(lsoa):
 
 def epc_threshold(epc):
     """
-    Is the EPC rating > C?
+    Is the EPC rating >= C?
     """
 
     if epc in ["A", "B", "C"]:
@@ -206,7 +191,7 @@ def not_flat(property_type):
 
     Is this property part of a building with multiple other properties (e.g. a flat)?
     """
-    if property_type != "Flat":
+    if property_type != "Flat, maisonette of apartment":
         return not_flat_scores
     else:
         # Is this property part of a building with multiple other properties (e.g. a flat)?
