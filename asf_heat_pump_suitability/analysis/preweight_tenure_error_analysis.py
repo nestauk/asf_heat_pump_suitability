@@ -10,22 +10,7 @@ Finally, it creates boxplots and difference plots for counts and proportions dif
 This script is intended to be run as a standalone script.
 """
 
-import polars as pl
-import s3fs
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-import math
-import numpy as np
-from sklearn.metrics import root_mean_squared_error, mean_absolute_error
-
-import os
-from typing import Tuple, Dict, List
-from collections import defaultdict
-
-from asf_heat_pump_suitability import PROJECT_DIR
-from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.pipeline.error_analysis.error_analysis_utils import *
+from asf_heat_pump_suitability.pipeline.evaluation.evaluate_reweighting import *
 
 
 def load_sample(sample_path):
