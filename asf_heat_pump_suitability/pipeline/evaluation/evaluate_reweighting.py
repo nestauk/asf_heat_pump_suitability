@@ -3,7 +3,6 @@ Functions needed to calculate errors in the proportions of features per LSOA
 """
 
 import polars as pl
-import s3fs
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -16,7 +15,6 @@ from typing import Tuple, Dict, List
 from collections import defaultdict
 
 from asf_heat_pump_suitability import PROJECT_DIR
-from asf_heat_pump_suitability import config
 
 
 def calculate_proportions(counts: dict) -> dict:
@@ -402,6 +400,7 @@ def create_boxplot(df, y, title, filename, target_feature_name, order_preference
         ax.text(
             i,
             ax.get_ylim()[1] + 0.01,
+            # TODO: unresolved reference to total_counts - is this meant to be a param?
             f"$n_{{properties}}$ = {total_counts[target_feature]}",
             ha="center",
         )
