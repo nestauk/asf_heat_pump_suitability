@@ -5,9 +5,7 @@ Errors are calculated between the sample (unweighted and weighted) and target pr
 
 Run with:
 
-python asf_heat_pump_suitability/pipeline/run_scripts/run_evaluate_reweighting.py
-	--reweighted_path "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights.parquet"
-	--sample
+python asf_heat_pump_suitability/pipeline/run_scripts/run_evaluate_reweighting.py --reweighted_path [path/to/weighted/EPC] -y [YYYY] -q [N] --sample
 
 [remove the --sample argument to run on full dataset]
 
@@ -37,11 +35,27 @@ def parse_arguments() -> argparse.Namespace:
         "--reweighted_path",
         help="S3 URI to weighted EPC dataset",
         type=str,
-        default="s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights.parquet",
+        required=True,
     )
 
     parser.add_argument(
-        "--save_output",
+        "-y",
+        "--year",
+        help="EPC data year. Format YYYY",
+        type=int,
+        required=True,
+    )
+
+    parser.add_argument(
+        "-q",
+        "--quarter",
+        help="EPC data quarter",
+        type=int,
+        required=True,
+    )
+
+    parser.add_argument(
+        "--save_as",
         help="S3 path to save evaluation results to",
         type=str,
         default=None,
@@ -207,6 +221,10 @@ def filter_epc(
 
 if __name__ == "__main__":
 
+    args = parse_arguments()
+    year = args.year
+    q = args.quarter
+
     error_metric_names = [
         "rmse_no_missing_cats",
         "mae_no_missing_cats",
@@ -215,8 +233,6 @@ if __name__ == "__main__":
     ]
 
     evaluation_feature_cols = ["tenure", "property_type", "build_year"]
-
-    args = parse_arguments()
 
     target_features = prepare_target.get_dict_dfs_counts()  # Counts
     target_features = {
@@ -262,11 +278,10 @@ if __name__ == "__main__":
 
     # Save to S3
 
-    if not args.save_output:
-        name = args.reweighted_path.replace("s3://asf-heat-pump-suitability/", "")
-        name = f"{name.split('.parquet')[0]}_evaluation.json"
+    if not args.save_as:
+        name = f"outputs/{year}_Q{q}_EPC_weights_evaluation.json"
         if args.sample:
             name = f"{name.split('.json')[0]}_sample.json"
-        args.save_output = name
+        args.save_as = name
 
-    save_to_s3("asf-heat-pump-suitability", full_results, args.save_output)
+    save_to_s3("asf-heat-pump-suitability", full_results, args.save_as)

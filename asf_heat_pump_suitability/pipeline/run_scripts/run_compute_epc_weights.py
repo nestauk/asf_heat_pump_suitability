@@ -6,7 +6,7 @@ following features:
 - tenure (owner-occupied, social rental, private rental)
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc_path [path/to/EPC/data]
+python asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc_path [path/to/weighted/EPC] -y [YYYY] -q [N]
 """
 
 import logging
@@ -36,7 +36,34 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--epc_path", help="S3 URI to EPC dataset", type=str, required=True
+        "--epc_path",
+        help="S3 URI to processed and deduplicated EPC dataset",
+        type=str,
+        required=True,
+    )
+
+    parser.add_argument(
+        "-y",
+        "--year",
+        help="EPC data year. Format YYYY",
+        type=int,
+        required=True,
+    )
+
+    parser.add_argument(
+        "-q",
+        "--quarter",
+        help="EPC data quarter",
+        type=int,
+        required=True,
+    )
+
+    parser.add_argument(
+        "--save_as",
+        help="S3 path to save enhanced EPC dataset to. If unspecified, save with default filename.",
+        type=str,
+        default=None,
+        required=False,
     )
 
     return parser.parse_args()
@@ -45,6 +72,9 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_arguments()
     epc_path = args.epc_path
+    year = args.year
+    q = args.quarter
+    save_as = args.save_as
 
     # Import processed & deduplicated EPC
     logging.info(f"Loading EPC file from path: {epc_path}")
@@ -58,7 +88,7 @@ if __name__ == "__main__":
     # Join ONSPD LSOA col
     epc_df = output_areas.standardise_col_postcode(epc_df, pcd_col="POSTCODE")
     onspd_df = output_areas.transform_df_ons_pd()
-    enhanced_epc_df = epc_df.join(onspd_df, how="left", on="POSTCODE")
+    epc_df = epc_df.join(onspd_df, how="left", on="POSTCODE")
 
     # Reweight EPC
     features = [
@@ -68,13 +98,11 @@ if __name__ == "__main__":
     ]  # TODO: add nrooms when categories collapsed
 
     # Add standardised weighting feature columns to EPC and drop rows missing data required for reweighting
-    enhanced_epc_df = enhanced_epc_df.drop_nulls(subset=["lsoa"])
-    enhanced_epc_df = prepare_sample.add_cols_weighting_features(enhanced_epc_df)
-    enhanced_epc_df = prepare_sample.drop_nulls_feature_cols(
-        df=enhanced_epc_df, features=features
-    )
+    epc_df = epc_df.drop_nulls(subset=["lsoa"])
+    epc_df = prepare_sample.add_cols_weighting_features(epc_df)
+    epc_df = prepare_sample.drop_nulls_feature_cols(df=epc_df, features=features)
 
-    lsoas = enhanced_epc_df["lsoa"].unique()
+    lsoas = epc_df["lsoa"].unique()
     target_marginals = prepare_target.get_dict_target_marginals()
 
     # Prepare results dicts
@@ -86,7 +114,7 @@ if __name__ == "__main__":
         try:
             start = time.time()
             sample, lost_rows = reweight_epc.generate_balance_sample(
-                df=enhanced_epc_df,
+                df=epc_df,
                 features=features,
                 lsoa=lsoa,
                 target_marginals=target_marginals,
@@ -118,19 +146,24 @@ if __name__ == "__main__":
 
     weights = pl.DataFrame(weights)
     # Outer join so the dummy rows are still included (these will have a UPRN prefixed with 'dummy_')
-    enhanced_epc_df = enhanced_epc_df.join(weights, how="full", on="UPRN")
+    epc_df = epc_df.join(weights, how="full", on="UPRN")
     lsoa_stats_df = pl.DataFrame(lsoa_stats)
 
     # Save to S3
+    if not save_as:
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weighted"
     fs = s3fs.S3FileSystem()
+
+    # Save weighted EPC
     with fs.open(
-        f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q2_EPC_weighted.parquet",
+        f"{save_as}.parquet",
         mode="wb",
     ) as f:
-        enhanced_epc_df.write_parquet(f)
+        epc_df.write_parquet(f)
 
+    # Save weighting stats
     with fs.open(
-        f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q2_EPC_weighted_stats.parquet",
+        f"{save_as}_stats.parquet",
         mode="wb",
     ) as f:
         lsoa_stats_df.write_parquet(f)
