@@ -12,6 +12,7 @@ import s3fs
 from argparse import ArgumentParser
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     conservation_areas,
+    epc,
     garden_space_avg,
     lat_lon,
     output_areas,
@@ -21,7 +22,6 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
     off_gas,
     listed_buildings,
 )
-from asf_heat_pump_suitability.pipeline.enhance_epc import prepare_epc
 
 
 def run():
@@ -54,8 +54,8 @@ if __name__ == "__main__":
     logging.info(f"Loading EPC file from path: {_args.epc_path}")
     epc_df = pl.read_parquet(_args.epc_path)
     # Join LAD code to EPC
-    # TODO this join and the preceding 2 lines can be removed once enhance_epc/run_script.py has been re-run
-    # TODO because the updated run_script.py will join the lad_code already
+    # TODO this join and the preceding 2 lines can be removed once enhance_epc/run_compute_epc_weights.py has been re-run
+    # TODO because the updated run_compute_epc_weights.py will join the lad_code already
     enhanced_epc_df = output_areas.standardise_col_postcode(epc_df, pcd_col="POSTCODE")
     onspd_df = output_areas.transform_df_ons_pd()
     enhanced_epc_df = enhanced_epc_df.join(onspd_df, how="left", on="POSTCODE")
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     # Add feature: garden space avg
     logging.info("Adding average garden size per MSOA to EPC")
     garden_space_avg_msoa_df = garden_space_avg.generate_df_garden_space_avg()
-    epc_df = prepare_epc.add_col_msoa_avg_outdoor_space_property_type(epc_df)
+    epc_df = epc.add_col_msoa_avg_outdoor_space_property_type(epc_df)
     enhanced_epc_df = enhanced_epc_df.join(
         garden_space_avg_msoa_df,
         how="left",
