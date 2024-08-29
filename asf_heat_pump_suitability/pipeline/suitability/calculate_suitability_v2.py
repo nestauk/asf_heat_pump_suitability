@@ -6,6 +6,8 @@ import pandas as pd
 import polars as pl
 from collections import defaultdict
 import logging
+import s3fs
+from datetime import datetime
 from typing import Optional
 
 site_regs_scores = {
@@ -568,3 +570,8 @@ if __name__ == "__main__":
     print("Joining all scores to EPC dataset")
     for score_df in scores:
         epc_df = epc_df.join(score_df, on="UPRN", how="left")
+
+    fs = s3fs.S3FileSystem()
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q4_heat_pump_suitability.parquet"
+    with fs.open(f"", mode="wb") as f:
+        epc_df.write_parquet(f)
