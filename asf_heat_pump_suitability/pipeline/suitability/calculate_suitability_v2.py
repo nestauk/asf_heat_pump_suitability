@@ -541,6 +541,7 @@ def filter_df_minimum_features(
 
 
 if __name__ == "__main__":
+    # TODO: logging.info not displaying to terminal for me
     print("Loading EPC data with features")
     epc_df = get_enhanced_epc()
 
