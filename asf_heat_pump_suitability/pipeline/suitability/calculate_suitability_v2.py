@@ -393,7 +393,7 @@ def compute_df_avg_score_per_epc(
             f"{tech_type}_avg_score"
         )
     )
-    return df
+    return df.select(["UPRN", f"{tech_type}_avg_score"])
 
 
 def compute_df_total_score_per_epc(
@@ -507,48 +507,63 @@ def compute_df_max_score_per_row(df: pl.DataFrame, tech_type: str) -> pl.DataFra
     return df.select(["UPRN", f"{tech_type}_max_score"])
 
 
+def filter_df_minimum_features(
+    df: pl.DataFrame, features: list = None, threshold: int = 4
+) -> pl.DataFrame:
+    """
+    Calculate number of non-null features for each row of EPC.
+
+    Args:
+        df: EPC dataset with features.
+        features: list of features to calculate HP suitability
+        threshold: minimum features required to be included
+    """
+    if features is None:
+        features = [
+            "ruc_two_fold",
+            "OFF GAS",
+            "Property density (households per KM2)",
+            "msoa_avg_outdoor_space_m2",
+            "listed_building_grade",
+            "in_conservation_area",
+            "property_type",
+            "CURRENT_ENERGY_RATING",
+        ]
+    df = df.with_columns(
+        (len(features) - pl.sum_horizontal(pl.col(features).is_null()))
+    ).rename(
+        {"literal": "n_features"}
+    )  # Not sure why this is required, naming with alias directly doesnt work fsr
+
+    df = df.filter(pl.col("n_features") >= threshold)
+
+    return df
+
+
 if __name__ == "__main__":
     print("Loading EPC data with features")
-    epc_enhanced_data = get_enhanced_epc()
+    epc_df = get_enhanced_epc()
 
-    # For now, just include some of the measurements in the calculation - later add the rest.
-    print("Calculating max scores")
-    max_scores = defaultdict(int)
-    for scores in [
-        garden_size_scores,
-        external_space_scores,
-        not_flat_scores,
-        high_heat_demand_scores,
-        not_flat_scores,
-        multiple_props_scores,
-        epc_threshold_scores,
-    ]:
-        for k, v in scores.items():
-            max_scores[k] += v
+    print("Filtering EPC data to rows with n_features >= minimum threshold")
+    epc_df = filter_df_minimum_features(epc_df)
 
-    print("Calculating suitability score of each tech per EPC record")
-    tech_suitability = epc_enhanced_data.apply(
-        lambda x: {
-            k: v / max_scores.get(k)
-            for k, v in get_property_scores(
-                x["ruc_two_fold"],  # Urban rural
-                # Off gas
-                # Property density
-                x["msoa_avg_outdoor_space_m2"],  # Avg garden space
-                # Estimated garden space
-                # Listed building status
-                # Building conservation area
-                x["PROPERTY_TYPE"],  # Property type (flats)
-                x["CURRENT_ENERGY_RATING"],  # EPC rating
-            ).items()
-        },
-        axis=1,
-    ).apply(pd.Series)
+    tech_types = [
+        "ASHP_S",
+        "ASHP_N",
+        "GSHP_S",
+        "GSHP_N",
+        "SGL_S",
+        "SGL_N",
+        "HN_S",
+        "HN_N",
+    ]
 
-    print("Joining tech suitability score to EPC dataset")
-    epc_enhanced_data = epc_enhanced_data.join(tech_suitability)
+    scores = []
+    for tech_type in tech_types:
+        print(f"Calculating suitability scores for tech type: {tech_type}")
+        epc_scores_df = compute_df_avg_score_per_epc(epc_df, tech_type)
+        scores.append(epc_scores_df)
 
-    print("Calculating mean score per lsoa")
-    average_suitability_per_lsoa = epc_enhanced_data.groupby("lsoa")[
-        tech_suitability.columns
-    ].mean()
+    print("Joining all scores to EPC dataset")
+    for score_df in scores:
+        epc_df = epc_df.join(score_df, on="UPRN", how="left")
