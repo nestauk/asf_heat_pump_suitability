@@ -573,5 +573,5 @@ if __name__ == "__main__":
 
     fs = s3fs.S3FileSystem()
     save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q4_heat_pump_suitability.parquet"
-    with fs.open(f"", mode="wb") as f:
+    with fs.open(save_as, mode="wb") as f:
         epc_df.write_parquet(f)
