@@ -2,13 +2,15 @@
 Functions to calculate suitability of different HP technologies.
 """
 
-import pandas as pd
 import polars as pl
 from collections import defaultdict
 import logging
 import s3fs
 from datetime import datetime
+from tqdm import tqdm
 from typing import Optional
+
+logging.getLogger().setLevel(logging.INFO)
 
 site_regs_scores = {
     "ASHP_S": 0.25,
@@ -542,12 +544,71 @@ def filter_df_minimum_features(
     return df
 
 
+def compute_df_weighted_score(df, threshold=0.5):
+    """
+    Calculate [un]weighted suitability scores per EPC property in a single LSOA. Scores will only be weighted if the
+    proportion of EPC properties in the LSOA with non-null weight data is above the specified threshold.
+
+    Args:
+        df: EPC dataset for one LSOA with suitability scores per property for each tech type and with proportional weights
+        threshold (float): minimum proportion of properties in LSOA EPC sample with non-null weights
+
+    Returns:
+        pl.DataFrame: weighted scores for an LSOA
+    """
+    score_cols = [col for col in df.columns if "score" in col]
+    df = df.with_columns(
+        pl.when(
+            (pl.col("proportional_weight").is_not_null().sum() / len(df)) >= threshold
+        )
+        .then(pl.col("proportional_weight") / pl.col("proportional_weight").sum())
+        .otherwise(1)
+        .alias("use_weight"),
+        pl.when(
+            (pl.col("proportional_weight").is_not_null().sum() / len(df)) >= threshold
+        )
+        .then(True)
+        .otherwise(False)
+        .alias("scores_weighted"),
+    )
+    for col in score_cols:
+        df = df.with_columns(
+            (pl.col(col) * pl.col("use_weight")).alias(f"{col}_weighted")
+        )
+
+    return df
+
+
+def compute_dict_lsoa_suitability_scores(df: pl.DataFrame, lsoa: str) -> dict:
+    """
+    Calculate average heat pump suitability scores for LSOA per tech type.
+
+    Args:
+        df (pl.DataFrame): LSOA with weighted suitability scores per tech type
+        lsoa (str): LSOA code
+
+    Returns:
+        dict: suitability scores per LSOA for each tech type
+    """
+    scores_dict = {"lsoa": lsoa}
+    assert df["scores_weighted"].n_unique() == 1
+    score_cols = [col for col in df.columns if "score_weighted" in col]
+    for score in score_cols:
+        if df["scores_weighted"].unique()[0]:
+            scores_dict[score] = df[score].sum()
+        else:
+            scores_dict[score] = df[score].mean()
+    scores_dict["scores_weighted"] = df["scores_weighted"].unique()[0]
+
+    return scores_dict
+
+
 if __name__ == "__main__":
     # TODO: logging.info not displaying to terminal for me
-    print("Loading EPC data with features")
+    logging.info("Loading EPC data with features")
     epc_df = get_enhanced_epc()
 
-    print("Filtering EPC data to rows with n_features >= minimum threshold")
+    logging.info("Filtering EPC data to rows with n_features >= minimum threshold")
     epc_df = filter_df_minimum_features(epc_df)
 
     tech_types = [
@@ -563,15 +624,29 @@ if __name__ == "__main__":
 
     scores = []
     for tech_type in tech_types:
-        print(f"Calculating suitability scores for tech type: {tech_type}")
+        logging.info(f"Calculating suitability scores for tech type: {tech_type}")
         epc_scores_df = compute_df_avg_score_per_epc(epc_df, tech_type)
         scores.append(epc_scores_df)
 
-    print("Joining all scores to EPC dataset")
+    logging.info("Joining all scores to EPC dataset")
     for score_df in scores:
         epc_df = epc_df.join(score_df, on="UPRN", how="left")
 
     fs = s3fs.S3FileSystem()
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q4_heat_pump_suitability.parquet"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q4_heat_pump_suitability_per_property.parquet"
     with fs.open(save_as, mode="wb") as f:
         epc_df.write_parquet(f)
+
+    logging.info("Weighting scores and aggregating per LSOA")
+    weighted_scores = []
+    for lsoa_code in tqdm(epc_df["lsoa"].unique()):
+        lsoa_df = epc_df.filter(pl.col("lsoa") == lsoa_code)
+        lsoa_df = compute_df_weighted_score(lsoa_df)
+        weighted_scores.append(compute_dict_lsoa_suitability_scores(lsoa_df, lsoa_code))
+
+    logging.info("Saving LSOA heat pump suitability scores")
+    suitability_df = pl.DataFrame(weighted_scores)
+    fs = s3fs.S3FileSystem()
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q4_heat_pump_suitability_per_lsoa.parquet"
+    with fs.open(save_as, mode="wb") as f:
+        suitability_df.write_parquet(f)
