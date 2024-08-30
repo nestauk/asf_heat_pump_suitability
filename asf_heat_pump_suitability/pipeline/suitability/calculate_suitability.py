@@ -154,6 +154,7 @@ def get_enhanced_epc() -> pl.DataFrame:
     """
     usecols = [
         "UPRN",
+        "COUNTRY",
         "lsoa",
         "weight",
         "proportional_weight",
@@ -172,7 +173,9 @@ def get_enhanced_epc() -> pl.DataFrame:
         columns=usecols,
     )
 
-    df = df.filter(~pl.col("UPRN").str.contains("dummy"))
+    df = df.filter(
+        ~pl.col("UPRN").str.contains("dummy"), pl.col("COUNTRY") != "Scotland"
+    )
 
     df = df.with_columns(
         pl.when(pl.col("listed_building_grade").is_null())
