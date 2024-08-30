@@ -3,12 +3,10 @@ Functions to calculate suitability of different HP technologies.
 """
 
 import polars as pl
-from collections import defaultdict
 import logging
 import s3fs
 from datetime import datetime
 from tqdm import tqdm
-from typing import Optional
 
 logging.getLogger().setLevel(logging.INFO)
 
@@ -223,7 +221,7 @@ def compute_df_avg_score_per_epc(
 def compute_df_total_score_per_epc(
     df: pl.DataFrame,
     tech_type: str,
-    density_threshold: int = 100,
+    density_threshold: int = 60,
     garden_threshold: int = 10,
     external_space_threshold: int = 2,
 ) -> pl.DataFrame:
@@ -419,6 +417,7 @@ def compute_dict_lsoa_suitability_scores(df: pl.DataFrame, lsoa: str) -> dict:
         else:
             scores_dict[score] = df[score].mean()
     scores_dict["scores_weighted"] = df["scores_weighted"].unique()[0]
+    scores_dict["n_properties"] = len(df)
 
     return scores_dict
 
@@ -463,10 +462,22 @@ if __name__ == "__main__":
         lsoa_df = epc_df.filter(pl.col("lsoa") == lsoa_code)
         lsoa_df = compute_df_weighted_score(lsoa_df)
         weighted_scores.append(compute_dict_lsoa_suitability_scores(lsoa_df, lsoa_code))
+    # Must have at least 15 properties to be included in score
+    suitability_df = pl.DataFrame(weighted_scores).filter(pl.col("n_properties") >= 15)
+
+    logging.info("Get LSOA names and join to suitability dataset")
+    lsoa_names_df = pl.read_csv(
+        "s3://asf-heat-pump-suitability/source_data/Lower_Layer_Super_Output_Area_(2021)_to_LAD_(April_2023)_Lookup_in_England_and_Wales.csv",
+        columns=["LSOA21CD", "LSOA21NM"],
+    )
+    suitability_df = suitability_df.join(
+        lsoa_names_df, left_on="lsoa", right_on="LSOA21CD", how="left"
+    ).rename({"LSOA21NM": "lsoa_name"})
 
     logging.info("Saving LSOA heat pump suitability scores")
-    suitability_df = pl.DataFrame(weighted_scores)
     fs = s3fs.S3FileSystem()
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q4_heat_pump_suitability_per_lsoa.parquet"
-    with fs.open(save_as, mode="wb") as f:
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q4_heat_pump_suitability_per_lsoa"
+    with fs.open(f"{save_as}.parquet", mode="wb") as f:
         suitability_df.write_parquet(f)
+    with fs.open(f"{save_as}.csv", mode="wb") as f:
+        suitability_df.write_csv(f)
