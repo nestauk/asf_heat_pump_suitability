@@ -5,40 +5,57 @@ Errors are calculated between the sample (unweighted and weighted) and target pr
 
 Run with:
 
-python asf_heat_pump_suitability/pipeline/reweight_epc/evaluate_reweighting.py
-	--reweighted_path "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights.parquet"
-	--sample
+python asf_heat_pump_suitability/pipeline/run_scripts/run_evaluate_reweighting.py --reweighted_path [path/to/weighted/EPC] -y [YYYY] -q [N] --sample
 
 [remove the --sample argument to run on full dataset]
 
 """
 
 import polars as pl
-import polars.selectors as cs
 from tqdm import tqdm
+import argparse
 
-from argparse import ArgumentParser
-
-from asf_heat_pump_suitability.pipeline.error_analysis import error_analysis_utils
+from asf_heat_pump_suitability.pipeline.evaluation import evaluate_reweighting
 from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_target
-from asf_heat_pump_suitability.pipeline.enhance_epc.prepare_epc import clean_df_nrooms
+from asf_heat_pump_suitability.pipeline.prepare_features.epc import clean_df_nrooms
 from asf_heat_pump_suitability.getters.s3_getters import save_to_s3
 from asf_heat_pump_suitability import logger
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
+    """
+    Create ArgumentParser and parse arguments.
 
-    parser = ArgumentParser()
+    Returns:
+        argparse.Namespace: populated `Namespace`
+    """
+    parser = argparse.ArgumentParser()
 
     parser.add_argument(
         "--reweighted_path",
         help="S3 URI to weighted EPC dataset",
         type=str,
-        default="s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights.parquet",
+        required=True,
     )
 
     parser.add_argument(
-        "--save_output",
+        "-y",
+        "--year",
+        help="EPC data year. Format YYYY",
+        type=int,
+        required=True,
+    )
+
+    parser.add_argument(
+        "-q",
+        "--quarter",
+        help="EPC data quarter",
+        type=int,
+        required=True,
+    )
+
+    parser.add_argument(
+        "--save_as",
         help="S3 path to save evaluation results to",
         type=str,
         default=None,
@@ -50,9 +67,7 @@ def parse_arguments():
         default=False,
         action="store_true",
     )
-    args = parser.parse_args()
-
-    return args
+    return parser.parse_args()
 
 
 def get_errors_for_lsoa(
@@ -78,7 +93,7 @@ def get_errors_for_lsoa(
                         For example, {'tenure': {'E01022833': {'owner-occupied': 548, 'rental (social)': 53}, 'E01013414': {}}, 'property_type': {}}
                     target_marginals (dict): A nested dictionary of the proportions for all property features and LSOAs
                     epc_subset (pl.DataFrame): EPC dataset for this LSOA
-                    error_metric_names (list): The error metric names desired in the output, defined in error_analysis_utils.get_error_metrics.
+                    error_metric_names (list): The error metric names desired in the output, defined in reweighting.get_error_metrics.
                         Defaults to ["rmse_no_missing_cats","mae_no_missing_cats","rmse_missing_cats","mae_missing_cats",]
 
     Returns:
@@ -99,8 +114,8 @@ def get_errors_for_lsoa(
         orig_counts = dict(
             zip(orig_counts_dict[feature_name], orig_counts_dict["count"])
         )
-        orig_proportions = error_analysis_utils.calculate_proportions(orig_counts)
-        error_metrics_orig = error_analysis_utils.get_error_metrics(
+        orig_proportions = evaluate_reweighting.calculate_proportions(orig_counts)
+        error_metrics_orig = evaluate_reweighting.get_error_metrics(
             orig_counts, orig_proportions, target_counts, target_proportions
         )
         if not all(epc_subset["weight"].is_null()):
@@ -114,17 +129,17 @@ def get_errors_for_lsoa(
                     reweighted_counts_dict["weight"],
                 )
             )
-            reweighted_proportions = error_analysis_utils.calculate_proportions(
+            reweighted_proportions = evaluate_reweighting.calculate_proportions(
                 reweighted_counts
             )
-            error_metrics_reweighted = error_analysis_utils.get_error_metrics(
+            error_metrics_reweighted = evaluate_reweighting.get_error_metrics(
                 reweighted_counts,
                 reweighted_proportions,
                 target_counts,
                 target_proportions,
             )
             # Calculate the average error reduction from the original to reweighted relative to the original proportions
-            average_error_reduction = error_analysis_utils.get_error_reduction(
+            average_error_reduction = evaluate_reweighting.get_error_reduction(
                 orig_proportions, reweighted_proportions, target_proportions
             )
 
@@ -206,6 +221,10 @@ def filter_epc(
 
 if __name__ == "__main__":
 
+    args = parse_arguments()
+    year = args.year
+    q = args.quarter
+
     error_metric_names = [
         "rmse_no_missing_cats",
         "mae_no_missing_cats",
@@ -214,8 +233,6 @@ if __name__ == "__main__":
     ]
 
     evaluation_feature_cols = ["tenure", "property_type", "build_year"]
-
-    args = parse_arguments()
 
     target_features = prepare_target.get_dict_dfs_counts()  # Counts
     target_features = {
@@ -261,11 +278,10 @@ if __name__ == "__main__":
 
     # Save to S3
 
-    if not args.save_output:
-        name = args.reweighted_path.replace("s3://asf-heat-pump-suitability/", "")
-        name = f"{name.split('.parquet')[0]}_evaluation.json"
+    if not args.save_as:
+        name = f"outputs/{year}Q{q}/{year}_Q{q}_EPC_weights_evaluation.json"
         if args.sample:
             name = f"{name.split('.json')[0]}_sample.json"
-        args.save_output = name
+        args.save_as = name
 
-    save_to_s3("asf-heat-pump-suitability", full_results, args.save_output)
+    save_to_s3("asf-heat-pump-suitability", full_results, args.save_as)

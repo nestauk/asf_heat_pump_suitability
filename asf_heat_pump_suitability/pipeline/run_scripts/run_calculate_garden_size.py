@@ -1,5 +1,9 @@
 """
-Script to calculate garden area (m2) where possible for properties in the domestic EPC register.
+Calculate garden area (m2) where possible for properties in the domestic EPC register using Land Registry data and
+Microsoft Building Footprints data.
+
+To run:
+python asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size.py --epc_path [path/to/EPC/data] -y [YYYY] -q [N] --use_mapping [path/to/land/extent/file/boundaries]
 """
 
 import argparse
@@ -8,6 +12,7 @@ import pandas as pd
 from tqdm import tqdm
 import polars as pl
 import geopandas as gpd
+from datetime import datetime
 from argparse import ArgumentParser
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     lat_lon,
@@ -17,65 +22,88 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
 )
 
 
-def argparser() -> argparse.Namespace:
+def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
 
     Returns:
-        argparse.Namespace: object holding argument attributes
+        argparse.Namespace: populated `Namespace`
     """
     parser = ArgumentParser()
+
+    parser.add_argument(
+        "--epc_path",
+        help="Path to EPC file with properties to estimate garden size for. Must have UPRN and x and y coordinate columns.",
+        type=str,
+        required=True,
+    )
+
+    parser.add_argument(
+        "-y",
+        "--year",
+        help="EPC data year. Format YYYY",
+        type=int,
+        required=True,
+    )
+
+    parser.add_argument(
+        "-q",
+        "--quarter",
+        help="EPC data quarter",
+        type=int,
+        required=True,
+    )
+
+    parser.add_argument(
+        "--save_epc_gardens",
+        help="Path to save output file with garden size per EPC record to. If unspecified, save with default filename.",
+        type=str,
+        required=False,
+        default=None,
+    )
 
     parser.add_argument(
         "--use_mapping",
         help="Path to existing mapping of land extent files to council/LAD boundary geometries. Recommended if available.",
         type=str,
         required=False,
-    )
-
-    parser.add_argument(
-        "--epc_path",
-        help="Path to EPC file with properties to estimate garden size for",
-        type=str,
-        required=False,
-    )
-
-    parser.add_argument(
-        "--save_epc_gardens",
-        help="Path to save output file with garden size per EPC record to",
-        type=str,
-        required=False,
+        default=None,
     )
 
     parser.add_argument(
         "--save_land_file_bounds",
-        help="Path to save land extent file bounds to",
+        help="Path to save land extent file bounds to. If unspecified, save with default filename.",
         type=str,
         required=False,
+        default=None,
     )
 
-    args = parser.parse_args()
-
-    return args
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    _args = argparser()
+    args = parse_arguments()
+    save_land_file_bounds = args.save_land_file_bounds
+    save_epc_gardens = args.save_epc_gardens
+    year = args.year
+    q = args.quarter
 
     # Load EPC x, y coordinates in CRS: EPSG:27700
     epc_gdf = pl.read_parquet(
-        _args.epc_path, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
+        args.epc_path, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
     )
     epc_gdf = lat_lon.generate_gdf_uprn_coords(epc_gdf)[["UPRN", "geometry"]]
 
-    if not _args.use_mapping:
+    if not args.use_mapping:
+        if not save_land_file_bounds:
+            save_land_file_bounds = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{year}_land_parcels_with_file_polygons.geojson"
         # Get land extent file boundaries
         land_file_bounds = land_extent.generate_gdf_map_file_to_bounds(
-            save_as=_args.save_land_file_bounds
+            save_as=save_land_file_bounds
         )
     else:
         # Load existing file with land extent files mapped to LAD boundaries
-        land_file_bounds = gpd.read_file(_args.use_mapping)
+        land_file_bounds = gpd.read_file(args.use_mapping)
 
     # Get building footprint file boundaries
     microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
@@ -137,4 +165,6 @@ if __name__ == "__main__":
 
     # Get df of all EPC records with garden size estimates
     epc_gardens_df = pd.concat(epc_gardens, ignore_index=True)
-    epc_gardens_df.to_parquet(_args.save_epc_gardens, engine="pyarrow")
+    if not save_epc_gardens:
+        save_epc_gardens = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates.parquet"
+    epc_gardens_df.to_parquet(save_epc_gardens, engine="pyarrow")

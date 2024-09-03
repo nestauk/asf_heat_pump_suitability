@@ -7,9 +7,6 @@ def transform_df_osopen_uprn_latlon() -> pl.DataFrame:
     """
     Transform UPRN column in raw OS Open UPRN data to match format in EPC.
 
-    Args:
-        df (pl.DataFrame): OS Open UPRN dataset
-
     Returns:
         pl.DataFrame: OS Open UPRN dataset with UPRN column in same format as in EPC
     """

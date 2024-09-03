@@ -118,6 +118,6 @@ def add_col_build_year_1930(df: pl.DataFrame) -> pl.DataFrame:
     """
     return df.with_columns(
         pl.col("CONSTRUCTION_AGE_BAND")
-        .map_dict(config["mapping"]["pre_post_1930_epc"])
+        .replace(config["mapping"]["pre_post_1930_epc"])
         .alias("build_year")
     )
