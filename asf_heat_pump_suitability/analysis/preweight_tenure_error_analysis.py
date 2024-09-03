@@ -64,6 +64,136 @@ def load_target(target_path):
     return target
 
 
+def create_boxplot(df, y, title, filename, target_feature_name, order_preference):
+    """
+    Create a boxplot from a DataFrame and save it to a file.
+
+    Args:
+            df (pd.DataFrame): The DataFrame to create a boxplot from.
+            y (str): The column to use as the y-axis.
+            title (str): The title of the plot.
+            filename (str): The name of the file to save the plot to.
+            target_feature_name (str): The name of the target feature to be displayed on the x-axis.
+            order_preference (List[str]): A list of categories in the order of preference for plotting.
+    """
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.boxplot(x=target_feature_name, y=y, data=df, ax=ax, order=order_preference)
+    for i, target_feature in enumerate(order_preference):
+        ax.text(
+            i,
+            ax.get_ylim()[1] + 0.01,
+            # TODO: unresolved reference to total_counts - is this meant to be a param?
+            f"$n_{{properties}}$ = {total_counts[target_feature]}",
+            ha="center",
+        )
+    ax.set_title(title, y=1.05)
+    ax.set_ylabel(f"$\Delta_{{{y.split(' ')[1]}}}$", labelpad=15, fontsize=14)
+    plt.tight_layout()
+    path_filename = f"{PROJECT_DIR}/outputs/figures/preweight_errors/{filename}"
+    directory = os.path.dirname(path_filename)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    fig.savefig(path_filename)
+    plt.show()
+
+
+def create_difference_plots(
+    differences_all: dict,
+    title: str,
+    filename: str,
+    label: str,
+    target_feature_name: str,
+    order_preference: List[str],
+) -> None:
+    """
+    Create a grid of bar plots for each LSOA showing the differences.
+
+    Args:
+            differences_all (dict): A dictionary of dictionaries where the outer keys are LSOAs and the inner keys are tenures.
+            title (str): The title for the plot.
+            filename (str): The name of the file to save the plot to.
+            label (str): The label for the y-axis (e.g., "$\Delta_{count}$" or "$\Delta_{proportion}$"
+            target_feature_name (str): The name of the target feature to be displayed on the x-axis.
+            order_preference (List[str]): A list of categories in the order of preference for plotting.
+
+    Returns:
+            None
+    """
+    # List of LSOAs
+    lsoas = list(differences_all.keys())
+
+    # Number of LSOAs
+    n_lsoas = len(lsoas)
+
+    # Calculate the number of rows and columns for the grid
+    n_cols = 3
+    n_rows = math.ceil(n_lsoas / n_cols)
+
+    # Create a figure with a subplot for each LSOA
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 3 * n_rows))
+
+    # Flatten the axs array for easy iteration
+    axs = axs.flatten()
+
+    # Find the global minimum and maximum differences
+    global_min = min(min(differences_all[lsoa].values()) for lsoa in lsoas)
+    global_max = max(max(differences_all[lsoa].values()) for lsoa in lsoas)
+    global_min_buffer = global_min + 0.1 * global_min
+    global_max_buffer = global_max + 0.1 * global_max
+
+    # Get the color palette used by seaborn's boxplot
+    palette = sns.color_palette()
+
+    # Loop over the LSOAs
+    for i, lsoa in enumerate(lsoas):
+        # Create a DataFrame for the current LSOA
+        df = pd.DataFrame(
+            {
+                target_feature_name: list(differences_all[lsoa].keys()),
+                "Difference": list(
+                    map(float, differences_all[lsoa].values())
+                ),  # Convert to float
+            }
+        )
+
+        # Create a bar chart in the current subplot
+        df.plot(
+            x=target_feature_name,
+            y="Difference",
+            kind="bar",
+            ax=axs[i],
+            color=[palette[order_preference.index(tenure)] for tenure in df["tenure"]],
+            legend=False,
+        )
+
+        # Set the title and labels
+        axs[i].set_title(f"$\\Delta_{{{label}}}$ for {lsoa}")
+        axs[i].set_ylabel(f"$\\Delta_{{{label}}}$")
+        axs[i].set_xlabel(target_feature_name)
+        axs[i].set_xticklabels(df[target_feature_name], rotation=15)
+
+        # Set the y-axis limits
+        axs[i].set_ylim(global_min_buffer, global_max_buffer)
+
+        # Add a gridline at 0
+        axs[i].axhline(0, color="black", linewidth=0.5)
+
+    # Remove unused subplots
+    for i in range(n_lsoas, n_rows * n_cols):
+        fig.delaxes(axs[i])
+
+    # Show the plot
+    fig.suptitle(title, y=0.98)
+
+    plt.tight_layout()
+    plt.show()
+    path_filename = f"{PROJECT_DIR}/outputs/figures/preweight_errors/{filename}"
+    directory = os.path.dirname(path_filename)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    fig.savefig(path_filename)
+
+
 if __name__ == "__main__":
     sample_path = "s3://asf-heat-pump-suitability/outputs/epc_sample_lsoa.parquet"
     target_path = config["data_source"]["EW_housing_characteristics_census"]
