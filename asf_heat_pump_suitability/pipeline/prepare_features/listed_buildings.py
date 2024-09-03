@@ -1,33 +1,10 @@
 import polars as pl
 import geopandas as gpd
 import pandas as pd
-from asf_heat_pump_suitability.getters import get_datasets
 from tqdm import tqdm
 import logging
-from typing import List
-
-
-def transform_df_EPC_X_and_Y_to_point(
-    enhanced_epc_df: pl.DataFrame,
-    x_col: str = "X_COORDINATE",
-    y_col: str = "Y_COORDINATE",
-) -> gpd.GeoDataFrame:
-    """
-    Transform 'X' and 'Y' coordinates in EPC dataset to be in 'POINT' format.
-
-    Args:
-        df (pl.DataFrame): Enhanced EPC dataset
-
-    Returns:
-        pl.DataFrame: EPC dataset with a column of 'POINT' (transformed from 'X' and 'Y' coordinate).
-    """
-    enhanced_epc_df = enhanced_epc_df.to_pandas()
-    gdf = gpd.GeoDataFrame(
-        enhanced_epc_df,
-        geometry=gpd.points_from_xy(enhanced_epc_df[x_col], enhanced_epc_df[y_col]),
-        crs="EPSG:27700",
-    )
-    return gdf
+from asf_heat_pump_suitability.getters import get_datasets
+from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
 
 
 def transform_gdf_listed_buildings(nation: str) -> gpd.GeoDataFrame:
@@ -75,7 +52,7 @@ def sjoin_df_epc_with_listed_buildings(
     data_partitioned = epc_df.with_columns(partitions).partition_by("chunk_id")
     logging.info(f"Adding listed buildings to EPC in {len(data_partitioned)} chunks")
     for epc_chunk in tqdm(data_partitioned):
-        epc_gdf = transform_df_EPC_X_and_Y_to_point(epc_chunk)[["UPRN", "geometry"]]
+        epc_gdf = lat_lon.generate_gdf_uprn_coords(df=epc_chunk)[["UPRN", "geometry"]]
         df = epc_gdf.sjoin(listed_buildings_gdf, how="inner", predicate="intersects")[
             ["UPRN", "listed_building_grade"]
         ].drop_duplicates(subset="UPRN")
