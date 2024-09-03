@@ -151,7 +151,7 @@ if __name__ == "__main__":
 
     # Save to S3
     if not save_as:
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weighted"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weighted"
     fs = s3fs.S3FileSystem()
 
     # Save weighted EPC

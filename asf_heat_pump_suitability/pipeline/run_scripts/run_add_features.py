@@ -164,7 +164,7 @@ if __name__ == "__main__":
 
     # Save to S3
     if not save_as:
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weighted_features.parquet"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weighted_features.parquet"
     fs = s3fs.S3FileSystem()
     with fs.open(save_as, mode="wb") as f:
         epc_df.write_parquet(f)

@@ -279,7 +279,7 @@ if __name__ == "__main__":
     # Save to S3
 
     if not args.save_as:
-        name = f"outputs/{year}_Q{q}_EPC_weights_evaluation.json"
+        name = f"outputs/{year}Q{q}/{year}_Q{q}_EPC_weights_evaluation.json"
         if args.sample:
             name = f"{name.split('.json')[0]}_sample.json"
         args.save_as = name

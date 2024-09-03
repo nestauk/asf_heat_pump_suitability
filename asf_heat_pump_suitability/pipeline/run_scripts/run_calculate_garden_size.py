@@ -96,7 +96,7 @@ if __name__ == "__main__":
 
     if not args.use_mapping:
         if not save_land_file_bounds:
-            save_land_file_bounds = f"s3://asf-heat-pump-suitability/outputs/{year}_land_parcels_with_file_polygons.geojson"
+            save_land_file_bounds = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{year}_land_parcels_with_file_polygons.geojson"
         # Get land extent file boundaries
         land_file_bounds = land_extent.generate_gdf_map_file_to_bounds(
             save_as=save_land_file_bounds
@@ -166,5 +166,5 @@ if __name__ == "__main__":
     # Get df of all EPC records with garden size estimates
     epc_gardens_df = pd.concat(epc_gardens, ignore_index=True)
     if not save_epc_gardens:
-        save_epc_gardens = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates.parquet"
+        save_epc_gardens = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates.parquet"
     epc_gardens_df.to_parquet(save_epc_gardens, engine="pyarrow")
