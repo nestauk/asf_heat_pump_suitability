@@ -6,7 +6,7 @@ following features:
 - tenure (owner-occupied, social rental, private rental)
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc_path [path/to/weighted/EPC] -y [YYYY] -q [N]
+python asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc_path [path/to/unweighted/EPC] -y [YYYY] -q [N]
 """
 
 import logging
