@@ -2,7 +2,7 @@ import s3fs
 import polars as pl
 
 
-def save_df_as_parquet_to_s3(df: pl.DataFrame, path: str) -> None:
+def save_parquet_to_s3(df: pl.DataFrame, path: str) -> None:
     """
     Save dataframe as parquet file to S3.
 
