@@ -100,7 +100,7 @@ def get_dict_lsoa_marginals(target_marginals, lsoa):
     return lsoa_marginals
 
 
-def convert_df_proportions(df: pl.DataFrame) -> Dict[str, pl.DataFrame]:
+def convert_df_proportions(df: pl.DataFrame) -> pl.DataFrame:
     """
     Convert dataframe of counts to target proportions for each feature category per LSOA.
 
@@ -108,7 +108,7 @@ def convert_df_proportions(df: pl.DataFrame) -> Dict[str, pl.DataFrame]:
         pl.DataFrame: dataframe containing counts of each feature category per LSOA
 
     Returns:
-        Dict[str, pl.DataFrame]: dataframe of target proportions for each feature category per LSOA
+        pl.DataFrame: dataframe of target proportions for each feature category per LSOA
     """
     cols = df.select(cs.integer()).columns
     df = df.with_columns(pl.sum_horizontal(df.select(cols)).alias("total"))
@@ -116,7 +116,7 @@ def convert_df_proportions(df: pl.DataFrame) -> Dict[str, pl.DataFrame]:
     # Rounding the proportions cuts down the run time to generate target population
     df = df.with_columns(
         [(pl.col(col) / pl.col("total")).round(3).alias(col) for col in cols]
-    ).drop(columns=["total"])
+    ).drop("total")
 
     return df
 
@@ -128,8 +128,8 @@ def _get_dict_proportions_sum_one(
     Ensure target proportions sum to 1 for each feature.
 
     Args:
-        lsoa_marginals (Dict[str, dict]): dict of dicts containing target proportions for each feature category for single specified
-        LSOA
+        lsoa_marginals (Dict[str, dict]): dict of dicts containing target proportions for each feature category for
+        single specified LSOA
         round_n (int): decimal places to round remainder difference to
 
     Returns:

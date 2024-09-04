@@ -1,7 +1,26 @@
 import polars as pl
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import s3fs
 import logging
+import argparse
+from datetime import datetime
+
+
+def parse_arguments() -> argparse.Namespace:
+    """
+    Create ArgumentParser and parse arguments.
+
+    Returns:
+        argparse.Namespace: populated `Namespace`
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--epc_weights_path",
+        help="Path to EPC with weights parquet file",
+        type=str,
+        required=True,
+    )
+    return parser.parse_args()
 
 
 def filter_df_area_sample_epc(
@@ -42,7 +61,7 @@ def get_dicts_quantile_sample_per_nation(
     country_codes: list,
     min_count: int,
     quantiles: List[int],
-) -> Tuple[List[Dict]]:
+) -> List[Dict]:
     """
     Get sample areas from EPC dataset. Get areas in each nation with count of UPRNs cut at specified quantiles.
 
@@ -54,7 +73,7 @@ def get_dicts_quantile_sample_per_nation(
         quantiles (List[int]): quantiles to sample from. Value 0 <= x <= 1.
 
     Returns
-        tuple[list[dict]]: dicts containing sample information for each sample area per nation at specified quantiles
+        list[dict]: dicts containing sample information for each sample area per nation at specified quantiles
     """
     _count = df.group_by([area, "country_code"]).agg(pl.col("UPRN").count())
     _count = _count.filter(pl.col("UPRN") >= min_count).sort(area)
@@ -91,19 +110,17 @@ def _get_dicts_sample_per_nation(df: pl.DataFrame, country_codes: list) -> List[
 
 
 if __name__ == "__main__":
+    args = parse_arguments()
+    epc_path = args.epc_weights_path
 
-    from asf_heat_pump_suitability.pipeline.enhance_epc import run_script
-
-    epc_path = (
-        "s3://asf-daps/lakehouse/processed/epc/deduplicated/processed_dedupl-0.parquet"
-    )
-    epc = run_script.main(epc_path=epc_path, save_output=None)
+    # Load EPC data with weights
+    epc = pl.read_parquet(epc_path)
 
     # Sample by LSOA & MSOA and save
     for oa in ["lsoa", "msoa"]:
         sample = filter_df_area_sample_epc(epc, area=oa)
         fs = s3fs.S3FileSystem()
-        save_path = f"s3://asf-heat-pump-suitability/outputs/epc_sample_{oa}.parquet"
+        save_path = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_epc_sample_{oa}.parquet"
         logging.info(f"Saving {oa} sample to: {save_path}")
         with fs.open(save_path, mode="wb") as f:
             sample.write_parquet(f)

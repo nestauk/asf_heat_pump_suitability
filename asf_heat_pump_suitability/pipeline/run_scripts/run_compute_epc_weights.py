@@ -1,10 +1,22 @@
+"""
+Add LSOA; MSOA data to EPC dataset and weight properties with Iterative Proportional Fitting per LSOA according to the
+following features:
+- property type (detached, semi-detached, terraced, flats, other);
+- build year (pre- and post-1930 split, and unknown);
+- tenure (owner-occupied, social rental, private rental)
+
+To run:
+python asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc_path [path/to/unweighted/EPC] -y [YYYY] -q [N]
+"""
+
 import logging
 import polars as pl
 import s3fs
 import pathlib
 from tqdm import tqdm
+from datetime import datetime
 import time
-from argparse import ArgumentParser
+import argparse
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.prepare_features import output_areas
 from asf_heat_pump_suitability.pipeline.reweight_epc import (
@@ -14,32 +26,56 @@ from asf_heat_pump_suitability.pipeline.reweight_epc import (
 )
 
 
-def run():
+def parse_arguments() -> argparse.Namespace:
     """
-    Create ArgumentParser and passes arguments to `main()` and runs `main()`.
+    Create ArgumentParser and parse arguments.
+
+    Returns:
+        argparse.Namespace: populated `Namespace`
     """
-    parser = ArgumentParser()
+    parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--epc_path", help="S3 URI to EPC dataset", type=str, required=True
+        "--epc_path",
+        help="S3 URI to processed and deduplicated EPC dataset",
+        type=str,
+        required=True,
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "-y",
+        "--year",
+        help="EPC data year. Format YYYY",
+        type=int,
+        required=True,
+    )
 
-    main(**vars(args))
+    parser.add_argument(
+        "-q",
+        "--quarter",
+        help="EPC data quarter",
+        type=int,
+        required=True,
+    )
+
+    parser.add_argument(
+        "--save_as",
+        help="S3 path to save enhanced EPC dataset to. If unspecified, save with default filename.",
+        type=str,
+        default=None,
+        required=False,
+    )
+
+    return parser.parse_args()
 
 
-def main(epc_path: str) -> pl.DataFrame:
-    """
-    Add LSOA; MSOA data to EPC dataset and weight properties per LSOA according to the following features: property
-    type; build year (pre- and post-1930 split); and tenure.
+if __name__ == "__main__":
+    args = parse_arguments()
+    epc_path = args.epc_path
+    year = args.year
+    q = args.quarter
+    save_as = args.save_as
 
-    Args
-        epc_path (str): S3 URI to EPC dataset
-
-    Returns
-        pl.DataFrame: enhanced EPC dataset with LSOA and MSOA data and weights
-    """
     # Import processed & deduplicated EPC
     logging.info(f"Loading EPC file from path: {epc_path}")
     if pathlib.Path(epc_path).suffixes == ".csv":
@@ -52,10 +88,9 @@ def main(epc_path: str) -> pl.DataFrame:
     # Join ONSPD LSOA col
     epc_df = output_areas.standardise_col_postcode(epc_df, pcd_col="POSTCODE")
     onspd_df = output_areas.transform_df_ons_pd()
-    enhanced_epc_df = epc_df.join(onspd_df, how="left", on="POSTCODE")
+    epc_df = epc_df.join(onspd_df, how="left", on="POSTCODE")
 
     # Reweight EPC
-
     features = [
         "property_type",
         "build_year",
@@ -63,13 +98,11 @@ def main(epc_path: str) -> pl.DataFrame:
     ]  # TODO: add nrooms when categories collapsed
 
     # Add standardised weighting feature columns to EPC and drop rows missing data required for reweighting
-    enhanced_epc_df = enhanced_epc_df.drop_nulls(subset=["lsoa"])
-    enhanced_epc_df = prepare_sample.add_cols_weighting_features(enhanced_epc_df)
-    enhanced_epc_df = prepare_sample.drop_nulls_feature_cols(
-        df=enhanced_epc_df, features=features
-    )
+    epc_df = epc_df.drop_nulls(subset=["lsoa"])
+    epc_df = prepare_sample.add_cols_weighting_features(epc_df)
+    epc_df = prepare_sample.drop_nulls_feature_cols(df=epc_df, features=features)
 
-    lsoas = enhanced_epc_df["lsoa"].unique()
+    lsoas = epc_df["lsoa"].unique()
     target_marginals = prepare_target.get_dict_target_marginals()
 
     # Prepare results dicts
@@ -81,7 +114,7 @@ def main(epc_path: str) -> pl.DataFrame:
         try:
             start = time.time()
             sample, lost_rows = reweight_epc.generate_balance_sample(
-                df=enhanced_epc_df,
+                df=epc_df,
                 features=features,
                 lsoa=lsoa,
                 target_marginals=target_marginals,
@@ -113,25 +146,24 @@ def main(epc_path: str) -> pl.DataFrame:
 
     weights = pl.DataFrame(weights)
     # Outer join so the dummy rows are still included (these will have a UPRN prefixed with 'dummy_')
-    enhanced_epc_df = enhanced_epc_df.join(weights, how="outer", on="UPRN")
+    epc_df = epc_df.join(weights, how="full", on="UPRN")
     lsoa_stats_df = pl.DataFrame(lsoa_stats)
 
     # Save to S3
+    if not save_as:
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weighted"
     fs = s3fs.S3FileSystem()
+
+    # Save weighted EPC
     with fs.open(
-        "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights.parquet",
+        f"{save_as}.parquet",
         mode="wb",
     ) as f:
-        enhanced_epc_df.write_parquet(f)
+        epc_df.write_parquet(f)
 
+    # Save weighting stats
     with fs.open(
-        "s3://asf-heat-pump-suitability/outputs/2023_Q2_EPC_enhanced_weights_stats.parquet",
+        f"{save_as}_stats.parquet",
         mode="wb",
     ) as f:
         lsoa_stats_df.write_parquet(f)
-
-    return enhanced_epc_df
-
-
-if __name__ == "__main__":
-    run()

@@ -1,7 +1,6 @@
 import pandas as pd
 import geopandas as gpd
 import regex as re
-from typing import List
 import logging
 from tqdm import tqdm
 from asf_heat_pump_suitability import config
