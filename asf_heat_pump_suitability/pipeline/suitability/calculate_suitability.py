@@ -3,12 +3,12 @@ Functions to calculate suitability of different HP technologies.
 """
 
 import polars as pl
-import logging
 import s3fs
 from datetime import datetime
 from tqdm import tqdm
+import logging
 
-logging.getLogger().setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
 site_regs_scores = {
     "ASHP_S": 0.25,
@@ -167,7 +167,7 @@ def get_enhanced_epc() -> pl.DataFrame:
         "CURRENT_ENERGY_RATING",
     ]
     df = pl.read_parquet(
-        "s3://asf-heat-pump-suitability/outputs/20240827_2023_Q4_EPC_weighted_features.parquet",
+        "s3://asf-heat-pump-suitability/outputs/2023Q4/20240827_2023_Q4_EPC_weighted_features.parquet",
         columns=usecols,
     )
 
@@ -424,10 +424,10 @@ def compute_dict_lsoa_suitability_scores(df: pl.DataFrame, lsoa: str) -> dict:
 
 if __name__ == "__main__":
     # TODO: logging.info not displaying to terminal for me
-    logging.info("Loading EPC data with features")
+    logger.info("Loading EPC data with features")
     epc_df = get_enhanced_epc()
 
-    logging.info("Filtering EPC data to rows with n_features >= minimum threshold")
+    logger.info("Filtering EPC data to rows with n_features >= minimum threshold")
     epc_df = filter_df_minimum_features(epc_df)
 
     tech_types = [
@@ -443,20 +443,20 @@ if __name__ == "__main__":
 
     scores = []
     for tech_type in tech_types:
-        logging.info(f"Calculating suitability scores for tech type: {tech_type}")
+        logger.info(f"Calculating suitability scores for tech type: {tech_type}")
         epc_scores_df = compute_df_avg_score_per_epc(epc_df, tech_type)
         scores.append(epc_scores_df)
 
-    logging.info("Joining all scores to EPC dataset")
+    logger.info("Joining all scores to EPC dataset")
     for score_df in scores:
         epc_df = epc_df.join(score_df, on="UPRN", how="left")
 
     fs = s3fs.S3FileSystem()
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q4_heat_pump_suitability_per_property.parquet"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/2023Q4/{datetime.today().strftime('%Y%m%d')}_2023_Q4_heat_pump_suitability_per_property.parquet"
     with fs.open(save_as, mode="wb") as f:
         epc_df.write_parquet(f)
 
-    logging.info("Weighting scores and aggregating per LSOA")
+    logger.info("Weighting scores and aggregating per LSOA")
     weighted_scores = []
     for lsoa_code in tqdm(epc_df["lsoa"].unique()):
         lsoa_df = epc_df.filter(pl.col("lsoa") == lsoa_code)
@@ -465,7 +465,7 @@ if __name__ == "__main__":
     # Must have at least 15 properties to be included in score
     suitability_df = pl.DataFrame(weighted_scores).filter(pl.col("n_properties") >= 15)
 
-    logging.info("Get LSOA names and join to suitability dataset")
+    logger.info("Get LSOA names and join to suitability dataset")
     lsoa_names_df = pl.read_csv(
         "s3://asf-heat-pump-suitability/source_data/Lower_Layer_Super_Output_Area_(2021)_to_LAD_(April_2023)_Lookup_in_England_and_Wales.csv",
         columns=["LSOA21CD", "LSOA21NM"],
@@ -474,9 +474,9 @@ if __name__ == "__main__":
         lsoa_names_df, left_on="lsoa", right_on="LSOA21CD", how="left"
     ).rename({"LSOA21NM": "lsoa_name"})
 
-    logging.info("Saving LSOA heat pump suitability scores")
+    logger.info("Saving LSOA heat pump suitability scores")
     fs = s3fs.S3FileSystem()
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{datetime.today().strftime('%Y%m%d')}_2023_Q4_heat_pump_suitability_per_lsoa"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/2023Q4/{datetime.today().strftime('%Y%m%d')}_2023_Q4_heat_pump_suitability_per_lsoa"
     with fs.open(f"{save_as}.parquet", mode="wb") as f:
         suitability_df.write_parquet(f)
     with fs.open(f"{save_as}.csv", mode="wb") as f:
