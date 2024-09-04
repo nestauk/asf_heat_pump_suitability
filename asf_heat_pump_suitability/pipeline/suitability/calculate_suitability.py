@@ -6,9 +6,9 @@ import polars as pl
 import s3fs
 from datetime import datetime
 from tqdm import tqdm
+import argparse
 import logging
 
-logger = logging.getLogger(__name__)
 
 site_regs_scores = {
     "ASHP_S": 0.25,
@@ -143,7 +143,25 @@ multiple_props_scores = {
 }
 
 
-def get_enhanced_epc() -> pl.DataFrame:
+def parse_arguments():
+    """
+    Create ArgumentParser and parse.
+
+    Returns:
+        argparse.Namespace: populated `Namespace`
+    """
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--epc_path",
+        help="Path to parquet with EPC properties with added features and weights for calculating suitability score from.",
+        required=True,
+    )
+
+    return parser.parse_args()
+
+
+def get_enhanced_epc(path) -> pl.DataFrame:
     """
     Load EPC dataset enhanced with weights and additional features.
 
@@ -159,17 +177,14 @@ def get_enhanced_epc() -> pl.DataFrame:
         "ruc_two_fold",
         "OFF GAS",
         "Property density (households per KM2)",
-        "msoa_avg_outdoor_space_m2",
+        "garden_area_m2",
         "listed_building_grade",
         "in_conservation_area",
         "lad_conservation_area_data_available",
         "property_type",
         "CURRENT_ENERGY_RATING",
     ]
-    df = pl.read_parquet(
-        "s3://asf-heat-pump-suitability/outputs/2023Q4/20240827_2023_Q4_EPC_weighted_features.parquet",
-        columns=usecols,
-    )
+    df = pl.read_parquet(path, columns=usecols)
 
     df = df.filter(
         ~pl.col("UPRN").str.contains("dummy"), pl.col("COUNTRY") != "Scotland"
@@ -248,10 +263,10 @@ def compute_df_total_score_per_epc(
         pl.when(pl.col("Property density (households per KM2)") > density_threshold)
         .then(property_density_scores.get(tech_type))
         .alias("property_density_score"),
-        pl.when(pl.col("msoa_avg_outdoor_space_m2") > garden_threshold)
+        pl.when(pl.col("garden_area_m2") > garden_threshold)
         .then(garden_size_scores.get(tech_type))
         .alias("garden_size_score"),
-        pl.when(pl.col("msoa_avg_outdoor_space_m2") > external_space_threshold)
+        pl.when(pl.col("garden_area_m2") > external_space_threshold)
         .then(external_space_scores.get(tech_type))
         .alias("external_space_score"),
         pl.when(~pl.col("listed_building"))
@@ -300,7 +315,7 @@ def compute_df_max_score_per_row(df: pl.DataFrame, tech_type: str) -> pl.DataFra
         .then(property_density_scores.get(tech_type))
         .otherwise(0)
         .alias("property_density_max"),
-        pl.when(pl.col("msoa_avg_outdoor_space_m2").is_not_null())
+        pl.when(pl.col("garden_area_m2").is_not_null())
         .then(garden_size_scores.get(tech_type) + external_space_scores.get(tech_type))
         .otherwise(0)
         .alias("garden_size_max"),
@@ -345,7 +360,7 @@ def filter_df_minimum_features(
             "ruc_two_fold",
             "OFF GAS",
             "Property density (households per KM2)",
-            "msoa_avg_outdoor_space_m2",
+            "garden_area_m2",
             "listed_building_grade",
             "in_conservation_area",
             "property_type",
@@ -423,9 +438,11 @@ def compute_dict_lsoa_suitability_scores(df: pl.DataFrame, lsoa: str) -> dict:
 
 
 if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
+    args = parse_arguments()
     # TODO: logging.info not displaying to terminal for me
     logger.info("Loading EPC data with features")
-    epc_df = get_enhanced_epc()
+    epc_df = get_enhanced_epc(path=args.epc_path)
 
     logger.info("Filtering EPC data to rows with n_features >= minimum threshold")
     epc_df = filter_df_minimum_features(epc_df)
