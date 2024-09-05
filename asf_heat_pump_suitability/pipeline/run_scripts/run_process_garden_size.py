@@ -92,7 +92,6 @@ if __name__ == "__main__":
                 > gardens_df["garden_area_m2"].quantile(quantile=0.97)
             )
         )
-        # (pl.col("garden_area_m2") < gardens_df["garden_area_m2"].quantile(quantile=0.97))  # Alternatively, remove all gardens above 97th percentile
     )
     # Calculate median garden size for UPRNs with multiple gardens
     gardens_df = gardens_df.group_by("UPRN").agg(pl.median("garden_area_m2"))
