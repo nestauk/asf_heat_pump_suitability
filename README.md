@@ -52,9 +52,10 @@ averaged per property before finally aggregating to LSOA level.
 ## Data sources and acknowledgements
 
 A comprehensive table of citations for data used in this analysis can be found in [asf_heat_pump_suitability/config/README.md](https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme).
-Contains OS data © Crown copyright and database right 2023.
-Contains Royal Mail data © Royal Mail copyright and database right 2023.
-Contains Office for National Statistics information licensed under the Open Government Licence v.3.0.
+
+Contains OS data © Crown copyright and database right 2023.\
+Contains Royal Mail data © Royal Mail copyright and database right 2023.\
+Contains Office for National Statistics information licensed under the Open Government Licence v.3.0.\
 Contains public sector information licensed under the Open Government Licence v3.0.
 
 This work uses [Facebook Research's balance package](https://github.com/facebookresearch/balance) and [ipfn](https://github.com/Dirguis/ipfn) to conduct iterative proportional fitting.
