@@ -8,6 +8,7 @@ from datetime import datetime
 from tqdm import tqdm
 import argparse
 import logging
+from asf_heat_pump_suitability import config
 
 
 site_regs_scores = {
@@ -485,7 +486,7 @@ if __name__ == "__main__":
 
     logger.info("Get LSOA names and join to suitability dataset")
     lsoa_names_df = pl.read_csv(
-        "s3://asf-heat-pump-suitability/source_data/Lower_Layer_Super_Output_Area_(2021)_to_LAD_(April_2023)_Lookup_in_England_and_Wales.csv",
+        config["data_source"]["EW_ons_lsoa_lad_lookup"],
         columns=["LSOA21CD", "LSOA21NM"],
     )
     suitability_df = suitability_df.join(
