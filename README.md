@@ -22,6 +22,38 @@ Intermediate outputs include:
 - Run `conda activate asf_heat_pump_suitability`
 - Instructions to run pipeline scripts can be found in [asf_heat_pump_suitability/pipeline/README.md](https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/pipeline#readme)
 
+## Repository structure
+
+See the general repository structure depicted below. Key files are also shown.
+
+```
+asf_heat_pump_suitability
+├───analysis/
+│    Scripts for ad-hoc analysis
+├───config/
+│    Respository config files and global variables
+│    ├─ base.yaml - data sources and mappings
+│    ├─ README.md - data source information, citations, and attributions
+├───getters/
+│    Modules with functions to load data
+│    ├─ base_getters.py - generic getter functions
+│    ├─ get_datasets.py - specific getter functions to load raw datasets
+│    ├─ get_target.py - specific getter functions to load and process target data for reweighting
+├───notebooks/
+│    Notebooks with prototype code for pipeline
+├───pipeline/
+│    Subdirs with modules to process data and produce outputs
+│    ├─ evaluation/
+│    ├─ prepare_features/
+│    ├─ reweight_epc/
+│    ├─ run_scripts/
+│    ├─ sampling/
+│    ├─ suitability/
+│    ├─ README.md - instructions to run pipeline
+├───utils/
+│    Modules with generic utils
+```
+
 ## Heat pump suitability scores
 
 One of the challenges in assessing heat pump suitability is to set criteria for what makes a home suitable for a

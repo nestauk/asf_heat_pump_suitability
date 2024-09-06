@@ -4,18 +4,18 @@
 
 ```
 asf_heat_pump_suitability/pipeline
-├───evaluation
-│    modules with functions for evaluating outputs, e.g. reweighting
-├───prepare_features
-│    modules with functions for preparing new features to join to EPC data
-├───reweight_epc
-│    modules with functions to prepare and conduct reweighting with IPF
-├───run_scripts
-│    scripts to weight EPC and add new features
-├───sampling
-│    scripts to generate samples of EPC data, e.g. for use in testing
-├───suitability
-│    scripts to calculate heat pump suitability from enhanced EPC data
+├───evaluation/
+│    Modules with functions for evaluating outputs, e.g. reweighting
+├───prepare_features/
+│    Modules with functions for preparing new features to join to EPC data
+├───reweight_epc/
+│    Modules with functions to prepare and conduct reweighting with IPF
+├───run_scripts/
+│    Scripts to weight EPC and add new features
+├───sampling/
+│    Scripts to generate samples of EPC data, e.g. for use in testing
+├───suitability/
+│    Scripts to calculate heat pump suitability from enhanced EPC data
 ```
 
 ## Run full pipeline to generate heat pump suitability scores
