@@ -29,6 +29,7 @@ particular technology. We have used two sets of criteria in this project: one a 
 reflects common consensus; and one a Nesta view, which draws on our latest research. We did this for four different
 technologies; air source heat pumps (ASHPs), ground source heat pumps (GSHPs), heat networks (HNs) and shared ground
 loops (SGLs).
+
 This pipeline therefore computes a conventional score and a Nesta score for each of the four tech types listed: eight
 heat pump suitability scores are calculated in total per LSOA. Scores are first computed per property based on presence/
 absence of certain characteristics of the property/area using a simple additive model (see table below). Scores are then
