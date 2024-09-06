@@ -65,7 +65,7 @@ if __name__ == "__main__":
         gardens_df = pl.from_pandas(gardens_df)
 
     else:
-        logger.info(f"Loading dataframe from: {args.garden_path}")
+        logger.info(f"Loading dataframe from: {args.gardens_path}")
         gardens_df = pl.read_parquet(args.gardens_path)
 
     # DEDUPLICATE
