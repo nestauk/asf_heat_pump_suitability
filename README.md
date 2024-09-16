@@ -89,7 +89,7 @@ A comprehensive table of citations for data used in this analysis can be found i
 - This work uses HM Land Registry's INSPIRE Index Polygons service. This information is subject to Crown copyright and database rights 2024 and is reproduced with the permission of HM Land Registry.
   The polygons (including the associated geometry, namely x, y co-ordinates) are subject to Crown copyright and database rights 2024 Ordnance Survey 100026316.
   INSPIRE Index Polygons service [Conditions of use](https://use-land-property-data.service.gov.uk/datasets/inspire#conditions).
-- Microsoft [GlobalMLBuildingFootprints](https://github.com/microsoft/GlobalMLBuildingFootprints) are made available under the [Open Database License](http://opendatacommons.org/licenses/odbl/1.0/). Any rights in individual contents of the database are licensed under the [Database Contents License](http://opendatacommons.org/licenses/dbcl/1.0/\) .
+- Microsoft [GlobalMLBuildingFootprints](https://github.com/microsoft/GlobalMLBuildingFootprints) are made available under the [Open Database License](http://opendatacommons.org/licenses/odbl/1.0/). Any rights in individual contents of the database are licensed under the Database Contents License: http://opendatacommons.org/licenses/dbcl/1.0/\ .
 
 This work uses [Facebook Research's balance package](https://github.com/facebookresearch/balance) and [ipfn](https://github.com/Dirguis/ipfn) to conduct iterative proportional fitting.
 
