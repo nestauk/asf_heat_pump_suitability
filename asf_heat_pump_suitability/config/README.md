@@ -32,12 +32,12 @@ a. Rural-urban classification codes are mapped to text descriptions according to
 
 _Attributions:_
 
-1. Contains OS data © Crown copyright and database right 2023.
-2. Contains Royal Mail data © Royal Mail copyright and database right 2023.
+1. Contains OS data © Crown copyright and database right 2024.
+2. Contains Royal Mail data © Royal Mail copyright and database right 2024.
 3. Contains Office for National Statistics information licensed under the Open Government Licence v.3.0.
 4. Contains public sector information licensed under the Open Government Licence v3.0.
-5. This information is subject to Crown copyright and database rights 2023 and is reproduced with the permission of HM Land Registry. [See INSPIRE index polygons conditions of use](https://use-land-property-data.service.gov.uk/datasets/inspire#conditions).
-6. The polygons (including the associated geometry, namely x, y co-ordinates) are subject to Crown copyright and database rights 2023 Ordnance Survey 100026316.
+5. This information is subject to Crown copyright and database rights 2024 and is reproduced with the permission of HM Land Registry. [See INSPIRE index polygons conditions of use](https://use-land-property-data.service.gov.uk/datasets/inspire#conditions).
+6. The polygons (including the associated geometry, namely x, y co-ordinates) are subject to Crown copyright and database rights 2024 Ordnance Survey 100026316.
 7. This data is licensed by Microsoft under the [Open Data Commons Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/).
 8. © Historic England 2024. Contains Ordnance Survey data © Crown copyright and database right 2024.
 9. Designated Historic Asset GIS Data, The Welsh Historic Environment Service (Cadw), DATE 2024, licensed under the [Open Government Licence](http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
