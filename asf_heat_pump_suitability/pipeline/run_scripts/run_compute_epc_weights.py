@@ -78,10 +78,8 @@ if __name__ == "__main__":
 
     # Import processed & deduplicated EPC
     logging.info(f"Loading EPC file from path: {epc_path}")
-    if pathlib.Path(epc_path).suffixes == ".csv":
-        fs = s3fs.S3FileSystem()
-        with fs.open(epc_path, mode="rb") as f:
-            epc_df = pl.read_csv(f, columns=config["usecols"]["epc"])
+    if ".csv" in pathlib.Path(epc_path).suffixes:
+        epc_df = pl.read_csv(epc_path, columns=config["usecols"]["epc"])
     else:
         epc_df = pl.read_parquet(epc_path, columns=config["usecols"]["epc"])
 
