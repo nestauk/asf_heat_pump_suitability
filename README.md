@@ -1,13 +1,9 @@
-# asf_heat_pump_suitability
+# ASF Heat Pump Suitability
 
-Calculate heat pump suitability scores for lower-layer super output areas (LSOAs) in England and Wales using domestic
-EPC data and supplementary sources. Scores are weight-adjusted for LSOAs where possible to reduce bias.
-Intermediate outputs include:
-
-- EPC data weighted according to LSOA using Iterative Proportional Fitting to reduce bias
-- EPC data enhanced with new features including: lat/lon; listed building status; building conservation zone status;
-  off gas status; average garden size per MSOA; property density per LSOA
-- Individual garden size estimates for UPRNs in EPC
+The `asf_heat_pump_suitability` repo contains the code used to calculate heat pump suitability scores for lower-layer
+super output areas (LSOAs) in England and Wales using domestic EPC data and supplementary sources. Scores are
+weight-adjusted for LSOAs where possible to reduce bias.
+Read more about the project [here](https://www.nesta.org.uk/project/mapping-heat-pump-suitability-across-great-britain/).
 
 ## Setup
 
@@ -88,11 +84,25 @@ A comprehensive table of citations for data used in this analysis can be found i
 Contains OS data © Crown copyright and database right 2023.\
 Contains Royal Mail data © Royal Mail copyright and database right 2023.\
 Contains Office for National Statistics information licensed under the Open Government Licence v.3.0.\
-Contains public sector information licensed under the Open Government Licence v3.0.
+Contains public sector information licensed under the Open Government Licence v3.0.\
+Contains GeoPlace data © Local Government Information House Limited copyright and database right 2024.\
+This work uses HM Land Registry's INSPIRE Index Polygons service. This information is subject to Crown copyright and database rights 2024 and is reproduced with the permission of HM Land Registry.\
+The polygons (including the associated geometry, namely x, y co-ordinates) are subject to Crown copyright and database rights 2024 Ordnance Survey 100026316.\
+INSPIRE Index Polygons service [Conditions of use](https://use-land-property-data.service.gov.uk/datasets/inspire#conditions).\
+Microsoft [GlobalMLBuildingFootprints](https://github.com/microsoft/GlobalMLBuildingFootprints) are made available under the [Open Database License](http://opendatacommons.org/licenses/odbl/1.0/). Any rights in individual contents of the database are licensed under the [Database Contents License](http://opendatacommons.org/licenses/dbcl/1.0/\)
 
 This work uses [Facebook Research's balance package](https://github.com/facebookresearch/balance) and [ipfn](https://github.com/Dirguis/ipfn) to conduct iterative proportional fitting.
 
 Sarig, T., Galili, T., & Eilat, R. (2023). balance – a Python package for balancing biased data samples. https://arxiv.org/abs/2307.06024
+
+## Pipeline intermediate outputs
+
+Intermediate outputs include:
+
+- EPC data weighted according to LSOA using Iterative Proportional Fitting to reduce bias
+- EPC data enhanced with new features including: lat/lon; listed building status; building conservation zone status;
+  off gas status; average garden size per MSOA; property density per LSOA
+- Individual garden size estimates for UPRNs in EPC
 
 ## Contributor guidelines
 
