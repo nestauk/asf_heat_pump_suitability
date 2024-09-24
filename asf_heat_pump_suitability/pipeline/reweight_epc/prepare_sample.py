@@ -67,21 +67,21 @@ def add_col_property_type(df: pl.DataFrame) -> pl.DataFrame:
             pl.col("PROPERTY_TYPE").is_in(["House", "Bungalow"]),
             pl.col("BUILT_FORM") == "Detached",
         )
-        .then(pl.lit("Detached whole house or bungalow"))
+        .then(pl.lit("Detached"))
         .when(
             pl.col("PROPERTY_TYPE").is_in(["House", "Bungalow"]),
             pl.col("BUILT_FORM") == "Semi-Detached",
         )
-        .then(pl.lit("Semi-detached whole house or bungalow"))
+        .then(pl.lit("Semi-detached"))
         .when(
             pl.col("PROPERTY_TYPE").is_in(["House", "Bungalow"]),
             pl.col("BUILT_FORM").is_in(terraced),
         )
-        .then(pl.lit("Terraced (including end-terrace) whole house or bungalow"))
+        .then(pl.lit("Terraced (including end-terrace)"))
         .when(pl.col("PROPERTY_TYPE").is_in(["Flat", "Maisonette"]))
         .then(pl.lit("Flat, maisonette or apartment"))
         .when(pl.col("PROPERTY_TYPE").is_in(["Park home"]))
-        .then(pl.lit("A caravan or other mobile or temporary structure"))
+        .then(pl.lit("Caravan or other mobile or temporary structure"))
         .alias("property_type")
     )
 
