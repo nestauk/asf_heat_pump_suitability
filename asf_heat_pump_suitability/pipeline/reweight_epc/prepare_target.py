@@ -35,8 +35,8 @@ def get_dict_dfs_counts() -> Dict[str, pl.DataFrame]:
         datasets
     """
     count_dict = {
-        "tenure": get_target.get_df_target_tenure_uncensored(),
-        "property_type": get_target.get_df_target_property_type_uncensored(),
+        "tenure": get_target.transform_df_target_tenure(),
+        "property_type": get_target.transform_df_target_tenure(),
         "build_year": get_target.get_df_target_build_year(),
         # TODO: collapse nrooms categories to increase speed
         # "nrooms": get_target.get_df_target_nrooms(),
