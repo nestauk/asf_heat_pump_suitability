@@ -263,3 +263,16 @@ def load_gdf_listed_buildings(nation: str, **kwargs) -> gpd.GeoDataFrame:
     else:
         raise ValueError("Please set `nation` to either 'England' or 'Wales'.")
     return gdf
+
+
+def load_df_ew_census_accommodation_type() -> pl.DataFrame:
+    """
+    Load raw accommodation type counts per LSOA for England and Wales from census.
+
+    Returns:
+        pl.DataFrame: raw accommodation type counts per LSOA for England and Wales
+    """
+    content = base_getters.get_content_from_s3_path(
+        config["data_source"]["EW_census_housing_characteristics"]
+    )
+    return pl.read_excel(content, sheet_name="2c", engine="calamine")

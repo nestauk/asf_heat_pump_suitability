@@ -1,8 +1,7 @@
 import polars as pl
-import warnings
+import polars.selectors as cs
 
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.getters import base_getters
 
 
 def get_df_target_nrooms() -> pl.DataFrame:
@@ -34,10 +33,23 @@ def get_df_target_nrooms() -> pl.DataFrame:
     return df
 
 
-def get_df_target_property_type_uncensored() -> pl.DataFrame:
+def transform_df_target_property_type() -> pl.DataFrame:
     """
-    Get dataframe of property type counts for all LSOAs in England and Wales. Dataframe has no censored values. Source:
-    census data 2021.
+    Load and transform property type counts per LSOA/data zone for England, Scotland, and Wales from census data.
+
+    Returns:
+        pl.DataFrame: property type counts for England, Scotland, and Wales per LSOA
+    """
+    ew_df = load_transform_df_target_property_type_ew()
+    s_df = load_transform_df_target_property_type_scotland()
+    s_df = s_df.select(ew_df.columns)
+
+    return pl.concat([ew_df, s_df], how="vertical")
+
+
+def load_transform_df_target_property_type_ew() -> pl.DataFrame:
+    """
+    Get dataframe of property type counts for all LSOAs in England and Wales from census data.
 
     Returns:
         pl.Dataframe: counts of property type for all LSOAs in England and Wales
@@ -78,9 +90,8 @@ def get_df_target_property_type_uncensored() -> pl.DataFrame:
         )
         .rename(
             {
-                "Detached": "Detached whole house or bungalow",
-                "Semi-detached": "Semi-detached whole house or bungalow",
-                "Terraced": "Terraced (including end-terrace) whole house or bungalow",
+                "Terraced": "Terraced (including end-terrace)",
+                "A caravan or other mobile or temporary structure": "Caravan or other mobile or temporary structure",
             }
         )
     )
@@ -88,40 +99,98 @@ def get_df_target_property_type_uncensored() -> pl.DataFrame:
     return df
 
 
-def get_df_target_property_type(fill_censored: int = 1) -> pl.DataFrame:
+def load_transform_df_target_property_type_scotland() -> pl.DataFrame:
     """
-    Get dataframe of property type counts for all LSOAs in England and Wales, and fill censored values (counts below 10)
-    with given constant. Source: census data 2021.
-
-    Args:
-        fill_censored (int): value to fill censored values with, [0-10]. Default 0.
+    Load and transform dataframe of property type counts for data zones in Scotland from census data.
 
     Returns:
-        pl.Dataframe: counts of property type for all LSOAs in England and Wales
+        pl.Dataframe: counts of property type for all data zones in Scotland
     """
-    content = base_getters.get_content_from_s3_path(
-        config["data_source"]["EW_census_housing_characteristics"]
+    df = pl.read_csv(
+        config["data_source"]["S_census_accommodation_type"],
+        skip_rows=10,
+        columns=list(range(0, 11)),
+        infer_schema_length=10000,
     )
-    df = pl.read_excel(content, sheet_name="2c", engine="calamine")
-
-    # Remove empty header rows
     df = (
-        df.rename(df[2].to_dicts().pop())
-        .slice(
-            3,
+        df[1:]
+        .drop_nulls(subset=cs.numeric())
+        .drop(
+            [
+                "Whole house or bungalow: Total",
+                "Flat, maisonette or apartment: Total",
+                "All occupied households",
+            ]
         )
-        .drop(["Area Name"])
-        .rename({"Area Code": "lsoa"})
     )
-    df = _fill_df_censored_values(df, fill_censored)
+    flats_cols = [col for col in df.columns if "Flat" in col]
+    df = (
+        df.with_columns(
+            pl.sum_horizontal(flats_cols).alias("Flat, maisonette or apartment")
+        )
+        .drop(flats_cols)
+        .rename(
+            {
+                col: col.replace("Whole house or bungalow: ", "")
+                for col in df.select(cs.numeric()).columns
+            }
+        )
+        .rename({"Type of accomodation": "lsoa"})
+    )
 
     return df
 
 
-def get_df_target_tenure_uncensored() -> pl.DataFrame:
+def transform_df_target_tenure() -> pl.DataFrame:
     """
-    Get dataframe of tenure type counts for all LSOAs in England and Wales. Dataframe has no censored values. Source:
-    census data 2021.
+    Load and transform tenure type counts per LSOA/data zone for England, Scotland, and Wales from census data.
+
+    Returns:
+        pl.DataFrame: tenure type counts per LSOA/data zone for England, Scotland, and Wales
+    """
+    ew_df = load_transform_df_target_tenure_ew()
+    s_df = load_transform_df_target_tenure_scotland()
+    s_df = s_df.select(ew_df.columns)
+
+    return pl.concat([ew_df, s_df], how="vertical")
+
+
+def load_transform_df_target_tenure_scotland() -> pl.DataFrame:
+    """
+    Load and transform tenure type counts per data zone in Scotland from census data.
+
+    Returns:
+        pl.DataFrame: tenure type counts per data zone in Scotland
+    """
+    df = pl.read_csv(
+        config["data_source"]["S_census_tenure"],
+        skip_rows=10,
+        columns=list(range(1, 4)),
+        infer_schema_length=10000,
+    )
+    df = (
+        df.drop_nulls()
+        .rename({"Intermediate Zone - Data Zone 2011": "lsoa"})
+        .pivot("Household Tenure", index="lsoa", values="Count")
+        .drop([col for col in df.columns if "Total" in col])
+    )
+    private_rental = [col for col in df.columns if "Private" in col]
+    private_rental.extend(["Lives Rent Free"])
+    df = df.with_columns(
+        pl.sum_horizontal([col for col in df.columns if "Owned" in col]).alias(
+            "owner_occupied"
+        ),
+        pl.sum_horizontal(private_rental).alias("private_rental"),
+        pl.sum_horizontal([col for col in df.columns if "Social" in col]).alias(
+            "social_rental"
+        ),
+    )
+    return df.select(["lsoa", "owner_occupied", "social_rental", "private_rental"])
+
+
+def load_transform_df_target_tenure_ew() -> pl.DataFrame:
+    """
+    Get dataframe of tenure type counts for all LSOAs in England and Wales from census data.
 
     Returns:
         pl.Dataframe: counts of tenure type for all LSOAs in England and Wales
@@ -155,53 +224,13 @@ def get_df_target_tenure_uncensored() -> pl.DataFrame:
         .pivot(index="lsoa", columns="tenure", values="Observation")
         .with_columns(
             [
-                pl.sum_horizontal(owned_cols).alias("owner-occupied"),
-                pl.sum_horizontal(social_rent_cols).alias("rental (social)"),
-                pl.sum_horizontal(private_rent_cols).alias("rental (private)"),
+                pl.sum_horizontal(owned_cols).alias("owner_occupied"),
+                pl.sum_horizontal(social_rent_cols).alias("social_rental"),
+                pl.sum_horizontal(private_rent_cols).alias("private_rental"),
             ]
         )
-        .select(
-            pl.col(["lsoa", "owner-occupied", "rental (social)", "rental (private)"])
-        )
+        .select(pl.col(["lsoa", "owner_occupied", "social_rental", "private_rental"]))
     )
-
-    return df
-
-
-def get_df_target_tenure(fill_censored: int = 1) -> pl.DataFrame:
-    """
-    Get dataframe of tenure type counts for all LSOAs in England and Wales, and fill censored values (counts below 10)
-    with given constant. Source: census data 2021.
-
-    Args:
-        fill_censored (int): value to fill censored values with, [0-10]. Default 0.
-
-    Returns:
-        pl.Dataframe: counts of tenure type for all LSOAs in England and Wales
-    """
-    content = base_getters.get_content_from_path(
-        config["data_source"]["EW_census_housing_characteristics"]
-    )
-    df = pl.read_excel(content, sheet_name="3c", engine="calamine")
-
-    # Remove empty header rows
-    df = (
-        df.rename(df[2].to_dicts().pop())
-        .slice(
-            3,
-        )
-        .drop(["Area Name"])
-        .rename(
-            {
-                "Area Code": "lsoa",
-                "Owned or shared ownership": "owner-occupied",
-                "Social Rented": "rental (social)",
-                "Private Rented or lives rent free": "rental (private)",
-            }
-        )
-    )
-
-    df = _fill_df_censored_values(df, fill_censored)
 
     return df
 
@@ -234,28 +263,5 @@ def get_df_target_build_year(
         .rename({"BP_UNKNOWN": "unknown", "AREA_CODE": "lsoa"})
         .select(["lsoa", f"pre_{year_label}", f"post_{year_label}", "unknown"])
     )
-
-    return df
-
-
-def _fill_df_censored_values(df: pl.DataFrame, val: int) -> pl.DataFrame:
-    """
-    Fill censored values in a target dataframe with a given value.
-
-    Args:
-        df (pl.DataFrame): dataframe
-        val (int): value to fill censored values with, [0-10]
-
-    Returns:
-        pl.DataFrame: dataframe with filled values
-    """
-    if not (0 <= val <= 10):
-        warnings.warn(
-            "Value to fill censored target data should be within range [0-10]. "
-            "Values outside this range may significantly change target proportions."
-        )
-    cols = df.columns
-    cols.remove("lsoa")
-    df = df.with_columns([pl.col(cols).str.replace("c", f"{val}").cast(pl.Int64)])
 
     return df
