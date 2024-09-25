@@ -19,6 +19,7 @@ data_source:
   UK_spa_offgasgrid: "s3://asf-heat-pump-suitability/source_data/2024_vMar2024_SPA_offgaspostcode_UK.xlsx"
   E_historicengland_listed_buildings: "s3://asf-heat-pump-suitability/source_data/Jun2024_vJul2024_HistoricEngland_listedbuilding_E.gpkg"
   W_cadw_listed_buildings: "s3://asf-heat-pump-suitability/source_data/May2024_vMay2024_Cadw_listedbuilding_W.gpkg"
+  S_scottish_gov_listed_buildings: "s3://asf-heat-pump-suitability/source_data/lb_scotland/Listed_Buildings_boundaries.shp"
   EW_ons_lsoa_lad_lookup: "s3://asf-heat-pump-suitability/source_data/2021_vApr2023_ons_lsoa_to_lad_lookup_EW.csv"
 usecols:
   epc:
