@@ -190,14 +190,6 @@ def get_enhanced_epc(path) -> pl.DataFrame:
     df = df.filter(
         ~pl.col("UPRN").str.contains("dummy"), pl.col("COUNTRY") != "Scotland"
     )
-
-    df = df.with_columns(
-        pl.when(pl.col("listed_building_grade").is_null())
-        .then(False)
-        .otherwise(True)
-        .alias("listed_building"),
-    )
-
     return df
 
 

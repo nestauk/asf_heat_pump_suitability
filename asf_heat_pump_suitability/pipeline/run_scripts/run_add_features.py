@@ -145,21 +145,11 @@ if __name__ == "__main__":
     epc_df = off_gas.add_off_gas_feature(epc_df, off_gas_postcodes)
 
     # Add feature: listed buildings data
-    logging.info("Loading listed buildings for England")
-    e_listed_buildings_df = listed_buildings.transform_gdf_listed_buildings("England")
-    e_listed_buildings_df = listed_buildings.sjoin_df_epc_with_listed_buildings(
-        epc_df, e_listed_buildings_df
+    logging.info("Adding listed buildings to EPC")
+    listed_buildings_df = listed_buildings.generate_df_epc_listed_buildings(
+        epc_df=epc_df
     )
 
-    logging.info("Loading listed buildings for Wales")
-    w_listed_buildings_df = listed_buildings.transform_gdf_listed_buildings("Wales")
-    w_listed_buildings_df = listed_buildings.sjoin_df_epc_with_listed_buildings(
-        epc_df, w_listed_buildings_df
-    )
-
-    listed_buildings_df = pl.concat(
-        [e_listed_buildings_df, w_listed_buildings_df], how="vertical"
-    )
     epc_df = epc_df.join(listed_buildings_df, how="left", on="UPRN")
 
     # Save to S3

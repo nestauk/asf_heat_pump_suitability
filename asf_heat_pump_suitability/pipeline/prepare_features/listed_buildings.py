@@ -25,7 +25,30 @@ def transform_gdf_listed_buildings(nation: str) -> gpd.GeoDataFrame:
     return gdf
 
 
-def sjoin_df_epc_with_listed_buildings(
+def generate_df_epc_listed_buildings(
+    epc_df: pl.DataFrame, nations: list = ["England", "Scotland", "Wales"]
+):
+    """
+    Generate dataframe of listed buildings in EPC data in specified nation(s).
+
+    Args:
+        epc_df (pl.DataFrame):
+        nations (list):
+
+    Returns:
+        pl.DataFrame:
+    """
+    dfs = []
+    for nation in nations:
+        logging.info(f"Loading listed building data for {nation}")
+        gdf = transform_gdf_listed_buildings(nation)
+        df = sjoin_df_epc_with_nation_listed_buildings(epc_df, gdf)
+        dfs.append(df)
+
+    return pl.concat(dfs, how="vertical")
+
+
+def sjoin_df_epc_with_nation_listed_buildings(
     epc_df: pl.DataFrame,
     listed_buildings_gdf: gpd.GeoDataFrame,
     chunk_size: int = 100000,
@@ -60,5 +83,10 @@ def sjoin_df_epc_with_listed_buildings(
         dfs.append(df)
 
     df = pl.from_pandas(pd.concat(dfs))
-
-    return df
+    df = df.with_columns(
+        pl.when(pl.col("listed_building_grade").is_null())
+        .then(False)
+        .otherwise(True)
+        .alias("listed_building"),
+    )
+    return df.select(["PUPRN", "listed_building"])
