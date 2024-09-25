@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     open_df = property_df.group_by("lsoa").agg(
         median_garden_estimate_m2=pl.col("garden_area_m2").median(),
-        property_density=(
+        property_density_km2=(
             pl.col("Property density (households per KM2)") * pl.col("use_weight")
         ).sum()
         / pl.col("use_weight").sum(),
@@ -147,7 +147,7 @@ if __name__ == "__main__":
 
     # Save to S3
     if not args.save_as:
-        args.save_as = f"s3://nesta-open-data/asf_heat_pump_suitability/{args.year}Q{args.q}/{datetime.today().strftime('%Y%m%d')}_{args.year}_Q{args.q}_EPC_heat_pump_suitability_per_lsoa"
+        args.save_as = f"s3://nesta-open-data/asf_heat_pump_suitability/{args.year}Q{args.quarter}/{datetime.today().strftime('%Y%m%d')}_{args.year}_Q{args.quarter}_EPC_heat_pump_suitability_per_lsoa"
     logging.info("Saving to S3")
     save_utils.save_parquet_to_s3(open_df, f"{args.save_as}.parquet")
     fs = s3fs.S3FileSystem()
