@@ -24,7 +24,7 @@ def generate_df_epc_listed_buildings(
     for nation in nations:
         logging.info(f"Loading listed building data for {nation}")
         gdf = transform_gdf_listed_buildings(nation)
-        df = chunk_sjoin_df_epc_listed_buildings(epc_df, gdf, nation)
+        df = chunk_sjoin_df_epc_listed_buildings(epc_df, gdf)
         dfs.append(df)
 
     return pl.concat(dfs, how="vertical")
