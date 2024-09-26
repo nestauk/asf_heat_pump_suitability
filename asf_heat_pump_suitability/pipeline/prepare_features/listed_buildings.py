@@ -18,7 +18,7 @@ def generate_df_epc_listed_buildings(
         nations (list): nation(s) to load listed buildings data for. Options: "England"; "Scotland"; "Wales".
 
     Returns:
-        pl.DataFrame: listed buildings in EPC data
+        pl.DataFrame: EPC UPRNs with listed buildings flag
     """
     dfs = []
     for nation in nations:
@@ -61,7 +61,7 @@ def chunk_sjoin_df_epc_listed_buildings(
         chunk_size (int): number of EPC rows in each partition. Default 100,000
 
     Returns:
-        pl.DataFrame: EPC UPRNs in listed buildings
+        pl.DataFrame: EPC UPRNs with listed building flag
     """
     partitions = (
         epc_df.select(["UPRN", "X_COORDINATE", "Y_COORDINATE"])
@@ -94,10 +94,11 @@ def sjoin_df_epc_listed_buildings(
     Args:
         epc_df (pl.DataFrame): EPC dataset with X and Y coordinates per UPRN
         listed_buildings_gdf (gpd.GeoDataFrame): listed buildings data
-        distance (float): maximum distance (m) within which to query for nearest geometry where `sjoin_nearest` used. Must be greater than 0. Default 5.
+        distance (float): maximum distance (m) within which to query for nearest geometry where `sjoin_nearest` used.
+                          Must be greater than 0. Default 5.
 
     Returns:
-        pd.DataFrame: EPC UPRNs in listed buildings
+        pd.DataFrame: EPC UPRNs with listed buildings flag
     """
     epc_gdf = lat_lon.generate_gdf_uprn_coords(df=epc_df, usecols=["UPRN"])
     if any(
@@ -107,7 +108,7 @@ def sjoin_df_epc_listed_buildings(
         ]
     ):
         df = epc_gdf.sjoin_nearest(
-            listed_buildings_gdf, how="inner", max_distance=distance
+            listed_buildings_gdf, how="left", max_distance=distance
         )[["UPRN", "listed_building"]].drop_duplicates(subset="UPRN")
     elif any(
         [
@@ -115,7 +116,7 @@ def sjoin_df_epc_listed_buildings(
             for expr in ["Polygon", "MultiPolygon"]
         ]
     ):
-        df = epc_gdf.sjoin(listed_buildings_gdf, how="inner", predicate="intersects")[
+        df = epc_gdf.sjoin(listed_buildings_gdf, how="left", predicate="intersects")[
             ["UPRN", "listed_building"]
         ].drop_duplicates(subset="UPRN")
     else:
