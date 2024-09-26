@@ -22,7 +22,7 @@ def generate_df_epc_listed_buildings(
     """
     dfs = []
     for nation in nations:
-        logging.info(f"Loading listed building data for {nation}")
+        logging.info(f"Loading listed buildings data for {nation}")
         gdf = transform_gdf_listed_buildings(nation)
         df = chunk_sjoin_df_epc_listed_buildings(epc_df, gdf)
         dfs.append(df)
@@ -81,7 +81,7 @@ def chunk_sjoin_df_epc_listed_buildings(
         pl.col("listed_building").fill_null(False)
     )
 
-    return df.select(["PUPRN", "listed_building"])
+    return df.select(["UPRN", "listed_building"])
 
 
 def sjoin_df_epc_listed_buildings(
@@ -108,7 +108,7 @@ def sjoin_df_epc_listed_buildings(
     ):
         df = epc_gdf.sjoin_nearest(
             listed_buildings_gdf, how="inner", max_distance=distance
-        )["UPRN", "listed_building"].drop_duplicates(subset="UPRN")
+        )[["UPRN", "listed_building"]].drop_duplicates(subset="UPRN")
     elif any(
         [
             expr in listed_buildings_gdf.geom_type.unique()
