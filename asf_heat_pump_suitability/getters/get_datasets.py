@@ -248,7 +248,7 @@ def load_gdf_listed_buildings(nation: str, **kwargs) -> gpd.GeoDataFrame:
     Get raw Listed Buildings polygons dataset for specified nation. CRS EPSG:27700, British National Grid.
 
     Args:
-        nation (str): UK nation to load listed buildings data for. Options: "England"; "Wales".
+        nation (str): nation to load listed buildings data for. Options: "England"; "Scotland", "Wales".
         **kwargs for `gpd.read_file()`
 
     Returns:
@@ -260,6 +260,12 @@ def load_gdf_listed_buildings(nation: str, **kwargs) -> gpd.GeoDataFrame:
         )
     elif nation.lower() == "wales":
         gdf = gpd.read_file(config["data_source"]["W_cadw_listed_buildings"], **kwargs)
+    elif nation.lower() == "scotland":
+        gdf = gpd.read_file(
+            config["data_source"]["S_scottish_gov_listed_buildings"], **kwargs
+        )
     else:
-        raise ValueError("Please set `nation` to either 'England' or 'Wales'.")
+        raise ValueError(
+            "Please set `nation` to either 'England', 'Scotland', or 'Wales'."
+        )
     return gdf
