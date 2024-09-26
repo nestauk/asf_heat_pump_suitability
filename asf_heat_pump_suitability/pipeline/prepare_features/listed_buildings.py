@@ -99,7 +99,7 @@ def sjoin_df_epc_listed_buildings(
     Returns:
         pd.DataFrame: EPC UPRNs in listed buildings
     """
-    epc_gdf = lat_lon.generate_gdf_uprn_coords(df=epc_df, usecols=["UPRN", "geometry"])
+    epc_gdf = lat_lon.generate_gdf_uprn_coords(df=epc_df, usecols=["UPRN"])
     if any(
         [
             expr in listed_buildings_gdf.geom_type.unique()
