@@ -19,7 +19,7 @@ def get_df_from_excel_url(url: str, **kwargs) -> pl.DataFrame:
     Returns
         pl.DataFrame: dataframe from Excel file
     """
-    content = _get_content_from_url(url)
+    content = get_content_from_url(url)
     df = pl.read_excel(content, **kwargs)
 
     return df
@@ -37,7 +37,7 @@ def get_df_from_zip_url(url: str, extract_file: str, **kwargs) -> pl.DataFrame:
     Returns:
         pl.DataFrame: dataset from ZIP file
     """
-    content = _get_content_from_url(url)
+    content = get_content_from_url(url)
     df = pl.read_csv(ZipFile(content).open(name=extract_file), **kwargs)
 
     return df
@@ -107,7 +107,7 @@ def get_content_from_s3_path(path: str) -> bytes:
     return content
 
 
-def _get_content_from_url(url: str) -> BytesIO:
+def get_content_from_url(url: str) -> BytesIO:
     """
     Get BytesIO stream from URL.
     Args
