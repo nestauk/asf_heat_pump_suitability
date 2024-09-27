@@ -17,7 +17,7 @@ import s3fs
 import argparse
 from datetime import datetime
 from asf_heat_pump_suitability.pipeline.prepare_features import (
-    conservation_areas,
+    protected_areas,
     epc,
     garden_space_avg,
     lat_lon,
@@ -85,10 +85,11 @@ if __name__ == "__main__":
     logging.info("Adding lat/lon data to EPC")
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
     epc_df = epc_df.join(uprn_latlon_df, how="left", on="UPRN")
+    epc_gdf = lat_lon.generate_gdf_uprn_coords(epc_df, usecols=["UPRN", "lad_code"])
 
     # Replace `lad_code` from postcode with `lad_code` from geospatial join and postcode
     logging.info("Adding LAD code with geospatial join")
-    uprn_lad_df = output_areas.sjoin_df_uprn_lad_code(epc_df)
+    uprn_lad_df = output_areas.sjoin_df_uprn_lad_code(epc_gdf)
     epc_df = epc_df.drop("lad_code").join(uprn_lad_df, how="left", on="UPRN")
 
     # Join new features to EPC dataset
@@ -104,20 +105,23 @@ if __name__ == "__main__":
     )
 
     # Add feature: building conservation area flag
-    logging.info("Adding building conservation area flag")
+    logging.info("Adding building conservation area England and Wales flag")
     # Get UPRNs in building conservation areas
-    uprns_in_cons_area_df = conservation_areas.generate_df_uprn_to_cons_area(epc_df)
+    uprns_in_cons_area_df = protected_areas.generate_df_uprn_in_cons_area(epc_gdf)
     epc_df = epc_df.join(uprns_in_cons_area_df, how="left", on="UPRN")
 
     # Label local authorities with missing building conservation area data
-    lad_cons_areas_df = (
-        conservation_areas.generate_df_conservation_area_data_availability(
-            ladcd_col="LAD23CD"
-        )
+    lad_cons_areas_df = protected_areas.generate_df_conservation_area_data_availability(
+        ladcd_col="LAD23CD"
     )
     epc_df = epc_df.join(
         lad_cons_areas_df, how="left", left_on="lad_code", right_on="LAD23CD"
     )
+
+    # Add feature: World Heritage Site flag
+    logging.info("Adding World Heritage Site Scotland flag")
+    uprns_in_whs_df = protected_areas.generate_df_uprn_in_whs(epc_gdf)
+    epc_df = epc_df.join(uprns_in_whs_df, how="left", on="UPRN")
 
     # Add feature: property density
     logging.info("Adding number of households data to EPC")
@@ -149,7 +153,6 @@ if __name__ == "__main__":
     listed_buildings_df = listed_buildings.generate_df_epc_listed_buildings(
         epc_df=epc_df
     )
-
     epc_df = epc_df.join(listed_buildings_df, how="left", on="UPRN")
 
     # Save to S3
