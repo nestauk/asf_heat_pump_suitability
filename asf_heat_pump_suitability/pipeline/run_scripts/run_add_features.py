@@ -27,6 +27,7 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
     property_density,
     off_gas,
     listed_buildings,
+    grid_capacity,
 )
 
 
@@ -161,6 +162,10 @@ if __name__ == "__main__":
         [e_listed_buildings_df, w_listed_buildings_df], how="vertical"
     )
     epc_df = epc_df.join(listed_buildings_df, how="left", on="UPRN")
+
+    logging.info("Adding grid capacity column to EPC")
+    grid_capacities = grid_capacity.calculate_grid_capacity()
+    epc_df = epc_df.join(grid_capacity, how="left", on="lsoa21")
 
     # Save to S3
     if not save_as:

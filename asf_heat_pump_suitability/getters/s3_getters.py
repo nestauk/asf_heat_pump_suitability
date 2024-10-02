@@ -7,6 +7,7 @@ import json
 import pickle
 import gzip
 import os
+import tempfile
 
 import pandas as pd
 import boto3
@@ -15,6 +16,7 @@ import numpy
 import yaml
 import io
 from io import BytesIO
+import geopandas as gpd
 
 from asf_heat_pump_suitability import logger, PROJECT_DIR
 from typing import List, Any, NoReturn
@@ -123,6 +125,12 @@ def load_s3_data(
     elif fnmatch(file_name, "*.pkl") or fnmatch(file_name, "*.pickle"):
         file = obj.get()["Body"].read().decode()
         return pickle.loads(file)
+    elif fnmatch(file_name, "*.gpkg"):
+        with BytesIO(obj.get()["Body"].read()) as file:
+            return gpd.read_file(file)
+    elif fnmatch(file_name, "*.geojson"):
+        with BytesIO(obj.get()["Body"].read()) as file:
+            return gpd.read_file(file)
     elif (
         fnmatch(file_name, "*.jpg")
         or fnmatch(file_name, "*.png")
@@ -135,7 +143,7 @@ def load_s3_data(
 
     else:
         logger.error(
-            'Function not supported for file type other than "*.csv", "*.parquet", "*.jsonl.gz", "*.jsonl", or "*.json"'
+            'Function not supported for file type other than "*.csv", "*.parquet", "*.gpkg", "*.geojson", "*.jsonl.gz", "*.jsonl", or "*.json"'
         )
 
 
@@ -174,3 +182,33 @@ def read_json_from_s3(bucket: str, file_path: str) -> dict:
     json_file = s3_resource.Object(bucket, file_path)
     json_file = json_file.get()["Body"].read().decode("utf-8")
     return json.loads(json_file)
+
+
+def get_shapefile_from_s3(bucket_name: str, directory_path: str):
+    """
+    Download shapefile components from S3 to a temporary directory.
+
+    Args:
+        bucket_name (str): S3 bucket name
+        directory_path (str): path of the directory containing the shapefile components
+
+    Returns:
+        (str): path to the directory containing the downloaded files
+    """
+    s3 = boto3.client("s3")
+    temp_dir = tempfile.mkdtemp()
+
+    paginator = s3.get_paginator("list_objects_v2")
+    pages = paginator.paginate(Bucket=bucket_name, Prefix=directory_path)
+
+    # Download each file
+    for page in pages:
+        for obj in page.get("Contents", []):
+            file_key = obj["Key"]
+            if file_key.endswith(
+                (".shp", ".shx", ".dbf", ".prj", ".cpg", ".sbn", ".sbx", ".xml")
+            ):
+                local_file_path = os.path.join(temp_dir, os.path.basename(file_key))
+                s3.download_file(bucket_name, file_key, local_file_path)
+
+    return temp_dir
