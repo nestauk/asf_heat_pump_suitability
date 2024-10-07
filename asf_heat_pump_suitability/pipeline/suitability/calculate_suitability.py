@@ -196,7 +196,7 @@ def get_enhanced_epc(path) -> pl.DataFrame:
         "lad_conservation_area_data_available",
         "property_type",
         "CURRENT_ENERGY_RATING",
-        "has_grid_capacity",
+        "heatpump_installation_percentage",
     ]
     df = pl.read_parquet(path, columns=usecols)
 
@@ -253,6 +253,7 @@ def compute_df_total_score_per_epc(
     density_threshold: int = 60,
     garden_threshold: int = 10,
     external_space_threshold: int = 2,
+    grid_installation_threshold: int = 30,
 ) -> pl.DataFrame:
     """
     Calculate total heat pump suitability score points per EPC record for specified tech_type.
@@ -296,7 +297,9 @@ def compute_df_total_score_per_epc(
         pl.when(pl.col("CURRENT_ENERGY_RATING").is_in(["A", "B", "C"]))
         .then(epc_threshold_scores.get(tech_type))
         .alias("epc_rating_score"),
-        pl.when(pl.col("has_grid_capacity"))
+        pl.when(
+            pl.col("heatpump_installation_percentage") > grid_installation_threshold
+        )
         .then(epc_threshold_scores.get(tech_type))
         .alias("grid_capacity_score"),
     )
@@ -353,7 +356,7 @@ def compute_df_max_score_per_row(df: pl.DataFrame, tech_type: str) -> pl.DataFra
         .then(epc_threshold_scores.get(tech_type))
         .otherwise(0)
         .alias("epc_rating_max"),
-        pl.when(pl.col("has_grid_capacity").is_not_null())
+        pl.when(pl.col("heatpump_installation_percentage").is_not_null())
         .then(epc_threshold_scores.get(tech_type))
         .otherwise(0)
         .alias("grid_capacity_max"),
@@ -386,7 +389,7 @@ def filter_df_minimum_features(
             "in_conservation_area",
             "property_type",
             "CURRENT_ENERGY_RATING",
-            "has_grid_capacity",
+            "heatpump_installation_percentage",
         ]
     df = df.with_columns(
         (len(features) - pl.sum_horizontal(pl.col(features).is_null()))
