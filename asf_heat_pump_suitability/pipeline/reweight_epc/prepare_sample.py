@@ -1,3 +1,7 @@
+"""
+Functions to prepare EPC data for reweighting.
+"""
+
 import polars as pl
 import polars.selectors as cs
 from asf_heat_pump_suitability import config
@@ -22,7 +26,7 @@ def drop_nulls_feature_cols(df, features):
         )
         .with_columns(
             pl.col("build_year").fill_null("unknown")
-        )  # replace null with unknown because it's a build_year category
+        )  # replace null with unknown because 'unknown' is a build_year category
         .drop_nulls(subset=features)
     )
     return df
