@@ -14,10 +14,10 @@ if __name__ == "__main__":
     )
 
     lsoa_to_lad_dict = dict(zip(lad_to_lsoa["LSOA21CD"], lad_to_lsoa["LAD23CD"]))
-    lad_name_dict_dict = dict(zip(lad_to_lsoa["LAD23CD"], lad_to_lsoa["LAD23NM"]))
+    lad_name_dict = dict(zip(lad_to_lsoa["LAD23CD"], lad_to_lsoa["LAD23NM"]))
 
     lsoa_build_year["LAD23CD"] = lsoa_build_year["AREA_CODE"].map(lsoa_to_lad_dict)
-    lsoa_build_year["LAD23NM"] = lsoa_build_year["LAD23CD"].map(lad_name_dict_dict)
+    lsoa_build_year["LAD23NM"] = lsoa_build_year["LAD23CD"].map(lad_name_dict)
 
     columns = [
         "BP_PRE_1900",
