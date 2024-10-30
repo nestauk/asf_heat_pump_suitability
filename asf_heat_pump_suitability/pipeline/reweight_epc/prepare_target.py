@@ -11,7 +11,7 @@ from typing import Dict
 from asf_heat_pump_suitability.getters import get_target
 
 
-def get_dict_target_marginals() -> Dict[str, Dict[str, dict]]:
+def get_dict_target_marginals(features: list) -> Dict[str, Dict[str, dict]]:
     """
     Get nested dictionary containing target proportions of each feature category per LSOA. Primary dictionary keys are
     feature names, secondary keys are LSOA codes, tertiary keys are feature categories.
@@ -24,10 +24,13 @@ def get_dict_target_marginals() -> Dict[str, Dict[str, dict]]:
         }
     ```
 
+    Args:
+        features (list): features to use in reweighting. Options: tenure; property_type; build_year; n_rooms
+
     Returns:
         Dict[str, Dict[str, dict]]: nested dict containing target proportions for each feature category per LSOA
     """
-    target_features = get_dict_dfs_counts()
+    target_features = get_dict_dfs_counts(features=features)
 
     target_proportions = {
         k: convert_df_proportions(v) for k, v in target_features.items()
@@ -37,22 +40,30 @@ def get_dict_target_marginals() -> Dict[str, Dict[str, dict]]:
     return marginals
 
 
-def get_dict_dfs_counts() -> Dict[str, pl.DataFrame]:
+def get_dict_dfs_counts(features: list) -> Dict[str, pl.DataFrame]:
     """
     Generate dict where keys are feature names and values are dataframes containing counts of each feature variable
     per LSOA in the target datasets.
+
+    Args:
+        features (list): features to use in reweighting. Options: tenure; property_type; build_year; n_rooms
 
     Returns:
         Dict[str, pl.DataFrame]: dict of dataframes containing counts of each feature variable per LSOA in the target
         datasets
     """
-    count_dict = {
-        "tenure": get_target.get_df_target_tenure_uncensored(),
-        "property_type": get_target.get_df_target_property_type_uncensored(),
-        "build_year": get_target.get_df_target_build_year(),
-        # TODO: collapse nrooms categories to increase speed
-        # "nrooms": get_target.get_df_target_nrooms(),
-    }
+    count_dict = {}
+
+    if "property_type" in features:
+        count_dict["property_type"] = (
+            get_target.get_df_target_property_type_uncensored()
+        )
+    if "tenure" in features:
+        count_dict["tenure"] = get_target.get_df_target_tenure_uncensored()
+    if "build_year" in features:
+        count_dict["build_year"] = get_target.get_df_target_build_year()
+    if "n_rooms" in features:  # TODO: collapse nrooms categories to increase speed
+        count_dict["n_rooms"]: get_target.get_df_target_nrooms()
 
     return count_dict
 
