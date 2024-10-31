@@ -1,9 +1,11 @@
 """
-Run reweighting with 2 features (property type, tenure); 3 features (+ build year); and 3 features with multi-level
-(LSOA- and LA-level) target data, and save results to S3.
+Run reweighting with 3 different models:
+- 2 features (property type, tenure);
+- 3 features (+ build year);
+- and 3 features with multi-level (LSOA- and LA-level) target data
 
 To run:
-python -i asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc_path [path/to/unweighted/EPC] -y [YYYY] -q [N]
+python -i asf_heat_pump_suitability/analysis/exploratory/run_compute_weights_models.py --epc_path [path/to/unweighted/EPC] -y [YYYY] -q [N]
 """
 
 import logging

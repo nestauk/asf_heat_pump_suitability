@@ -9,7 +9,7 @@ Errors are calculated between the sample (unweighted and weighted) and target pr
 
 Run with:
 
-python -i asf_heat_pump_suitability/analysis/exploratory/evaluate_reweighting_models.py -y [YYYY] -q [N]
+python -i asf_heat_pump_suitability/analysis/exploratory/run_evaluate_reweighting_models.py -y [YYYY] -q [N]
 """
 
 import polars as pl
