@@ -1,5 +1,6 @@
 """
-Run reweighting with 2 features (property type, tenure) and 3 features (+ build year) and save results to S3.
+Run reweighting with 2 features (property type, tenure); 3 features (+ build year); and 3 features with multi-level
+(LSOA- and LA-level) target data, and save results to S3.
 
 To run:
 python -i asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc_path [path/to/unweighted/EPC] -y [YYYY] -q [N]
@@ -83,6 +84,7 @@ if __name__ == "__main__":
     feature_composition = {
         "2_features": ["property_type", "tenure"],
         "3_features": ["property_type", "tenure", "build_year"],
+        "3_features_mixed_lsoa_la": ["property_type", "tenure", "build_year"],
     }
 
     for key, features in feature_composition.items():
@@ -92,7 +94,14 @@ if __name__ == "__main__":
         )
 
         # 2. Generate target marginals for all features and LSOAs
-        target_marginals = prepare_target.get_dict_target_marginals(features=features)
+        if key == "3_features_mixed_lsoa_la":
+            target_marginals = prepare_target.get_dict_target_marginals(
+                features=features, use_la_build_year=True
+            )
+        else:
+            target_marginals = prepare_target.get_dict_target_marginals(
+                features=features, use_la_build_year=False
+            )
 
         # 3. Prepare results dicts
         weights = {"UPRN": [], "weight": [], "proportional_weight": []}
