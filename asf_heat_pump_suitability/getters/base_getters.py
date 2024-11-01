@@ -141,18 +141,17 @@ def load_gdf_from_s3_geojson(s3_uri: str, crs: str) -> gpd.GeoDataFrame:
     return gdf
 
 
-def list_files_s3_location(location: str) -> list:
+def list_obj_s3_location(location: str) -> list:
     """
-    List files in an S3 location.
+    List objects in an S3 location.
 
     Args:
         location (str): S3 URI
 
     Returns:
-        list: files in S3 location
+        list: objects in S3 location
     """
     fs = s3fs.S3FileSystem()
-    # Indexing to remove directory key
-    files = fs.ls(location)[1:]
+    o = fs.ls(location)
 
-    return files
+    return o
