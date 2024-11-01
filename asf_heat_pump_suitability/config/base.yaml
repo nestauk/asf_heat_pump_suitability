@@ -23,6 +23,7 @@ data_source:
   EW_ons_lsoa_lad_lookup: "s3://asf-heat-pump-suitability/source_data/2021_vApr2023_ons_lsoa_to_lad_lookup_EW.csv"
   S_historic_environment_scotland_world_heritage_sites: "s3://asf-heat-pump-suitability/source_data/WHS/World_Heritage_Sites.shp"
   S_ros_inspire_url: "https://ros.locationcentre.co.uk/inspire/"
+  EW_inspire_url: "https://use-land-property-data.service.gov.uk/datasets/inspire/download"
 usecols:
   epc:
     - COUNTRY
