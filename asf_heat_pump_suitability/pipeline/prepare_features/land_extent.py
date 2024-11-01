@@ -3,9 +3,37 @@ import geopandas as gpd
 import regex as re
 import logging
 from tqdm import tqdm
-from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters, get_datasets
 from asf_heat_pump_suitability.utils import geo_utils
+
+
+def generate_gdf_file_bounds_s(path: str) -> gpd.GeoDataFrame:
+    """
+    Generate GeoDataFrame with land extent (INSPIRE) filenames for Scotland and their bounding polygons.
+    CRS: British National Grid (EPSG: 27700).
+
+    Args:
+        path (str): S3 location of land extent (INSPIRE) files.
+
+    Returns:
+        gpd.GeoDataFrame: land extent (INSPIRE) files and their bounding polygons in British National Grid CRS
+    """
+    shp_dirs = base_getters.list_obj_s3_location(path)
+    file_bounds = {"inspire_file_name": [], "council_name": [], "geometry": []}
+    for shp_dir in shp_dirs:
+        files = base_getters.list_obj_s3_location(f"s3://{shp_dir}")
+        shapefile = [file for file in files if file.endswith(".shp")][0]
+        gdf = get_datasets.load_gdf_inspire_land_parcels(
+            f"s3://{shapefile}", columns=["geometry"]
+        )
+        bounding_polygon = geo_utils.get_polygon_gdf_bounds(gdf)
+        file_bounds["inspire_file_name"].append(shapefile)
+        file_bounds["council_name"].append(shp_dir.split("/")[-1])
+        file_bounds["geometry"].append(bounding_polygon)
+
+    gdf = gpd.GeoDataFrame(file_bounds, crs="EPSG:27700", geometry="geometry")
+
+    return gdf
 
 
 def transform_gdf_council_bounds(
@@ -50,57 +78,52 @@ def _standardise_list_council_names(name_series: pd.Series) -> list:
     return council_names
 
 
-def generate_gdf_map_file_to_bounds(
-    land_extent_location: str = config["data_source"]["EW_inspire_land_extent"],
+def generate_gdf_file_bounds_ew(
+    path: str,
     ladnm_col: str = "LAD23NM",
     use_cols: list = ["LAD23NM", "LAD23CD", "geometry"],
-    save_as: str = None,
 ) -> gpd.GeoDataFrame:
     """
-    Generate GeoDataFrame with land extent (INSPIRE) files and their bounding polygons by matching land extent filenames
-    to ONS council polygon names. CRS: British National Grid (EPSG: 27700).
+    Generate GeoDataFrame with land extent (INSPIRE) filenames for England and Wales and their bounding polygons.
+    CRS: British National Grid (EPSG: 27700).
 
     Args:
-        land_extent_location (str): location of land extent (INSPIRE) files. Defaults to S3 location.
+        path (str): S3 location of land extent (INSPIRE) files.
         ladnm_col (str): name of column with council (LAD) names in council polygons file
         use_cols (list): names of columns to keep in council polygons file. Must include the following columns:
         council/LAD name, council/LAD code, council/LAD geometry.
-        save_as (str): path to save matched files to. Optional.
 
     Returns:
         gpd.GeoDataFrame: land extent (INSPIRE) files and their bounding polygons in British National Grid CRS
     """
-    council_bounds = transform_gdf_council_bounds(ladnm_col, use_cols)
-    land_extent_file_names = base_getters.list_files_s3_location(land_extent_location)
+    bounds_gdf = transform_gdf_council_bounds(ladnm_col, use_cols)
+    files = base_getters.list_obj_s3_location(path)
 
     matches = _match_list_file_to_name(
-        land_extent_files=land_extent_file_names,
-        council_names=council_bounds["council_name_std"],
+        land_extent_files=files,
+        council_names=bounds_gdf["council_name_std"],
     )
 
-    file_to_bounds = pd.DataFrame(
-        {"inspire_file_name": land_extent_file_names, "council_bounds_matches": matches}
+    file_bounds_df = pd.DataFrame(
+        {"inspire_file_name": files, "council_bounds_matches": matches}
     ).merge(
-        council_bounds,
+        bounds_gdf,
         how="left",
         left_on="council_bounds_matches",
         right_on="council_name_std",
     )
 
-    file_to_bounds = gpd.GeoDataFrame(
-        file_to_bounds, crs="EPSG:27700", geometry="geometry"
+    file_bounds_df = gpd.GeoDataFrame(
+        file_bounds_df, crs="EPSG:27700", geometry="geometry"
     )
 
     use_cols.append("council_name_std")
 
-    file_to_bounds = fill_nulls_file_bounds(
-        file_to_bounds, council_bounds, ladnm_col, use_cols
+    file_bounds_df = fill_nulls_file_bounds(
+        file_bounds_df, bounds_gdf, ladnm_col, use_cols
     )
 
-    if save_as:
-        file_to_bounds.to_file(save_as)
-
-    return file_to_bounds
+    return file_bounds_df
 
 
 def _match_list_file_to_name(land_extent_files: list, council_names: pd.Series) -> list:
@@ -186,8 +209,21 @@ def transform_gdf_land_parcels(land_parcel_file: str) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: land parcel geodata
     """
-    gdf = get_datasets.load_gdf_inspire_land_parcels(land_parcel_file)
-    gdf = gdf[["NATIONALCADASTRALREFERENCE", "geometry"]]
+    # TODO existing mapping geojson for England and Wales does not contain the same file names found in this dir.
+    # TODO The mapping needs to be regenerated with the updated file names.
+    if "inspire_ew" in land_parcel_file:
+        gdf = get_datasets.load_gdf_inspire_land_parcels(
+            land_parcel_file, columns=["NATIONALCADASTRALREFERENCE", "geometry"]
+        )
+    elif "inspire_scotland" in land_parcel_file:
+        gdf = get_datasets.load_gdf_inspire_land_parcels(
+            land_parcel_file, columns=["nationalca", "geometry"]
+        ).rename(columns={"nationalca": "NATIONALCADASTRALREFERENCE"})
+    else:
+        raise ValueError(
+            f"Nation [England and Wales; or Scotland] not recognised in file path: {land_parcel_file} \n"
+            f"Unable to load and transform land registry file."
+        )
     gdf = geo_utils.transform_gdf_drop_duplicates(gdf)
     gdf["land_area_m2"] = gdf["geometry"].area
 
