@@ -35,7 +35,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "-n",
         "--nations",
-        help="Nations to download INSPIRE land registry files for out of England and Wales; Scotland; or all.",
+        help="Nations to download INSPIRE land registry files for, out of England and Wales; Scotland; or all.",
         type=str,
         choices=["ew", "s", "all"],
         required=True,
