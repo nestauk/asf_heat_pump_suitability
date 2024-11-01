@@ -3,7 +3,10 @@ Calculate garden area (m2) where possible for properties in the domestic EPC reg
 Microsoft Building Footprints data.
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size.py --epc_path [path/to/EPC/data] -y [YYYY] -q [N] --use_mapping [path/to/land/extent/file/boundaries]
+python -i asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size.py --epc_path [path/to/EPC/data] -y [YYYY] -q [N] -n all
+
+[Set -n nation flag to "ew" or "s" for generating garden size estimates for either England and Wales or Scotland INSPIRE
+files only. It is recommended to process England-Wales and Scotland separately due to long run time (2+ days).]
 """
 
 import argparse
@@ -55,24 +58,17 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--save_epc_gardens",
+        "-n",
+        "--nations",
+        help="Nations to get INSPIRE land registry file bounds for. Of England and Wales (ew); Scotland (s); or all (ews).",
+        type=str,
+        choices=["ew", "s", "ews"],
+        required=True,
+    )
+
+    parser.add_argument(
+        "--save_as",
         help="Path to save output file with garden size per EPC record to. If unspecified, save with default filename.",
-        type=str,
-        required=False,
-        default=None,
-    )
-
-    parser.add_argument(
-        "--use_mapping",
-        help="Path to existing mapping of land extent files to council/LAD boundary geometries. Recommended if available.",
-        type=str,
-        required=False,
-        default=None,
-    )
-
-    parser.add_argument(
-        "--save_land_file_bounds",
-        help="Path to save land extent file bounds to. If unspecified, save with default filename.",
         type=str,
         required=False,
         default=None,
@@ -83,8 +79,6 @@ def parse_arguments() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = parse_arguments()
-    save_land_file_bounds = args.save_land_file_bounds
-    save_epc_gardens = args.save_epc_gardens
     year = args.year
     q = args.quarter
 
@@ -94,21 +88,13 @@ if __name__ == "__main__":
     )
     epc_gdf = lat_lon.generate_gdf_uprn_coords(epc_gdf)[["UPRN", "geometry"]]
 
-    if not args.use_mapping:
-        if not save_land_file_bounds:
-            save_land_file_bounds = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{year}_land_parcels_with_file_polygons.geojson"
-        # Get land extent file boundaries
-        land_file_bounds = land_extent.generate_gdf_map_file_to_bounds(
-            save_as=save_land_file_bounds
-        )
-    else:
-        # Load existing file with land extent files mapped to LAD boundaries
-        land_file_bounds = gpd.read_file(args.use_mapping)
-
-    # Get building footprint file boundaries
+    # Load land registry and building footprint boundaries
+    land_file_bounds = gpd.read_file(
+        f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/inspire_file_bounds_{args.nations.upper()}.geojson"
+    )
     microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
 
-    # Check where building footprint files and land extent files overlap
+    # Match land extent files with overlapping building footprint files
     file_matches = garden_size.match_series_files_land_building(
         land_files_gdf=land_file_bounds, building_files_gdf=microsoft_file_bounds
     )
@@ -165,6 +151,6 @@ if __name__ == "__main__":
 
     # Get df of all EPC records with garden size estimates
     epc_gardens_df = pd.concat(epc_gardens, ignore_index=True)
-    if not save_epc_gardens:
-        save_epc_gardens = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates.parquet"
-    epc_gardens_df.to_parquet(save_epc_gardens, engine="pyarrow")
+    if not args.save_as:
+        args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates.parquet"
+    epc_gardens_df.to_parquet(args.save_as, engine="pyarrow")
