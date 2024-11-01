@@ -152,5 +152,5 @@ if __name__ == "__main__":
     # Get df of all EPC records with garden size estimates
     epc_gardens_df = pd.concat(epc_gardens, ignore_index=True)
     if not args.save_as:
-        args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates.parquet"
+        args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nation.upper()}.parquet"
     epc_gardens_df.to_parquet(args.save_as, engine="pyarrow")
