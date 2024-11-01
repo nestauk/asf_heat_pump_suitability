@@ -19,7 +19,7 @@ def generate_gdf_file_bounds_s(path: str) -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: land extent (INSPIRE) files and their bounding polygons in British National Grid CRS
     """
     shp_dirs = base_getters.list_obj_s3_location(path)
-    file_bounds = {"inspire_file_name": [], "council_name": [], "geometry": []}
+    file_bounds = {"inspire_file_name": [], "registration_county": [], "geometry": []}
     for shp_dir in shp_dirs:
         files = base_getters.list_obj_s3_location(f"s3://{shp_dir}")
         shapefile = [file for file in files if file.endswith(".shp")][0]
@@ -28,7 +28,7 @@ def generate_gdf_file_bounds_s(path: str) -> gpd.GeoDataFrame:
         )
         bounding_polygon = geo_utils.get_polygon_gdf_bounds(gdf)
         file_bounds["inspire_file_name"].append(shapefile)
-        file_bounds["council_name"].append(shp_dir.split("/")[-1])
+        file_bounds["registration_county"].append(shp_dir.split("/")[-1])
         file_bounds["geometry"].append(bounding_polygon)
 
     gdf = gpd.GeoDataFrame(file_bounds, crs="EPSG:27700", geometry="geometry")
