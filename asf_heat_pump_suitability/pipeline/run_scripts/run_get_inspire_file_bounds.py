@@ -13,11 +13,12 @@ authority boundaries via string matching based on their filenames. Any nulls are
 file and identifying which local authority boundary it should be matched to based on the geometry.
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_get_inspire_file_bounds.py -y [YYYY] -q [N] -n all
+python -i asf_heat_pump_suitability/pipeline/run_scripts/run_get_inspire_file_bounds.py -y [YYYY] -q [N] -n all
 
 [Set -n nation flag to "ew" or "s" for generating file bounds either England and Wales or Scotland INSPIRE files only.]
 """
 
+import pandas as pd
 import argparse
 from argparse import ArgumentParser
 from asf_heat_pump_suitability import config
@@ -54,7 +55,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "-n",
         "--nations",
-        help="Nations to get INSPIRE land registry file bounds for, out of England and Wales; Scotland; or all.",
+        help="Nations to get INSPIRE land registry file bounds for. Of England and Wales (ew); Scotland (s); or all (ews).",
         type=str,
         choices=["ew", "s", "all"],
         required=True,
@@ -68,16 +69,21 @@ if __name__ == "__main__":
     year = args.year
     q = args.quarter
 
-    if args.nations in ["ew", "all"]:
-        gdf = land_extent.generate_gdf_file_bounds_ew(
+    if "ew" in args.nations:
+        ew_gdf = land_extent.generate_gdf_file_bounds_ew(
             path=config["data_source"]["EW_inspire_land_extent_dir"]
         )
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{year}_inspire_file_bounds_EW.geojson"
-        gdf.to_file(save_as)
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/inspire_file_bounds_EW.geojson"
+        ew_gdf.to_file(save_as)
 
-    if args.nations in ["s", "all"]:
-        gdf = land_extent.generate_gdf_file_bounds_s(
+    if "s" in args.nations:
+        s_gdf = land_extent.generate_gdf_file_bounds_s(
             config["data_source"]["S_inspire_land_extent_dir"]
         )
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{year}_inspire_file_bounds_S.geojson"
-        gdf.to_file(save_as)
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/inspire_file_bounds_S.geojson"
+        s_gdf.to_file(save_as)
+
+    if args.nations == "ews":
+        gdf = pd.concat([ew_gdf, s_gdf]).reset_index()
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/inspire_file_bounds_EWS.geojson"
+        s_gdf.to_file(save_as)
