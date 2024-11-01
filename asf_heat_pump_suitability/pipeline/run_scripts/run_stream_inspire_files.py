@@ -1,11 +1,12 @@
 """
-Script to stream INSPIRE files for Scotland from ROS webpage and/or INSPIRE files for England and Wales
-from government website to S3 asf-heat-pump-suitability bucket.
+Script to stream INSPIRE land registry files for Scotland from ROS webpage and/or INSPIRE files for England and Wales
+from government website to S3 asf-heat-pump-suitability bucket. Files are unzipped during streaming and
+saved to S3 in unzipped format.
 
 Scottish INSPIRE files are partitioned according to Registration Counties in shapefile packages.
 England and Wales INSPIRE files are partitioned according to Local Authorities in gml format.
 
-python -i asf_heat_pump_suitability/pipeline/run_scripts/run_download_inspire.py -n all
+python -i asf_heat_pump_suitability/pipeline/run_scripts/run_stream_inspire_files.py -n all
 
 [Set -n nation flag to "ew" or "s" for streaming either England and Wales or Scotland INSPIRE files only.]
 """
