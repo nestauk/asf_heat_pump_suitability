@@ -143,6 +143,10 @@ if __name__ == "__main__":
     logging.info("Adding property density to EPC")
     epc_df = property_density.extend_df_with_property_density(epc_df)
 
+    # Add feature: property density Scotland
+    dz_density_df = property_density.generate_df_property_density_s()
+    epc_df = epc_df.join(dz_density_df, how="left", right_on="lsoa", left_on="DataZone")
+
     # Add feature: off gas postcodes
     logging.info("Adding off gas grid column to EPC")
     off_gas_postcodes = off_gas.process_off_gas_data()
