@@ -1,5 +1,5 @@
-# Add property density feature to EPC dataset
 import polars as pl
+from asf_heat_pump_suitability.getters import get_datasets
 
 
 def extend_df_with_property_density(enhanced_epc_df: pl.DataFrame) -> pl.DataFrame:
@@ -58,6 +58,58 @@ def replace_zeros_with_none_df(df: pl.DataFrame, column_name: str) -> pl.DataFra
         .then(None)
         .otherwise(pl.col(column_name))
         .alias(column_name)
+    )
+
+    return df
+
+
+def generate_df_property_density_s() -> pl.DataFrame:
+    """
+    Generate dataframe with property density (dwellings per km2) per 2011 Data Zone in Scotland. Long-term empty dwellings
+    are excluded from dwelling count to calculate property density.
+
+    Returns:
+        pl.DataFrame: properties per km2 per 2011 Data Zone in Scotland
+    """
+    dz_df = load_transform_df_datazone_area()
+    dwellings_df = load_transform_df_n_dwellings_s()
+    df = dwellings_df.join(dz_df, how="inner", on="DataZone").with_columns(
+        (pl.col("n_dwellings") / pl.col("StdAreaKm2")).alias("property_density_km2")
+    )
+
+    return df
+
+
+def load_transform_df_datazone_area():
+    """
+    Load and transform dataframe with area (km2) per 2011 Scottish Data Zone.
+
+    Returns:
+         pl.DataFrame: area (km2) per 2011 Data Zone in Scotland
+    """
+    df = get_datasets.load_gdf_scotgov_data_zone_bounds()[["DataZone", "StdAreaKm2"]]
+
+    return pl.from_pandas(df)
+
+
+def load_transform_df_n_dwellings_s():
+    """
+    Load and transform dataframe with number of dwellings per 2011 Scottish Data Zone. Number of dwellings excludes
+    long-term empty dwellings.
+
+    Returns:
+        pl.DataFrame: number of dwellings per 2011 Scottish Data Zone in Scotland
+    """
+    df = get_datasets.load_df_nrs_dwellings()
+    df = (
+        df.with_columns(
+            (
+                pl.col("Total number of dwellings")
+                - pl.col("Long-term empty dwellings \r\n[Note 6]")
+            ).alias("n_dwellings")
+        )
+        .select(["Data Zone code", "n_dwellings"])
+        .rename({"Data Zone code": "DataZone"})
     )
 
     return df
