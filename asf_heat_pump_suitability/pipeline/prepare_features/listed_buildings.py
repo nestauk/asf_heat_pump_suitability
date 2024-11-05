@@ -82,7 +82,7 @@ def chunk_sjoin_df_epc_listed_buildings(
 
 
 def sjoin_df_epc_listed_buildings(
-    epc_df: pl.DataFrame, listed_buildings_gdf: gpd.GeoDataFrame, distance: float = 5
+    epc_df: pl.DataFrame, listed_buildings_gdf: gpd.GeoDataFrame, distance: float = 10
 ) -> pd.DataFrame:
     """
     Spatial join EPC UPRNs with listed buildings using `geopandas.GeoDataFrame.sjoin_nearest` where Point or MultiPoint
@@ -92,7 +92,7 @@ def sjoin_df_epc_listed_buildings(
         epc_df (pl.DataFrame): EPC dataset with X and Y coordinates per UPRN
         listed_buildings_gdf (gpd.GeoDataFrame): listed buildings data
         distance (float): maximum distance (m) within which to query for nearest geometry where `sjoin_nearest` used.
-                          Must be greater than 0. Default 5.
+                          Must be greater than 0. Default 10m.
 
     Returns:
         pd.DataFrame: EPC UPRNs in listed buildings
