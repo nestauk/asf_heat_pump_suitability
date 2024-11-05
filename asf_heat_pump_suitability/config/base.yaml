@@ -25,6 +25,8 @@ data_source:
   S_historic_environment_scotland_world_heritage_sites: "s3://asf-heat-pump-suitability/source_data/WHS/World_Heritage_Sites.shp"
   S_ros_inspire_url: "https://ros.locationcentre.co.uk/inspire/"
   EW_inspire_url: "https://use-land-property-data.service.gov.uk/datasets/inspire/download"
+  S_scottish_gov_DZ2011_boundaries: "s3://asf-heat-pump-suitability/source_data/2014_Scottish_Government_DataZoneBoundaries_2011_S/SG_DataZone_Bdry_2011.shp"
+  S_NRScotland_dwellings: "s3://asf-heat-pump-suitability/source_data/June2024_NRScotland_households_and_dwellings_S.xlsx"
 usecols:
   epc:
     - COUNTRY
