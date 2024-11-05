@@ -182,9 +182,6 @@ def get_df_ons_number_of_households() -> pl.DataFrame:
     """
     Get raw ONS 'Number of households' dataset.
 
-    Args:
-        **kwargs for pl.read_excel
-
     Returns:
         pl.DataFrame: raw ONS 'Number of households' dataset
     """
@@ -215,7 +212,7 @@ def get_df_ons_land_area() -> pl.DataFrame:
     content_str = content.decode("utf-8")  # convert bytes to string
     content_file = StringIO(content_str)  # convert string to file-like object
 
-    # dtypes specificed as polars read csv wa inferring wrong data types and throwing error
+    # dtypes specificed as polars read csv was inferring wrong data types and throwing error
     dtypes = {
         "LSOA21CD": pl.Utf8,
         "LSOA21NM": pl.Utf8,
@@ -270,3 +267,31 @@ def load_gdf_listed_buildings(nation: str, **kwargs) -> gpd.GeoDataFrame:
             "Please set `nation` to either 'England', 'Scotland', or 'Wales'."
         )
     return gdf
+
+
+def load_gdf_scotgov_data_zone_bounds() -> gpd.GeoDataFrame:
+    """
+    Load raw 2011 Data Zone geospatial boundary polygons and area data for Scotland from the Scottish Government.
+
+    Returns:
+        gpd.GeoDataFrame: boundary polygons and area data for 2011 Scottish Data Zones
+    """
+    return gpd.read_file(config["data_source"]["S_scottish_gov_DZ2011_boundaries"])
+
+
+def load_df_nrs_dwellings() -> pl.DataFrame:
+    """
+    Load 2023 dwelling counts per 2011 Data Zone in Scotland from National Records of Scotland. Data remains in raw
+    form with light processing to correct column headers and dtypes.
+
+    Returns:
+        pl.DataFrame: dwelling counts per 2011 Scottish Data Zone
+    """
+    df = base_getters.get_df_from_excel_s3_path(
+        config["data_source"]["S_NRScotland_dwellings"], sheet_name="2023"
+    )
+    # Remove empty rows and set column headers to correct names
+    df.columns = df.row(2)
+    df = df[3:].cast(schemas.nrs_dwellings)
+
+    return df
