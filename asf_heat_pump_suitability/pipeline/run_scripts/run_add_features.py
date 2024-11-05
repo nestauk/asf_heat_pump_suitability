@@ -6,9 +6,10 @@ Enhance EPC dataset with additional features:
 - off gas properties by postcode
 - listed building status per UPRN
 - England and Wales building conservation area flag per UPRN
+- Scotland World Heritage Site flag per UPRN
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_add_features.py --epc_path [path/to/weighted/EPC] -y [YYYY] -q [N]
+python -i asf_heat_pump_suitability/pipeline/run_scripts/run_add_features.py --epc_path [path/to/weighted/EPC] -y [YYYY] -q [N]
 """
 
 import logging
