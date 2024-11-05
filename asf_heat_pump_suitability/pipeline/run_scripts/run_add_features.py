@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     # Add feature: property density Scotland
     dz_density_df = property_density.generate_df_property_density_s()
-    epc_df = epc_df.join(dz_density_df, how="left", right_on="lsoa", left_on="DataZone")
+    epc_df = epc_df.join(dz_density_df, how="left", left_on="lsoa", right_on="DataZone")
 
     # Add feature: off gas postcodes
     logging.info("Adding off gas grid column to EPC")
@@ -158,7 +158,9 @@ if __name__ == "__main__":
     listed_buildings_df = listed_buildings.generate_df_epc_listed_buildings(
         epc_df=epc_df
     )
-    epc_df = epc_df.join(listed_buildings_df, how="left", on="UPRN")
+    epc_df = epc_df.join(listed_buildings_df, how="left", on="UPRN").with_columns(
+        pl.col("listed_building").fill_null(False)
+    )
 
     # Save to S3
     if not save_as:
