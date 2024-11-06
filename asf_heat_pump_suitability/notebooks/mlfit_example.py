@@ -31,6 +31,7 @@ list(filter(lambda x: 'mlfit' in x[0], rpackages.InstalledPackages()))
 
 # %%
 import pandas
+import geopandas
 import rpy2.robjects as robjects
 from rpy2.robjects import pandas2ri
 
@@ -113,5 +114,8 @@ reference_sample.groupby('HHNR', as_index=False).agg({'weights':'mean', 'CAR':'f
 
 # %% [markdown]
 # ### Extending the example to the heat pump suitability context
-
+# 
+# The difference between the above problem and our problem is that the above problem is fitting data where characteristics would logically be observed/measured at the different levels, whereas in our problem data should all logically be observed at the individual-level, but some of it is only available at a more aggregate level. This means we'll have to scale the margins at the higher level according to the nesting at the lower level.
+# 
+# Unfortunately, this doesn't work as the nesting isn't sufficiently rich enough - you just can't represent the la level as you can't have repeated lsoa constraints.
 
