@@ -17,6 +17,7 @@ import s3fs
 import argparse
 from datetime import datetime
 from asf_heat_pump_suitability.pipeline.prepare_features import (
+    anchor_properties,
     conservation_areas,
     epc,
     garden_space_avg,
@@ -161,6 +162,10 @@ if __name__ == "__main__":
         [e_listed_buildings_df, w_listed_buildings_df], how="vertical"
     )
     epc_df = epc_df.join(listed_buildings_df, how="left", on="UPRN")
+
+    logging.info("Adding anchor properties column to EPC")
+    anchor_properties_df = anchor_properties.identify_anchor_properties()
+    epc_df = epc_df.join(anchor_properties_df, how="left", on="lsoa")
 
     # Save to S3
     if not save_as:

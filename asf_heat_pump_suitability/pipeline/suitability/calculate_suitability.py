@@ -283,6 +283,9 @@ def compute_df_total_score_per_epc(
         pl.when(pl.col("CURRENT_ENERGY_RATING").is_in(["A", "B", "C"]))
         .then(epc_threshold_scores.get(tech_type))
         .alias("epc_rating_score"),
+        pl.when(pl.col("has_anchor_property"))
+        .then(anchor_properties_scores.get(tech_type))
+        .alias("anchor_properties_score"),
     )
 
     score_cols = [col for col in df.columns if "score" in col]
@@ -337,6 +340,10 @@ def compute_df_max_score_per_row(df: pl.DataFrame, tech_type: str) -> pl.DataFra
         .then(epc_threshold_scores.get(tech_type))
         .otherwise(0)
         .alias("epc_rating_max"),
+        pl.when(pl.col("has_anchor_properties").is_not_null())
+        .then(anchor_properties_scores.get(tech_type))
+        .otherwise(0)
+        .alias("anchor_properties_max"),
     )
 
     max_cols = [col for col in df.columns if "max" in col]
@@ -366,6 +373,7 @@ def filter_df_minimum_features(
             "in_conservation_area",
             "property_type",
             "CURRENT_ENERGY_RATING",
+            "has_anchor_properties",
         ]
     df = df.with_columns(
         (len(features) - pl.sum_horizontal(pl.col(features).is_null()))
