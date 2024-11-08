@@ -143,7 +143,7 @@ multiple_props_scores = {
     "HN_N": 2,
 }
 
-# to refine
+# TODO to refine
 grid_capacity_scores = {
     "ASHP_S": 1,
     "ASHP_N": 1,

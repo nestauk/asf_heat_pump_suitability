@@ -7,6 +7,7 @@ import json
 import pickle
 import gzip
 import os
+import shutil
 import tempfile
 
 import pandas as pd
@@ -182,33 +183,3 @@ def read_json_from_s3(bucket: str, file_path: str) -> dict:
     json_file = s3_resource.Object(bucket, file_path)
     json_file = json_file.get()["Body"].read().decode("utf-8")
     return json.loads(json_file)
-
-
-def get_shapefile_from_s3(bucket_name: str, directory_path: str):
-    """
-    Download shapefile components from S3 to a temporary directory.
-
-    Args:
-        bucket_name (str): S3 bucket name
-        directory_path (str): path of the directory containing the shapefile components
-
-    Returns:
-        (str): path to the directory containing the downloaded files
-    """
-    s3 = boto3.client("s3")
-    temp_dir = tempfile.mkdtemp()
-
-    paginator = s3.get_paginator("list_objects_v2")
-    pages = paginator.paginate(Bucket=bucket_name, Prefix=directory_path)
-
-    # Download each file
-    for page in pages:
-        for obj in page.get("Contents", []):
-            file_key = obj["Key"]
-            if file_key.endswith(
-                (".shp", ".shx", ".dbf", ".prj", ".cpg", ".sbn", ".sbx", ".xml")
-            ):
-                local_file_path = os.path.join(temp_dir, os.path.basename(file_key))
-                s3.download_file(bucket_name, file_key, local_file_path)
-
-    return temp_dir

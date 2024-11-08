@@ -165,7 +165,7 @@ if __name__ == "__main__":
 
     logging.info("Adding grid capacity column to EPC")
     grid_capacities = grid_capacity.calculate_grid_capacity()
-    epc_df = epc_df.join(grid_capacity, how="left", on="lsoa21")
+    epc_df = epc_df.join(grid_capacities, how="left", on="lsoa")
 
     # Save to S3
     if not save_as:
