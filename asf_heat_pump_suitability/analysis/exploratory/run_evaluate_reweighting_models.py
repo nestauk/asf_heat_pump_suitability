@@ -257,13 +257,6 @@ if __name__ == "__main__":
             reweighted_epc_df, target_features, features
         )
 
-        if args.sample:
-            lsoas = reweighted_epc_df_with_target["lsoa"].unique()
-            lsoas = lsoas[0:500]
-            reweighted_epc_df_with_target = reweighted_epc_df_with_target.filter(
-                pl.col("lsoa").is_in(lsoas)
-            )
-
         logger.info(
             f"Evaluating for {reweighted_epc_df_with_target['lsoa'].n_unique()} LSOAs"
         )
@@ -292,7 +285,4 @@ if __name__ == "__main__":
         name = (
             f"outputs/{year}Q{q}/{year}_Q{q}_EPC_weights_{composition}_evaluation.json"
         )
-        if args.sample:
-            name = f"{name.split('.json')[0]}_sample.json"
-
         save_to_s3("asf-heat-pump-suitability", full_results, name)
