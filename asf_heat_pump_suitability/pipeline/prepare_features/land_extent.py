@@ -98,6 +98,7 @@ def generate_gdf_file_bounds_ew(
     """
     bounds_gdf = transform_gdf_council_bounds(ladnm_col, use_cols)
     files = base_getters.list_obj_s3_location(path)
+    files = [file for file in files if file.endswith(".gml")]
 
     matches = _match_list_file_to_name(
         land_extent_files=files,
