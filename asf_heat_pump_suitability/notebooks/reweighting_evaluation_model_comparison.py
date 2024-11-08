@@ -164,6 +164,7 @@ print_results(results_dfs["2 features"])
 print_results(results_dfs["3 features (mixed-level)"])
 
 # %%
+# Average error reduction after reweighting per feature, per reweighting model
 features = ["property_type", "tenure", "build_year"]
 fig, axs = plt.subplots(len(results_dfs), 3, figsize=(12, 3 * len(results_dfs)))
 fig.tight_layout(h_pad=5)
@@ -187,5 +188,55 @@ for i, (composition, results_df) in enumerate(results_dfs.items()):
     fig.savefig(
         f"{output_dir}/MAE_diff_per_feature_histograms.png", bbox_inches="tight"
     )
+
+# %%
+# Average error after reweighting per feature, per reweighting model
+features = ["property_type", "tenure", "build_year"]
+fig, axs = plt.subplots(len(results_dfs), 3, figsize=(12, 3 * len(results_dfs)))
+fig.tight_layout(h_pad=5)
+fontsize = 10
+
+for i, (composition, results_df) in enumerate(results_dfs.items()):
+    for j, feature_name in enumerate(features):
+
+        # feature_name = "tenure"
+        axs[i][j].hist(
+            [m for m in results_df[f"{feature_name}_mae_reweight"].tolist() if m],
+            bins=50,
+            color="#0000FF",
+        )
+        axs[i][j].axvline(x=0, color="#F6A4B7", label="axvline - full height")
+        axs[i][j].set_title(
+            f"{feature_name}\nMAE after weighting with {composition}", fontsize=fontsize
+        )
+
+    fig.savefig(
+        f"{output_dir}/MAE_per_feature_post_weighting_histograms.png",
+        bbox_inches="tight",
+    )
+
+# %%
+# Average error before reweighting per feature
+features = ["property_type", "tenure", "build_year"]
+fig, axs = plt.subplots(1, 3, figsize=(12, 3))
+fig.tight_layout(h_pad=5)
+fontsize = 10
+
+
+for j, feature_name in enumerate(features):
+
+    axs[j].hist(
+        [m for m in results_df[f"{feature_name}_mae_unweight"].tolist() if m],
+        bins=50,
+        color="#0000FF",
+    )
+    axs[j].axvline(x=0, color="#F6A4B7", label="axvline - full height")
+    axs[j].set_title(
+        f"{feature_name}\nMAE before weighting with {composition}", fontsize=fontsize
+    )
+
+fig.savefig(
+    f"{output_dir}/MAE_per_feature_pre_weighting_histograms.png", bbox_inches="tight"
+)
 
 # %%
