@@ -6,33 +6,42 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 
-from asf_heat_pump_suitability.utils.geo_utils import parse_binary_geometry
+from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.getters import base_getters
 from asf_heat_pump_suitability.getters.s3_getters import (
     load_s3_data,
 )
+from asf_heat_pump_suitability.utils.geo_utils import parse_binary_geometry
+
 
 CRS = "EPSG:4326"  # Geometry coordinate reference system - standard longitude/latitude projection
 
 
 def generate_enw_gdf() -> gpd.GeoDataFrame:
     """
-    Generate a GeoDataFrame for Electricity North West (ENW) substations.
+    Generate a GeoDataFrame for Electricity North West (ENW) primary substations and their service areas.
+
+    The function processes substation data from ENW's Distribution Future Energy Scenarios (DFES)
+    and Network Development Plan (NDP) datasets. It combines point locations of substations with
+    their corresponding service area polygons (Voronoi polygons) and capacity/demand information.
 
     Returns:
-        GeoDataFrame with ENW substation data.
+        gpd.GeoDataFrame: DataFrame with EPSG:4326 (WGS84) projection containing:
+            - id: Unique substation identifier
+            - firm_capacity_mva: Maximum power the substation can safely deliver (MVA)
+            - peak_demand_mva: Maximum observed power demand at the substation (MVA)
+            - geo_shape: Polygon geometry representing the substation's service area
+            - operator: Distribution network operator code ("ENW")
     """
-    enw_demand = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/ENW/dfes-2023-primary-data0.parquet",
-    )
-    enw_substations = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/ENW/ndp-pry-bsp-headroom.parquet",
-    )
-    enw_shape = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/ENW/ndp-pry-voronoi.parquet",
-    )
+    enw_demand = base_getters.get_df_from_parquet_s3_path(
+        config["data_source"]["ENW_dfes_primaries"]
+    ).to_pandas()
+    enw_substations = base_getters.get_df_from_parquet_s3_path(
+        config["data_source"]["ENW_ndp_headroom"]
+    ).to_pandas()
+    enw_shape = base_getters.get_df_from_parquet_s3_path(
+        config["data_source"]["ENW_ndp_voronoi"]
+    ).to_pandas()
 
     # Filter data for primary substations, current year, and best view scenario
     enw_substations = enw_substations[
@@ -64,7 +73,9 @@ def generate_enw_gdf() -> gpd.GeoDataFrame:
 
     # Create GeoDataFrame and perform spatial join with shape data
     enw_gdf = gpd.GeoDataFrame(enw, geometry="geopoint", crs=CRS)
+    # polygon geometry of substation distribution area
     enw_shape["geo_shape"] = enw_shape["geo_shape"].apply(parse_binary_geometry)
+    # point geometry of substation location
     enw_shape["geo_point_2d"] = enw_shape["geo_point_2d"].apply(parse_binary_geometry)
     enw_shape_gdf = gpd.GeoDataFrame(enw_shape, geometry="geo_shape", crs=CRS)
     enw_df = gpd.sjoin(enw_gdf, enw_shape_gdf, how="right", predicate="intersects")
@@ -91,19 +102,26 @@ def generate_enw_gdf() -> gpd.GeoDataFrame:
 
 def generate_npg_gdf() -> gpd.GeoDataFrame:
     """
-    Generate a GeoDataFrame for Northern Powergrid (NPg) substations.
+    Generate a GeoDataFrame for Northern Powergrid (NPg) primary substations and their service areas.
+
+    The function processes substation data from NPg's heatmap demand data and Network Development
+    Plan (NDP) datasets. It combines point locations of primary substations with their corresponding
+    service area polygons and capacity/demand information based on NPg's Best View scenario.
 
     Returns:
-        GeoDataFrame with NPg substation data.
+        gpd.GeoDataFrame: DataFrame with EPSG:4326 (WGS84) projection containing:
+            - id: Unique substation identifier
+            - firm_capacity_mva: Maximum power the substation can safely deliver (MVA)
+            - peak_demand_mva: Maximum observed power demand at the substation (MVA)
+            - geo_shape: Polygon geometry representing the substation's service area
+            - operator: Distribution network operator code ("NPg")
     """
-    npg_substations = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/NPg/heatmapdemanddata.parquet",
-    )
-    npg_demand = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/NPg/npg_ndp_demand_headroom.parquet",
-    )
+    npg_substations = base_getters.get_df_from_parquet_s3_path(
+        config["data_source"]["NPg_heatmap"]
+    ).to_pandas()
+    npg_demand = base_getters.get_df_from_parquet_s3_path(
+        config["data_source"]["NPg_ndp_demand"]
+    ).to_pandas()
 
     # Filter and process substation data
     npg_substations = npg_substations[npg_substations.substation_class == "Primary"]
@@ -152,27 +170,33 @@ def generate_npg_gdf() -> gpd.GeoDataFrame:
 
 def generate_spen_gdf() -> gpd.GeoDataFrame:
     """
-    Generate a GeoDataFrame for Scottish Power Energy Networks (SPEN) substations.
+    Generate a GeoDataFrame for Scottish Power Energy Networks (SPEN) primary substations and their
+    service areas.
+
+    The function processes substation data from both SP Distribution (SPD) and SP Manweb (SPM)
+    regions (Scotland and North Wales respectively), combining their respective heat maps and network development plan polygon datasets.
+    It merges point locations of substations with their service area boundaries.
 
     Returns:
-        GeoDataFrame with SPEN substation data.
+        gpd.GeoDataFrame: DataFrame with EPSG:4326 (WGS84) projection containing:
+            - id: Unique substation identifier
+            - firm_capacity_mva: Maximum power the substation can safely deliver (MVA)
+            - peak_demand_mva: Maximum observed power demand at the substation (MVA)
+            - geo_shape: Polygon geometry representing the substation's service area
+            - operator: Distribution network operator code ("SPEN")
     """
-    spen_spd_substations = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/SPEN/distributed-generation-sp-distribution-heat-maps-spd-primary-substations.parquet",
-    )
-    spen_spm_substations = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/SPEN/distributed-generation-sp-manweb-heat-maps-spm-primary-substations.parquet",
-    )
-    spen_spd_shape = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/SPEN/ndp-spd-primary-substation-polygons.parquet",
-    )
-    spen_spm_shape = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/SPEN/ndp-spm-primary-group-polygons.parquet",
-    )
+    spen_spd_substations = base_getters.get_df_from_parquet_s3_path(
+        config["data_source"]["SPEN_spd_substations"]
+    ).to_pandas()
+    spen_spm_substations = base_getters.get_df_from_parquet_s3_path(
+        config["data_source"]["SPEN_spm_substations"]
+    ).to_pandas()
+    spen_spd_shape = base_getters.get_df_from_parquet_s3_path(
+        config["data_source"]["SPEN_spd_polygons"]
+    ).to_pandas()
+    spen_spm_shape = base_getters.get_df_from_parquet_s3_path(
+        config["data_source"]["SPEN_spm_polygons"]
+    ).to_pandas()
 
     # Process SPM data
     spm_df = spen_spm_substations.merge(spen_spm_shape, how="left", on="primary_group")
@@ -230,21 +254,25 @@ def generate_spen_gdf() -> gpd.GeoDataFrame:
 
 def generate_ssen_gdf() -> gpd.GeoDataFrame:
     """
-    Generate a GeoDataFrame for Scottish and Southern Electricity Networks (SSEN) substations.
+    Generate a GeoDataFrame for Scottish and Southern Electricity Networks (SSEN) primary substations
+    and their service areas.
+
+    The function processes substation data from both SHEPD (Shetland) and SEPD (Scotland) regions.
+    It combines demand heat map data with primary substation boundary polygons from both regions.
 
     Returns:
-        GeoDataFrame with SSEN substation data.
+        gpd.GeoDataFrame: DataFrame with EPSG:4326 (WGS84) projection containing:
+            - id: Unique substation identifier
+            - firm_capacity_mva: Maximum power the substation can safely deliver (MVA)
+            - peak_demand_mva: Maximum observed power demand at the substation (MVA)
+            - geo_shape: Polygon geometry representing the substation's service area
+            - operator: Distribution network operator code ("SSEN")
     """
-    ssen_demand = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/SSEN/demand-heat-map-update-feb-24.xlsx - PS.csv",
-    )
-    sepd_shape = gpd.read_file(
-        "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/SEPD Primary Sub Boundaries"
-    )
-    shepd_shape = gpd.read_file(
-        "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/SHEPD Primary Sub Boundaries"
-    )
+    ssen_demand = base_getters.get_df_from_csv_s3_path(
+        config["data_source"]["SSEN_demand"]
+    ).to_pandas()
+    sepd_shape = gpd.read_file(config["data_source"]["SSEN_sepd_bounds"])
+    shepd_shape = gpd.read_file(config["data_source"]["SSEN_shepd_bounds"])
 
     # Process SSEN data
     ssen = ssen_demand[
@@ -290,15 +318,23 @@ def generate_ssen_gdf() -> gpd.GeoDataFrame:
 
 def generate_ukpn_gdf() -> gpd.GeoDataFrame:
     """
-    Generate a GeoDataFrame for UK Power Networks (UKPN) substations.
+    Generate a GeoDataFrame for UK Power Networks (UKPN) primary substations and their service areas.
+
+    The function processes primary substation data including seasonal capacity constraints and demand
+    headroom. It calculates actual demand from percentage-based headroom values and combines this with
+    service area polygons for each substation.
 
     Returns:
-        GeoDataFrame with UKPN substation data.
+        gpd.GeoDataFrame: DataFrame with EPSG:4326 (WGS84) projection containing:
+            - id: Unique substation identifier
+            - firm_capacity_mva: Maximum power the substation can safely deliver (MVA)
+            - peak_demand_mva: Maximum observed power demand at the substation (MVA)
+            - geo_shape: Polygon geometry representing the substation's service area
+            - operator: Distribution network operator code ("UKPN")
     """
-    ukpn_primary_substations = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/UKPN/ukpn_primary_postcode_area.parquet",
-    )
+    ukpn_primary_substations = base_getters.get_df_from_parquet_s3_path(
+        config["data_source"]["UKPN_primaries"]
+    ).to_pandas()
 
     # Process UKPN data
     ukpn_primary_substations["firm_capacity_mva"] = ukpn_primary_substations.apply(
@@ -356,29 +392,35 @@ def generate_ukpn_gdf() -> gpd.GeoDataFrame:
 
 def generate_wpd_gdf() -> gpd.GeoDataFrame:
     """
-    Generate a GeoDataFrame for Western Power Distribution (WPD) substations.
+    Generate a GeoDataFrame for Western Power Distribution (WPD) primary substations and their
+    service areas.
+
+    The function processes network capacity data across four WPD regions: East Midlands, South Wales,
+    South West, and West Midlands. It combines point locations and demand data from the network
+    capacity map with service area boundary polygons from regional shapefiles.
 
     Returns:
-        GeoDataFrame with WPD substation data.
+        gpd.GeoDataFrame: DataFrame with EPSG:4326 (WGS84) projection containing:
+            - id: Unique substation identifier
+            - firm_capacity_mva: Maximum power the substation can safely deliver (MVA)
+            - peak_demand_mva: Maximum observed power demand at the substation (MVA)
+            - geo_shape: Polygon geometry representing the substation's service area
+            - operator: Distribution network operator code ("WPD")
     """
-    wpd_substations = load_s3_data(
-        "asf-heat-pump-suitability",
-        "source_data/grid_operators/WPD/wpd-network-capacity-map.csv",
-    )
-    wpd_regions = [
-        "east-midlands-primary.gpkg",
-        "south-wales-primary.gpkg",
-        "south-west-primary.gpkg",
-        "west-midlands-primary.gpkg",
-    ]
-    wpd_shapes = []
+    wpd_substations = base_getters.get_df_from_csv_s3_path(
+        config["data_source"]["WPD_capacity"]
+    ).to_pandas()
 
-    # Load and concatenate shape files for different regions
-    for region in wpd_regions:
+    # Load shape files for each region
+    wpd_shapes = []
+    for region in [
+        "WPD_east_midlands",
+        "WPD_south_wales",
+        "WPD_south_west",
+        "WPD_west_midlands",
+    ]:
         wpd_shapes.append(
-            load_s3_data(
-                "asf-heat-pump-suitability", f"source_data/grid_operators/WPD/{region}"
-            )
+            base_getters.get_gdf_from_gpkg_s3_path(config["data_source"][region])
         )
     wpd_shapes = pd.concat(wpd_shapes)
 

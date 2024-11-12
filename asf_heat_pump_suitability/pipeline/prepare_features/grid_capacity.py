@@ -63,10 +63,25 @@ def _parse_capacity(value: Any) -> float:
 
 def generate_substations_gdf() -> gpd.GeoDataFrame:
     """
-    Generate a combined GeoDataFrame for all grid operators' substations.
+    Generate a combined GeoDataFrame containing all primary substations and their service areas
+    across Distribution Network Operators (DNOs).
+
+    Combines data from:
+        - Electricity North West (ENW)
+        - Northern Powergrid (NPg)
+        - Scottish Power Energy Networks (SPEN)
+        - Scottish and Southern Electricity Networks (SSEN)
+        - UK Power Networks (UKPN)
+        - Western Power Distribution (WPD)
 
     Returns:
-        GeoDataFrame with combined substation data from all operators.
+        gpd.GeoDataFrame: DataFrame with EPSG:4326 (WGS84) projection containing:
+            - id: Unique substation identifier (format varies by operator)
+            - firm_capacity_mva: Maximum power the substation can safely deliver (MVA)
+            - peak_demand_mva: Maximum observed power demand at the substation (MVA)
+            - geo_shape: Polygon geometry representing the substation's service area
+            - operator: Distribution network operator code
+                       (one of: "ENW", "NPg", "SPEN", "SSEN", "UKPN", "WPD")
     """
     return pd.concat(
         [
