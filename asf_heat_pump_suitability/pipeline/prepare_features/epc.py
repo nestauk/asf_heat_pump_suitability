@@ -20,7 +20,7 @@ def add_col_msoa_avg_outdoor_space_property_type(
         .then(pl.lit("Houses"))
         .when(pl.col(ptype_col).str.to_lowercase().str.contains("flat"))
         .then(pl.lit("Flats"))
-        .otherwise(pl.lit(ptype_col))
+        .otherwise("unknown")
         .alias("msoa_avg_outdoor_space_property_type")
     )
 
