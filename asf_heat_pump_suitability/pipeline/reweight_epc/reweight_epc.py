@@ -1,3 +1,7 @@
+"""
+Functions to reweight EPC using IPF against target marginals.
+"""
+
 import polars as pl
 import random
 from typing import Dict, Tuple
@@ -82,7 +86,7 @@ def generate_balance_sample(
             feature=feature, feature_marginals=marginals, sample=sample
         )
         sample = sample.filter(~pl.col(feature).is_in(missing))
-    lost_rows = len(sample) - len_before
+    lost_rows = len_before - len(sample)
 
     # Add dummy rows for feature categories missing from sample but present in target
     dummies = generate_df_dummies(lsoa_marginals=lsoa_marginals, sample=sample)
