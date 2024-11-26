@@ -3,6 +3,7 @@ import geopandas as gpd
 import regex as re
 import logging
 from tqdm import tqdm
+import warnings
 from asf_heat_pump_suitability.getters import base_getters, get_datasets
 from asf_heat_pump_suitability.utils import geo_utils
 
@@ -75,6 +76,16 @@ def _standardise_list_council_names(name_series: pd.Series) -> list:
         re.sub("[^a-zA-Z-,]+", "_", nm).lower().split(",")[0]
         for nm in name_series
     ]
+
+    manual_rename = {
+        "county_durham": "durham_county",
+        "king_s_lynn_and_west_norfolk": "kings_lynn_and_west_norfolk",
+        "kingston_upon_hull": "hull_city",
+        "newcastle_upon_tyne": "newcastle_city",
+    }
+
+    council_names = [manual_rename.get(c, c) for c in council_names]
+
     return council_names
 
 
@@ -95,6 +106,9 @@ def generate_gdf_file_bounds_ew(
 
     Returns:
         gpd.GeoDataFrame: land extent (INSPIRE) files and their bounding polygons in British National Grid CRS
+
+    Raises:
+        AssertionError: if more than 10% of INSPIRE .gml files are missing file bound geometries
     """
     bounds_gdf = transform_gdf_council_bounds(ladnm_col, use_cols)
     files = base_getters.list_obj_s3_location(path)
@@ -105,7 +119,7 @@ def generate_gdf_file_bounds_ew(
         council_names=bounds_gdf["council_name_std"],
     )
 
-    file_bounds_df = pd.DataFrame(
+    file_bounds_gdf = pd.DataFrame(
         {"inspire_file_name": files, "council_bounds_matches": matches}
     ).merge(
         bounds_gdf,
@@ -114,17 +128,27 @@ def generate_gdf_file_bounds_ew(
         right_on="council_name_std",
     )
 
-    file_bounds_df = gpd.GeoDataFrame(
-        file_bounds_df, crs="EPSG:27700", geometry="geometry"
+    file_bounds_gdf = gpd.GeoDataFrame(
+        file_bounds_gdf, crs="EPSG:27700", geometry="geometry"
     )
 
     use_cols.append("council_name_std")
 
-    file_bounds_df = fill_nulls_file_bounds(
-        file_bounds_df, bounds_gdf, ladnm_col, use_cols
+    file_bounds_gdf = fill_nulls_file_bounds(
+        file_bounds_gdf, bounds_gdf, ladnm_col, use_cols
     )
 
-    return file_bounds_df
+    if any(file_bounds_gdf["geometry"].isna()):
+        warnings.warn(
+            f"{file_bounds_gdf['geometry'].isna().sum()} land extent INSPIRE .gml files are missing file bound geometries."
+        )
+    if (file_bounds_gdf["geometry"].isna().sum()) > (len(file_bounds_gdf) * 0.1):
+        raise AssertionError(
+            f"More than 10% of INSPIRE .gml files are missing file bound geometries.\n"
+            f"Please check input INPIRE .gml and Local Authority bounds files are correct and have sufficient "
+            f"geographical coverage."
+        )
+    return file_bounds_gdf
 
 
 def _match_list_file_to_name(land_extent_files: list, council_names: pd.Series) -> list:
