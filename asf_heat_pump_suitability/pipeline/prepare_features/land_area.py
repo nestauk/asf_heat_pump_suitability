@@ -6,8 +6,6 @@ def prepare_df_land_area_ons() -> pl.DataFrame:
     """
     Process and clean ONS land area dataset
 
-    Args
-
     Returns
         pl.DataFrame: processed ONS land area
     """
