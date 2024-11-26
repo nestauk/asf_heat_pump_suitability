@@ -6,7 +6,7 @@ following features:
 - tenure (owner-occupied, social rental, private rental)
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc_path [path/to/unweighted/EPC] -y [YYYY] -q [N]
+python -i asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc_path [path/to/unweighted/EPC] -y [YYYY] -q [N]
 """
 
 import logging
@@ -59,6 +59,16 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "-f",
+        "--features",
+        help="Features to use in reweighting. Options: tenure; property_type; build_year",
+        nargs="+",
+        type=str,
+        required=False,
+        default=["tenure", "property_type", "build_year"],
+    )
+
+    parser.add_argument(
         "--save_as",
         help="S3 path to save enhanced EPC dataset to. If unspecified, save with default filename.",
         type=str,
@@ -89,31 +99,25 @@ if __name__ == "__main__":
     epc_df = epc_df.join(onspd_df, how="left", on="POSTCODE")
 
     # Reweight EPC
-    features = [
-        "property_type",
-        "build_year",
-        "tenure",
-    ]  # TODO: add nrooms when categories collapsed
-
-    # Add standardised weighting feature columns to EPC and drop rows missing data required for reweighting
+    # 1. Add standardised weighting feature columns to EPC and drop rows missing data required for reweighting
     epc_df = epc_df.drop_nulls(subset=["lsoa"])
     epc_df = prepare_sample.add_cols_weighting_features(epc_df)
-    epc_df = prepare_sample.drop_nulls_feature_cols(df=epc_df, features=features)
+    epc_df = prepare_sample.drop_nulls_feature_cols(df=epc_df, features=args.features)
 
-    lsoas = epc_df["lsoa"].unique()
-    target_marginals = prepare_target.get_dict_target_marginals()
+    # 2. Generate target marginals for all features and LSOAs
+    target_marginals = prepare_target.get_dict_target_marginals(features=args.features)
 
-    # Prepare results dicts
+    # 3. Prepare results dicts
     weights = {"UPRN": [], "weight": [], "proportional_weight": []}
     lsoa_stats = {"lsoa": [], "time": [], "lost_rows": []}
 
-    # Reweight LSOAs
-    for lsoa in tqdm(lsoas):
+    # 4. Reweight properties per LSOA
+    for lsoa in tqdm(epc_df["lsoa"].unique()):
         try:
             start = time.time()
             sample, lost_rows = reweight_epc.generate_balance_sample(
                 df=epc_df,
-                features=features,
+                features=args.features,
                 lsoa=lsoa,
                 target_marginals=target_marginals,
             )
@@ -147,7 +151,7 @@ if __name__ == "__main__":
     epc_df = epc_df.join(weights, how="full", on="UPRN")
     lsoa_stats_df = pl.DataFrame(lsoa_stats)
 
-    # Save to S3
+    # 5. Save to S3
     if not save_as:
         save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weighted"
     fs = s3fs.S3FileSystem()
