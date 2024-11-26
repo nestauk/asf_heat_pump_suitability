@@ -145,7 +145,7 @@ def generate_gdf_file_bounds_ew(
     if (file_bounds_gdf["geometry"].isna().sum()) > (len(file_bounds_gdf) * 0.1):
         raise AssertionError(
             f"More than 10% of INSPIRE .gml files are missing file bound geometries.\n"
-            f"Please check input INPIRE .gml and Local Authority bounds files are correct and have sufficient "
+            f"Please check input INSPIRE .gml and Local Authority bounds files are correct and have sufficient "
             f"geographical coverage."
         )
     return file_bounds_gdf
@@ -234,8 +234,7 @@ def transform_gdf_land_parcels(land_parcel_file: str) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: land parcel geodata
     """
-    # TODO existing mapping geojson for England and Wales does not contain the same file names found in this dir.
-    # TODO The mapping needs to be regenerated with the updated file names.
+    # TODO - the process to identify nation for processing could be improved
     if "inspire_ew" in land_parcel_file:
         gdf = get_datasets.load_gdf_inspire_land_parcels(
             land_parcel_file, columns=["NATIONALCADASTRALREFERENCE", "geometry"]
@@ -246,8 +245,8 @@ def transform_gdf_land_parcels(land_parcel_file: str) -> gpd.GeoDataFrame:
         ).rename(columns={"nationalca": "NATIONALCADASTRALREFERENCE"})
     else:
         raise ValueError(
-            f"Nation [England and Wales; or Scotland] not recognised in file path: {land_parcel_file} \n"
-            f"Unable to load and transform land registry file."
+            f"Nation not identified from file path: {land_parcel_file} \n"
+            f"Unable to conduct nation-specific preprocessing of land registry file."
         )
     gdf = geo_utils.transform_gdf_drop_duplicates(gdf)
     gdf["land_area_m2"] = gdf["geometry"].area

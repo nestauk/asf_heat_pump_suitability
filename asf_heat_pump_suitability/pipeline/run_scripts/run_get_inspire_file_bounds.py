@@ -57,7 +57,7 @@ def parse_arguments() -> argparse.Namespace:
         "--nations",
         help="Nations to get INSPIRE land registry file bounds for. Of England and Wales (ew); Scotland (s); or all (ews).",
         type=str,
-        choices=["ew", "s", "all"],
+        choices=["ew", "s", "ews"],
         required=True,
     )
 
@@ -86,4 +86,4 @@ if __name__ == "__main__":
     if args.nations == "ews":
         gdf = pd.concat([ew_gdf, s_gdf]).reset_index()
         save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/inspire_file_bounds_EWS.geojson"
-        s_gdf.to_file(save_as)
+        gdf.to_file(save_as)
