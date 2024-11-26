@@ -29,7 +29,7 @@ def extend_df_with_property_density(enhanced_epc_df: pl.DataFrame) -> pl.DataFra
                 pl.col("Number of households 2021") / pl.col("Land Count (Area in KM2)")
             )
             .otherwise(None)
-        ).alias("Property density (households per KM2)")
+        ).alias("households_per_km2")
     )
     # Changes 0 values back to None
     enhanced_epc_df = replace_zeros_with_none_df(
@@ -74,7 +74,7 @@ def generate_df_property_density_s() -> pl.DataFrame:
     dz_df = load_transform_df_datazone_area()
     dwellings_df = load_transform_df_n_dwellings_s()
     df = dwellings_df.join(dz_df, how="inner", on="DataZone").with_columns(
-        (pl.col("n_dwellings") / pl.col("StdAreaKm2")).alias("property_density_km2")
+        (pl.col("n_dwellings") / pl.col("StdAreaKm2")).alias("households_per_km2")
     )
 
     return df

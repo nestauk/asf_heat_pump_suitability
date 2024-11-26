@@ -177,7 +177,7 @@ def get_enhanced_epc(path) -> pl.DataFrame:
         "proportional_weight",
         "ruc_two_fold",
         "OFF GAS",
-        "Property density (households per KM2)",
+        "households_per_km2",
         "garden_area_m2",
         "listed_building_grade",
         "in_conservation_area",
@@ -253,7 +253,7 @@ def compute_df_total_score_per_epc(
         pl.when(pl.col("OFF GAS"))
         .then(offgas_scores.get(tech_type))
         .alias("off_gas_score"),
-        pl.when(pl.col("Property density (households per KM2)") > density_threshold)
+        pl.when(pl.col("households_per_km2") > density_threshold)
         .then(property_density_scores.get(tech_type))
         .alias("property_density_score"),
         pl.when(pl.col("garden_area_m2") > garden_threshold)
@@ -304,7 +304,7 @@ def compute_df_max_score_per_row(df: pl.DataFrame, tech_type: str) -> pl.DataFra
         .then(offgas_scores.get(tech_type))
         .otherwise(0)
         .alias("off_gas_max"),
-        pl.when(pl.col("Property density (households per KM2)").is_not_null())
+        pl.when(pl.col("households_per_km2").is_not_null())
         .then(property_density_scores.get(tech_type))
         .otherwise(0)
         .alias("property_density_max"),
@@ -352,7 +352,7 @@ def filter_df_minimum_features(
         features = [
             "ruc_two_fold",
             "OFF GAS",
-            "Property density (households per KM2)",
+            "households_per_km2",
             "garden_area_m2",
             "listed_building_grade",
             "in_conservation_area",
