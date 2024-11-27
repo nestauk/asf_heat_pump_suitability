@@ -77,7 +77,7 @@ def generate_df_property_density_s() -> pl.DataFrame:
         (pl.col("n_dwellings") / pl.col("StdAreaKm2")).alias("households_per_km2")
     )
 
-    return df
+    return df.select(["DataZone", "households_per_km2"])
 
 
 def load_transform_df_datazone_area():
