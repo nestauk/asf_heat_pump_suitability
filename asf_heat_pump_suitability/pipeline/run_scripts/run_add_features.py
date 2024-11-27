@@ -147,6 +147,9 @@ if __name__ == "__main__":
     # Add feature: property density Scotland
     dz_density_df = property_density.generate_df_property_density_s()
     epc_df = epc_df.join(dz_density_df, how="left", left_on="lsoa", right_on="DataZone")
+    epc_df = epc_df.with_columns(
+        pl.col("households_per_km2").fill_null(pl.col("households_per_km2_right"))
+    ).drop("households_per_km2_right")
 
     # Add feature: off gas postcodes
     logging.info("Adding off gas grid column to EPC")
