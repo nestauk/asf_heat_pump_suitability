@@ -58,7 +58,7 @@ def parse_arguments() -> argparse.Namespace:
         help="Nations to get INSPIRE land registry file bounds for. Of England and Wales (ew); Scotland (s); or all (ews).",
         type=str,
         choices=["ew", "s", "ews"],
-        required=True,
+        default="ews",
     )
 
     return parser.parse_args()
