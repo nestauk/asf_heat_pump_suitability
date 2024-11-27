@@ -9,6 +9,7 @@ import pandas as pd
 import geopandas as gpd
 
 from asf_heat_pump_suitability.getters import get_datasets
+from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters.get_dno_datasets import (
     generate_enw_gdf,
     generate_npg_gdf,
@@ -259,9 +260,7 @@ def calculate_grid_capacity() -> pd.DataFrame:
     )
 
     # Load and process LSOA boundary data
-    lsoa_gdf = gpd.read_file(
-        "s3://asf-heat-pump-suitability/source_data/Lower_layer_Super_Output_Areas_2021_EW_BFE_V9_-9107090204806789093/LSOA_2021_EW_BFE_V9.shp"
-    ).to_crs(CRS)
+    lsoa_gdf = gpd.read_file(config["data_source"]["EW_lsoa_bounds"]).to_crs(CRS)
 
     # Load and process household data
     households_df = get_datasets.get_df_ons_number_of_households()
@@ -295,7 +294,7 @@ def parse_arguments() -> argparse.Namespace:
         help="Path to save grid capacity results to. If unspecified, save with default filename.",
         type=str,
         required=False,
-        default="grid_capacity.csv",
+        default="outputs/reports/grid_capacity.csv",
     )
 
     return parser.parse_args()

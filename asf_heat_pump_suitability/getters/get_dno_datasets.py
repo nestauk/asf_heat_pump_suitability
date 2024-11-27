@@ -34,16 +34,17 @@ def generate_enw_gdf() -> gpd.GeoDataFrame:
             - operator: Distribution network operator code ("ENW")
     """
     enw_demand = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["ENW_dfes_primaries"]
+        config["data_source"]["E_ENW_dfes_primaries"]
     ).to_pandas()
     enw_substations = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["ENW_ndp_headroom"]
+        config["data_source"]["E_ENW_ndp_headroom"]
     ).to_pandas()
     enw_shape = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["ENW_ndp_voronoi"]
+        config["data_source"]["E_ENW_ndp_voronoi"]
     ).to_pandas()
 
     # Filter data for primary substations, current year, and best view scenario
+    # Best view scenario represents middle ground future projections of demand on substation capacity
     enw_substations = enw_substations[
         (enw_substations["substation_type"] == "PRIMARY")
         & (enw_substations["year"] == "2024")
@@ -68,35 +69,44 @@ def generate_enw_gdf() -> gpd.GeoDataFrame:
     enw["firm_capacity_mva"] = (
         enw["maximum_demand_mva_per_primary_substation"] + enw["headroom_mva"]
     )
-    enw["operator"] = "ENW"
     enw["geopoint"] = enw["geopoint"].apply(parse_binary_geometry)
 
-    # Create GeoDataFrame and perform spatial join with shape data
+    # Distribution areas are given by primary group rather than individual primary substations
+    # Substation data doesn't contain information on primary group, so we need to perform a spatial join
     enw_gdf = gpd.GeoDataFrame(enw, geometry="geopoint", crs=CRS)
     # polygon geometry of substation distribution area
     enw_shape["geo_shape"] = enw_shape["geo_shape"].apply(parse_binary_geometry)
-    # point geometry of substation location
-    enw_shape["geo_point_2d"] = enw_shape["geo_point_2d"].apply(parse_binary_geometry)
     enw_shape_gdf = gpd.GeoDataFrame(enw_shape, geometry="geo_shape", crs=CRS)
-    enw_df = gpd.sjoin(enw_gdf, enw_shape_gdf, how="right", predicate="intersects")
+    enw_df = gpd.sjoin(enw_gdf, enw_shape_gdf, how="right", predicate="within")
     enw_df = enw_df.dropna(subset=["index_left"])
 
-    # Prepare final dataframe
-    enw_df["substation_id"] = enw_df["pry_group"] + "_" + enw_df["substation"]
-    return enw_df[
-        [
-            "substation_id",
-            "firm_capacity_mva",
-            "maximum_demand_mva_per_primary_substation",
-            "geo_shape",
-            "operator",
+    # Aggregate capacity and demand data to primary group level
+    enw_df = (
+        enw_df.groupby(["pry_group", "geo_shape"])[
+            ["firm_capacity_mva", "maximum_demand_mva_per_primary_substation"]
         ]
-    ].rename(
-        columns={
-            "substation_id": "id",
-            "maximum_demand_mva_per_primary_substation": "peak_demand_mva",
-            "geo_shape": "geo_shape",
-        }
+        .sum()
+        .reset_index()
+    )
+    enw_df["operator"] = "ENW"
+    return gpd.GeoDataFrame(
+        enw_df[
+            [
+                "pry_group",
+                "firm_capacity_mva",
+                "maximum_demand_mva_per_primary_substation",
+                "geo_shape",
+                "operator",
+            ]
+        ].rename(
+            columns={
+                "substation_id": "id",
+                "maximum_demand_mva_per_primary_substation": "peak_demand_mva",
+                "geo_shape": "geo_shape",
+            }
+        ),
+        geometry="geo_shape",
+        crs=CRS,
     )
 
 
@@ -117,10 +127,10 @@ def generate_npg_gdf() -> gpd.GeoDataFrame:
             - operator: Distribution network operator code ("NPg")
     """
     npg_substations = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["NPg_heatmap"]
+        config["data_source"]["E_NPg_heatmap"]
     ).to_pandas()
     npg_demand = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["NPg_ndp_demand"]
+        config["data_source"]["E_NPg_ndp_demand"]
     ).to_pandas()
 
     # Filter and process substation data
@@ -146,14 +156,13 @@ def generate_npg_gdf() -> gpd.GeoDataFrame:
         (npg_demand["bulk_supply_point_or_primary"] == "Primary")
         & (npg_demand["scenario_name"] == "NPg Best View")
     ]
-    npg_demand["geo_point_2d"] = npg_demand["geo_point_2d"].apply(parse_binary_geometry)
     npg_demand["geo_shape"] = npg_demand["geo_shape"].apply(parse_binary_geometry)
-    npg_shape = npg_demand[["geo_point_2d", "geo_shape"]].drop_duplicates()
+    npg_shape = npg_demand["geo_shape"].drop_duplicates()
 
     # Create GeoDataFrames and perform spatial join
     npg_gdf = gpd.GeoDataFrame(npg, geometry="location", crs=CRS)
     npg_shape_gdf = gpd.GeoDataFrame(npg_shape, geometry="geo_shape", crs=CRS)
-    npg_df = gpd.sjoin(npg_shape_gdf, npg_gdf, how="left", predicate="intersects")
+    npg_df = gpd.sjoin(npg_shape_gdf, npg_gdf, how="left", predicate="within")
     npg_df = npg_df.dropna(subset="index_right")
 
     # Prepare final dataframe
@@ -186,27 +195,36 @@ def generate_spen_gdf() -> gpd.GeoDataFrame:
             - operator: Distribution network operator code ("SPEN")
     """
     spen_spd_substations = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["SPEN_spd_substations"]
+        config["data_source"]["S_SPEN_spd_substations"]
     ).to_pandas()
     spen_spm_substations = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["SPEN_spm_substations"]
+        config["data_source"]["W_SPEN_spm_substations"]
     ).to_pandas()
     spen_spd_shape = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["SPEN_spd_polygons"]
+        config["data_source"]["S_SPEN_spd_polygons"]
     ).to_pandas()
     spen_spm_shape = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["SPEN_spm_polygons"]
+        config["data_source"]["W_SPEN_spm_polygons"]
     ).to_pandas()
 
     # Process SPM data
+    # geometry data for SPM is only available at the primary group level which are groups of 1-3 primary substations
+    # therefore we need to first aggregate primary substation data to primary group level
+    spen_spm_substations = (
+        spen_spm_substations.groupby("primary_group")[
+            ["firm_capacity_mva", "maximum_load_mva"]
+        ]
+        .sum()
+        .reset_index()
+    )
+
     spm_df = spen_spm_substations.merge(spen_spm_shape, how="left", on="primary_group")
+    spm_df = spm_df.rename(columns={"primary_group": "substation_name"})
     spm_df = spm_df[
         [
             "substation_name",
-            "primary_group",
             "firm_capacity_mva",
             "maximum_load_mva",
-            "geo_point_2d",
             "geo_shape",
         ]
     ]
@@ -223,16 +241,13 @@ def generate_spen_gdf() -> gpd.GeoDataFrame:
             "substation_name",
             "firm_capacity_mva",
             "maximum_load_mva",
-            "geo_point_2d",
             "geo_shape",
         ]
     ]
 
     # Combine SPM and SPD data
     spen_df = pd.concat([spd_df, spm_df])
-    spen_df["geo_point_2d"] = spen_df["geo_point_2d"].apply(parse_binary_geometry)
     spen_df["geo_shape"] = spen_df["geo_shape"].apply(parse_binary_geometry)
-
     spen_df["operator"] = "SPEN"
 
     return gpd.GeoDataFrame(
@@ -269,10 +284,10 @@ def generate_ssen_gdf() -> gpd.GeoDataFrame:
             - operator: Distribution network operator code ("SSEN")
     """
     ssen_demand = base_getters.get_df_from_csv_s3_path(
-        config["data_source"]["SSEN_demand"]
+        config["data_source"]["ES_SSEN_demand"]
     ).to_pandas()
-    sepd_shape = gpd.read_file(config["data_source"]["SSEN_sepd_bounds"])
-    shepd_shape = gpd.read_file(config["data_source"]["SSEN_shepd_bounds"])
+    sepd_shape = gpd.read_file(config["data_source"]["S_SSEN_sepd_bounds"])
+    shepd_shape = gpd.read_file(config["data_source"]["E_SSEN_shepd_bounds"])
 
     # Process SSEN data
     ssen = ssen_demand[
@@ -333,7 +348,7 @@ def generate_ukpn_gdf() -> gpd.GeoDataFrame:
             - operator: Distribution network operator code ("UKPN")
     """
     ukpn_primary_substations = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["UKPN_primaries"]
+        config["data_source"]["E_UKPN_primaries"]
     ).to_pandas()
 
     # Process UKPN data
@@ -370,7 +385,6 @@ def generate_ukpn_gdf() -> gpd.GeoDataFrame:
             "geo_shape",
         ]
     ]
-    ukpn["geo_point_2d"] = ukpn["geo_point_2d"].apply(parse_binary_geometry)
     ukpn["geo_shape"] = ukpn["geo_shape"].apply(parse_binary_geometry)
 
     ukpn["operator"] = "UKPN"
@@ -408,16 +422,16 @@ def generate_wpd_gdf() -> gpd.GeoDataFrame:
             - operator: Distribution network operator code ("WPD")
     """
     wpd_substations = base_getters.get_df_from_csv_s3_path(
-        config["data_source"]["WPD_capacity"]
+        config["data_source"]["EW_WPD_capacity"]
     ).to_pandas()
 
     # Load shape files for each region
     wpd_shapes = []
     for region in [
-        "WPD_east_midlands",
-        "WPD_south_wales",
-        "WPD_south_west",
-        "WPD_west_midlands",
+        "E_WPD_east_midlands_bounds",
+        "W_WPD_south_wales_bounds",
+        "E_WPD_south_west_bounds",
+        "E_WPD_west_midlands_bounds",
     ]:
         wpd_shapes.append(
             base_getters.get_gdf_from_gpkg_s3_path(config["data_source"][region])
