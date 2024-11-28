@@ -178,14 +178,14 @@ def load_transform_df_target_tenure_scotland() -> pl.DataFrame:
     private_rental.extend(["Lives Rent Free"])
     df = df.with_columns(
         pl.sum_horizontal([col for col in df.columns if "Owned" in col]).alias(
-            "owner_occupied"
+            "owner-occupied"
         ),
-        pl.sum_horizontal(private_rental).alias("private_rental"),
+        pl.sum_horizontal(private_rental).alias("rental (private)"),
         pl.sum_horizontal([col for col in df.columns if "Social" in col]).alias(
-            "social_rental"
+            "rental (social)"
         ),
     )
-    return df.select(["lsoa", "owner_occupied", "social_rental", "private_rental"])
+    return df.select(["lsoa", "owner-occupied", "rental (social)", "rental (private)"])
 
 
 def load_transform_df_target_tenure_ew() -> pl.DataFrame:
@@ -224,12 +224,14 @@ def load_transform_df_target_tenure_ew() -> pl.DataFrame:
         .pivot(index="lsoa", columns="tenure", values="Observation")
         .with_columns(
             [
-                pl.sum_horizontal(owned_cols).alias("owner_occupied"),
-                pl.sum_horizontal(social_rent_cols).alias("social_rental"),
-                pl.sum_horizontal(private_rent_cols).alias("private_rental"),
+                pl.sum_horizontal(owned_cols).alias("owner-occupied"),
+                pl.sum_horizontal(social_rent_cols).alias("rental (social)"),
+                pl.sum_horizontal(private_rent_cols).alias("rental (private)"),
             ]
         )
-        .select(pl.col(["lsoa", "owner_occupied", "social_rental", "private_rental"]))
+        .select(
+            pl.col(["lsoa", "owner-occupied", "rental (social)", "rental (private)"])
+        )
     )
 
     return df
