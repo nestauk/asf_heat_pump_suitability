@@ -83,19 +83,20 @@ def load_gdf_microsoft_building_footprints(url: str) -> gpd.GeoDataFrame:
 
 
 @retry(stop=stop_after_attempt(4))
-def load_gdf_inspire_land_parcels(path: str) -> gpd.GeoDataFrame:
+def load_gdf_inspire_land_parcels(path: str, **kwargs) -> gpd.GeoDataFrame:
     """
     Load land registry's index polygons spatial data (INSPIRE) showing the geometry and extent of registered freehold
     properties in England and Wales. CRS EPSG:27700, British National Grid.
 
     Args:
         path (str): path to INSPIRE land parcel file
+        **kwargs for `gpd.read_file()`
 
     Returns:
         gpd.GeoDataFrame: registered land extent polygons for one council
     """
     logging.info(f"Loading INSPIRE land parcel file: {path}")
-    gdf = gpd.read_file(path, engine="pyogrio")
+    gdf = gpd.read_file(path, engine="pyogrio", **kwargs)
 
     return gdf
 
@@ -181,9 +182,6 @@ def get_df_ons_number_of_households() -> pl.DataFrame:
     """
     Get raw ONS 'Number of households' dataset.
 
-    Args:
-        **kwargs for pl.read_excel
-
     Returns:
         pl.DataFrame: raw ONS 'Number of households' dataset
     """
@@ -214,7 +212,7 @@ def get_df_ons_land_area() -> pl.DataFrame:
     content_str = content.decode("utf-8")  # convert bytes to string
     content_file = StringIO(content_str)  # convert string to file-like object
 
-    # dtypes specificed as polars read csv wa inferring wrong data types and throwing error
+    # dtypes specificed as polars read csv was inferring wrong data types and throwing error
     dtypes = {
         "LSOA21CD": pl.Utf8,
         "LSOA21NM": pl.Utf8,
@@ -248,7 +246,7 @@ def load_gdf_listed_buildings(nation: str, **kwargs) -> gpd.GeoDataFrame:
     Get raw Listed Buildings polygons dataset for specified nation. CRS EPSG:27700, British National Grid.
 
     Args:
-        nation (str): UK nation to load listed buildings data for. Options: "England"; "Wales".
+        nation (str): nation to load listed buildings data for. Options: "England"; "Scotland", "Wales".
         **kwargs for `gpd.read_file()`
 
     Returns:
@@ -260,8 +258,14 @@ def load_gdf_listed_buildings(nation: str, **kwargs) -> gpd.GeoDataFrame:
         )
     elif nation.lower() == "wales":
         gdf = gpd.read_file(config["data_source"]["W_cadw_listed_buildings"], **kwargs)
+    elif nation.lower() == "scotland":
+        gdf = gpd.read_file(
+            config["data_source"]["S_scottish_gov_listed_buildings"], **kwargs
+        )
     else:
-        raise ValueError("Please set `nation` to either 'England' or 'Wales'.")
+        raise ValueError(
+            "Please set `nation` to either 'England', 'Scotland', or 'Wales'."
+        )
     return gdf
 
 
@@ -276,3 +280,31 @@ def load_df_ew_census_accommodation_type() -> pl.DataFrame:
         config["data_source"]["EW_census_housing_characteristics"]
     )
     return pl.read_excel(content, sheet_name="2c", engine="calamine")
+
+
+def load_gdf_scotgov_data_zone_bounds() -> gpd.GeoDataFrame:
+    """
+    Load raw 2011 Data Zone geospatial boundary polygons and area data for Scotland from the Scottish Government.
+
+    Returns:
+        gpd.GeoDataFrame: boundary polygons and area data for 2011 Scottish Data Zones
+    """
+    return gpd.read_file(config["data_source"]["S_scottish_gov_DZ2011_boundaries"])
+
+
+def load_df_nrs_dwellings() -> pl.DataFrame:
+    """
+    Load 2023 dwelling counts per 2011 Data Zone in Scotland from National Records of Scotland. Data remains in raw
+    form with light processing to correct column headers and dtypes.
+
+    Returns:
+        pl.DataFrame: dwelling counts per 2011 Scottish Data Zone
+    """
+    df = base_getters.get_df_from_excel_s3_path(
+        config["data_source"]["S_NRScotland_dwellings"], sheet_name="2023"
+    )
+    # Remove empty rows and set column headers to correct names
+    df.columns = df.row(2)
+    df = df[3:].cast(schemas.nrs_dwellings)
+
+    return df

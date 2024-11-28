@@ -171,7 +171,8 @@ if __name__ == "__main__":
     lsoa_stats_df = pl.DataFrame(lsoa_stats)
 
     # 5. Save to S3
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weights"
+    if not save_as:
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weights"
     fs = s3fs.S3FileSystem()
 
     # Save weighted EPC
