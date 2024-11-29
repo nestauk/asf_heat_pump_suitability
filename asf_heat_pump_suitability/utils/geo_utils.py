@@ -1,6 +1,11 @@
 import logging
+from typing import Union
+
 import geopandas as gpd
 import shapely
+
+from shapely.geometry.base import BaseGeometry
+from shapely import wkb
 
 
 def transform_gdf_drop_duplicates(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -43,3 +48,25 @@ def get_polygon_gdf_bounds(gdf: gpd.GeoDataFrame) -> shapely.Polygon:
         shapely.Polygon: bounding polygon of GeoDataFrame
     """
     return shapely.box(*gdf.total_bounds)
+
+
+def parse_binary_geometry(
+    binary_data: Union[BaseGeometry, bytes, str]
+) -> Union[BaseGeometry, None]:
+    """
+    Parse binary geometry data into Shapely geometry object.
+
+    Args:
+        binary_data: Input geometry data in various formats.
+
+    Returns:
+        Shapely geometry object or None if parsing fails.
+    """
+    if isinstance(binary_data, BaseGeometry):
+        return binary_data
+    elif isinstance(binary_data, bytes):
+        return wkb.loads(binary_data)
+    elif isinstance(binary_data, str):
+        return wkb.loads(binary_data, hex=True)
+    else:
+        return None
