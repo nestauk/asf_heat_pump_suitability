@@ -94,6 +94,9 @@ def load_gdf_and_process_poi() -> gpd.GeoDataFrame:
     anchor_properties = poi[poi.main_category.isin(ANCHOR_PROPERTIES)].to_crs(
         PROCESSING_CRS
     )
+    anchor_properties = anchor_properties.drop_duplicates(
+        subset="geometry", keep="first"
+    )
 
     logger.info(f"Found {len(anchor_properties)} potential anchor properties")
     logger.info(f"Output CRS: {PROCESSING_CRS}")
@@ -169,7 +172,6 @@ if __name__ == "__main__":
     try:
         results = identify_anchor_properties_gdf()
 
-        # Save results (modify as needed)
         output_path = Path("outputs/reports/anchor_property_analysis.csv")
         results.to_csv(output_path, index=False)
         logger.info(f"Results saved to {output_path}")
