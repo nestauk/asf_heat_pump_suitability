@@ -84,7 +84,8 @@ def generate_substations_gdf() -> gpd.GeoDataFrame:
             - operator: Distribution network operator code
                        (one of: "ENW", "NPg", "SPEN", "SSEN", "UKPN", "WPD")
     """
-    return pd.concat(
+
+    substations_gdf = pd.concat(
         [
             generate_enw_gdf(),
             generate_npg_gdf(),
@@ -94,6 +95,17 @@ def generate_substations_gdf() -> gpd.GeoDataFrame:
             generate_wpd_gdf(),
         ]
     )
+
+    assert set(substations_gdf["operator"]) == {
+        "ENW",
+        "NPg",
+        "SPEN",
+        "SSEN",
+        "UKPN",
+        "WPD",
+    }
+
+    return substations_gdf
 
 
 def distribute_substation_headroom(
@@ -118,7 +130,7 @@ def distribute_substation_headroom(
     # Perform spatial join between LSOAs and substations
     joined = gpd.sjoin(
         lsoa_with_households, substations_gdf, how="inner", predicate="intersects"
-    ).rename(columns={"index_right": "substation_id"})
+    ).rename(columns={"id": "substation_id"})
 
     # Calculate total households served by each substation
     substation_total_households = (
