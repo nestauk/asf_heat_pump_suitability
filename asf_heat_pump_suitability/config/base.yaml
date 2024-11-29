@@ -50,25 +50,6 @@ data_source:
   EW_inspire_url: "https://use-land-property-data.service.gov.uk/datasets/inspire/download"
   S_scottish_gov_DZ2011_boundaries: "s3://asf-heat-pump-suitability/source_data/2014_Scottish_Government_DataZoneBoundaries_2011_S/SG_DataZone_Bdry_2011.shp"
   S_NRScotland_dwellings: "s3://asf-heat-pump-suitability/source_data/June2024_NRScotland_households_and_dwellings_S.xlsx"
-usecols:
-  epc:
-    - COUNTRY
-    - ADDRESS1
-    - ADDRESS2
-    - POSTCODE
-    - CURRENT_ENERGY_EFFICIENCY
-    - CURRENT_ENERGY_RATING
-    - CURR_ENERGY_RATING_NUM
-    - ENERGY_RATING_CAT
-    - UPRN
-    - TENURE
-    - PROPERTY_TYPE
-    - BUILT_FORM
-    - CONSTRUCTION_AGE_BAND
-    - CO2_EMISSIONS_CURRENT
-    - NUMBER_HABITABLE_ROOMS
-    - HEATING_SYSTEM
-    - HEATING_FUEL
 mapping:
   build_year_pre_cols:
     - BP_PRE_1900
