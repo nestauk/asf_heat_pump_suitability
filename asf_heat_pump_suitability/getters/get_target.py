@@ -138,6 +138,20 @@ def load_transform_df_target_property_type_scotland() -> pl.DataFrame:
         .rename({"Type of accomodation": "lsoa"})
     )
 
+    # A small number of rows seem to erroneously have zero values for all property types, we need to remove them
+    df = df.filter(
+        pl.sum_horizontal(
+            [
+                "Detached",
+                "Semi-detached",
+                "Terraced (including end-terrace)",
+                "Caravan or other mobile or temporary structure",
+                "Flat, maisonette or apartment",
+            ]
+        )
+        != 0
+    )
+
     return df
 
 
@@ -185,6 +199,13 @@ def load_transform_df_target_tenure_scotland() -> pl.DataFrame:
             "rental (social)"
         ),
     )
+
+    # A small number of rows seem to erroneously have zero values for all tenure types, we need to remove them
+    df = df.filter(
+        pl.sum_horizontal(["owner-occupied", "rental (social)", "rental (private)"])
+        != 0
+    )
+
     return df.select(["lsoa", "owner-occupied", "rental (social)", "rental (private)"])
 
 
