@@ -155,3 +155,32 @@ def list_obj_s3_location(location: str) -> list:
     o = fs.ls(location)
 
     return o
+
+def get_df_from_parquet_s3_path(path: str, **kwargs) -> pl.DataFrame:
+    """
+    Get dataframe from Parquet file stored in s3 path.
+
+    Args
+        path (str): S3 URI to Parquet file
+        **kwargs for pl.read_parquet()
+    Returns
+        pl.DataFrame: dataframe from Parquet file
+    """
+    content = BytesIO(get_content_from_s3_path(path))
+    df = pl.read_parquet(content, **kwargs)
+    return df
+
+
+def get_gdf_from_gpkg_s3_path(path: str, **kwargs) -> gpd.GeoDataFrame:
+    """
+    Get GeoDataFrame from GeoPackage file stored in s3 path.
+
+    Args
+        path (str): S3 URI to GeoPackage file
+        **kwargs for gpd.read_file()
+    Returns
+        gpd.GeoDataFrame: geodataframe from GeoPackage file
+    """
+    content = BytesIO(get_content_from_s3_path(path))
+    gdf = gpd.read_file(content, **kwargs)
+    return gdf
