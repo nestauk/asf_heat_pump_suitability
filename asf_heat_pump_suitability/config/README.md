@@ -21,6 +21,7 @@ See additional attribution statements listed below.
 | `["data_source"]["E_historic_england_conservation_areas"]` | `source_data/Aug2024_historic_england_conservation_areas_E.geojson` | [Historic England](https://www.planning.data.gov.uk/dataset/conservation-area)<sup>10</sup> | June 2024 | Building conservation area boundaries in England (places of special architectural and historic interest). |
 | `["data_source"]["W_welsh_gov_conservation_areas"]` | `source_data/2022_welsh_gov_building_conservation_areas_W.gpkg` | [Welsh Government](https://datamap.gov.wales/layers/inspire-wg:conservation_areas)<sup>4</sup> | Sept 2022 | Building conservation area boundaries in Wales (places of special architectural and historic interest). |
 | `["data_source"]["EW_ons_lsoa_lad_lookup"]` | `source_data/2021_vApr2023_ons_lsoa_to_lad_lookup_EW.csv` | [ONS](https://geoportal.statistics.gov.uk/datasets/ons::lsoa-2021-to-local-authority-districts-april-2023-best-fit-lookup-in-ew/explore)<sup>3</sup> | April 2023 | LSOA to LAD lookup. |
+| `["data_source"]["UK_poi_locations"]` | `source_data/poi_uk.gpkg` | [CDRC](https://data.cdrc.ac.uk/dataset/point-interest-data-united-kingdom)<sup>3</sup> | Sept 2024 | Points of interest geographic locations and classifications covering UK |
 
 _Footnotes:_
 

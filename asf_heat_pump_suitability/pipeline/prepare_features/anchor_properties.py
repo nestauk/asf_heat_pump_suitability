@@ -1,6 +1,9 @@
-"""Module for identifying and analyzing potential anchor properties in LSOAs."""
+"""
+Module for identifying and analyzing potential anchor properties in LSOAs.
+This script can be run independentally and will output a CSV file with a list of LSOAs, the number of anchor properties in each LSOA, and the categories of anchor properties present.
+"""
 
-# TODO implement building footprint data for increased identification accuracy
+# TODO implement building footprint data for improved identification accuracy
 
 import logging
 from typing import Set
@@ -10,6 +13,7 @@ import geopandas as gpd
 import pandas as pd
 
 from asf_heat_pump_suitability.getters.s3_getters import load_s3_data
+from asf_heat_pump_suitability import config
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -43,7 +47,7 @@ ANCHOR_PROPERTIES = {
 }
 
 
-def _safe_join_categories(categories: pd.Series) -> str:
+def _safe_join_str_categories(categories: pd.Series) -> str:
     """
     Safely join category strings.
 
@@ -57,24 +61,28 @@ def _safe_join_categories(categories: pd.Series) -> str:
     return ", ".join(sorted(valid_categories)) if valid_categories else ""
 
 
-def load_and_process_poi() -> gpd.GeoDataFrame:
+def load_gdf_and_process_poi() -> gpd.GeoDataFrame:
     """
     Load and process Points of Interest data.
 
     Returns:
-        GeoDataFrame: Processed POI data containing only anchor properties
+        gpd.GeoDataFrame: Processed POI data containing only anchor properties
 
     Raises:
         ValueError: If required columns are missing
     """
     logger.info("Loading POI data...")
-    poi = load_s3_data("asf-heat-pump-suitability", "source_data/poi_uk.gpkg")
 
-    # Validate POI data
-    required_columns = {"country", "main_category", "geometry"}
-    missing_columns = required_columns - set(poi.columns)
-    if missing_columns:
-        raise ValueError(f"Missing required columns in POI data: {missing_columns}")
+    required_columns = [
+        "id",
+        "country",
+        "main_category",
+        "alternate_category",
+        "geometry",
+    ]
+    poi = gpd.read_file(
+        config["data_source"]["UK_poi_locations"], columns=required_columns
+    ).to_crs(INPUT_CRS)
 
     # Filter and process
     poi = poi[poi.country == '"GB"'].copy()
@@ -83,22 +91,21 @@ def load_and_process_poi() -> gpd.GeoDataFrame:
     )
 
     # Filter anchor properties and reproject
-    anchor_properties = (
-        poi[poi.main_category.isin(ANCHOR_PROPERTIES)]
-        .to_crs(INPUT_CRS)
-        .to_crs(PROCESSING_CRS)
+    anchor_properties = poi[poi.main_category.isin(ANCHOR_PROPERTIES)].to_crs(
+        PROCESSING_CRS
     )
 
     logger.info(f"Found {len(anchor_properties)} potential anchor properties")
+    logger.info(f"Output CRS: {PROCESSING_CRS}")
     return anchor_properties
 
 
-def identify_anchor_properties() -> gpd.GeoDataFrame:
+def identify_anchor_properties_gdf() -> gpd.GeoDataFrame:
     """
     Identify and analyze anchor properties within LSOAs.
 
     Returns:
-        GeoDataFrame: Summary of anchor properties by LSOA containing columns:
+        gpd.GeoDataFrame: Summary of anchor properties by LSOA containing columns:
             - lsoa: Unique identifier for the LSOA
             - lsoa_name: Name of the LSOA
             - anchor_count: Number of anchor properties in the LSOA
@@ -110,24 +117,26 @@ def identify_anchor_properties() -> gpd.GeoDataFrame:
         logger.info("Starting anchor property analysis...")
 
         # Load required data
-        lsoa_gdf = logger.info("Loading LSOA boundaries...")
+        logger.info("Loading LSOA boundaries...")
+        # Load and process LSOA boundary data
         lsoa_gdf = gpd.read_file(
-            "s3://asf-heat-pump-suitability/source_data/Lower_layer_Super_Output_Areas_2021_EW_BFE_V9_-9107090204806789093/LSOA_2021_EW_BFE_V9.shp"
-        )
-        anchor_properties = load_and_process_poi()
+            config["data_source"]["EW_lsoa_bounds"],
+            columns=["LSOA21CD", "LSOA21NM", "geometry"],
+        ).to_crs(PROCESSING_CRS)
+        anchor_properties = load_gdf_and_process_poi()
 
         lsoa_with_anchors = gpd.sjoin(
             lsoa_gdf, anchor_properties, how="left", predicate="intersects"
         )
 
         lsoa_anchor_summary = (
-            lsoa_with_anchors.groupby("LSOA21CD_left")
+            lsoa_with_anchors.groupby("LSOA21CD")
             .agg(
                 {
-                    "LSOA21NM_left": "first",
+                    "LSOA21NM": "first",
                     "id": "count",
-                    "main_category": _safe_join_categories,
-                    "alternate_category": _safe_join_categories,
+                    "main_category": _safe_join_str_categories,
+                    "alternate_category": _safe_join_str_categories,
                 }
             )
             .reset_index()
@@ -158,10 +167,10 @@ def identify_anchor_properties() -> gpd.GeoDataFrame:
 
 if __name__ == "__main__":
     try:
-        results = identify_anchor_properties()
+        results = identify_anchor_properties_gdf()
 
         # Save results (modify as needed)
-        output_path = Path("anchor_property_analysis.csv")
+        output_path = Path("outputs/reports/anchor_property_analysis.csv")
         results.to_csv(output_path, index=False)
         logger.info(f"Results saved to {output_path}")
 
