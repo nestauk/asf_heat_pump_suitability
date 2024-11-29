@@ -289,6 +289,9 @@ def compute_df_total_score_per_epc(
         pl.when(pl.col("CURRENT_ENERGY_RATING").is_in(["A", "B", "C"]))
         .then(epc_threshold_scores.get(tech_type))
         .alias("epc_rating_score"),
+        pl.when(pl.col("has_anchor_property"))
+        .then(anchor_properties_scores.get(tech_type))
+        .alias("anchor_properties_score"),
         pl.when(
             pl.col("heatpump_installation_percentage") > grid_installation_threshold
         )
@@ -348,6 +351,10 @@ def compute_df_max_score_per_row(df: pl.DataFrame, tech_type: str) -> pl.DataFra
         .then(epc_threshold_scores.get(tech_type))
         .otherwise(0)
         .alias("epc_rating_max"),
+        pl.when(pl.col("has_anchor_properties").is_not_null())
+        .then(anchor_properties_scores.get(tech_type))
+        .otherwise(0)
+        .alias("anchor_properties_max"),
         pl.when(pl.col("heatpump_installation_percentage").is_not_null())
         .then(epc_threshold_scores.get(tech_type))
         .otherwise(0)
@@ -381,6 +388,7 @@ def filter_df_minimum_features(
             "in_conservation_area",
             "property_type",
             "CURRENT_ENERGY_RATING",
+            "has_anchor_properties",
             "heatpump_installation_percentage",
         ]
     df = df.with_columns(
