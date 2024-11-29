@@ -77,7 +77,7 @@ def generate_enw_gdf() -> gpd.GeoDataFrame:
     # polygon geometry of substation distribution area
     enw_shape["geo_shape"] = enw_shape["geo_shape"].apply(parse_binary_geometry)
     enw_shape_gdf = gpd.GeoDataFrame(enw_shape, geometry="geo_shape", crs=CRS)
-    enw_df = gpd.sjoin(enw_gdf, enw_shape_gdf, how="right", predicate="contains")
+    enw_df = gpd.sjoin(enw_gdf, enw_shape_gdf, how="right", predicate="within")
     enw_df = enw_df.dropna(subset=["index_left"])
 
     # Aggregate capacity and demand data to primary group level
