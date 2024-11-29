@@ -112,7 +112,7 @@ if __name__ == "__main__":
     epc_df = prepare_sample.add_cols_weighting_features(epc_df)
 
     # 2. Prepare results dicts
-    weights = {"UPRN": [], "weight": [], "proportional_weight": []}
+    weights = {"UPRN": [], "lsoa": [], "weight": [], "proportional_weight": []}
     lsoa_stats = {"lsoa": [], "time": [], "lost_rows": []}
 
     for key, features in COUNTRY_FEATURES.items():
@@ -149,6 +149,8 @@ if __name__ == "__main__":
 
                 # Add outputs weights for LSOA to dict
                 weights["UPRN"].extend(_weights["UPRN"])
+                # Adding LSOA required for dummy rows
+                weights["lsoa"].extend([lsoa for i in range(len(_weights["UPRN"]))])
                 weights["weight"].extend(_weights["weight"])
                 weights["proportional_weight"].extend(_weights["proportional_weight"])
 
@@ -164,7 +166,7 @@ if __name__ == "__main__":
 
     # Get df of UPRNs, reweighting features, and weights for all nations
     weights = pl.DataFrame(weights)
-    epc_df = epc_df.select(["UPRN", "lsoa", "property_type", "tenure", "build_year"])
+    epc_df = epc_df.select(["UPRN", "property_type", "tenure", "build_year"])
     # Left join ensures we retain dummy rows which we need to retain for reweighting evaluation
     weights = weights.join(epc_df, how="left", on="UPRN")
 
