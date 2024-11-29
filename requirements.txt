@@ -21,5 +21,6 @@ xlsx2csv
 s3fs==2022.5.0
 boto3==1.21.21
 tenacity
-numpy
+numpy<2.0.0
 fiona
+bs4

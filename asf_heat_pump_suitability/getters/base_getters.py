@@ -19,7 +19,7 @@ def get_df_from_excel_url(url: str, **kwargs) -> pl.DataFrame:
     Returns
         pl.DataFrame: dataframe from Excel file
     """
-    content = _get_content_from_url(url)
+    content = get_content_from_url(url)
     df = pl.read_excel(content, **kwargs)
 
     return df
@@ -37,7 +37,7 @@ def get_df_from_zip_url(url: str, extract_file: str, **kwargs) -> pl.DataFrame:
     Returns:
         pl.DataFrame: dataset from ZIP file
     """
-    content = _get_content_from_url(url)
+    content = get_content_from_url(url)
     df = pl.read_csv(ZipFile(content).open(name=extract_file), **kwargs)
 
     return df
@@ -107,7 +107,7 @@ def get_content_from_s3_path(path: str) -> bytes:
     return content
 
 
-def _get_content_from_url(url: str) -> BytesIO:
+def get_content_from_url(url: str) -> BytesIO:
     """
     Get BytesIO stream from URL.
     Args
@@ -141,22 +141,20 @@ def load_gdf_from_s3_geojson(s3_uri: str, crs: str) -> gpd.GeoDataFrame:
     return gdf
 
 
-def list_files_s3_location(location: str) -> list:
+def list_obj_s3_location(location: str) -> list:
     """
-    List files in an S3 location.
+    List objects in an S3 location.
 
     Args:
         location (str): S3 URI
 
     Returns:
-        list: files in S3 location
+        list: objects in S3 location
     """
     fs = s3fs.S3FileSystem()
-    # Indexing to remove directory key
-    files = fs.ls(location)[1:]
+    o = fs.ls(location)
 
-    return files
-
+    return o
 
 def get_df_from_parquet_s3_path(path: str, **kwargs) -> pl.DataFrame:
     """
