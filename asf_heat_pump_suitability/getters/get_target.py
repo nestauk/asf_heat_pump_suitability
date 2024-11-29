@@ -238,6 +238,20 @@ def get_df_target_build_year(
     return df
 
 
+def get_df_target_build_year_la() -> pl.DataFrame:
+    """
+    Get dataframe of counts of properties built before and after 1930 for local authorities in England and Wales.
+    Source: Consumer Data Research Centre, 2015.
+
+    Returns:
+        pl.Dataframe: counts of properties built before and after 1930 for local authorities in England and Wales.
+    """
+    df = pl.read_parquet(config["data_source"]["EW_cdrc_dwelling_age_la"])
+    df = df.select(["lsoa", "pre_1930", "post_1930", "unknown"])
+
+    return df
+
+
 def _fill_df_censored_values(df: pl.DataFrame, val: int) -> pl.DataFrame:
     """
     Fill censored values in a target dataframe with a given value.

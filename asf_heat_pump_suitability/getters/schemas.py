@@ -62,3 +62,26 @@ onspd_schema = OrderedDict(
 microsoft_datalinks = OrderedDict(
     [("Location", str), ("QuadKey", str), ("Url", str), ("Size", str)]
 )
+nrs_dwellings = OrderedDict(
+    [
+        ("Data Zone code", pl.String),
+        ("Data Zone name", pl.String),
+        ("Council area code", pl.String),
+        ("Council area name", pl.String),
+        ("Total number of dwellings", pl.Int64),
+        ("Occupied dwellings", pl.Int64),
+        ("Vacant dwellings", pl.Int64),
+        ("Unoccupied dwellings exempt from paying Council Tax", pl.Int64),
+        ("Long-term empty dwellings \r\n[Note 6]", pl.Int64),
+        ("Second homes", pl.Int64),
+        ("Occupied dwellings exempt from paying Council Tax", pl.Int64),
+        ("Dwellings with a 'single adult' Council Tax discount", pl.Int64),
+        ("Occupied dwellings\r\n(%)", pl.Int64),
+        ("Vacant dwellings\r\n(%)", pl.Int64),
+        ("Unoccupied dwellings exempt from paying Council Tax\r\n(%)", pl.Int64),
+        ("Empty dwellings \r\n(%) \r\n[Note 6]", pl.Int64),
+        ("Second homes\r\n(%)", pl.Int64),
+        ("Occupied dwellings exempt from paying Council Tax\r\n(%)", pl.Int64),
+        ("Dwellings with a 'single adult' Council Tax discount\r\n(%)", pl.Int64),
+    ]
+)
