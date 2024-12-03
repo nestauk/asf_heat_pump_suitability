@@ -50,6 +50,14 @@ See additional data attribution statements listed below.
 | Grid capacity                 | `["E_WPD_west_midlands_bounds"]`                           | [WPD West Midlands Network Areas](https://connecteddata.nationalgrid.co.uk/dataset/spatial-datasets)                                                                                                            | Jun 2024                          | Primary substation service area boundary polygons for West Midlands region.                                                    |
 | Grid capacity                 | `["EW_lsoa_bounds"]`                                       | [ONS](https://geoportal.statistics.gov.uk/datasets/ons::output-areas-december-2021-boundaries-ew-bfe-v9/about)<sup>3</sup>                                                                                      | December 2021                     | Lower Level Super Output Area boundaries EW BFE.                                                                               |
 
+_Footnotes:_
+
+a. Rural-urban classification codes are mapped to text descriptions according to the sources listed below:
+
+- Scotland 8-fold code to text classification mapping: [Table 2.2, Scottish Government Urban Rural Classification](https://www.gov.scot/publications/scottish-government-urban-rural-classification-2020/pages/2/)
+- Scotland 8-fold to 2-fold classification mapping: [Table 2.3, Scottish Government Urban Rural Classification](https://www.gov.scot/publications/scottish-government-urban-rural-classification-2020/pages/2/)
+- England & Wales 10- and 2-fold code to text classification mapping: [page 19, ONS Postcode Directory (August 2023) User Guide](https://geoportal.statistics.gov.uk/datasets/a8db59f77e7542d092458426dbacfb90/about)
+
 ### Reweighting datasets
 
 These datasets provide the target marginals for reweighting the EPC data.
@@ -62,14 +70,6 @@ These datasets provide the target marginals for reweighting the EPC data.
 |       `["S_census_tenure"]`        | [Scotland's Census](https://www.scotlandscensus.gov.uk/search-the-census#/search-by)<sup>4</sup> - [National Records of Scotland](https://www.nrscotland.gov.uk/)<sup>13</sup> | Census 2022                   | Census 2022 household counts by tenure per Data Zone in Scotland.                                                                      |
 |     `["EW_cdrc_dwelling_age"]`     | [CDRC](https://data.cdrc.ac.uk/dataset/dwelling-ages-and-prices/resource/dwelling-age-band-counts-lsoa-2015)<sup>11</sup>                                                      | 2015                          | Residential dwelling ages, grouped into approximately 10-year age bands from pre-1900 to 2015, with counts of each age group per LSOA. |
 |  `["EW_census_number_of_rooms"]`   | [ONS](https://www.ons.gov.uk/datasets/TS051/editions/2021/versions/4)<sup>4</sup>                                                                                              | Census 2021, updated Mar 2023 | Census 2021 household counts by number of rooms per LSOA in England and Wales.                                                         |
-
-_Footnotes:_
-
-a. Rural-urban classification codes are mapped to text descriptions according to the sources listed below:
-
-- Scotland 8-fold code to text classification mapping: [Table 2.2, Scottish Government Urban Rural Classification](https://www.gov.scot/publications/scottish-government-urban-rural-classification-2020/pages/2/)
-- Scotland 8-fold to 2-fold classification mapping: [Table 2.3, Scottish Government Urban Rural Classification](https://www.gov.scot/publications/scottish-government-urban-rural-classification-2020/pages/2/)
-- England & Wales 10- and 2-fold code to text classification mapping: [page 19, ONS Postcode Directory (August 2023) User Guide](https://geoportal.statistics.gov.uk/datasets/a8db59f77e7542d092458426dbacfb90/about)
 
 _Attributions:_
 
