@@ -24,7 +24,32 @@ def sjoin_df_uprn_lad_code(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
     return pl.from_pandas(gdf[["UPRN", "lad_code"]])
 
 
-def transform_df_ons_pd(
+def load_transform_df_lsoas(
+    pcd_col: str = "pcd",
+    use_cols: list = [
+        "pcd",
+        "lsoa11",
+        "lsoa21",
+    ],
+) -> pl.DataFrame:
+    """
+    Load and clean ONS postcode directory dataset LSOA code and postcode columns.
+
+    Args
+        pcd_col (str): name of column containing postcodes. Default "pcd".
+        use_cols (list): columns to import. Default ["pcd", "lsoa11", "lsoa21"].
+
+    Returns
+        pl.DataFrame: postcode to LSOA code lookup table
+    """
+    df = get_datasets.get_df_ons_pd(columns=use_cols)
+    df = standardise_col_postcode(df, pcd_col=pcd_col)
+    df = _clean_col_output_area(df, area_type="lsoa")
+
+    return df.select(["POSTCODE", "lsoa"])
+
+
+def load_transform_df_area_info(
     pcd_col: str = "pcd",
     ruc_col: str = "ru11ind",
     lad_col: str = "oslaua",
@@ -49,7 +74,7 @@ def transform_df_ons_pd(
         use_cols (list): columns to import. Default ["pcd", "lsoa11", "msoa11", "lsoa21", "msoa21", "ru11ind", "oslaua"].
 
     Returns
-        pl.DataFrame: processed ONS postcode directory dataset
+        pl.DataFrame: postcode to area and rural-urban indicator lookup table
     """
     df = get_datasets.get_df_ons_pd(columns=use_cols).rename(
         mapping={lad_col: "lad_code"}
