@@ -149,7 +149,7 @@ if __name__ == "__main__":
     if not args.save_as:
         args.save_as = f"s3://nesta-open-data/asf_heat_pump_suitability/{args.year}Q{args.quarter}/{datetime.today().strftime('%Y%m%d')}_{args.year}_Q{args.quarter}_EPC_heat_pump_suitability_per_lsoa"
     logging.info("Saving to S3")
-    save_utils.save_parquet_to_s3(open_df, f"{args.save_as}.parquet")
+    save_utils.save_to_s3(open_df, f"{args.save_as}.parquet")
     fs = s3fs.S3FileSystem()
     with fs.open(path=f"{args.save_as}.csv", mode="wb") as f:
         open_df.write_csv(f)
