@@ -18,9 +18,9 @@ NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet
 
 import logging
 import polars as pl
-import s3fs
 import argparse
 from datetime import datetime
+from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     anchor_properties,
@@ -92,6 +92,7 @@ if __name__ == "__main__":
         epc_path,
         columns=[
             "UPRN",
+            "COUNTRY",
             "POSTCODE",
             "PROPERTY_TYPE",
             "BUILT_FORM",
@@ -132,8 +133,10 @@ if __name__ == "__main__":
         right_on=["MSOA code", "msoa_avg_outdoor_space_property_type"],
     )
 
-    logging.info("Adding building conservation area flag for England and Wales")
-    uprns_in_cons_area_df = protected_areas.generate_df_uprn_in_cons_area(epc_gdf)
+    logging.info("Adding protected area flag")
+    uprns_in_cons_area_df = protected_areas.load_transform_df_uprn_in_protected_area(
+        epc_gdf
+    )
     epc_df = epc_df.join(uprns_in_cons_area_df, how="left", on="UPRN")
 
     logging.info(
@@ -145,10 +148,6 @@ if __name__ == "__main__":
     epc_df = epc_df.join(
         lad_cons_areas_df, how="left", left_on="lad_code", right_on="LAD23CD"
     )
-
-    logging.info("Adding World Heritage Site flag for Scotland")
-    uprns_in_whs_df = protected_areas.generate_df_uprn_in_whs(epc_gdf)
-    epc_df = epc_df.join(uprns_in_whs_df, how="left", on="UPRN")
 
     logging.info("Adding property density to EPC")
     lsoa_density_df = property_density.generate_df_property_density()
@@ -181,6 +180,4 @@ if __name__ == "__main__":
     # Save to S3
     if not save_as:
         save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_features.parquet"
-    fs = s3fs.S3FileSystem()
-    with fs.open(save_as, mode="wb") as f:
-        epc_df.write_parquet(f)
+    save_utils.save_to_s3(epc_df, save_as)
