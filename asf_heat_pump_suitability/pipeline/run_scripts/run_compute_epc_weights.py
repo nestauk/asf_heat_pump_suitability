@@ -11,7 +11,7 @@ build year data aggregated to Data Zone-level.
 To run:
 python -i asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc [path/to/EPC] -y [YYYY] -q [N]
 
-NB: this pipeline requires the preprocessed and deduplicated EPC dataset in parquet file format.
+NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
 
 import logging
@@ -103,8 +103,8 @@ if __name__ == "__main__":
 
     # Join ONSPD LSOA col
     epc_df = output_areas.standardise_col_postcode(epc_df, pcd_col="POSTCODE")
-    onspd_df = output_areas.transform_df_ons_pd()
-    epc_df = epc_df.join(onspd_df, how="left", on="POSTCODE")
+    lsoa_df = output_areas.load_transform_df_lsoas()
+    epc_df = epc_df.join(lsoa_df, how="left", on="POSTCODE")
 
     # Reweight EPC
     # 1. Add standardised weighting feature columns to EPC and drop rows missing data required for reweighting
