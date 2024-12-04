@@ -180,7 +180,7 @@ def load_gdf_welsh_gov_conservation_areas(**kwargs) -> gpd.GeoDataFrame:
 
 def get_df_ons_number_of_households() -> pl.DataFrame:
     """
-    Get raw ONS 'Number of households' dataset.
+    Get raw ONS 'Number of households' per LSOA for England and Wales.
 
     Returns:
         pl.DataFrame: raw ONS 'Number of households' dataset
@@ -201,7 +201,8 @@ def get_df_ons_number_of_households() -> pl.DataFrame:
 
 def get_df_ons_land_area() -> pl.DataFrame:
     """
-    Get raw ONS 'land area' dataset.
+    Get raw ONS 'land area' dataset. Contains Standard Area Measurements of ‘Land Area’ (Area to Mean High Water
+    Excluding Area of Inland Water) for England and Wales.
 
     Returns:
         pl.DataFrame: raw ONS 'land area' dataset
@@ -274,7 +275,7 @@ def load_gdf_scotgov_data_zone_bounds() -> gpd.GeoDataFrame:
     Load raw 2011 Data Zone geospatial boundary polygons and area data for Scotland from the Scottish Government.
 
     Returns:
-        gpd.GeoDataFrame: boundary polygons and area data for 2011 Scottish Data Zones
+        gpd.GeoDataFrame: boundary polygons and area standard area measurment data for 2011 Scottish Data Zones
     """
     return gpd.read_file(config["data_source"]["S_scottish_gov_DZ2011_boundaries"])
 
