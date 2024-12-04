@@ -343,9 +343,7 @@ if __name__ == "__main__":
     # Extract the optional_threshold value from args
     optional_threshold = args.optional_threshold
     # Define the output directory and set up logging
-    output_dir = os.path.join(
-        PROJECT_DIR, "asf_heat_pump_suitability/outputs/hn_zones/output_data/"
-    )
+    output_dir = os.path.join(PROJECT_DIR, "outputs/hn_zones/output_data/")
     setup_logging_and_file_path(output_dir=output_dir)
 
     # Load the data and perform spatial join
@@ -412,9 +410,9 @@ if __name__ == "__main__":
         thresholds=thresholds,
     )
 
-    # Save the results to CSV
-    average_scores_df.write_csv(
-        os.path.join(output_dir, "average_scores_by_threshold.csv")
+    # Save the results to Parquet
+    average_scores_df.write_parquet(
+        os.path.join(output_dir, "average_scores_by_threshold.parquet")
     )
 
     # Calculate and log Mean Absolute Error (MAE)
