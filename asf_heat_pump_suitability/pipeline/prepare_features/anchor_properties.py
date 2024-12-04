@@ -6,13 +6,12 @@ This script can be run independentally and will output a CSV file with a list of
 # TODO implement building footprint data for improved identification accuracy
 
 import logging
-from typing import Set
 from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+import polars as pl
 
-from asf_heat_pump_suitability.getters.s3_getters import load_s3_data
 from asf_heat_pump_suitability import config
 
 # Configure logging
@@ -103,12 +102,12 @@ def load_gdf_and_process_poi() -> gpd.GeoDataFrame:
     return anchor_properties
 
 
-def identify_anchor_properties_gdf() -> gpd.GeoDataFrame:
+def identify_anchor_properties_df() -> pl.DataFrame:
     """
     Identify and analyze anchor properties within LSOAs.
 
     Returns:
-        gpd.GeoDataFrame: Summary of anchor properties by LSOA containing columns:
+        pl.DataFrame: Summary of anchor properties by LSOA containing columns:
             - lsoa: Unique identifier for the LSOA
             - lsoa_name: Name of the LSOA
             - anchor_count: Number of anchor properties in the LSOA
@@ -161,7 +160,7 @@ def identify_anchor_properties_gdf() -> gpd.GeoDataFrame:
             f"Found {lsoa_anchor_summary['has_anchor_property'].sum()} LSOAs with suitable anchor properties"
         )
 
-        return lsoa_anchor_summary
+        return pl.from_pandas(lsoa_anchor_summary)
 
     except Exception as e:
         logger.error(f"Error in anchor property analysis: {str(e)}")
