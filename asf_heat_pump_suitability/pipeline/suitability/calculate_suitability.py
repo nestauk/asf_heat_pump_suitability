@@ -188,7 +188,7 @@ def get_enhanced_epc(path) -> pl.DataFrame:
         "weight",
         "proportional_weight",
         "ruc_two_fold",
-        "OFF GAS",
+        "off_gas",
         "households_per_km2",
         "garden_area_m2",
         "listed_building_grade",
@@ -197,12 +197,10 @@ def get_enhanced_epc(path) -> pl.DataFrame:
         "property_type",
         "CURRENT_ENERGY_RATING",
         "heatpump_installation_percentage",
+        "has_anchor_property",
     ]
     df = pl.read_parquet(path, columns=usecols)
 
-    df = df.filter(
-        ~pl.col("UPRN").str.contains("dummy"), pl.col("COUNTRY") != "Scotland"
-    )
     return df
 
 
