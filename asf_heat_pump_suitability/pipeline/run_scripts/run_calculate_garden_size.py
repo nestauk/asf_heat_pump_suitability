@@ -11,12 +11,12 @@ files only. It is recommended to process England-Wales and Scotland separately d
 
 import argparse
 import logging
-import pandas as pd
 from tqdm import tqdm
 import polars as pl
 import geopandas as gpd
 from datetime import datetime
 from argparse import ArgumentParser
+from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     lat_lon,
     land_extent,
@@ -140,6 +140,7 @@ if __name__ == "__main__":
             predicate="intersects",
         ).drop(columns=["geometry", "index_right"])
 
+        epc_df = pl.from_pandas(epc_df)
         epc_gardens.append(epc_df)
 
         # Set prev
@@ -150,7 +151,18 @@ if __name__ == "__main__":
         )
 
     # Get df of all EPC records with garden size estimates
-    epc_gardens_df = pd.concat(epc_gardens, ignore_index=True)
+    epc_gardens_df = pl.concat(epc_gardens)
     if not args.save_as:
         args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}.parquet"
-    epc_gardens_df.to_parquet(args.save_as, engine="pyarrow")
+    save_utils.save_to_s3(epc_gardens_df, args.save_as)
+
+    # Deduplicate UPRNs
+    epc_gardens_df = epc_gardens_df.select(
+        [
+            "UPRN",
+            "garden_area_m2",
+        ]
+    ).with_columns(pl.col(pl.Float64).round(2))
+    epc_gardens_df = garden_size.deduplicate_df_garden_size(epc_gardens_df)
+    args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_deduplicated.parquet"
+    save_utils.save_to_s3(epc_gardens_df, args.save_as)
