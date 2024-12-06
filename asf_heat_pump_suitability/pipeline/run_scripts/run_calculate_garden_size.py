@@ -169,6 +169,7 @@ if __name__ == "__main__":
         )
 
     # Get df of all EPC records with garden size estimates
+    epc_gardens = [df for df in epc_gardens if len(df) > 0]
     epc_gardens_df = pl.concat(epc_gardens)
     if not args.save_as:
         args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}.parquet"
