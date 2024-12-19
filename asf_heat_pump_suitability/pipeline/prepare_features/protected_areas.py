@@ -21,7 +21,7 @@ def load_transform_df_uprn_in_protected_area(gdf: gpd.GeoDataFrame) -> pl.DataFr
         {"in_conservation_area_ew": "in_protected_area"}
     )
     s_df = generate_df_uprn_in_whs(gdf).rename(
-        {"in_world_heritage_site": "in_protected_area"}
+        {"in_world_heritage_site_s": "in_protected_area"}
     )
 
     return pl.concat([ew_df, s_df])
