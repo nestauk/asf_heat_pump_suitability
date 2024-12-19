@@ -131,7 +131,7 @@ def generate_gdf_garden_size(
 
 def deduplicate_df_garden_size(df: pl.DataFrame) -> pl.DataFrame:
     """
-    Deduplicate UPRNs matched to multiple gardens them by taking the average size of the multiple gardens (for gardens
+    Deduplicate UPRNs matched to multiple gardens by taking the average size of the multiple gardens (for gardens
     below a threshold size).
 
     Args:
