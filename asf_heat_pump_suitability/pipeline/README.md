@@ -23,8 +23,14 @@ asf_heat_pump_suitability/pipeline
 To calculate heat pump suitability, you first need to produce the required inputs:
 To weight the EPC data, add new features, and estimate garden size of properties in preparation for calculating suitability, you can run the
 following files in any order. All scripts take the preprocessed and deduplicated EPC dataset (output from `asf-daps`) in
-parquet file format as input. Ensure you set the `--year` and `--quarter` arguments to correspond to those of the EPC
+parquet file format as input via the `--epc` argument. Ensure you set the `--year` and `--quarter` arguments to correspond to those of the EPC
 dataset when running each script.See the script `.py` files for more detailed running instructions.
+
+E.g. to run the pipeline for 2023 Q4 EPC data, you would set the following args for each script in the table below:
+
+- `--epc s3://asf-daps/lakehouse/processed/epc/old/deduplicated/processed_dedupl-0.parquet`
+- `--year 2023`
+- `--quarter 4`
 
 |             Script             | Purpose                                                                                                                          | Inputs                                                                                                                                                                                                                                  | Output filename                                                                                        | Output description                                                                                                                                        |
 | :----------------------------: | :------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
