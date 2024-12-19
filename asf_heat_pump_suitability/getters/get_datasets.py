@@ -275,7 +275,7 @@ def load_gdf_scotgov_data_zone_bounds() -> gpd.GeoDataFrame:
     Load raw 2011 Data Zone geospatial boundary polygons and area data for Scotland from the Scottish Government.
 
     Returns:
-        gpd.GeoDataFrame: boundary polygons and area standard area measurment data for 2011 Scottish Data Zones
+        gpd.GeoDataFrame: boundary polygons and area standard area measurement data for 2011 Scottish Data Zones
     """
     return gpd.read_file(config["data_source"]["S_scottish_gov_DZ2011_boundaries"])
 
