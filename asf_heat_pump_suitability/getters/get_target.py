@@ -4,6 +4,7 @@ import polars.selectors as cs
 from asf_heat_pump_suitability import config
 
 
+# TODO will need to add number of rooms target data for Scotland if we revert to using it
 def get_df_target_nrooms() -> pl.DataFrame:
     """
     Get dataframe of counts of total number of rooms for properties in all LSOAs in England and Wales. Where number of rooms
