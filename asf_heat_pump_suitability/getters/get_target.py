@@ -136,7 +136,9 @@ def load_transform_df_target_property_type_scotland() -> pl.DataFrame:
                 for col in df.select(cs.numeric()).columns
             }
         )
-        .rename({"Type of accomodation": "lsoa"})
+        .rename(
+            {"Type of accomodation": "lsoa"}
+        )  # The Data Zone (lsoa) column name is mislabelled due to .csv formatting
     )
 
     # A small number of rows seem to erroneously have zero values for all property types, we need to remove them
