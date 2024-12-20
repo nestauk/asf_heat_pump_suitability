@@ -13,7 +13,7 @@ authority boundaries via string matching based on their filenames. Any nulls are
 file and identifying which local authority boundary it should be matched to based on the geometry.
 
 To run:
-python -i asf_heat_pump_suitability/pipeline/run_scripts/run_get_inspire_file_bounds.py -y [YYYY] -q [N] -n all
+python -i asf_heat_pump_suitability/pipeline/run_scripts/run_get_inspire_file_bounds.py -y [YYYY] -q [Q] -n all
 
 [Set -n nation flag to "ew" or "s" for generating file bounds either England and Wales or Scotland INSPIRE files only.]
 """

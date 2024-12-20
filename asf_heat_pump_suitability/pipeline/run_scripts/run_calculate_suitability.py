@@ -1,5 +1,14 @@
 """
-Functions to calculate suitability of different HP technologies.
+Calculate suitability scores of different low-carbon heating technologies in Nesta and 'conventional' views for individual
+properties and LSOAs.
+
+To run:
+python -i asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_suitability.py --weights [path/to/weighted/EPC] --features [path/to/EPC/with/features] --gardens [path/to/garden/size/estimates] -y [YYYY] -q [Q]
+
+NB: this pipeline takes the outputs from the following scripts as inputs:
+- asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py
+- asf_heat_pump_suitability/pipeline/run_scripts/run_add_features.py
+- asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size.py
 """
 
 import polars as pl

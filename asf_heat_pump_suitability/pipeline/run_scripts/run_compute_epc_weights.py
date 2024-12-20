@@ -9,7 +9,7 @@ following features:
 build year data aggregated to Data Zone-level.
 
 To run:
-python -i asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc [path/to/EPC] -y [YYYY] -q [N]
+python -i asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc [path/to/EPC] -y [YYYY] -q [Q]
 
 NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
