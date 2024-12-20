@@ -24,7 +24,7 @@ To calculate heat pump suitability, you first need to produce the required input
 To weight the EPC data, add new features, and estimate garden size of properties in preparation for calculating suitability, you can run the
 following files in any order. All scripts take the preprocessed and deduplicated EPC dataset (output from `asf-daps`) in
 parquet file format as input via the `--epc` argument. Ensure you set the `--year` and `--quarter` arguments to correspond to those of the EPC
-dataset when running each script.See the script `.py` files for more detailed running instructions.
+dataset when running each script. See the script `.py` files for more detailed running instructions.
 
 E.g. to run the pipeline for 2023 Q4 EPC data, you would set the following args for each script in the table below:
 

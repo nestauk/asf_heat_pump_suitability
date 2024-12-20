@@ -61,7 +61,16 @@ loops (SGLs).
 This pipeline therefore computes a conventional score and a Nesta score for each of the four tech types listed: eight
 heat pump suitability scores are calculated in total per LSOA. Scores are first computed per property based on presence/
 absence of certain characteristics of the property/area using a simple additive model (see table below). Scores are then
-averaged per property before finally aggregating to LSOA level.
+averaged per property and weighted\* before finally aggregating to LSOA level. Note that an LSOA must have data for at
+least 15 properties to be included in the final suitability per LSOA dataset.
+
+\*Scores will only be weighted for an LSOA if the proportion of EPC properties in that LSOA that have a weight is above a
+specified threshold - the default threshold (and the threshold we have used for our published results) is 50%. Individual
+properties do not receive a weight if they are missing data required for weighting.
+
+If the threshold is not met for a given LSOA, suitability scores for that LSOA will be unweighted and labelled as such.
+Unweighted scores may not accurately represent the suitability of an LSOA for a given heating technology as a whole and
+should therefore be interpreted with caution.
 
 |                                                                                   | ASHP (S) | ASHP (N) | GSHP (S) | GSHP (N) | SGL (S) | SGL (N) | HN (S) | HN (N) |
 | --------------------------------------------------------------------------------- | -------- | -------- | -------- | -------- | ------- | ------- | ------ | ------ |

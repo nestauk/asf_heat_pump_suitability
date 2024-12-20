@@ -139,7 +139,7 @@ if __name__ == "__main__":
                 lsoa_df, lsoa_code
             )
         )
-    # Must have at least 15 properties to be included in score
+    # Must have at least 15 properties to be included in final dataset
     suitability_df = pl.DataFrame(weighted_scores).filter(pl.col("n_properties") >= 15)
     suitability_df = suitability_df.with_columns(pl.col(pl.Float64).round(3))
 
