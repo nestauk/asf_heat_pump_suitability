@@ -325,4 +325,4 @@ if __name__ == "__main__":
     )
 
     if args.save_as:
-        grid_capacity_results.to_csv(args.save_as, index=False)
+        grid_capacity_results.write_csv(args.save_as)

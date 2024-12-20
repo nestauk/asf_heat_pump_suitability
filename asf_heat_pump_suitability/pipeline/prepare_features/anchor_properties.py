@@ -169,10 +169,10 @@ def identify_anchor_properties_df() -> pl.DataFrame:
 
 if __name__ == "__main__":
     try:
-        results = identify_anchor_properties_gdf()
+        results = identify_anchor_properties_df()
 
         output_path = Path("outputs/reports/anchor_property_analysis.csv")
-        results.to_csv(output_path, index=False)
+        results.write_csv(output_path)
         logger.info(f"Results saved to {output_path}")
 
     except Exception as e:
