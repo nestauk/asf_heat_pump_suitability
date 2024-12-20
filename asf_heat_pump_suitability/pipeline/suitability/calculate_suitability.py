@@ -45,7 +45,6 @@ def compute_df_total_score_per_epc(
     density_threshold: int = 60,
     garden_threshold: int = 10,
     external_space_threshold: int = 2,
-    grid_installation_threshold: int = 30,
 ) -> pl.DataFrame:
     """
     Calculate total heat pump suitability score points per EPC record for specified tech_type.
@@ -56,7 +55,6 @@ def compute_df_total_score_per_epc(
         density_threshold: minimum property density (households per km2) required for shared ground loop
         garden_threshold: minimum garden size (m2) required for heat pumps
         external_space_threshold: minimum outdoor space (m2) required for heat pumps
-        grid_installation_threshold: minimum percentage of properties in LSOA that could have a heat pump installed with current grid capacity
 
     Returns:
         pl.DataFrame: suitability score for specified tech type
@@ -93,10 +91,12 @@ def compute_df_total_score_per_epc(
         pl.when(pl.col("has_anchor_property"))
         .then(scoring.anchor_properties_scores.get(tech_type))
         .alias("anchor_properties_score"),
-        pl.when(
-            pl.col("heatpump_installation_percentage") >= grid_installation_threshold
+        pl.when(pl.col("heatpump_installation_percentage").is_not_null())
+        .then(
+            scoring.grid_capacity_scores.get(tech_type)
+            * pl.col("heatpump_installation_percentage")
+            / 100
         )
-        .then(scoring.epc_threshold_scores.get(tech_type))
         .alias("grid_capacity_score"),
     )
 
