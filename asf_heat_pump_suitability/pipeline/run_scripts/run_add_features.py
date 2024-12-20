@@ -108,7 +108,9 @@ if __name__ == "__main__":
     logging.info("Adding lat/lon data to EPC")
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
     epc_df = epc_df.join(uprn_latlon_df, how="left", on="UPRN")
-    epc_gdf = lat_lon.generate_gdf_uprn_coords(epc_df, usecols=["UPRN", "lad_code"])
+    epc_gdf = lat_lon.generate_gdf_uprn_coords(
+        epc_df, usecols=["UPRN", "COUNTRY", "lad_code"]
+    )
 
     # TODO this is far too slow and is only used to correct some EPC records with incorrect postcodes which get joined to the wrong LSOA/MSOA
     # TODO can we filter the dataset somehow and only do the join with incorrect postcodes?
@@ -134,10 +136,10 @@ if __name__ == "__main__":
     )
 
     logging.info("Adding protected area flag")
-    uprns_in_cons_area_df = protected_areas.load_transform_df_uprn_in_protected_area(
-        epc_gdf
+    uprns_in_protected_area_df = (
+        protected_areas.load_transform_df_uprn_in_protected_area(epc_gdf)
     )
-    epc_df = epc_df.join(uprns_in_cons_area_df, how="left", on="UPRN")
+    epc_df = epc_df.join(uprns_in_protected_area_df, how="left", on="UPRN")
 
     logging.info(
         "Adding local authority building conservation area data availability flag for England and Wales"

@@ -65,18 +65,22 @@ def transform_gdf_building_cons_areas() -> gpd.GeoDataFrame:
     return gdf
 
 
-def generate_df_uprn_in_whs(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
+def generate_df_uprn_in_whs(
+    gdf: gpd.GeoDataFrame, country_col: str = "COUNTRY"
+) -> pl.DataFrame:
     """
     Generate dataframe to flag UPRNs located within World Heritage Sites in Scotland.
 
     Args:
         gdf (pl.DataFrame): dataframe with point geometries per UPRN in BNG
+        country_col (str): column containing country names
 
     Returns:
         pl.DataFrame: EPC UPRNs with flag for World Heritage Sites in Scotland
     """
     whs_gdf = load_transform_gdf_scottish_world_heritage_sites()
 
+    gdf = gdf[gdf[country_col] == "Scotland"].copy()
     gdf = gdf.sjoin(whs_gdf, how="left", predicate="intersects").drop_duplicates(
         subset="UPRN"
     )
