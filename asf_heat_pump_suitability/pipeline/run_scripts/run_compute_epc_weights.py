@@ -5,8 +5,8 @@ following features:
 - tenure (owner-occupied, social rental, private rental)
 - build year (pre- and post-1930 split, and unknown); [applies to England and Wales only*]
 
-*Data Zones in Scotland are reweighted on two features only (property type and tenure) due to the absence of target
-build year data aggregated to Data Zone-level.
+*Data Zones in Scotland are the closest equivalent to LSOAs in England and Wales. They are reweighted on two features
+only (property type and tenure) due to the absence of target build year data aggregated to Data Zone-level.
 
 To run:
 python -i asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc [path/to/EPC] -y [YYYY] -q [N]
