@@ -1,5 +1,5 @@
 """
-This script processes and visualises heat network (HN) and heat pump suitability data for Liverpool.
+This script processes and visualises DESNZ heat network (HN) and Nesta heat pump suitability data for Liverpool.
 
 Steps:
 1. Load and preprocess data:
@@ -16,7 +16,20 @@ Steps:
 
 5. Define and use a function to plot absolute error maps by DESNZ Pilot Score, saving the plots as PNG files.
 
-6. Load and plot average Nesta HN scores against DESNZ Pilot Fraction along with plotting the best fit line and calculating the R^{2}.
+6. Load and plot average Nesta HN scores against DESNZ Pilot Fraction threshold along with plotting the best fit line and calculating the R^{2}.
+
+Usage:
+    python plot_comparison_of_hn_zones.py [--read_from_s3]
+
+Arguments:
+    --read_from_s3 (bool): If True, read the input files from S3 bucket. Defaults to False.
+
+Example:
+    # Run the script with local files
+    python plot_comparison_of_hn_zones.py
+
+    # Run the script with files from S3
+    python plot_comparison_of_hn_zones.py --read_from_s3 True
 """
 
 import geopandas as gpd
@@ -30,56 +43,92 @@ import logging
 from asf_heat_pump_suitability import PROJECT_DIR
 import numpy as np
 from sklearn.metrics import r2_score
+import argparse
+import boto3
 
 # Set up logging configuration
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
-# Define constants for file paths (LEAVE UNCHANGED)
+# Define local directories and file paths
 INPUT_DIR = os.path.join(PROJECT_DIR, "outputs/hn_zones/output_data/")
-
-LIVERPOOL_HP_SUITABILITY_PARQUET = os.path.join(
+LOCAL_LIVERPOOL_HP_SUITABILITY_PARQUET = os.path.join(
     INPUT_DIR, "liverpool_hp_suitability_scores_with_desnz.parquet"
 )
-
-AVERAGE_HN_SCORES_COVERAGE_PARQUET = os.path.join(
+LOCAL_AVERAGE_HN_SCORES_COVERAGE_PARQUET = os.path.join(
     INPUT_DIR, "average_scores_by_threshold.parquet"
 )
-print(AVERAGE_HN_SCORES_COVERAGE_PARQUET)
+LOCAL_LSOA_JSON_PATH = os.path.join(INPUT_DIR, "liverpool_hp_suitability_lsoas.json")
 
 LSOA_SHP_PATH = "s3://asf-heat-pump-suitability/source_data/Lower_layer_Super_Output_Areas_2021_EW_BFE_V9_-9107090204806789093/LSOA_2021_EW_BFE_V9.shp"
 LIVERPOOL_GPKG_PATH = "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Liverpool.gpkg"
-LSOA_JSON_PATH = os.path.join(INPUT_DIR, "liverpool_hp_suitability_lsoas.json")
+
+# Define S3 variables and paths
+S3_BUCKET = "asf-heat-pump-suitability"
+S3_KEY_DIR = "evaluation/desnz_hn_zone_scores/"
+S3_KEY_LIVERPOOL_HP_SUITABILITY_PARQUET = (
+    f"{S3_KEY_DIR}liverpool_hp_suitability_scores_with_desnz.parquet"
+)
+S3_KEY_AVERAGE_HN_SCORES_COVERAGE_PARQUET = (
+    f"{S3_KEY_DIR}average_scores_by_threshold.parquet"
+)
+S3_KEY_LSOA_JSON_PATH = f"{S3_KEY_DIR}liverpool_hp_suitability_lsoas.json"
+# Define output directory
 OUTPUT_DIR = os.path.join(PROJECT_DIR, "outputs/hn_zones/output_plots/")
 
 # Ensure the output directory exists
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+
 # Define a variable for target CRS to avoid hardcoding
 TARGET_CRS = "EPSG:27700"
 
 
-def load_data():
+def load_data(read_from_s3: bool = False) -> tuple:
     """
     Load the necessary data files and return them.
 
+    Args:
+        read_from_s3 (bool): If True, read the input files from S3. If False, read the input files locally.
+
     Returns:
         Tuple:
-            - pd.DataFrame: DataFrame with Liverpool heat pump suitability scores.
+            - pl.DataFrame: DataFrame with Liverpool heat pump suitability scores.
             - List[str]: List of LSOA codes for Liverpool.
-            - pl.DataFrame: DataFrame with average HN scores coverage.
+            - pl.DataFrame: DataFrame with the average heat network scores for different area thresholds (threshold is the fraction of an LSOA which is covered by a DESNZ HN zone).
     Raises:
         IOError: If any of the data files cannot be loaded.
     """
     try:
         logging.info("Loading data files...")
-        liverpool_hp_suitability_scores_pd = pd.read_parquet(
-            LIVERPOOL_HP_SUITABILITY_PARQUET
-        )
-        with open(LSOA_JSON_PATH, "r") as file:
-            liverpool_hp_suitability_lsoas = json.load(file)
-        average_hn_scores_coverage_df = pl.read_parquet(
-            AVERAGE_HN_SCORES_COVERAGE_PARQUET
-        )
+        if read_from_s3:
+            # Read from S3
+            s3_client = boto3.client("s3")
+
+            # Read Liverpool heat pump suitability scores
+            liv_hps_obj = s3_client.get_object(
+                Bucket=S3_BUCKET, Key=S3_KEY_LIVERPOOL_HP_SUITABILITY_PARQUET
+            )
+            liverpool_hp_suitability_scores_pd = pd.read_parquet(liv_hps_obj["Body"])
+
+            # Read LSOA JSON
+            liv_hps_lsoas_obj = s3_client.get_object(
+                Bucket=S3_BUCKET, Key=S3_KEY_LSOA_JSON_PATH
+            )
+            liverpool_lsoas = json.loads(liv_hps_lsoas_obj["Body"].read())
+
+            # Read average HN scores coverage
+            avg_hn_scores_obj = s3_client.get_object(
+                Bucket=S3_BUCKET, Key=S3_KEY_AVERAGE_HN_SCORES_COVERAGE_PARQUET
+            )
+            average_hn_scores_coverage_df = pl.read_parquet(avg_hn_scores_obj["Body"])
+        else:
+            liverpool_hp_suitability_scores_pd = pd.read_parquet(
+                LOCAL_LIVERPOOL_HP_SUITABILITY_PARQUET
+            )
+            with open(LOCAL_LSOA_JSON_PATH, "r") as file:
+                liverpool_lsoas = json.load(file)
+            average_hn_scores_coverage_df = pl.read_parquet(
+                LOCAL_AVERAGE_HN_SCORES_COVERAGE_PARQUET
+            )
 
         # Basic validation: Check expected columns in the main DataFrame
         expected_cols = ["LSOA21CD", "DESNZ_pilot_fraction", "absolute_error"]
@@ -90,12 +139,12 @@ def load_data():
         ]
         if missing_cols:
             raise ValueError(
-                f"Missing expected columns in main DataFrame: {missing_cols}"
+                f"Missing expected columns in hp suitability df: {missing_cols}"
             )
 
         return (
             liverpool_hp_suitability_scores_pd,
-            liverpool_hp_suitability_lsoas,
+            liverpool_lsoas,
             average_hn_scores_coverage_df,
         )
     except Exception as e:
@@ -104,7 +153,7 @@ def load_data():
 
 
 def preprocess_data(
-    liverpool_hp_suitability_lsoas: list,
+    liverpool_lsoas: list,
     lsoa_shp_path: str = LSOA_SHP_PATH,
     target_crs: str = TARGET_CRS,
 ) -> gpd.GeoDataFrame:
@@ -112,7 +161,7 @@ def preprocess_data(
     Load and preprocess LSOA geospatial data by extracting unique LSOA geometries and filtering Liverpool LSOAs.
 
     Args:
-        liverpool_hp_suitability_lsoas (list): List of LSOA codes for Liverpool.
+        liverpool_lsoas (list): List of LSOA codes for Liverpool.
         lsoa_shp_path (str): Path to the LSOA shapefile.
         target_crs (str): The target CRS to ensure consistent geospatial analysis.
 
@@ -125,7 +174,7 @@ def preprocess_data(
         logging.info(f"Converting to {target_crs}")
         lsoa_geometries_gdf = lsoa_geometries_gdf.to_crs(target_crs)
     liverpool_lsoa_geometries_gdf = lsoa_geometries_gdf[
-        lsoa_geometries_gdf["LSOA21CD"].isin(liverpool_hp_suitability_lsoas)
+        lsoa_geometries_gdf["LSOA21CD"].isin(liverpool_lsoas)
     ]
 
     if liverpool_lsoa_geometries_gdf.empty:
@@ -134,9 +183,11 @@ def preprocess_data(
     return liverpool_lsoa_geometries_gdf
 
 
-def plot_lsoa_geometries(liverpool_lsoa_geometries_gdf, output_dir: str = OUTPUT_DIR):
+def plot_lsoa_geometries(
+    liverpool_lsoa_geometries_gdf: gpd.GeoDataFrame, output_dir: str = OUTPUT_DIR
+):
     """
-    Plot Liverpool LSOA geometries and save as PNG.
+    Plot Liverpool LSOA geometries and save as PNG and PDF.
 
     Args:
         liverpool_lsoa_geometries_gdf (gpd.GeoDataFrame): GeoDataFrame with Liverpool LSOA geometries.
@@ -157,7 +208,7 @@ def merge_data(
     liverpool_lsoa_geometries_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """
-    Merge suitability scores with geometries and convert to GeoDataFrame.
+    Merge LSOA suitability scores with geometries and convert to GeoDataFrame.
 
     Args:
         liverpool_hp_suitability_scores_pd (pd.DataFrame): DataFrame with Liverpool heat pump suitability scores.
@@ -192,7 +243,7 @@ def plot_overlay(
     output_dir: str = OUTPUT_DIR,
 ):
     """
-    Overlay of DESNZ pilot heat network zones on LSOAs in Liverpool.
+    Overlay of DESNZ pilot heat network zones on LSOAs in Liverpool. Saves the plot as PNG and PDF.
 
     Args:
         liverpool_hp_suitability_gdf (gpd.GeoDataFrame): GeoDataFrame with Liverpool heat pump suitability scores and geometries.
@@ -223,7 +274,7 @@ def plot_absolute_error_map(
     output_dir: str = OUTPUT_DIR,
 ):
     """
-    Plot an absolute error map for areas in Liverpool based on the DESNZ pilot score.
+    Plot an absolute error map for areas in Liverpool based on the DESNZ pilot score. Saves the plot as PNG and PDF.
 
     Args:
         hp_suitability_gdf (gpd.GeoDataFrame): GeoDataFrame containing Liverpool's LSOA geometries and
@@ -232,6 +283,7 @@ def plot_absolute_error_map(
         score (float): DESNZ pilot score threshold.
                        If > 0.0, plot regions where DESNZ_pilot_fraction >= score.
                        If 0, plot regions where DESNZ_pilot_fraction == 0.
+                       Range from 0 to 1.
         title (str): Title for the plot.
         filename (str): Filename (PNG) to save the plot.
         output_dir (str): Output directory to save the plot image.
@@ -239,7 +291,7 @@ def plot_absolute_error_map(
     Raises:
         ValueError: If score < 0.
     """
-    logging.info(f"Plotting absolute error map for score {score}...")
+    logging.info(f"Plotting absolute error map for score threshold {score}...")
     if score < 0:
         raise ValueError("Score must be a non-negative value.")
 
@@ -285,7 +337,7 @@ def plot_hn_avg_score_vs_fraction_threshold(
     Args:
         average_hn_scores_coverage_df (pl.DataFrame): DataFrame with average Nesta HN scores and DESNZ Pilot Fraction.
         fraction_thresholds_col (str): Column name for DESNZ Pilot Fraction Threshold.
-        hn_avg_scores_col (str): Column name for HN_N Avg Score Weighted.
+        hn_avg_scores_col (str): Column name for Nesta Heat Network Avg Score Weighted.
     """
     logging.info("Plotting average HN score vs DESNZ Pilot Fraction Threshold...")
     fraction_thresholds = average_hn_scores_coverage_df[
@@ -356,12 +408,25 @@ def plot_hn_avg_score_vs_fraction_threshold(
 
 
 if __name__ == "__main__":
+    # Argument parser for reading inputs from s3
+    parser = argparse.ArgumentParser(
+        description="Process heat network zones and calculate scores."
+    )
+    parser.add_argument(
+        "--read_from_s3",
+        type=bool,
+        default=False,
+        help="Read the input files from S3 bucket.",
+    )
+    args = parser.parse_args()
+    read_from_s3 = args.read_from_s3
+
     (
         liverpool_hp_suitability_scores_pd,
-        liverpool_hp_suitability_lsoas,
+        liverpool_lsoas,
         average_hn_scores_coverage_df,
     ) = load_data()
-    liverpool_lsoa_geometries_gdf = preprocess_data(liverpool_hp_suitability_lsoas)
+    liverpool_lsoa_geometries_gdf = preprocess_data(liverpool_lsoas)
     plot_lsoa_geometries(liverpool_lsoa_geometries_gdf)
     liverpool_hp_suitability_gdf = merge_data(
         liverpool_hp_suitability_scores_pd, liverpool_lsoa_geometries_gdf
