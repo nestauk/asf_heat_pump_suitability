@@ -26,31 +26,41 @@ This script analyses DESNZ heat network (HN) zones and Nesta's heat pump suitabi
 
 **How to Run the Script**:
 To run the script, use the following command:
-python comparison_of_hn_zones.py [--optional_threshold OPTIONAL_THRESHOLD]
+python comparison_of_hn_zones.py [--optional_threshold OPTIONAL_THRESHOLD] [--read_in_s3 READ_IN_S3] [--save_to_s3 SAVE_TO_S3]
+
+Example:
+    # Run the script with default settings (local files, no threshold)
+    python comparison_of_hn_zones.py
+
+    # Run the script with a specific threshold
+    python comparison_of_hn_zones.py --optional_threshold 0.1
+
+    # Run the script with files from S3
+    python comparison_of_hn_zones.py --read_in_s3 True
+
+    # Run the script and save outputs to S3
+    python comparison_of_hn_zones.py --save_to_s3 True
+
+    # Run the script with a specific threshold, read from S3, and save to S3
+    python comparison_of_hn_zones.py --optional_threshold 0.1 --read_in_s3 True --save_to_s3 True
 """
 
 import geopandas as gpd
 import pyogrio
 import polars as pl
-from typing import Tuple, List, Callable, Optional
+from typing import Tuple, List, Optional
 import logging
 import json
 import os
-from shapely.geometry import Polygon
 from asf_heat_pump_suitability import PROJECT_DIR
 import argparse
+import boto3
 
 
 # Define file paths
-# LIVERPOOL_GPKG_PATH = "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Liverpool.gpkg"
-# LSOA_SHP_PATH = "s3://asf-heat-pump-suitability/source_data/Lower_layer_Super_Output_Areas_2021_EW_BFE_V9_-9107090204806789093/LSOA_2021_EW_BFE_V9.shp"
-# NESTA_HP_SUITABILITY_PARQUET_PATH = "s3://nesta-open-data/asf_heat_pump_suitability/2023Q4/20240925_2023_Q4_EPC_heat_pump_suitability_per_lsoa.parquet"
 LA_TO_ANALYSE = "Liverpool"
-LIVERPOOL_GPKG_PATH = "heat-network-zone-map-Liverpool.gpkg"
-LSOA_SHP_PATH = "LSOA_2021_EW_BFE_V9.shp"
-NESTA_HP_SUITABILITY_PARQUET_PATH = (
-    "20240925_2023_Q4_EPC_heat_pump_suitability_per_lsoa.parquet"
-)
+S3_BUCKET = "asf-heat-pump-suitability"
+S3_KEY_DIR = "evaluation/desnz_hn_zone_scores/"
 
 
 def setup_logging_and_file_path(
@@ -85,14 +95,54 @@ def setup_logging_and_file_path(
     logging.info(f"Logging setup complete. Logs are saved to {log_file_path}.")
 
 
-def load_hn_geodata(
+def setup_paths(read_in_s3: bool):
+    """
+    Set up the paths based on whether to read from S3 or locally.
+
+    Args:
+        read_in_s3 (bool): If True, set up paths to read from S3. Otherwise, set up local paths.
+
+    Returns:
+        Tuple[str, str, str]: Paths for LIVERPOOL_GPKG_PATH, LSOA_SHP_PATH, and NESTA_HP_SUITABILITY_PARQUET_PATH.
+    """
+    if read_in_s3:
+        LIVERPOOL_GPKG_PATH = "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Liverpool.gpkg"
+        LSOA_SHP_PATH = "s3://asf-heat-pump-suitability/source_data/Lower_layer_Super_Output_Areas_2021_EW_BFE_V9_-9107090204806789093/LSOA_2021_EW_BFE_V9.shp"
+        NESTA_HP_SUITABILITY_PARQUET_PATH = "s3://nesta-open-data/asf_heat_pump_suitability/2023Q4/20240925_2023_Q4_EPC_heat_pump_suitability_per_lsoa.parquet"
+    else:
+        LIVERPOOL_GPKG_PATH = "heat-network-zone-map-Liverpool.gpkg"
+        LSOA_SHP_PATH = "LSOA_2021_EW_BFE_V9.shp"
+        NESTA_HP_SUITABILITY_PARQUET_PATH = (
+            "20240925_2023_Q4_EPC_heat_pump_suitability_per_lsoa.parquet"
+        )
+    return LIVERPOOL_GPKG_PATH, LSOA_SHP_PATH, NESTA_HP_SUITABILITY_PARQUET_PATH
+
+
+def optionally_upload_file_to_s3(
+    local_file_path: str, s3_bucket: str, s3_key: str, save_to_s3: bool
+) -> None:
+    """
+    Upload a local file to an S3 bucket.
+
+    Args:
+        local_file_path (str): Path to the local file.
+        s3_bucket (str): Name of the S3 bucket.
+        s3_key (str): S3 key (path) where the file should be uploaded.
+    """
+    if save_to_s3:
+        s3_client = boto3.client("s3")
+        s3_client.upload_file(local_file_path, s3_bucket, s3_key)
+        logging.info(f"File uploaded to s3://{s3_bucket}/{s3_key}")
+
+
+def load_transform_hn_geodata(
     desnz_hn_gpkg_path: str, lsoa_shp_path: str
 ) -> Tuple[gpd.GeoDataFrame, List[str]]:
     """
-    Load the HN GeoPackage file and perform a spatial join with LSOA polygons to add a column of LSOA codes.
+    Load the Heat Networks GeoPackage file, perform a spatial join with LSOA polygons to add a column of LSOA codes and calculates the intersection area and the fraction of LSOA area covered by HN zones.
 
     Args:
-        desnz_hn_gpkg_path (str): Path to the GeoPackage file with the HN zones.
+        desnz_hn_gpkg_path (str): Path to the GeoPackage file with the Heat Network zones.
         lsoa_shp_path (str): Path to the LSOA shapefile.
 
     Returns:
@@ -122,22 +172,12 @@ def load_hn_geodata(
         how="left",
         predicate="intersects",
     )
-
-    # Calculate the intersection area and the fraction of LSOA area covered by HN zones
-    joined_gdf["intersection_area"] = joined_gdf.apply(
-        lambda row: row.geometry.intersection(
-            lsoa_gdf.loc[row.index_right, "geometry"]
-        ).area,
-        axis=1,
-    )
     lsoa_gdf["total_area"] = lsoa_gdf.geometry.area
-
-    # Merge the LSOA geometries into the joined GeoDataFrame
-    joined_gdf = joined_gdf.merge(lsoa_gdf[["LSOA21CD", "total_area"]], on="LSOA21CD")
-
-    # Extract unique LSOA codes from the joined GeoDataFrame
+    # Get all intersections between DESNZ heat network zones and LSOAs
+    joined_gdf = gpd.overlay(desnz_hn_gdf, lsoa_gdf, how="intersection")
+    # Calculate area of intersections
     joined_gdf["fraction_covered"] = (
-        joined_gdf["intersection_area"] / joined_gdf["total_area"]
+        joined_gdf["geometry"].area / joined_gdf["total_area"]
     )
     desnz_hn_unique_lsoas = joined_gdf["LSOA21CD"].dropna().unique().tolist()
     return joined_gdf, desnz_hn_unique_lsoas
@@ -187,10 +227,11 @@ def add_DESNZ_pilot_fraction(
     Args:
         la_hp_suitability_scores (pl.DataFrame): Data containing 'LSOA21CD' and 'HN_N_avg_score_weighted' columns for a single LA.
         joined_gdf (gpd.GeoDataFrame): GeoDataFrame containing 'LSOA21CD' and 'fraction_covered' columns.
+        optional_threshold (Optional[float]): Optional threshold for fraction of HN zone area contained within LA. Defaults to 0.
 
     Returns:
         Tuple[pl.DataFrame, float, float]:
-            - Updated DataFrame with 'DESNZ_pilot_fraction' column added (fraction of area covered by HN zones).
+            - Updated DataFrame with 'DESNZ_pilot_fraction' column added (fraction of local authority area covered by HN zones).
             - Average 'HN_N_avg_score_weighted' for rows where 'DESNZ_pilot_fraction' is non-zero.
             - Average 'HN_N_avg_score_weighted' for rows where 'DESNZ_pilot_fraction' is zero.
     """
@@ -215,10 +256,11 @@ def add_DESNZ_pilot_fraction(
     # Calculating the average Nesta HN score for non-zero and zero DESNZ pilot scores
     avg_hn_score_pilot_nonzero = _calculate_hn_pilot_average_score(
         la_hp_suitability_scores,
-        pilot_score_condition=lambda col: col > optional_threshold,
+        hn_zones=True,
+        optional_threshold=optional_threshold,
     )
     avg_hn_score_pilot_zero = _calculate_hn_pilot_average_score(
-        la_hp_suitability_scores, pilot_score_condition=lambda col: col == 0
+        la_hp_suitability_scores, hn_zones=False
     )
     return la_hp_suitability_scores, avg_hn_score_pilot_nonzero, avg_hn_score_pilot_zero
 
@@ -239,7 +281,7 @@ def calculate_average_scores_for_thresholds(
     results = []
     for threshold in thresholds:
         avg_score = _calculate_hn_pilot_average_score(
-            la_hp_suitability_scores, pilot_score_condition=lambda col: col > threshold
+            la_hp_suitability_scores, hn_zones=True, optional_threshold=threshold
         )
         results.append(
             {
@@ -253,22 +295,30 @@ def calculate_average_scores_for_thresholds(
 
 def _calculate_hn_pilot_average_score(
     la_hp_suitability_scores: pl.DataFrame,
-    pilot_score_condition: Callable[[pl.Expr], pl.Expr],
+    hn_zones: bool,
+    optional_threshold: Optional[float] = 0,
 ) -> float:
     """
-    Calculate the average Nesta Heat Network score for LSOAs in (`DESNZ_pilot_fraction > 0`) or not in (`DESNZ_pilot_fraction == 0`) DESNZ heat network pilot areas.
+    Calculate the average Nesta Heat Network score for LSOAs in (`DESNZ_pilot_fraction > optional_threshold`) or not in (`DESNZ_pilot_fraction == 0`) DESNZ heat network pilot areas.
 
     Args:
         la_hp_suitability_scores (pl.DataFrame): DataFrame containing 'DESNZ_pilot_fraction' and 'HN_N_avg_score_weighted' columns for a LA.
-        pilot_score_condition (Callable[[pl.Expr], pl.Expr]): The value of 'DESNZ_pilot_fraction' to filter by (must be >0 or 0).
+        hn_zones (bool): If True, calculate average Nesta heat network score for LSOAs in DESNZ heat network zones. Set to False to calculate the average score for LSOAs not in heat network zones.
+        optional_threshold (Optional[float]): The threshold value for 'DESNZ_pilot_fraction'. Defaults to 0. Range: 0-1.
 
     Returns:
         float: Average 'HN_N_avg_score_weighted' for the filtered rows.
     """
-    # Apply the condition function to filter the DataFrame
-    filtered_la_hp_suitability_scores = la_hp_suitability_scores.filter(
-        pilot_score_condition(pl.col("DESNZ_pilot_fraction"))
-    )
+    if hn_zones:
+        # Filter for LSOAs in DESNZ heat network zones
+        filtered_la_hp_suitability_scores = la_hp_suitability_scores.filter(
+            pl.col("DESNZ_pilot_fraction") > optional_threshold
+        )
+    else:
+        # Filter for LSOAs not in DESNZ heat network zones
+        filtered_la_hp_suitability_scores = la_hp_suitability_scores.filter(
+            pl.col("DESNZ_pilot_fraction") == 0
+        )
 
     # Calculate the average score
     avg_score = filtered_la_hp_suitability_scores["HN_N_avg_score_weighted"].mean()
@@ -277,22 +327,32 @@ def _calculate_hn_pilot_average_score(
 
 def calculate_mae_for_pilot_score(
     hp_suitability_scores_with_desnz: pl.DataFrame,
-    condition_score_value: Callable[[pl.Expr], pl.Expr],
+    hn_zones: bool,
+    optional_threshold: Optional[float] = 0,
 ) -> float:
     """
-    Calculate the Mean Absolute Error (MAE) for entries satisfying a specified condition on 'DESNZ_pilot_fraction'.
+    Calculate the Mean Absolute Error (MAE) for entries in or not in DESNZ heat network zones.
 
     Args:
         hp_suitability_scores_with_desnz (pl.DataFrame): DataFrame containing 'DESNZ_pilot_fraction' and 'absolute_error' columns.
-        condition_score_value (Callable[[pl.Expr], pl.Expr]): A function defining the condition to filter 'DESNZ_pilot_fraction'.
+        hn_zones (bool): If True, calculate MAE for entries in DESNZ heat network zones. Set to False to calculate MAE for entries not in heat network zones.
+        optional_threshold (Optional[float]): The threshold value for 'DESNZ_pilot_fraction'. Defaults to 0. Range: 0-1.
 
     Returns:
         float: The MAE for the specified condition.
     """
-    # Apply the DEZNZ pilot score condition to filter the DataFrame
-    filtered_df = hp_suitability_scores_with_desnz.filter(
-        condition_score_value(pl.col("DESNZ_pilot_fraction"))
-    )
+    if hn_zones:
+        # Filter for entries in DESNZ heat network zones
+        filtered_df = hp_suitability_scores_with_desnz.filter(
+            pl.col("DESNZ_pilot_fraction") > optional_threshold
+        )
+    else:
+        # Filter for entries not in DESNZ heat network zones
+        filtered_df = hp_suitability_scores_with_desnz.filter(
+            pl.col("DESNZ_pilot_fraction") == 0
+        )
+
+    # Calculate the MAE
     mae = filtered_df["absolute_error"].mean()
     return mae
 
@@ -337,24 +397,54 @@ if __name__ == "__main__":
         "--optional_threshold",
         type=float,
         default=0.0,
-        help="Optional threshold for DESNZ pilot fraction for calculating average Nesta HN score.",
+        help="Optional threshold for DESNZ pilot fraction for calculating average Nesta HN score. Range: 0-1.",
+    )
+    parser.add_argument(
+        "--read_in_s3",
+        type=bool,
+        default=False,
+        help="Read in the input files from S3.",
+    )
+    parser.add_argument(
+        "--save_to_s3",
+        type=bool,
+        default=False,
+        help="Save the output files to S3.",
     )
     args = parser.parse_args()
     # Extract the optional_threshold value from args
     optional_threshold = args.optional_threshold
+    save_to_s3 = args.save_to_s3
+    read_in_s3 = args.read_in_s3
+    LIVERPOOL_GPKG_PATH, LSOA_SHP_PATH, NESTA_HP_SUITABILITY_PARQUET_PATH = setup_paths(
+        read_in_s3=read_in_s3
+    )
     # Define the output directory and set up logging
     output_dir = os.path.join(PROJECT_DIR, "outputs/hn_zones/output_data/")
+
     setup_logging_and_file_path(output_dir=output_dir)
 
     # Load the data and perform spatial join
-    liverpool_with_desnz_hn_lsoa, list_of_liverpool_desnz_hn_lsoas = load_hn_geodata(
-        desnz_hn_gpkg_path=LIVERPOOL_GPKG_PATH, lsoa_shp_path=LSOA_SHP_PATH
+    liverpool_with_desnz_hn_lsoa, list_of_liverpool_desnz_hn_lsoas = (
+        load_transform_hn_geodata(
+            desnz_hn_gpkg_path=LIVERPOOL_GPKG_PATH, lsoa_shp_path=LSOA_SHP_PATH
+        )
     )
 
     logging.info("Loaded Liverpool with DESNZ HN LSOA data.")
+
+    liv_desnz_hn_filename = "liverpool_with_desnz_hn_lsoa.gpkg"
+    liv_desnz_hn_local_file_path = os.path.join(output_dir, liv_desnz_hn_filename)
     liverpool_with_desnz_hn_lsoa.to_file(
-        filename=os.path.join(output_dir, "liverpool_with_desnz_hn_lsoa.gpkg"),
+        filename=liv_desnz_hn_local_file_path,
         driver="GPKG",
+    )
+    liv_desnz_hn_s3_key = f"{S3_KEY_DIR}{liv_desnz_hn_filename}"
+    optionally_upload_file_to_s3(
+        local_file_path=liv_desnz_hn_local_file_path,
+        s3_bucket=S3_BUCKET,
+        s3_key=liv_desnz_hn_s3_key,
+        save_to_s3=save_to_s3,
     )
 
     # Process Nesta heat pump suitability scores
@@ -365,11 +455,20 @@ if __name__ == "__main__":
         )
     )
     logging.info("Processed Nesta HP suitability scores for Liverpool.")
+    # Define JSON file name and paths
+    lsoas_json_filename = "liverpool_hp_suitability_lsoas.json"
+    lsoas_json_local_file_path = os.path.join(output_dir, lsoas_json_filename)
+    lsoas_json_s3_key = f"{S3_KEY_DIR}{lsoas_json_filename}"
 
-    with open(
-        os.path.join(output_dir, "liverpool_hp_suitability_lsoas.json"), "w"
-    ) as file:
+    with open(os.path.join(output_dir, lsoas_json_filename), "w") as file:
         json.dump(liverpool_hp_suitability_lsoas, file)
+
+    optionally_upload_file_to_s3(
+        local_file_path=lsoas_json_local_file_path,
+        s3_bucket=S3_BUCKET,
+        s3_key=lsoas_json_s3_key,
+        save_to_s3=save_to_s3,
+    )
 
     # Check LSOAs not in HP suitability scores
     not_in_hp_suitability = set(list_of_liverpool_desnz_hn_lsoas) - set(
@@ -411,8 +510,14 @@ if __name__ == "__main__":
     )
 
     # Save the results to Parquet
-    average_scores_df.write_parquet(
-        os.path.join(output_dir, "average_scores_by_threshold.parquet")
+    avg_score_parquet_filename = "average_scores_by_threshold.parquet"
+    avg_score_parquet_filepath = os.path.join(output_dir, avg_score_parquet_filename)
+    average_scores_df.write_parquet(avg_score_parquet_filepath)
+    optionally_upload_file_to_s3(
+        local_file_path=avg_score_parquet_filepath,
+        s3_bucket=S3_BUCKET,
+        s3_key=f"{S3_KEY_DIR}{avg_score_parquet_filename}",
+        save_to_s3=save_to_s3,
     )
 
     # Calculate and log Mean Absolute Error (MAE)
@@ -423,21 +528,31 @@ if __name__ == "__main__":
     )
     mae_pilot_non_zero = calculate_mae_for_pilot_score(
         hp_suitability_scores_with_desnz=liverpool_hp_suitability_scores_with_desnz,
-        condition_score_value=lambda col: col > 0,
+        hn_zones=True,
     )
     logging.info(
         f"Mean Absolute Error (MAE) for DESNZ_pilot_fraction > 0: {mae_pilot_non_zero}"
     )
     mae_pilot_zero = calculate_mae_for_pilot_score(
         hp_suitability_scores_with_desnz=liverpool_hp_suitability_scores_with_desnz,
-        condition_score_value=lambda col: col == 0,
+        hn_zones=False,
     )
     logging.info(
         f"Mean Absolute Error (MAE) for DESNZ_pilot_fraction = 0: {mae_pilot_zero}"
     )
-
+    # Define Parquet file name and paths for MAE results
+    mae_parquet_filename = "liverpool_hp_suitability_scores_with_desnz.parquet"
+    mae_parquet_local_file_path = os.path.join(output_dir, mae_parquet_filename)
+    mae_parquet_s3_key = f"{S3_KEY_DIR}{mae_parquet_filename}"
     liverpool_hp_suitability_scores_with_desnz.write_parquet(
-        os.path.join(output_dir, "liverpool_hp_suitability_scores_with_desnz.parquet")
+        mae_parquet_local_file_path
+    )
+
+    optionally_upload_file_to_s3(
+        local_file_path=mae_parquet_local_file_path,
+        s3_bucket=S3_BUCKET,
+        s3_key=mae_parquet_s3_key,
+        save_to_s3=save_to_s3,
     )
     # Write to CSV file
     liverpool_hp_suitability_scores_with_desnz.write_csv(
