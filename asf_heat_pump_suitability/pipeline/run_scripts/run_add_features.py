@@ -177,7 +177,9 @@ if __name__ == "__main__":
     anchor_properties_df = anchor_properties.identify_anchor_properties_df().select(
         ["lsoa", "has_anchor_property"]
     )
-    epc_df = epc_df.join(anchor_properties_df, how="left", on="lsoa")
+    epc_df = epc_df.join(anchor_properties_df, how="left", on="lsoa").with_columns(
+        pl.col("has_anchor_property").fill_null(False)
+    )
 
     # Save to S3
     if not save_as:
