@@ -6,7 +6,8 @@ following features:
 - build year (pre- and post-1930 split, and unknown); [applies to England and Wales only*]
 
 *Data Zones in Scotland are the closest equivalent to LSOAs in England and Wales. They are reweighted on two features
-only (property type and tenure) due to the absence of target build year data aggregated to Data Zone-level.
+only (property type and tenure) because there is no target build year data aggregated to Data Zone-level available for
+Scotland.
 
 To run:
 python -i asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc [path/to/EPC] -y [YYYY] -q [N]
@@ -101,7 +102,7 @@ if __name__ == "__main__":
         ],
     )
 
-    # Join ONSPD LSOA col
+    # Join ONS Postcode Directory LSOA col
     epc_df = output_areas.standardise_col_postcode(epc_df, pcd_col="POSTCODE")
     onspd_df = output_areas.transform_df_ons_pd()
     epc_df = epc_df.join(onspd_df, how="left", on="POSTCODE")
