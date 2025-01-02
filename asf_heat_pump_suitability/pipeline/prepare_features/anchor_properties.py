@@ -103,13 +103,13 @@ def load_gdf_and_process_poi() -> gpd.GeoDataFrame:
 
 def identify_anchor_properties_gdf() -> gpd.GeoDataFrame:
     """
-    Identify and analyze anchor properties within LSOAs.
+    Identify and analyze anchor properties within LSOAs/DataZones.
 
     Returns:
-        gpd.GeoDataFrame: Summary of anchor properties by LSOA containing columns:
-            - lsoa: Unique identifier for the LSOA
-            - lsoa_name: Name of the LSOA
-            - anchor_count: Number of anchor properties in the LSOA
+        gpd.GeoDataFrame: Summary of anchor properties by LSOA/DataZone, containing columns:
+            - lsoa: Unique identifier for the LSOA/DataZone
+            - lsoa_name: Name of the LSOA/DataZone
+            - anchor_count: Number of anchor properties in the LSOA/DataZone
             - building_categories: List of main categories present
             - building_subcategories: List of subcategories present
             - has_anchor_property: Boolean indicating presence of anchor properties
