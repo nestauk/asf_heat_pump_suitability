@@ -121,6 +121,8 @@ if __name__ == "__main__":
             f"Running reweighting for {key}. Reweighting using the following features: {features}"
         )
         epc_cleaned_df = epc_df.filter(pl.col("COUNTRY") == key)
+        assert len(epc_cleaned_df) > 0, f"No EPC records found for {key}."
+
         epc_cleaned_df = prepare_sample.drop_nulls_feature_cols(
             df=epc_cleaned_df, features=features
         )
