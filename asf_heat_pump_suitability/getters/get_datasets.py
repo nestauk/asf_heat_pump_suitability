@@ -269,14 +269,20 @@ def load_gdf_listed_buildings(nation: str, **kwargs) -> gpd.GeoDataFrame:
     return gdf
 
 
-def load_gdf_scotgov_data_zone_bounds() -> gpd.GeoDataFrame:
+def load_gdf_scotgov_data_zone_bounds(**kwargs) -> gpd.GeoDataFrame:
     """
-    Load raw 2011 Data Zone geospatial boundary polygons and area data for Scotland from the Scottish Government.
+    Load raw 2011 Data Zone geospatial boundary polygons and area data for Scotland from the Scottish Government. CRS
+    British National Grid (EPSG:27700).
+
+    Args:
+        **kwargs for geopandas.read_file()
 
     Returns:
         gpd.GeoDataFrame: boundary polygons and area data for 2011 Scottish Data Zones
     """
-    return gpd.read_file(config["data_source"]["S_scottish_gov_DZ2011_boundaries"])
+    return gpd.read_file(
+        config["data_source"]["S_scottish_gov_DZ2011_boundaries"], **kwargs
+    )
 
 
 def load_df_nrs_dwellings() -> pl.DataFrame:
