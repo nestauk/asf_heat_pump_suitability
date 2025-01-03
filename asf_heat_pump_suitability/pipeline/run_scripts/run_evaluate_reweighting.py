@@ -63,7 +63,8 @@ if __name__ == "__main__":
     args = parse_arguments()
     year = args.year
     q = args.quarter
-    full_results = {}
+    full_results_ew = {}
+    full_results_s = {}
 
     error_metrics = [
         "rmse_no_missing_cats",
@@ -113,8 +114,12 @@ if __name__ == "__main__":
                 )
                 feature_results[feature_name] = results
             feature_results["n_properties"] = len(subset)
-            full_results[lsoa] = feature_results
+            if country == "Scotland":
+                full_results_s[lsoa] = feature_results
+            else:
+                full_results_ew[lsoa] = feature_results
 
     # Save to S3
-    save_as = f"evaluation/reweighting/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weights_evaluation.json"
-    save_to_s3("asf-heat-pump-suitability", full_results, save_as)
+    for country, results in {"S": full_results_s, "EW": full_results_ew}:
+        save_as = f"evaluation/reweighting/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weights_evaluation_{country}.json"
+        save_to_s3("asf-heat-pump-suitability", results, save_as)
