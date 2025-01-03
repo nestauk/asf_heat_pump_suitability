@@ -120,6 +120,6 @@ if __name__ == "__main__":
                 full_results_ew[lsoa] = feature_results
 
     # Save to S3
-    for country, results in {"S": full_results_s, "EW": full_results_ew}:
+    for country, results in {"S": full_results_s, "EW": full_results_ew}.items():
         save_as = f"evaluation/reweighting/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weights_evaluation_{country}.json"
         save_to_s3("asf-heat-pump-suitability", results, save_as)
