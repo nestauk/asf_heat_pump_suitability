@@ -82,6 +82,11 @@ if __name__ == "__main__":
     logging.info("Joining EPC features data with garden size estimates and weights")
     epc_df = epc_df.join(gardens, how="left", on="UPRN")
     epc_df = epc_df.join(weights, how="left", on="UPRN")
+
+    logging.info(f"Saving augmented EPC data")
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}{q}/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_epc_augmented.parquet"
+    save_utils.save_to_s3(epc_df, save_as)
+
     epc_df = epc_df.with_columns(
         pl.col("garden_area_m2")
         .fill_null(pl.col("msoa_avg_outdoor_space_m2"))
