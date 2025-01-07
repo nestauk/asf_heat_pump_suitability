@@ -39,7 +39,7 @@ def generate_gdf_uprn_coords(
     if not usecols:
         usecols = ["*"]
     else:
-        for col in ["X_COORDINATE", "Y_COORDINATE"]:
+        for col in [x_col, y_col]:
             if col not in usecols:
                 usecols.append(col)
     df = df.select(usecols)
