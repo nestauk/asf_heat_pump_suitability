@@ -113,6 +113,7 @@ def transform_gdf_building_footprints(building_footprint_file: str) -> gpd.GeoDa
     """
     gdf = get_datasets.load_gdf_microsoft_building_footprints(building_footprint_file)
     gdf["geometry"] = transform_geoseries_convert_bng(gdf["geometry"])
+    gdf = gdf.dropna(subset="geometry", axis=0)
     gdf = extend_gdf_building_footprint_id(gdf)
     gdf = geo_utils.transform_gdf_drop_duplicates(gdf)
     if gdf["building_id"].nunique != len(gdf):
@@ -148,7 +149,16 @@ def transform_geoseries_convert_bng(geos: gpd.GeoSeries) -> gpd.GeoSeries:
     # -1 required to prevent spare empty array at the end
     splits = np.split(coords.to_numpy(), split_ids)[:-1]
     # Convert each group of points back into a polygon
-    return gpd.GeoSeries([shapely.Polygon(pts) for pts in splits]).set_crs(epsg=27700)
+    polygons = []
+    for pts in splits:
+        try:
+            polygons.append(shapely.Polygon(pts))
+        except shapely.errors.GEOSException:
+            warnings.warn(
+                "shapely error in building footprint polygon discovered during conversion to BNG: setting geometry to None."
+            )
+            polygons.append(None)
+    return gpd.GeoSeries(polygons).set_crs(epsg=27700)
 
 
 def extend_gdf_building_footprint_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:

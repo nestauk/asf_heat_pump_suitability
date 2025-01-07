@@ -1,3 +1,7 @@
+"""
+Functions to prepare target marginals for reweighting with IPF.
+"""
+
 import random
 import balance
 from balance.weighting_methods import rake
@@ -7,15 +11,31 @@ from typing import Dict
 from asf_heat_pump_suitability.getters import get_target
 
 
-def get_dict_target_marginals() -> Dict[str, dict]:
+def get_dict_target_marginals(
+    features: list, use_la_build_year: bool = False
+) -> Dict[str, Dict[str, dict]]:
     """
-    Get dict of dicts containing target proportions of each feature category per LSOA. Dictionary keys are
-    feature names.
+    Get nested dictionary containing target proportions of each feature category per LSOA. Primary dictionary keys are
+    feature names, secondary keys are LSOA codes, tertiary keys are feature categories.
+
+    Returned nested dict structure:
+    ```
+        {"tenure": {"lsoa_01": {"owner-occupied": <proportion>, "rental (social)": <proportion>, etc.},
+                    "lsoa_02": {"owner-occupied": <proportion>, "rental (social)": <proportion>, etc.}},
+         "build_year": {"lsoa_01": {"pre-1930": <proportion>, "post-1930": <proportion>}}
+        }
+    ```
+
+    Args:
+        features (list): features to use in reweighting. Options: tenure; property_type; build_year; n_rooms
+        use_la_build_year (bool): use build year data from local authority rather than LSOA
 
     Returns:
-        Dict[str, dict]: dict of dicts containing target proportions for each feature category per LSOA
+        Dict[str, Dict[str, dict]]: nested dict containing target proportions for each feature category per LSOA
     """
-    target_features = get_dict_dfs_counts()
+    target_features = get_dict_dfs_counts(
+        features=features, use_la_build_year=use_la_build_year
+    )
 
     target_proportions = {
         k: convert_df_proportions(v) for k, v in target_features.items()
@@ -25,35 +45,55 @@ def get_dict_target_marginals() -> Dict[str, dict]:
     return marginals
 
 
-def get_dict_dfs_counts() -> Dict[str, pl.DataFrame]:
+def get_dict_dfs_counts(
+    features: list, use_la_build_year: bool = False
+) -> Dict[str, pl.DataFrame]:
     """
-    Get dict of dataframes containing counts of each feature category per LSOA in the target datasets. Dictionary
-    keys are feature names.
+    Generate dict where keys are feature names and values are dataframes containing counts of each feature variable
+    per LSOA in the target datasets.
+
+    Args:
+        features (list): features to use in reweighting. Options: tenure; property_type; build_year; n_rooms
+        use_la_build_year (bool): use build year data from local authority rather than LSOA
 
     Returns:
-        Dict[str, pl.DataFrame]: dict of dataframes containing counts of each feature category per LSOA in the target
+        Dict[str, pl.DataFrame]: dict of dataframes containing counts of each feature variable per LSOA in the target
         datasets
     """
-    count_dict = {
-        "tenure": get_target.get_df_target_tenure_uncensored(),
-        "property_type": get_target.get_df_target_property_type_uncensored(),
-        "build_year": get_target.get_df_target_build_year(),
-        # TODO: collapse nrooms categories to increase speed
-        # "nrooms": get_target.get_df_target_nrooms(),
-    }
+    count_dict = {}
+
+    if "property_type" in features:
+        count_dict["property_type"] = get_target.transform_df_target_property_type()
+    if "tenure" in features:
+        count_dict["tenure"] = get_target.transform_df_target_tenure()
+    if "build_year" in features:
+        if not use_la_build_year:
+            count_dict["build_year"] = get_target.get_df_target_build_year()
+        else:
+            count_dict["build_year"] = get_target.get_df_target_build_year_la()
+    if "n_rooms" in features:  # TODO: collapse nrooms categories to increase speed
+        count_dict["n_rooms"]: get_target.get_df_target_nrooms()
 
     return count_dict
 
 
 def to_dict_feature_marginals(df: pl.DataFrame) -> Dict[str, dict]:
     """
-    Convert dataframe with target marginals to dict where keys are LSOA codes
+    Convert dataframe with target marginals per LSOA to dict where keys are LSOA codes and values are dictionaries with
+    target proportions for each feature variable.
+
+    Returned dict structure:
+    ```
+        {"lsoa_01": {"owner-occupied": <proportion>, "rental (social)": <proportion>, etc.},
+         "lsoa_02": {"owner-occupied": <proportion>, "rental (social)": <proportion>, etc.},
+        }
+    ```
 
     Args:
-        df (pl.DataFrame): dataframe with target marginals category per LSOA
+        df (pl.DataFrame): single-feature dataframe with target marginals for each feature variable per LSOA
 
     Returns:
-        Dict[str, dict]: dict with target proportions for each feature category where keys are LSOA codes
+        Dict[str, dict]: dict with target proportions for each feature variable where keys are LSOA codes
     """
     lsoas = df["lsoa"].to_list()
     marginals = df.select(pl.exclude("lsoa")).to_dicts()
@@ -63,13 +103,14 @@ def to_dict_feature_marginals(df: pl.DataFrame) -> Dict[str, dict]:
 
 
 def generate_balance_target_population(
-    target_marginals: Dict[str, dict], lsoa: str
+    target_marginals: Dict[str, Dict[str, dict]], lsoa: str
 ) -> balance.sample_class.Sample:
     """
-    Generate balance Sample object from target proportions for each feature category for the specified LSOA.
+    Generate artificial target population from target proportions for each feature variable for the specified LSOA.
 
     Args:
-        target_marginals (Dict[str, dict]): dict of dicts containing target proportions for each feature category by LSOA
+        target_marginals (Dict[str, Dict[str, dict]]): nested dict containing target proportions for each feature
+        variable by LSOA. Structure: {"feature_01": {"lsoa_01": {"feature_01_a": <proportion>, "feature_01_b": <proportion>}}}
         lsoa (str): LSOA code to generate target population for
 
     Returns:
@@ -83,17 +124,28 @@ def generate_balance_target_population(
     return df
 
 
-def get_dict_lsoa_marginals(target_marginals, lsoa):
+def get_dict_lsoa_marginals(
+    target_marginals: Dict[str, Dict[str, dict]], lsoa: str
+) -> Dict[str, dict]:
     """
-    Get dict of dicts containing target proportions of each feature category for single specified LSOA. Dictionary keys
-    are feature names.
+    Get nested dictionary where keys are feature names and values are dictionaries containing target proportions of each
+    feature variable for a single specified LSOA.
+
+    Returned dict structure:
+    ```
+        {"tenure": {"owner-occupied": <proportion>, "rental (social)": <proportion>, etc.},
+         "build_year": {"pre-1930": <proportion>, "post-1930": <proportion>},
+         "property_type": {"detached": <proportion>, "semi-detached": <proportion>, etc.}}
+        }
+    ```
 
     Args:
-        target_marginals (Dict[str, dict]): dict of dicts containing target proportions for each feature category per LSOA
+        target_marginals (Dict[str, Dict[str, dict]]): nested dict containing target proportions for each feature
+        variable by LSOA. Structure: {"feature_01": {"lsoa_01": {"feature_01_a": <proportion>, "feature_01_b": <proportion>}}}
         lsoa (str): LSOA code to get target marginals for
 
     Returns:
-        Dict[str, dict]: dict of dicts containing target proportions for each feature category for single specified
+        Dict[str, dict]: nested dictionary containing target proportions for each feature variable for a single specified
         LSOA
     """
     lsoa_marginals = {k: v[lsoa] for k, v in target_marginals.items()}

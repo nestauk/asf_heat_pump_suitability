@@ -1,3 +1,7 @@
+"""
+Functions to prepare EPC data for reweighting.
+"""
+
 import polars as pl
 import polars.selectors as cs
 from asf_heat_pump_suitability import config
@@ -22,7 +26,7 @@ def drop_nulls_feature_cols(df, features):
         )
         .with_columns(
             pl.col("build_year").fill_null("unknown")
-        )  # replace null with unknown because it's a build_year category
+        )  # replace null with unknown because 'unknown' is a build_year category
         .drop_nulls(subset=features)
     )
     return df
@@ -67,21 +71,21 @@ def add_col_property_type(df: pl.DataFrame) -> pl.DataFrame:
             pl.col("PROPERTY_TYPE").is_in(["House", "Bungalow"]),
             pl.col("BUILT_FORM") == "Detached",
         )
-        .then(pl.lit("Detached whole house or bungalow"))
+        .then(pl.lit("Detached"))
         .when(
             pl.col("PROPERTY_TYPE").is_in(["House", "Bungalow"]),
             pl.col("BUILT_FORM") == "Semi-Detached",
         )
-        .then(pl.lit("Semi-detached whole house or bungalow"))
+        .then(pl.lit("Semi-detached"))
         .when(
             pl.col("PROPERTY_TYPE").is_in(["House", "Bungalow"]),
             pl.col("BUILT_FORM").is_in(terraced),
         )
-        .then(pl.lit("Terraced (including end-terrace) whole house or bungalow"))
+        .then(pl.lit("Terraced (including end-terrace)"))
         .when(pl.col("PROPERTY_TYPE").is_in(["Flat", "Maisonette"]))
         .then(pl.lit("Flat, maisonette or apartment"))
         .when(pl.col("PROPERTY_TYPE").is_in(["Park home"]))
-        .then(pl.lit("A caravan or other mobile or temporary structure"))
+        .then(pl.lit("Caravan or other mobile or temporary structure"))
         .alias("property_type")
     )
 

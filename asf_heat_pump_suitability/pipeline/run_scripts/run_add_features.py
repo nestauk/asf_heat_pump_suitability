@@ -6,9 +6,10 @@ Enhance EPC dataset with additional features:
 - off gas properties by postcode
 - listed building status per UPRN
 - England and Wales building conservation area flag per UPRN
+- Scotland World Heritage Site flag per UPRN
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_add_features.py --epc_path [path/to/weighted/EPC] -y [YYYY] -q [N]
+python -i asf_heat_pump_suitability/pipeline/run_scripts/run_add_features.py --epc_path [path/to/weighted/EPC] -y [YYYY] -q [N]
 """
 
 import logging
@@ -17,7 +18,9 @@ import s3fs
 import argparse
 from datetime import datetime
 from asf_heat_pump_suitability.pipeline.prepare_features import (
+    anchor_properties,
     conservation_areas,
+    protected_areas,
     epc,
     garden_space_avg,
     lat_lon,
@@ -27,6 +30,7 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
     property_density,
     off_gas,
     listed_buildings,
+    grid_capacity,
 )
 
 
@@ -85,10 +89,11 @@ if __name__ == "__main__":
     logging.info("Adding lat/lon data to EPC")
     uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
     epc_df = epc_df.join(uprn_latlon_df, how="left", on="UPRN")
+    epc_gdf = lat_lon.generate_gdf_uprn_coords(epc_df, usecols=["UPRN", "lad_code"])
 
     # Replace `lad_code` from postcode with `lad_code` from geospatial join and postcode
     logging.info("Adding LAD code with geospatial join")
-    uprn_lad_df = output_areas.sjoin_df_uprn_lad_code(epc_df)
+    uprn_lad_df = output_areas.sjoin_df_uprn_lad_code(epc_gdf)
     epc_df = epc_df.drop("lad_code").join(uprn_lad_df, how="left", on="UPRN")
 
     # Join new features to EPC dataset
@@ -104,20 +109,23 @@ if __name__ == "__main__":
     )
 
     # Add feature: building conservation area flag
-    logging.info("Adding building conservation area flag")
+    logging.info("Adding building conservation area England and Wales flag")
     # Get UPRNs in building conservation areas
-    uprns_in_cons_area_df = conservation_areas.generate_df_uprn_to_cons_area(epc_df)
+    uprns_in_cons_area_df = protected_areas.generate_df_uprn_in_cons_area(epc_gdf)
     epc_df = epc_df.join(uprns_in_cons_area_df, how="left", on="UPRN")
 
     # Label local authorities with missing building conservation area data
-    lad_cons_areas_df = (
-        conservation_areas.generate_df_conservation_area_data_availability(
-            ladcd_col="LAD23CD"
-        )
+    lad_cons_areas_df = protected_areas.generate_df_conservation_area_data_availability(
+        ladcd_col="LAD23CD"
     )
     epc_df = epc_df.join(
         lad_cons_areas_df, how="left", left_on="lad_code", right_on="LAD23CD"
     )
+
+    # Add feature: World Heritage Site flag
+    logging.info("Adding World Heritage Site Scotland flag")
+    uprns_in_whs_df = protected_areas.generate_df_uprn_in_whs(epc_gdf)
+    epc_df = epc_df.join(uprns_in_whs_df, how="left", on="UPRN")
 
     # Add feature: property density
     logging.info("Adding number of households data to EPC")
@@ -139,28 +147,34 @@ if __name__ == "__main__":
     logging.info("Adding property density to EPC")
     epc_df = property_density.extend_df_with_property_density(epc_df)
 
+    # Add feature: property density Scotland
+    dz_density_df = property_density.generate_df_property_density_s()
+    epc_df = epc_df.join(dz_density_df, how="left", left_on="lsoa", right_on="DataZone")
+    epc_df = epc_df.with_columns(
+        pl.col("households_per_km2").fill_null(pl.col("households_per_km2_right"))
+    ).drop("households_per_km2_right")
+
     # Add feature: off gas postcodes
     logging.info("Adding off gas grid column to EPC")
     off_gas_postcodes = off_gas.process_off_gas_data()
     epc_df = off_gas.add_off_gas_feature(epc_df, off_gas_postcodes)
 
     # Add feature: listed buildings data
-    logging.info("Loading listed buildings for England")
-    e_listed_buildings_df = listed_buildings.transform_gdf_listed_buildings("England")
-    e_listed_buildings_df = listed_buildings.sjoin_df_epc_with_listed_buildings(
-        epc_df, e_listed_buildings_df
+    logging.info("Adding listed buildings to EPC")
+    listed_buildings_df = listed_buildings.generate_df_epc_listed_buildings(
+        epc_df=epc_df
+    )
+    epc_df = epc_df.join(listed_buildings_df, how="left", on="UPRN").with_columns(
+        pl.col("listed_building").fill_null(False)
     )
 
-    logging.info("Loading listed buildings for Wales")
-    w_listed_buildings_df = listed_buildings.transform_gdf_listed_buildings("Wales")
-    w_listed_buildings_df = listed_buildings.sjoin_df_epc_with_listed_buildings(
-        epc_df, w_listed_buildings_df
-    )
+    logging.info("Adding grid capacity column to EPC")
+    grid_capacities = grid_capacity.calculate_grid_capacity()
+    epc_df = epc_df.join(grid_capacities, how="left", on="lsoa")
 
-    listed_buildings_df = pl.concat(
-        [e_listed_buildings_df, w_listed_buildings_df], how="vertical"
-    )
-    epc_df = epc_df.join(listed_buildings_df, how="left", on="UPRN")
+    logging.info("Adding anchor properties column to EPC")
+    anchor_properties_df = anchor_properties.identify_anchor_properties()
+    epc_df = epc_df.join(anchor_properties_df, how="left", on="lsoa")
 
     # Save to S3
     if not save_as:

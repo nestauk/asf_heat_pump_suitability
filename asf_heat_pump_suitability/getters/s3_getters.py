@@ -7,6 +7,8 @@ import json
 import pickle
 import gzip
 import os
+import shutil
+import tempfile
 
 import pandas as pd
 import boto3
@@ -15,6 +17,7 @@ import numpy
 import yaml
 import io
 from io import BytesIO
+import geopandas as gpd
 
 from asf_heat_pump_suitability import logger, PROJECT_DIR
 from typing import List, Any, NoReturn
@@ -123,6 +126,12 @@ def load_s3_data(
     elif fnmatch(file_name, "*.pkl") or fnmatch(file_name, "*.pickle"):
         file = obj.get()["Body"].read().decode()
         return pickle.loads(file)
+    elif fnmatch(file_name, "*.gpkg"):
+        with BytesIO(obj.get()["Body"].read()) as file:
+            return gpd.read_file(file)
+    elif fnmatch(file_name, "*.geojson"):
+        with BytesIO(obj.get()["Body"].read()) as file:
+            return gpd.read_file(file)
     elif (
         fnmatch(file_name, "*.jpg")
         or fnmatch(file_name, "*.png")
@@ -135,7 +144,7 @@ def load_s3_data(
 
     else:
         logger.error(
-            'Function not supported for file type other than "*.csv", "*.parquet", "*.jsonl.gz", "*.jsonl", or "*.json"'
+            'Function not supported for file type other than "*.csv", "*.parquet", "*.gpkg", "*.geojson", "*.jsonl.gz", "*.jsonl", or "*.json"'
         )
 
 

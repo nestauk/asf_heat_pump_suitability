@@ -143,6 +143,18 @@ multiple_props_scores = {
     "HN_N": 2,
 }
 
+# TODO to refine
+grid_capacity_scores = {
+    "ASHP_S": 1,
+    "ASHP_N": 1,
+    "GSHP_S": 1,
+    "GSHP_N": 1,
+    "SGL_S": 1,
+    "SGL_N": 1,
+    "HN_S": 1,
+    "HN_N": 1,
+}
+
 
 def parse_arguments():
     """
@@ -177,27 +189,20 @@ def get_enhanced_epc(path) -> pl.DataFrame:
         "proportional_weight",
         "ruc_two_fold",
         "OFF GAS",
-        "Property density (households per KM2)",
+        "households_per_km2",
         "garden_area_m2",
         "listed_building_grade",
         "in_conservation_area",
         "lad_conservation_area_data_available",
         "property_type",
         "CURRENT_ENERGY_RATING",
+        "heatpump_installation_percentage",
     ]
     df = pl.read_parquet(path, columns=usecols)
 
     df = df.filter(
         ~pl.col("UPRN").str.contains("dummy"), pl.col("COUNTRY") != "Scotland"
     )
-
-    df = df.with_columns(
-        pl.when(pl.col("listed_building_grade").is_null())
-        .then(False)
-        .otherwise(True)
-        .alias("listed_building"),
-    )
-
     return df
 
 
@@ -240,6 +245,7 @@ def compute_df_total_score_per_epc(
     density_threshold: int = 60,
     garden_threshold: int = 10,
     external_space_threshold: int = 2,
+    grid_installation_threshold: int = 30,
 ) -> pl.DataFrame:
     """
     Calculate total heat pump suitability score points per EPC record for specified tech_type.
@@ -261,7 +267,7 @@ def compute_df_total_score_per_epc(
         pl.when(pl.col("OFF GAS"))
         .then(offgas_scores.get(tech_type))
         .alias("off_gas_score"),
-        pl.when(pl.col("Property density (households per KM2)") > density_threshold)
+        pl.when(pl.col("households_per_km2") > density_threshold)
         .then(property_density_scores.get(tech_type))
         .alias("property_density_score"),
         pl.when(pl.col("garden_area_m2") > garden_threshold)
@@ -283,6 +289,14 @@ def compute_df_total_score_per_epc(
         pl.when(pl.col("CURRENT_ENERGY_RATING").is_in(["A", "B", "C"]))
         .then(epc_threshold_scores.get(tech_type))
         .alias("epc_rating_score"),
+        pl.when(pl.col("has_anchor_property"))
+        .then(anchor_properties_scores.get(tech_type))
+        .alias("anchor_properties_score"),
+        pl.when(
+            pl.col("heatpump_installation_percentage") > grid_installation_threshold
+        )
+        .then(epc_threshold_scores.get(tech_type))
+        .alias("grid_capacity_score"),
     )
 
     score_cols = [col for col in df.columns if "score" in col]
@@ -312,7 +326,7 @@ def compute_df_max_score_per_row(df: pl.DataFrame, tech_type: str) -> pl.DataFra
         .then(offgas_scores.get(tech_type))
         .otherwise(0)
         .alias("off_gas_max"),
-        pl.when(pl.col("Property density (households per KM2)").is_not_null())
+        pl.when(pl.col("households_per_km2").is_not_null())
         .then(property_density_scores.get(tech_type))
         .otherwise(0)
         .alias("property_density_max"),
@@ -337,6 +351,14 @@ def compute_df_max_score_per_row(df: pl.DataFrame, tech_type: str) -> pl.DataFra
         .then(epc_threshold_scores.get(tech_type))
         .otherwise(0)
         .alias("epc_rating_max"),
+        pl.when(pl.col("has_anchor_properties").is_not_null())
+        .then(anchor_properties_scores.get(tech_type))
+        .otherwise(0)
+        .alias("anchor_properties_max"),
+        pl.when(pl.col("heatpump_installation_percentage").is_not_null())
+        .then(epc_threshold_scores.get(tech_type))
+        .otherwise(0)
+        .alias("grid_capacity_max"),
     )
 
     max_cols = [col for col in df.columns if "max" in col]
@@ -360,12 +382,14 @@ def filter_df_minimum_features(
         features = [
             "ruc_two_fold",
             "OFF GAS",
-            "Property density (households per KM2)",
+            "households_per_km2",
             "garden_area_m2",
             "listed_building_grade",
             "in_conservation_area",
             "property_type",
             "CURRENT_ENERGY_RATING",
+            "has_anchor_properties",
+            "heatpump_installation_percentage",
         ]
     df = df.with_columns(
         (len(features) - pl.sum_horizontal(pl.col(features).is_null()))
