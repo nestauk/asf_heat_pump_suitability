@@ -9,7 +9,7 @@ from asf_heat_pump_suitability.pipeline.suitability import scoring
 def compute_df_avg_score_per_epc(
     df: pl.DataFrame,
     tech_type: str,
-    density_threshold: int = 100,
+    density_threshold: int = 60,
     garden_threshold: int = 10,
     external_space_threshold: int = 2,
 ):
@@ -19,9 +19,9 @@ def compute_df_avg_score_per_epc(
     Args:
         df: EPC dataset with features for calculating suitability score
         tech_type (str): tech type to calculate suitability scores for, in standard (S) or Nesta (N) view
-        density_threshold: minimum property density (households per km2) required for shared ground loop
-        garden_threshold: minimum garden size (m2) required for heat pumps
-        external_space_threshold: minimum outdoor space (m2) required for heat pumps
+        density_threshold: minimum property density (households per km2) required for shared ground loop. Default 60.
+        garden_threshold: minimum garden size (m2) required for heat pumps. Default 10.
+        external_space_threshold: minimum outdoor space (m2) required for heat pumps. Default 2.
 
     Returns:
         pl.DataFrame: average suitability score for specified tech type
@@ -47,14 +47,14 @@ def compute_df_total_score_per_epc(
     external_space_threshold: int = 2,
 ) -> pl.DataFrame:
     """
-    Calculate total heat pump suitability score points per EPC record for specified tech_type.
+    Calculate total heat pump suitability score points per EPC record for specified tech type.
 
     Args:
         df: EPC dataset with features for calculating suitability score
         tech_type (str): tech type to calculate suitability scores for, in standard (S) or Nesta (N) view
-        density_threshold: minimum property density (households per km2) required for shared ground loop
-        garden_threshold: minimum garden size (m2) required for heat pumps
-        external_space_threshold: minimum outdoor space (m2) required for heat pumps
+        density_threshold: minimum property density (households per km2) required for shared ground loop. Default 60.
+        garden_threshold: minimum garden size (m2) required for heat pumps. Default 10.
+        external_space_threshold: minimum outdoor space (m2) required for heat pumps. Default 2.
 
     Returns:
         pl.DataFrame: suitability score for specified tech type
