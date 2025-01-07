@@ -4,6 +4,7 @@ import polars.selectors as cs
 from asf_heat_pump_suitability import config
 
 
+# TODO will need to add number of rooms target data for Scotland if we revert to using it
 def get_df_target_nrooms() -> pl.DataFrame:
     """
     Get dataframe of counts of total number of rooms for properties in all LSOAs in England and Wales. Where number of rooms
@@ -135,7 +136,9 @@ def load_transform_df_target_property_type_scotland() -> pl.DataFrame:
                 for col in df.select(cs.numeric()).columns
             }
         )
-        .rename({"Type of accomodation": "lsoa"})
+        .rename(
+            {"Type of accomodation": "lsoa"}
+        )  # The Data Zone (lsoa) column name is mislabelled due to .csv formatting
     )
 
     # A small number of rows seem to erroneously have zero values for all property types, we need to remove them

@@ -5,8 +5,9 @@ following features:
 - tenure (owner-occupied, social rental, private rental)
 - build year (pre- and post-1930 split, and unknown); [applies to England and Wales only*]
 
-*Data Zones in Scotland are reweighted on two features only (property type and tenure) due to the absence of target
-build year data aggregated to Data Zone-level.
+*Data Zones in Scotland are the closest equivalent to LSOAs in England and Wales. They are reweighted on two features
+only (property type and tenure) because there is no target build year data aggregated to Data Zone-level available for
+Scotland.
 
 To run:
 python -i asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc [path/to/EPC] -y [YYYY] -q [Q]
@@ -101,7 +102,7 @@ if __name__ == "__main__":
         ],
     )
 
-    # Join ONSPD LSOA col
+    # Join ONS Postcode Directory LSOA col
     epc_df = output_areas.standardise_col_postcode(epc_df, pcd_col="POSTCODE")
     lsoa_df = output_areas.load_transform_df_lsoas()
     epc_df = epc_df.join(lsoa_df, how="left", on="POSTCODE")
@@ -120,6 +121,8 @@ if __name__ == "__main__":
             f"Running reweighting for {key}. Reweighting using the following features: {features}"
         )
         epc_cleaned_df = epc_df.filter(pl.col("COUNTRY") == key)
+        assert len(epc_cleaned_df) > 0, f"No EPC records found for {key}."
+
         epc_cleaned_df = prepare_sample.drop_nulls_feature_cols(
             df=epc_cleaned_df, features=features
         )

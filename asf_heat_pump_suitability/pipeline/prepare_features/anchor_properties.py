@@ -1,6 +1,6 @@
 """
 Module for identifying and analyzing potential anchor properties in LSOAs.
-This script can be run independentally and will output a CSV file with a list of LSOAs, the number of anchor properties in each LSOA, and the categories of anchor properties present.
+This script can be run independently and will output a CSV file with a list of LSOAs, the number of anchor properties in each LSOA, and the categories of anchor properties present.
 """
 
 # TODO implement building footprint data for improved identification accuracy
@@ -13,6 +13,7 @@ import pandas as pd
 import polars as pl
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.getters import get_datasets
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -80,14 +81,13 @@ def load_gdf_and_process_poi() -> gpd.GeoDataFrame:
         "geometry",
     ]
     poi = gpd.read_file(
-        config["data_source"]["UK_poi_locations"], columns=required_columns
+        config["data_source"]["UK_poi_locations"],
+        columns=required_columns,
+        layer="poi_uk",
     ).to_crs(INPUT_CRS)
 
     # Filter and process
-    poi = poi[poi.country == '"GB"'].copy()
-    poi["main_category"] = poi["main_category"].apply(
-        lambda x: str.strip(x, '"') if pd.notna(x) else None
-    )
+    poi = poi[poi.country == "GB"].copy()
 
     # Filter anchor properties and reproject
     anchor_properties = poi[poi.main_category.isin(ANCHOR_PROPERTIES)].to_crs(
@@ -104,13 +104,13 @@ def load_gdf_and_process_poi() -> gpd.GeoDataFrame:
 
 def identify_anchor_properties_df() -> pl.DataFrame:
     """
-    Identify and analyze anchor properties within LSOAs.
+    Identify and analyze anchor properties within LSOAs/DataZones.
 
     Returns:
         pl.DataFrame: Summary of anchor properties by LSOA containing columns:
-            - lsoa: Unique identifier for the LSOA
-            - lsoa_name: Name of the LSOA
-            - anchor_count: Number of anchor properties in the LSOA
+            - lsoa: Unique identifier for the LSOA/DataZone
+            - lsoa_name: Name of the LSOA/DataZone
+            - anchor_count: Number of anchor properties in the LSOA/DataZone
             - building_categories: List of main categories present
             - building_subcategories: List of subcategories present
             - has_anchor_property: Boolean indicating presence of anchor properties
@@ -118,13 +118,27 @@ def identify_anchor_properties_df() -> pl.DataFrame:
     try:
         logger.info("Starting anchor property analysis...")
 
-        # Load required data
+        # Load and process LSOA and DZ boundary data
         logger.info("Loading LSOA boundaries...")
-        # Load and process LSOA boundary data
-        lsoa_gdf = gpd.read_file(
-            config["data_source"]["EW_lsoa_bounds"],
-            columns=["LSOA21CD", "LSOA21NM", "geometry"],
-        ).to_crs(PROCESSING_CRS)
+        lsoa_gdf = (
+            gpd.read_file(
+                config["data_source"]["EW_lsoa_bounds"],
+                columns=["LSOA21CD", "LSOA21NM", "geometry"],
+            )
+            .rename(columns={"LSOA21CD": "lsoa", "LSOA21NM": "lsoa_name"})
+            .to_crs(PROCESSING_CRS)
+        )
+
+        dz_gdf = (
+            get_datasets.load_gdf_scotgov_data_zone_bounds(
+                columns=["DataZone", "Name", "geometry"]
+            )
+            .rename(columns={"DataZone": "lsoa", "Name": "lsoa_name"})
+            .to_crs(PROCESSING_CRS)
+        )
+
+        lsoa_gdf = pd.concat([lsoa_gdf, dz_gdf])
+
         anchor_properties = load_gdf_and_process_poi()
 
         lsoa_with_anchors = gpd.sjoin(
@@ -132,10 +146,10 @@ def identify_anchor_properties_df() -> pl.DataFrame:
         )
 
         lsoa_anchor_summary = (
-            lsoa_with_anchors.groupby("LSOA21CD")
+            lsoa_with_anchors.groupby("lsoa")
             .agg(
                 {
-                    "LSOA21NM": "first",
+                    "lsoa_name": "first",
                     "id": "count",
                     "main_category": _safe_join_str_categories,
                     "alternate_category": _safe_join_str_categories,
