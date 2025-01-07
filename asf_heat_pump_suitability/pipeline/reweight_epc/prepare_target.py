@@ -63,11 +63,9 @@ def get_dict_dfs_counts(
     count_dict = {}
 
     if "property_type" in features:
-        count_dict["property_type"] = (
-            get_target.get_df_target_property_type_uncensored()
-        )
+        count_dict["property_type"] = get_target.transform_df_target_property_type()
     if "tenure" in features:
-        count_dict["tenure"] = get_target.get_df_target_tenure_uncensored()
+        count_dict["tenure"] = get_target.transform_df_target_tenure()
     if "build_year" in features:
         if not use_la_build_year:
             count_dict["build_year"] = get_target.get_df_target_build_year()
