@@ -86,6 +86,7 @@ def add_col_property_type(df: pl.DataFrame) -> pl.DataFrame:
         .then(pl.lit("Flat, maisonette or apartment"))
         .when(pl.col("PROPERTY_TYPE").is_in(["Park home"]))
         .then(pl.lit("Caravan or other mobile or temporary structure"))
+        .otherwise(None)
         .alias("property_type")
     )
 

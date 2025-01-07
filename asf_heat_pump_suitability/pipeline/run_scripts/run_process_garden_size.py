@@ -108,4 +108,4 @@ if __name__ == "__main__":
     )
     logger.info("Saving updated EPC dataset to S3")
     save_as = f"s3://asf-heat-pump-suitability/outputs/2023Q4/{datetime.today().strftime('%Y%m%d')}_2023_Q4_EPC_weighted_features_gardens.parquet"
-    save_utils.save_parquet_to_s3(epc_df, save_as)
+    save_utils.save_to_s3(epc_df, save_as)

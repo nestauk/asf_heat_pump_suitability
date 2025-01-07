@@ -5,7 +5,7 @@ Errors are calculated between the sample (unweighted and weighted) and target pr
 
 Run with:
 
-python asf_heat_pump_suitability/pipeline/run_scripts/run_evaluate_reweighting.py --reweighted_path [path/to/weighted/EPC] -y [YYYY] -q [N] --sample
+python asf_heat_pump_suitability/pipeline/run_scripts/run_evaluate_reweighting.py --reweighted_path [path/to/weighted/EPC] -y [YYYY] -q [Q] --sample
 
 [remove the --sample argument to run on full dataset]
 

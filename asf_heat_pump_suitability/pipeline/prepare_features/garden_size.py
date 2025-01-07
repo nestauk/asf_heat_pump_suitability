@@ -1,6 +1,7 @@
 import geopandas as gpd
 import logging
 import pandas as pd
+import polars as pl
 
 
 def match_series_files_land_building(
@@ -126,3 +127,28 @@ def generate_gdf_garden_size(
     )
 
     return gardens_gdf
+
+
+def deduplicate_df_garden_size(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Deduplicate UPRNs matched to multiple gardens by taking the average size of the multiple gardens (for gardens
+    below a threshold size).
+
+    Args:
+        df (pl.DataFrame): UPRNs with garden size estimates
+
+    Returns:
+        pl.DataFrame: deduplicated UPRNs with garden size estimates
+    """
+    df = df.with_columns(pl.col("UPRN").is_duplicated().alias("UPRN_duplicated"))
+    # Remove gardens with area above the 97th percentile if they are matched to duplicate UPRNs
+    df = df.filter(
+        ~(
+            pl.col("UPRN_duplicated")
+            & (pl.col("garden_area_m2") > df["garden_area_m2"].quantile(quantile=0.97))
+        )
+    )
+    # Calculate median garden size for UPRNs with multiple gardens
+    df = df.group_by("UPRN").agg(pl.median("garden_area_m2"))
+
+    return df

@@ -1,6 +1,6 @@
 """
 Module for identifying and analyzing potential anchor properties in LSOAs.
-This script can be run independentally and will output a CSV file with a list of LSOAs, the number of anchor properties in each LSOA, and the categories of anchor properties present.
+This script can be run independently and will output a CSV file with a list of LSOAs, the number of anchor properties in each LSOA, and the categories of anchor properties present.
 """
 
 # TODO implement building footprint data for improved identification accuracy
@@ -10,6 +10,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+import polars as pl
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import get_datasets
@@ -101,12 +102,12 @@ def load_gdf_and_process_poi() -> gpd.GeoDataFrame:
     return anchor_properties
 
 
-def identify_anchor_properties_gdf() -> gpd.GeoDataFrame:
+def identify_anchor_properties_df() -> pl.DataFrame:
     """
     Identify and analyze anchor properties within LSOAs/DataZones.
 
     Returns:
-        gpd.GeoDataFrame: Summary of anchor properties by LSOA/DataZone, containing columns:
+        pl.DataFrame: Summary of anchor properties by LSOA containing columns:
             - lsoa: Unique identifier for the LSOA/DataZone
             - lsoa_name: Name of the LSOA/DataZone
             - anchor_count: Number of anchor properties in the LSOA/DataZone
@@ -173,7 +174,7 @@ def identify_anchor_properties_gdf() -> gpd.GeoDataFrame:
             f"Found {lsoa_anchor_summary['has_anchor_property'].sum()} LSOAs with suitable anchor properties"
         )
 
-        return lsoa_anchor_summary
+        return pl.from_pandas(lsoa_anchor_summary)
 
     except Exception as e:
         logger.error(f"Error in anchor property analysis: {str(e)}")
@@ -182,10 +183,10 @@ def identify_anchor_properties_gdf() -> gpd.GeoDataFrame:
 
 if __name__ == "__main__":
     try:
-        results = identify_anchor_properties_gdf()
+        results = identify_anchor_properties_df()
 
         output_path = Path("outputs/reports/anchor_property_analysis.csv")
-        results.to_csv(output_path, index=False)
+        results.write_csv(output_path)
         logger.info(f"Results saved to {output_path}")
 
     except Exception as e:

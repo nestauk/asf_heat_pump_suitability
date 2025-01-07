@@ -58,4 +58,4 @@ if __name__ == "__main__":
 
     # Save
     save_as = "s3://asf-heat-pump-suitability/source_data_minor_edits/northern_england_epc_processed_dedupl-0.parquet"
-    save_utils.save_parquet_to_s3(epc_df_north, save_as)
+    save_utils.save_to_s3(epc_df_north, save_as)

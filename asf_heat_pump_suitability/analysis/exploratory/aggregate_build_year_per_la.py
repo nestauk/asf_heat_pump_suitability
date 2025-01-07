@@ -58,7 +58,7 @@ if __name__ == "__main__":
         la_build_year, how="left", on=["LAD23CD", "LAD23NM"]
     )
 
-    save_utils.save_parquet_to_s3(
+    save_utils.save_to_s3(
         df=la_build_year,
         path="s3://asf-heat-pump-suitability/source_data_minor_edits/2015cdrc_dwelling_ages_E_W_per_la_02.parquet",
     )

@@ -1,5 +1,4 @@
 import re
-import os
 from typing import Any
 import logging
 import argparse
@@ -7,6 +6,7 @@ import argparse
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import polars as pl
 
 from asf_heat_pump_suitability.getters import get_datasets
 from asf_heat_pump_suitability import config
@@ -239,7 +239,7 @@ def assess_heatpump_suitability(
     return lsoa_data
 
 
-def calculate_grid_capacity() -> pd.DataFrame:
+def calculate_grid_capacity() -> pl.DataFrame:
     """
     Calculate the grid capacity for heat pump installations across all LSOAs.
 
@@ -290,7 +290,7 @@ def calculate_grid_capacity() -> pd.DataFrame:
     # Rename LSOA column for consistency
     result = result.rename(columns={"LSOA21CD": "lsoa"})
 
-    return result
+    return pl.from_pandas(result)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -325,4 +325,4 @@ if __name__ == "__main__":
     )
 
     if args.save_as:
-        grid_capacity_results.to_csv(args.save_as, index=False)
+        grid_capacity_results.write_csv(args.save_as)
