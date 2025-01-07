@@ -95,7 +95,7 @@ def setup_logging_and_file_path(
     logging.info(f"Logging setup complete. Logs are saved to {log_file_path}.")
 
 
-def setup_paths(read_in_s3: bool):
+def setup_paths(read_in_s3: bool) -> dict:
     """
     Set up the paths based on whether to read from S3 or locally.
 
@@ -103,19 +103,27 @@ def setup_paths(read_in_s3: bool):
         read_in_s3 (bool): If True, set up paths to read from S3. Otherwise, set up local paths.
 
     Returns:
-        Tuple[str, str, str]: Paths for LIVERPOOL_GPKG_PATH, LSOA_SHP_PATH, and NESTA_HP_SUITABILITY_PARQUET_PATH.
+        dict: A dictionary containing paths for LIVERPOOL_GPKG_PATH, LSOA_SHP_PATH, and NESTA_HP_SUITABILITY_PARQUET_PATH.
     """
+    paths = {}
     if read_in_s3:
-        LIVERPOOL_GPKG_PATH = "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Liverpool.gpkg"
-        LSOA_SHP_PATH = "s3://asf-heat-pump-suitability/source_data/Lower_layer_Super_Output_Areas_2021_EW_BFE_V9_-9107090204806789093/LSOA_2021_EW_BFE_V9.shp"
-        NESTA_HP_SUITABILITY_PARQUET_PATH = "s3://nesta-open-data/asf_heat_pump_suitability/2023Q4/20240925_2023_Q4_EPC_heat_pump_suitability_per_lsoa.parquet"
+        paths["LIVERPOOL_GPKG_PATH"] = (
+            "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Liverpool.gpkg"
+        )
+        paths["LSOA_SHP_PATH"] = (
+            "s3://asf-heat-pump-suitability/source_data/Lower_layer_Super_Output_Areas_2021_EW_BFE_V9_-9107090204806789093/LSOA_2021_EW_BFE_V9.shp"
+        )
+        paths["NESTA_HP_SUITABILITY_PARQUET_PATH"] = (
+            "s3://nesta-open-data/asf_heat_pump_suitability/2023Q4/20240925_2023_Q4_EPC_heat_pump_suitability_per_lsoa.parquet"
+        )
+
     else:
-        LIVERPOOL_GPKG_PATH = "heat-network-zone-map-Liverpool.gpkg"
-        LSOA_SHP_PATH = "LSOA_2021_EW_BFE_V9.shp"
-        NESTA_HP_SUITABILITY_PARQUET_PATH = (
+        paths["LIVERPOOL_GPKG_PATH"] = "heat-network-zone-map-Liverpool.gpkg"
+        paths["LSOA_SHP_PATH"] = "LSOA_2021_EW_BFE_V9.shp"
+        paths["NESTA_HP_SUITABILITY_PARQUET_PATH"] = (
             "20240925_2023_Q4_EPC_heat_pump_suitability_per_lsoa.parquet"
         )
-    return LIVERPOOL_GPKG_PATH, LSOA_SHP_PATH, NESTA_HP_SUITABILITY_PARQUET_PATH
+    return paths
 
 
 def optionally_upload_file_to_s3(
@@ -416,9 +424,15 @@ if __name__ == "__main__":
     optional_threshold = args.optional_threshold
     save_to_s3 = args.save_to_s3
     read_in_s3 = args.read_in_s3
-    LIVERPOOL_GPKG_PATH, LSOA_SHP_PATH, NESTA_HP_SUITABILITY_PARQUET_PATH = setup_paths(
-        read_in_s3=read_in_s3
-    )
+
+    # Set up paths based on the read_from_s3 flag
+    paths = setup_paths(read_in_s3)
+
+    # Access the paths from the dictionary
+    LIVERPOOL_GPKG_PATH = paths["LIVERPOOL_GPKG_PATH"]
+    LSOA_SHP_PATH = paths["LSOA_SHP_PATH"]
+    NESTA_HP_SUITABILITY_PARQUET_PATH = paths["NESTA_HP_SUITABILITY_PARQUET_PATH"]
+
     # Define the output directory and set up logging
     output_dir = os.path.join(PROJECT_DIR, "outputs/hn_zones/output_data/")
 
