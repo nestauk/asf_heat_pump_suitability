@@ -3,10 +3,7 @@ Functions needed to calculate errors in the proportions of features per LSOA
 """
 
 import polars as pl
-import matplotlib.pyplot as plt
-import seaborn as sns
 import pandas as pd
-import math
 import numpy as np
 from sklearn.metrics import root_mean_squared_error, mean_absolute_error
 
@@ -15,6 +12,94 @@ from typing import Tuple, Dict, List
 from collections import defaultdict
 
 from asf_heat_pump_suitability import PROJECT_DIR
+from asf_heat_pump_suitability import logger
+
+
+def calculate_dict_errors_for_lsoa(
+    feature_name: str,
+    lsoa_code: str,
+    target_features: dict,
+    target_marginals: dict,
+    epc_subset: pl.DataFrame,
+    error_metric_names: list,
+) -> dict:
+    """
+    Get errors between target and unweighted, and target and weighted, for one feature and one LSOA.
+
+    Args:
+        feature_name (str): The feature name to calculate errors for
+        lsoa_code (str): The LSOA
+        target_features (dict): A nested dictionary of the counts for all property features and LSOAs
+            For example, {'tenure': {'E01022833': {'owner-occupied': 548, 'rental (social)': 53}, 'E01013414': {}}, 'property_type': {}}
+        target_marginals (dict): A nested dictionary of the proportions for all property features and LSOAs
+        epc_subset (pl.DataFrame): EPC dataset for this LSOA
+        error_metric_names (list): The error metric names desired in the output, defined in reweighting.get_error_metrics.
+
+    Returns:
+        dict: A dictionary containing various metrics for both the unweighted and weighted EPC data compared to
+                        the target dataset for this feature.
+
+    """
+
+    # Find target values for this feature and LSOA
+    target_counts = target_features[feature_name].get(lsoa_code)
+    target_proportions = target_marginals[feature_name].get(lsoa_code)
+
+    if target_counts:
+        # If we have target information then calculate the errors
+
+        # Calculate the errors between the original EPC data and the target data
+        orig_counts_dict = epc_subset[feature_name].value_counts().to_dict()
+        orig_counts = dict(
+            zip(orig_counts_dict[feature_name], orig_counts_dict["count"])
+        )
+        orig_proportions = calculate_proportions(orig_counts)
+        error_metrics_orig = get_error_metrics(
+            orig_counts, orig_proportions, target_counts, target_proportions
+        )
+        if not all(epc_subset["weight"].is_null()):
+            # Get the sum of the weights for each feature category (not technically a 'count')
+            reweighted_counts_dict = (
+                epc_subset.group_by(feature_name).agg(pl.col("weight").sum()).to_dict()
+            )
+            reweighted_counts = dict(
+                zip(
+                    reweighted_counts_dict[feature_name],
+                    reweighted_counts_dict["weight"],
+                )
+            )
+            reweighted_proportions = calculate_proportions(reweighted_counts)
+            error_metrics_reweighted = get_error_metrics(
+                reweighted_counts,
+                reweighted_proportions,
+                target_counts,
+                target_proportions,
+            )
+            # Calculate the average error reduction from the original to reweighted relative to the original proportions
+            average_error_reduction = get_error_reduction(
+                orig_proportions, reweighted_proportions, target_proportions
+            )
+
+        else:
+            logger.info(
+                f"All weights are null for the {feature_name} feature in LSOA {lsoa_code}"
+            )
+            error_metrics_reweighted = {}
+            average_error_reduction = None
+    else:
+        logger.info(
+            f"No target data for the {feature_name} feature in LSOA {lsoa_code}"
+        )
+        return None
+
+    final_metrics = {}
+    for metric in error_metric_names:
+        final_metrics[metric] = {
+            "unweight": error_metrics_orig.get(metric, None),
+            "reweight": error_metrics_reweighted.get(metric, None),
+            "error_reduction": average_error_reduction,
+        }
+    return final_metrics
 
 
 def calculate_proportions(counts: dict) -> dict:
@@ -207,7 +292,6 @@ def process_single_lsoa(
     counts = dict(zip(counts_list[feature_name], counts_list["count"]))
 
     proportions = calculate_proportions(counts)
-    list_proportions = list(proportions.values())
 
     target_dict = target_subset.to_dicts()[0]
     del target_dict[lsoa]

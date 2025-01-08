@@ -55,3 +55,22 @@ def clean_df_nrooms(
     )
 
     return df
+
+
+def extend_df_country_col(df: pl.DataFrame, lsoa_col: str = "lsoa") -> pl.DataFrame:
+    """
+    Add a new column to a dataframe based on LSOA/DataZone code.
+
+    Args:
+        df (pl.DataFrame): dataframe with column containing LSOA / DataZone code
+        lsoa_col (str): column containing LSOA / DataZone code
+
+    Returns:
+        pl.DataFrame: dataframe with new "country" column
+    """
+    df = df.with_columns(pl.col(lsoa_col).str.slice(0, 1).alias("country"))
+    df = df.with_columns(
+        pl.col("country").replace({"E": "England", "S": "Scotland", "W": "Wales"})
+    )
+
+    return df
