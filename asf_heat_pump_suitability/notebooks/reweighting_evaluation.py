@@ -31,7 +31,7 @@ def restructure_df_data(results: dict, scotland: bool) -> pd.DataFrame:
 
     Args:
         results (dict): reweighting evaluation results
-        scotland (bool)
+        scotland (bool): True if evaluating Scotland results, False for England and Wales
 
     Returns:
         pd.DataFrame: reweighting evaluation results in dataframe
@@ -98,6 +98,11 @@ ew_results_df = restructure_df_data(ew_results, scotland=False)
 
 # %%
 def print_results(results_df: pd.DataFrame, scotland: bool):
+    """
+    Args:
+        results_df (pd.DataFrame): reweighting evaluation results
+        scotland (bool): True if evaluating Scotland results, False for England and Wales
+    """
     if scotland:
         feature_names = ["tenure", "property_type"]
     else:
