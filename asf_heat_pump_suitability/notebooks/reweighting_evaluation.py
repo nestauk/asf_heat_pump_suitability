@@ -320,9 +320,6 @@ for j, feature_name in enumerate(features):
 # ### Additional visuals for England and Wales
 
 # %%
-all_results_df = ew_results_df.copy()
-
-# %%
 corr = ew_results_df[
     [
         "tenure_mae_all",
