@@ -2,65 +2,74 @@ import polars as pl
 from asf_heat_pump_suitability.getters import get_datasets
 
 
-def extend_df_with_property_density(enhanced_epc_df: pl.DataFrame) -> pl.DataFrame:
+def generate_df_property_density() -> pl.DataFrame:
     """
-    Add property density feature to the EPC dataset
-    Args:
-        enhanced_epc_df (pl.DataFrame): EPC dataset with additional features
-    Returns:
-        pl.DataFrame: EPC dataset with property density feature
-    """
-    # Fill None values with a default value (e.g., 0)
-    enhanced_epc_df = enhanced_epc_df.with_columns(
-        [
-            pl.col("Number of households 2021")
-            .fill_null(0)
-            .alias("Number of households 2021"),
-            pl.col("Land Count (Area in KM2)")
-            .fill_null(0)
-            .alias("Land Count (Area in KM2)"),  # Fill with 1 to avoid division by zero
-        ]
-    )
-    # Calculate and add the new column with the property density, handling division by zero
-    enhanced_epc_df = enhanced_epc_df.with_columns(
-        (
-            pl.when(pl.col("Land Count (Area in KM2)") != 0)
-            .then(
-                pl.col("Number of households 2021") / pl.col("Land Count (Area in KM2)")
-            )
-            .otherwise(None)
-        ).alias("households_per_km2")
-    )
-    # Changes 0 values back to None
-    enhanced_epc_df = replace_zeros_with_none_df(
-        enhanced_epc_df, "Number of households 2021"
-    )
-    enhanced_epc_df = replace_zeros_with_none_df(
-        enhanced_epc_df, "Land Count (Area in KM2)"
-    )
-
-    return enhanced_epc_df
-
-
-def replace_zeros_with_none_df(df: pl.DataFrame, column_name: str) -> pl.DataFrame:
-    """
-    This function replaces 0 values in the specified column of a DataFrame with None.
-
-    Parameters:
-    df (pl.DataFrame): The DataFrame to modify.
-    column_name (str): The name of the column in which to replace 0 values.
+    Generate dataframe with property density (households per km2) per LSOA/2011 Data Zone in England and Wales, and Scotland,
+    respectively, using Standard Area Measurement of ‘Land Area’ (Area to Mean High Water Excluding Area of Inland Water).
 
     Returns:
-    pl.DataFrame: The modified DataFrame.
+        pl.DataFrame: households per km2 per LSOA/Data Zone in England, Wales, and Scotland
     """
+    ew_df = generate_df_property_density_ew()
+    s_df = generate_df_property_density_s().rename({"DataZone": "lsoa"})
+
+    return pl.concat([ew_df, s_df])
+
+
+def generate_df_property_density_ew() -> pl.DataFrame:
+    """
+    Generate dataframe with property density (households per km2) per LSOA in England and Wales using Standard Area Measurement of
+    ‘Land Area’ (Area to Mean High Water Excluding Area of Inland Water).
+
+    Returns:
+        pl.DataFrame: households per km2 per LSOA in England and Wales
+    """
+    households_df = load_transform_df_n_households_ew()
+    area_df = load_transform_df_land_area_ew()
+    df = households_df.join(area_df, how="inner", on="lsoa")
     df = df.with_columns(
-        pl.when(pl.col(column_name) == 0)
-        .then(None)
-        .otherwise(pl.col(column_name))
-        .alias(column_name)
+        (pl.col("households_count") / pl.col("Land Count (Area in KM2)")).alias(
+            "households_per_km2"
+        )
     )
 
+    return df.select(["lsoa", "households_per_km2"])
+
+
+def load_transform_df_n_households_ew() -> pl.DataFrame:
+    """
+    Load and process ONS number of households per LSOA in England and Wales.
+
+    Returns
+        pl.DataFrame: number of households per LSOA
+    """
+    df = (
+        get_datasets.get_df_ons_number_of_households()
+        .rename(
+            {
+                "mnemonic": "lsoa",
+                "2021": "households_count",
+            }
+        )
+        .select(["lsoa", "households_count"])
+    )
     return df
+
+
+def load_transform_df_land_area_ew() -> pl.DataFrame:
+    """
+    Process and clean ONS land area dataset for England and Wales.
+
+    Returns
+        pl.DataFrame: processed ONS land area
+    """
+    df = get_datasets.get_df_ons_land_area().rename(
+        {
+            "LSOA21CD": "lsoa",
+        }
+    )
+
+    return df.select(["lsoa", "Land Count (Area in KM2)"])
 
 
 def generate_df_property_density_s() -> pl.DataFrame:
@@ -80,9 +89,10 @@ def generate_df_property_density_s() -> pl.DataFrame:
     return df.select(["DataZone", "households_per_km2"])
 
 
-def load_transform_df_datazone_area():
+def load_transform_df_datazone_area() -> pl.DataFrame:
     """
-    Load and transform dataframe with area (km2) per 2011 Scottish Data Zone.
+    Load and transform dataframe with area (km2) per 2011 Scottish Data Zone. Uses Standard Area Measurement of
+    ‘Land Area’ (Area to Mean High Water Excluding Area of Inland Water).
 
     Returns:
          pl.DataFrame: area (km2) per 2011 Data Zone in Scotland
@@ -92,7 +102,7 @@ def load_transform_df_datazone_area():
     return pl.from_pandas(df)
 
 
-def load_transform_df_n_dwellings_s():
+def load_transform_df_n_dwellings_s() -> pl.DataFrame:
     """
     Load and transform dataframe with number of dwellings per 2011 Scottish Data Zone. Number of dwellings excludes
     long-term empty dwellings.
