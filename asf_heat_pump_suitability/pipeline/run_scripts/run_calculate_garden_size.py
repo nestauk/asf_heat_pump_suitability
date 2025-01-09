@@ -113,7 +113,7 @@ if __name__ == "__main__":
     logging.info(
         f"Estimating garden size for properties across {len(file_matches)} pairs of land extent and building footprint files."
     )
-    for land_file, building_file in tqdm(file_matches.items()):
+    for i, (land_file, building_file) in tqdm(enumerate(file_matches.items())):
 
         # Only load land extent gdf if we haven't loaded already
         if land_file != prev:
@@ -160,6 +160,16 @@ if __name__ == "__main__":
 
         epc_df = pl.from_pandas(epc_df)
         epc_gardens.append(epc_df)
+
+        # Save intermediate results
+        if i == 1 or i % 100 == 0:
+            logging.info(
+                f"Saving interim garden estimates for {i} of {len(file_matches)} file matches"
+            )
+            interim_results = [df for df in epc_gardens if len(df) > 0]
+            interim_results = pl.concat(interim_results)
+            save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_0_{i}_INTERIM.parquet"
+            save_utils.save_to_s3(interim_results, save_as)
 
         # Set prev
         prev = land_file
