@@ -272,14 +272,14 @@ def load_gdf_listed_buildings(nation: str, **kwargs) -> gpd.GeoDataFrame:
 
 def load_gdf_ons_lsoa_bounds(**kwargs) -> gpd.GeoDataFrame:
     """
-    Load raw 2021 LSOA geospatial boundary polygons and area data for England and Wales from ONS. CRS
+    Load raw 2021 LSOA geospatial boundary polygons for England and Wales from ONS. CRS
     British National Grid (EPSG:27700).
 
     Args:
         **kwargs for geopandas.read_file()
 
     Returns:
-        gpd.GeoDataFrame: boundary polygons and area standard area measurement data for 2021 LSOAs
+        gpd.GeoDataFrame: boundary polygons for 2021 LSOAs
     """
     return gpd.read_file(config["data_source"]["EW_lsoa_bounds"], **kwargs)
 
