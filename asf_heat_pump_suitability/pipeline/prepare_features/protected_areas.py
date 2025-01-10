@@ -6,6 +6,27 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import get_datasets
 
 
+def load_transform_df_uprn_in_protected_area(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
+    """
+    Generate dataframe of UPRNs located within building conservation areas in England and Wales and UPRNS
+    located within Scottish World Heritage sites.
+
+    Args:
+        gdf (pl.DataFrame): dataframe with point geometries per UPRN in BNG
+
+    Returns:
+        pl.DataFrame: EPC UPRNs in building conservation areas in England and Wales and Scottish World Heritage Sites
+    """
+    ew_df = generate_df_uprn_in_cons_area(gdf).rename(
+        {"in_conservation_area_ew": "in_protected_area"}
+    )
+    s_df = generate_df_uprn_in_whs(gdf).rename(
+        {"in_world_heritage_site_s": "in_protected_area"}
+    )
+
+    return pl.concat([ew_df, s_df])
+
+
 def generate_df_uprn_in_cons_area(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
     """
     Generate dataframe of UPRNs located within building conservation areas in England and Wales.
@@ -44,18 +65,22 @@ def transform_gdf_building_cons_areas() -> gpd.GeoDataFrame:
     return gdf
 
 
-def generate_df_uprn_in_whs(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
+def generate_df_uprn_in_whs(
+    gdf: gpd.GeoDataFrame, country_col: str = "COUNTRY"
+) -> pl.DataFrame:
     """
     Generate dataframe to flag UPRNs located within World Heritage Sites in Scotland.
 
     Args:
         gdf (pl.DataFrame): dataframe with point geometries per UPRN in BNG
+        country_col (str): column containing country names
 
     Returns:
         pl.DataFrame: EPC UPRNs with flag for World Heritage Sites in Scotland
     """
     whs_gdf = load_transform_gdf_scottish_world_heritage_sites()
 
+    gdf = gdf[gdf[country_col] == "Scotland"].copy()
     gdf = gdf.sjoin(whs_gdf, how="left", predicate="intersects").drop_duplicates(
         subset="UPRN"
     )
