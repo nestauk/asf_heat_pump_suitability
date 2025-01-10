@@ -1,5 +1,6 @@
 import polars as pl
 from asf_heat_pump_suitability.getters import get_datasets
+from asf_heat_pump_suitability.pipeline.prepare_features import household_count
 
 
 def generate_df_property_density() -> pl.DataFrame:
@@ -24,7 +25,7 @@ def generate_df_property_density_ew() -> pl.DataFrame:
     Returns:
         pl.DataFrame: households per km2 per LSOA in England and Wales
     """
-    households_df = load_transform_df_n_households_ew()
+    households_df = household_count.load_transform_df_n_households_ew()
     area_df = load_transform_df_land_area_ew()
     df = households_df.join(area_df, how="inner", on="lsoa")
     df = df.with_columns(
@@ -34,26 +35,6 @@ def generate_df_property_density_ew() -> pl.DataFrame:
     )
 
     return df.select(["lsoa", "households_per_km2"])
-
-
-def load_transform_df_n_households_ew() -> pl.DataFrame:
-    """
-    Load and process ONS number of households per LSOA in England and Wales.
-
-    Returns
-        pl.DataFrame: number of households per LSOA
-    """
-    df = (
-        get_datasets.get_df_ons_number_of_households()
-        .rename(
-            {
-                "mnemonic": "lsoa",
-                "2021": "households_count",
-            }
-        )
-        .select(["lsoa", "households_count"])
-    )
-    return df
 
 
 def load_transform_df_land_area_ew() -> pl.DataFrame:
@@ -81,7 +62,7 @@ def generate_df_property_density_s() -> pl.DataFrame:
         pl.DataFrame: properties per km2 per 2011 Data Zone in Scotland
     """
     dz_df = load_transform_df_datazone_area()
-    dwellings_df = load_transform_df_n_dwellings_s()
+    dwellings_df = household_count.load_transform_df_n_dwellings_s()
     df = dwellings_df.join(dz_df, how="inner", on="DataZone").with_columns(
         (pl.col("n_dwellings") / pl.col("StdAreaKm2")).alias("households_per_km2")
     )
@@ -100,26 +81,3 @@ def load_transform_df_datazone_area() -> pl.DataFrame:
     df = get_datasets.load_gdf_scotgov_data_zone_bounds()[["DataZone", "StdAreaKm2"]]
 
     return pl.from_pandas(df)
-
-
-def load_transform_df_n_dwellings_s() -> pl.DataFrame:
-    """
-    Load and transform dataframe with number of dwellings per 2011 Scottish Data Zone. Number of dwellings excludes
-    long-term empty dwellings.
-
-    Returns:
-        pl.DataFrame: number of dwellings per 2011 Scottish Data Zone in Scotland
-    """
-    df = get_datasets.load_df_nrs_dwellings()
-    df = (
-        df.with_columns(
-            (
-                pl.col("Total number of dwellings")
-                - pl.col("Long-term empty dwellings \r\n[Note 6]")
-            ).alias("n_dwellings")
-        )
-        .select(["Data Zone code", "n_dwellings"])
-        .rename({"Data Zone code": "DataZone"})
-    )
-
-    return df
