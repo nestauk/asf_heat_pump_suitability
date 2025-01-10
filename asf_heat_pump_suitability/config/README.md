@@ -13,7 +13,7 @@ We have used domestic Energy Performance Certificate (EPC) records from the [Ene
 England and Wales published by the Department for Levelling Up, Housing & Communities ([licensing information](https://epc.opendatacommunities.org/docs/copyright)),
 and from the [Scottish Energy Performance Certificate Register](https://www.scottishepcregister.org.uk/) published by the Scottish Government
 for Scotland ([licensing information](https://statistics.gov.scot/data/domestic-energy-performance-certificates)). The data has been combined
-and preprocessed with our `asf-daps` [pipeline](https://github.com/nestauk/asf_daps).
+and preprocessed and deduplicated with our `asf-daps` [pipeline](https://github.com/nestauk/asf_daps).
 
 ### Features
 
