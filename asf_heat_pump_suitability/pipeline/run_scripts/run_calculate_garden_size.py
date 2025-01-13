@@ -110,6 +110,7 @@ if __name__ == "__main__":
     epc_gardens = []
     prev = None
     total_gardens = 0
+    min = 0
     logging.info(
         f"Estimating garden size for properties across {len(file_matches)} pairs of land extent and building footprint files."
     )
@@ -172,11 +173,12 @@ if __name__ == "__main__":
                 if len(df) > 0
             ]
             interim_results = pl.concat(interim_results)
-            save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/interim/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_{i-100}_{i}_INTERIM.parquet"
+            save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/interim/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_{min}_{i}_INTERIM.parquet"
             save_utils.save_to_s3(interim_results, save_as)
 
             # Reset to save next batch
             epc_gardens = []
+            min += 100
 
         # Set prev
         prev = land_file
