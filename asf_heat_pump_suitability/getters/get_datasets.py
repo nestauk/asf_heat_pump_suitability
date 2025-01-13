@@ -295,7 +295,7 @@ def load_df_nrs_dwellings() -> pl.DataFrame:
         pl.DataFrame: dwelling counts per 2011 Scottish Data Zone
     """
     df = base_getters.get_df_from_excel_s3_path(
-        config["data_source"]["S_NRScotland_dwellings"], sheet_name="2023"
+        config["data_source"]["S_NRScotland_households"], sheet_name="2023"
     )
     # Remove empty rows and set column headers to correct names
     df.columns = df.row(2)
