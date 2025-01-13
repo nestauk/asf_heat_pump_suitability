@@ -162,7 +162,7 @@ if __name__ == "__main__":
         epc_gardens.append(epc_df)
 
         # Save intermediate results
-        if i == 1 or i % 100 == 0:
+        if (i % 100 == 0) or (i == (len(file_matches) - 1)):
             logging.info(
                 f"Saving interim garden estimates for {i} of {len(file_matches)} file matches"
             )
@@ -172,8 +172,11 @@ if __name__ == "__main__":
                 if len(df) > 0
             ]
             interim_results = pl.concat(interim_results)
-            save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/estimates/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_0_{i}_INTERIM.parquet"
+            save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/interim/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_{i-100}_{i}_INTERIM.parquet"
             save_utils.save_to_s3(interim_results, save_as)
+
+            # Reset to save next batch
+            epc_gardens = []
 
         # Set prev
         prev = land_file
@@ -182,19 +185,19 @@ if __name__ == "__main__":
             f"Garden size calculated for {total_gardens} EPC properties in total."
         )
 
-    # Get df of all EPC records with garden size estimates
-    epc_gardens = [
-        df.with_columns(pl.col("NATIONALCADASTRALREFERENCE").cast(pl.String))
-        for df in epc_gardens
-        if len(df) > 0
-    ]
-    epc_gardens_df = pl.concat(epc_gardens)
-    if not args.save_as:
-        args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}.parquet"
-    save_utils.save_to_s3(epc_gardens_df, args.save_as)
-
-    logging.info("Deduplicating UPRNs that were matched to multiple gardens")
-    epc_gardens_df = epc_gardens_df.with_columns(pl.col(pl.Float64).round(2))
-    epc_gardens_df = garden_size.deduplicate_df_garden_size(epc_gardens_df)
-    args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_deduplicated.parquet"
-    save_utils.save_to_s3(epc_gardens_df, args.save_as)
+    # # Get df of all EPC records with garden size estimates
+    # epc_gardens = [
+    #     df.with_columns(pl.col("NATIONALCADASTRALREFERENCE").cast(pl.String))
+    #     for df in epc_gardens
+    #     if len(df) > 0
+    # ]
+    # epc_gardens_df = pl.concat(epc_gardens)
+    # if not args.save_as:
+    #     args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}.parquet"
+    # save_utils.save_to_s3(epc_gardens_df, args.save_as)
+    #
+    # logging.info("Deduplicating UPRNs that were matched to multiple gardens")
+    # epc_gardens_df = epc_gardens_df.with_columns(pl.col(pl.Float64).round(2))
+    # epc_gardens_df = garden_size.deduplicate_df_garden_size(epc_gardens_df)
+    # args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_deduplicated.parquet"
+    # save_utils.save_to_s3(epc_gardens_df, args.save_as)
