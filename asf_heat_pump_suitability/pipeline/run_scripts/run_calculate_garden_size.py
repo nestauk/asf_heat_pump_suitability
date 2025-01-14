@@ -164,7 +164,7 @@ if __name__ == "__main__":
         epc_gardens.append(epc_df)
 
         # Save intermediate results
-        if (i % 100 == 0) or (i == (len(file_matches) - 1)):
+        if ((i % 100 == 0) & (i != 0)) or (i == (len(file_matches) - 1)):
             logging.info(
                 f"Saving interim garden estimates for {i} of {len(file_matches)} file matches"
             )
