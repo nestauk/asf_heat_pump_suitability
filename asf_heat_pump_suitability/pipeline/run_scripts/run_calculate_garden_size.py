@@ -13,7 +13,7 @@ NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet
 
 import argparse
 import logging
-
+import os
 import shapely.errors
 from tqdm import tqdm
 import polars as pl
@@ -86,6 +86,7 @@ if __name__ == "__main__":
     args = parse_arguments()
     year = args.year
     q = args.quarter
+    interim_dir = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/interim/"
 
     logging.info("Load EPC UPRNs")
     epc_df = pl.read_parquet(args.epc, columns=["UPRN"])
@@ -112,6 +113,7 @@ if __name__ == "__main__":
     prev = None
     total_gardens = 0
     min = 0
+
     logging.info(
         f"Estimating garden size for properties across {len(file_matches)} pairs of land extent and building footprint files."
     )
@@ -174,7 +176,10 @@ if __name__ == "__main__":
                 if len(df) > 0
             ]
             interim_results = pl.concat(interim_results)
-            save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/interim/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_{min}_{i}_INTERIM.parquet"
+            save_as = os.path.join(
+                interim_dir,
+                f"{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_{min}_{i}_INTERIM.parquet",
+            )
             save_utils.save_to_s3(interim_results, save_as)
 
             # Reset to save next batch
@@ -188,8 +193,16 @@ if __name__ == "__main__":
             f"Garden size calculated for {total_gardens} EPC properties in total."
         )
 
-    del epc_gardens, epc_df, interim_results
-    interim_files = base_getters.list_obj_s3_location(args.interim_dir)
+    del (
+        epc_gardens,
+        epc_df,
+        interim_results,
+        gardens_gdf,
+        building_footprints_gdf,
+        intersection_gdf,
+    )
+
+    interim_files = base_getters.list_obj_s3_location(interim_dir)
 
     # Get df of all EPC records with garden size estimates
     epc_gardens_df = pl.DataFrame()
@@ -202,8 +215,19 @@ if __name__ == "__main__":
         args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}.parquet"
     save_utils.save_to_s3(epc_gardens_df, args.save_as)
 
+    del epc_gardens_df
+
+    # We load the files again and deduplicate them as they are loaded as it's less memory intensive
     logging.info("Deduplicating UPRNs that were matched to multiple gardens")
-    epc_gardens_df = epc_gardens_df.with_columns(pl.col(pl.Float64).round(2))
+    epc_gardens_df = pl.DataFrame()
+    for file in interim_files:
+        logging.info(f"Loading file: {file}")
+        df = pl.read_parquet(f"s3://{file}")
+        df = df.with_columns(pl.col(pl.Float64).round(2))
+        df = garden_size.deduplicate_df_garden_size(df)
+        epc_gardens_df = pl.concat([epc_gardens_df, df])
+
+    # Final round of deduplication
     epc_gardens_df = garden_size.deduplicate_df_garden_size(epc_gardens_df)
     args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_deduplicated.parquet"
     save_utils.save_to_s3(epc_gardens_df, args.save_as)
