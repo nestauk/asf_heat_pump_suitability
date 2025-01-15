@@ -73,18 +73,18 @@ if __name__ == "__main__":
     q = args.quarter
 
     logging.info("Loading EPC data with features")
-    epc_df = pl.read_parquet(path=args.features)
+    epc_df = pl.read_parquet(args.features)
     logging.info("Loading garden size estimates")
-    gardens = pl.read_parquet(path=args.gardens)
+    gardens = pl.read_parquet(args.gardens)
     logging.info("Loading weights")
-    weights = pl.read_parquet(path=args.weights)
+    weights = pl.read_parquet(args.weights)
 
     logging.info("Joining EPC features data with garden size estimates and weights")
     epc_df = epc_df.join(gardens, how="left", on="UPRN")
     epc_df = epc_df.join(weights, how="left", on="UPRN")
 
     logging.info(f"Saving augmented EPC data")
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}{q}/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_epc_augmented.parquet"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/augmented_epc/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_epc_augmented.parquet"
     save_utils.save_to_s3(epc_df, save_as)
 
     epc_df = epc_df.with_columns(
@@ -103,7 +103,7 @@ if __name__ == "__main__":
         "in_protected_area",
         "garden_area_m2",
         "households_per_km2",
-        "has_anchor_properties",
+        "has_anchor_property",
         "heatpump_installation_percentage",
     ]
     epc_df = calculate_suitability.filter_df_minimum_features(epc_df, features=features)
@@ -131,19 +131,26 @@ if __name__ == "__main__":
     for score_df in scores:
         epc_df = epc_df.join(score_df, on="UPRN", how="left")
 
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}{q}/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_heat_pump_suitability_per_property.parquet"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_heat_pump_suitability_per_property.parquet"
     save_utils.save_to_s3(epc_df, save_as)
 
     logging.info("Weighting scores and aggregating per LSOA")
     weighted_scores = []
     for lsoa_code in tqdm(epc_df["lsoa"].unique()):
         lsoa_df = epc_df.filter(pl.col("lsoa") == lsoa_code)
-        lsoa_df = calculate_suitability.compute_df_weighted_score(lsoa_df)
-        weighted_scores.append(
-            calculate_suitability.compute_dict_lsoa_suitability_scores(
-                lsoa_df, lsoa_code
+        if lsoa_df.is_empty():
+            logging.info(
+                f"No EPC records found for {lsoa_code}. Skipping weighting and aggregation."
             )
-        )
+            continue
+        else:
+            lsoa_df = calculate_suitability.compute_df_weighted_score(lsoa_df)
+            weighted_scores.append(
+                calculate_suitability.compute_dict_lsoa_suitability_scores(
+                    lsoa_df, lsoa_code
+                )
+            )
+
     # Must have at least 15 properties to be included in final dataset
     suitability_df = pl.DataFrame(weighted_scores).filter(pl.col("n_properties") >= 15)
     suitability_df = suitability_df.with_columns(pl.col(pl.Float64).round(3))
@@ -159,6 +166,6 @@ if __name__ == "__main__":
     ).rename({"LSOA21NM": "lsoa_name"})
 
     logging.info("Saving LSOA heat pump suitability scores")
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}{q}/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_heat_pump_suitability_per_lsoa"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_heat_pump_suitability_per_lsoa"
     save_utils.save_to_s3(suitability_df, f"{save_as}.parquet")
     save_utils.save_to_s3(suitability_df, f"{save_as}.csv")
