@@ -178,7 +178,7 @@ if __name__ == "__main__":
             interim_results = pl.concat(interim_results)
             save_as = os.path.join(
                 interim_dir,
-                f"{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_{min}_{i}_INTERIM.parquet",
+                f"{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_{min+1}_{i}_INTERIM.parquet",
             )
             save_utils.save_to_s3(interim_results, save_as)
 
