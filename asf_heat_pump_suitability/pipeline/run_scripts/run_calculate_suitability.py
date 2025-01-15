@@ -136,20 +136,13 @@ if __name__ == "__main__":
 
     logging.info("Weighting scores and aggregating per LSOA")
     weighted_scores = []
-    for lsoa_code in tqdm(epc_df["lsoa"].unique()):
-        lsoa_df = epc_df.filter(pl.col("lsoa") == lsoa_code)
-        if lsoa_df.is_empty():
-            logging.info(
-                f"No EPC records found for {lsoa_code}. Skipping weighting and aggregation."
+    for lsoa_code in tqdm(epc_df["lsoa"].drop_nulls().unique()):
+        lsoa_df = calculate_suitability.compute_df_weighted_score(lsoa_df)
+        weighted_scores.append(
+            calculate_suitability.compute_dict_lsoa_suitability_scores(
+                lsoa_df, lsoa_code
             )
-            continue
-        else:
-            lsoa_df = calculate_suitability.compute_df_weighted_score(lsoa_df)
-            weighted_scores.append(
-                calculate_suitability.compute_dict_lsoa_suitability_scores(
-                    lsoa_df, lsoa_code
-                )
-            )
+        )
 
     # Must have at least 15 properties to be included in final dataset
     suitability_df = pl.DataFrame(weighted_scores).filter(pl.col("n_properties") >= 15)
