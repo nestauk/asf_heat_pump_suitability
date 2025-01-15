@@ -137,6 +137,7 @@ if __name__ == "__main__":
     logging.info("Weighting scores and aggregating per LSOA")
     weighted_scores = []
     for lsoa_code in tqdm(epc_df["lsoa"].drop_nulls().unique()):
+        lsoa_df = epc_df.filter(pl.col("lsoa") == lsoa_code)
         lsoa_df = calculate_suitability.compute_df_weighted_score(lsoa_df)
         weighted_scores.append(
             calculate_suitability.compute_dict_lsoa_suitability_scores(
