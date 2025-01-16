@@ -158,7 +158,7 @@ def compute_df_max_score_per_epc(df: pl.DataFrame, tech_type: str) -> pl.DataFra
         .then(scoring.epc_threshold_scores.get(tech_type))
         .otherwise(0)
         .alias("epc_rating_max"),
-        pl.when(pl.col("has_anchor_properties").is_not_null())
+        pl.when(pl.col("has_anchor_property").is_not_null())
         .then(scoring.anchor_properties_scores.get(tech_type))
         .otherwise(0)
         .alias("anchor_properties_max"),
