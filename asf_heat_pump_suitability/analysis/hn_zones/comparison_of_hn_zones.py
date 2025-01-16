@@ -18,11 +18,11 @@ fractions, calculates various statistics, and exports the results.
 
 4. **Data Export**:
    - For each LA, outputs:
-       - A GeoPackage (`la_name_with_desnz_hn_lsoa.gpkg`)
+       - A GeoPackage with the DESNZ Heat Network zones joined with the LSOA polygons and the intersection areas for each of the LAs (`la_name_with_desnz_hn_lsoa.gpkg`)
        - A JSON file listing LSOAs (`la_name_hp_suitability_lsoas.json`)
        - A Parquet file containing final suitability scores with DESNZ coverage (`la_name_hp_suitability_scores_with_desnz.parquet`)
        - A CSV of those same scores (`la_name_hp_suitability_scores_with_desnz.csv`)
-   - Also creates a combined CSV (`la_mae_data.csv`) aggregating MAE metrics across all LAs.
+   - Also creates a combined CSV (`la_mae_data.csv`) aggregating MAE metrics across all LAs as well as LSOAs which aren't contained within the LA but in the DESNZ heat network zone.
    - Logs all steps and statistics (`script_output.log` by default).
 
 **Note**: For a “region” such as **Greater Manchester**, this script further processes
@@ -63,17 +63,17 @@ import logging
 import json
 import os
 import geopandas as gpd
-from typing import List, Dict
+from typing import List, Dict, Any
 from asf_heat_pump_suitability import PROJECT_DIR
-from utils.log_save_utils import (
+from hnz_utils.log_utils import (
     setup_logging_and_file_path,
-    setup_paths,
-    optionally_upload_file_to_s3,
-    save_gdf_to_gpkg,
 )
-from utils.spatial_utils import load_transform_hn_geodata
-from utils.nesta_hp_suitability_utils import filter_la_nesta_hp_scores
-from utils.hnz_comparison_analysis_utils import (
+from asf_heat_pump_suitability.utils.save_utils import upload_file_to_s3
+from hnz_utils.nesta_hp_suitability_utils import filter_la_nesta_hp_scores
+from hnz_utils.hnz_comparison_analysis_utils import (
+    setup_paths,
+    save_gdf_to_gpkg,
+    load_transform_hn_geodata,
     add_DESNZ_pilot_fraction,
     calculate_average_scores_for_thresholds,
     calculate_mae_for_all,
@@ -183,7 +183,7 @@ def process_single_LA(
     save_to_s3: bool,
     s3_bucket: str,
     s3_key_dir: str,
-    la_mae_data: List[Dict[str, float]],
+    la_mae_data: List[Dict[str, Any]],
 ):
     """
     Processes a single Local Authority (LA) or sub-LA (if part of a region like Greater Manchester)
@@ -206,7 +206,7 @@ def process_single_LA(
         save_to_s3 (bool): Whether to upload outputs to S3.
         s3_bucket (str): S3 bucket name.
         s3_key_dir (str): S3 storage directory prefix.
-        la_mae_data (List[Dict[str, float]]): Stores MAE and statistical results.
+        la_mae_data (List[Dict[str, Any]]): Stores MAE and statistical results.
     """
     # 1. Filter Nesta HP suitability scores for this LA
     la_hp_suitability_scores, la_hp_suitability_lsoas = filter_la_nesta_hp_scores(
@@ -223,7 +223,7 @@ def process_single_LA(
     with open(lsoas_json_local_file_path, "w") as file:
         json.dump(la_hp_suitability_lsoas, file)
 
-    optionally_upload_file_to_s3(
+    upload_file_to_s3(
         local_file_path=lsoas_json_local_file_path,
         s3_bucket=s3_bucket,
         s3_key_dir=s3_key_dir,
@@ -273,7 +273,7 @@ def process_single_LA(
     )
     avg_score_parquet_filepath = os.path.join(output_dir, avg_score_parquet_filename)
     average_scores_df.write_parquet(avg_score_parquet_filepath)
-    optionally_upload_file_to_s3(
+    upload_file_to_s3(
         local_file_path=avg_score_parquet_filepath,
         s3_bucket=s3_bucket,
         s3_key_dir=s3_key_dir,
@@ -315,14 +315,6 @@ def process_single_LA(
             None if multiple_las else len(set(la_hp_suitability_lsoas))
         ),
     }
-    # if not multiple_las:
-    #    not_in_hp_suitability_str = ",".join(sorted(not_in_hp_suitability))
-    #    la_list_of_desnz_hn_lsoas_str = ",".join(sorted(len(la_list_of_desnz_hn_lsoas)))
-    #    la_hp_suitability_lsoas_str = ",".join(sorted(len(la_hp_suitability_lsoas)))
-    # else:
-    #    not_in_hp_suitability_str = None
-    #    la_list_of_desnz_hn_lsoas_str = None
-    #    la_hp_suitability_lsoas_str = None
 
     # 9. Append all metrics—including the stringified sets—to la_mae_data
     la_mae_data.append(
@@ -344,7 +336,7 @@ def process_single_LA(
     )
     mae_parquet_local_file_path = os.path.join(output_dir, mae_parquet_filename)
     la_hp_scores_with_desnz.write_parquet(mae_parquet_local_file_path)
-    optionally_upload_file_to_s3(
+    upload_file_to_s3(
         local_file_path=mae_parquet_local_file_path,
         s3_bucket=s3_bucket,
         s3_key_dir=s3_key_dir,
@@ -436,7 +428,7 @@ if __name__ == "__main__":
     la_mae_filename = "la_mae_data.csv"
     la_mae_csv_path = os.path.join(output_dir, la_mae_filename)
     mae_df.write_csv(la_mae_csv_path)
-    optionally_upload_file_to_s3(
+    upload_file_to_s3(
         local_file_path=la_mae_csv_path,
         s3_bucket=S3_BUCKET,
         s3_key_dir=S3_KEY_DIR,
