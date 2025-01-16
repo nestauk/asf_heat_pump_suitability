@@ -1,18 +1,10 @@
-import re
-from typing import Any
-import logging
-
-import numpy as np
 import pandas as pd
 import geopandas as gpd
+import polars as pl
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
-from asf_heat_pump_suitability.getters.s3_getters import (
-    load_s3_data,
-)
 from asf_heat_pump_suitability.utils.geo_utils import parse_binary_geometry
-
 
 CRS = "EPSG:4326"  # Geometry coordinate reference system - standard longitude/latitude projection
 
@@ -283,25 +275,13 @@ def generate_ssen_gdf() -> gpd.GeoDataFrame:
             - geo_shape: Polygon geometry representing the substation's service area
             - operator: Distribution network operator code ("SSEN")
     """
-    ssen_demand = base_getters.get_df_from_csv_s3_path(
-        config["data_source"]["ES_SSEN_demand"]
-    ).to_pandas()
     sepd_shape = gpd.read_file(config["data_source"]["S_SSEN_sepd_bounds"])
     shepd_shape = gpd.read_file(config["data_source"]["E_SSEN_shepd_bounds"])
-
-    # Process SSEN data
-    ssen = ssen_demand[
-        [
-            "Primary Substation Name",
-            "Nameplate rating (MVA)",
-            "Maximum Load (MVA)",
-            "Latitude",
-            "Longitude",
-            "Grid Reference",
-        ]
-    ]
     ssen_shape = pd.concat([shepd_shape, sepd_shape])
-    ssen_df = ssen.merge(
+
+    ssen_demand = load_transform_df_ssen_demand().to_pandas()
+
+    ssen_df = ssen_demand.merge(
         ssen_shape, left_on="Primary Substation Name", right_on="Primary"
     )
 
@@ -329,6 +309,55 @@ def generate_ssen_gdf() -> gpd.GeoDataFrame:
     ).to_crs(CRS)
 
     return ssen_df[ssen_df.geometry.is_valid]
+
+
+def load_transform_df_ssen_demand() -> pl.DataFrame:
+    """
+    Load and transform demand data for Scottish and Southern Electricity Networks (SSEN) primary substations.
+
+    The function processes substation data from SHEPD (Shetland), SEPD (Scotland), and South England regions.
+
+    Returns:
+        pl.DataFrame: dataset containing:
+            - Primary Substation Name: Unique substation identifier
+            - Nameplate rating (MVA): Maximum power the substation can safely deliver (MVA)
+            - Maximum Load (MVA): Maximum observed power demand at the substation (MVA)
+            - Latitude, Longitude, and Grid Reference geospatial information
+    """
+    cols = [
+        "Primary Substation Name",
+        "Nameplate rating (MVA)",
+        "Maximum Load (MVA)",
+        "Latitude",
+        "Longitude",
+        "Grid Reference",
+    ]
+
+    ssen_demand = []
+
+    ssen_demand.append(
+        base_getters.get_df_from_csv_s3_path(
+            config["data_source"]["E_SSEN_demand"], columns=cols
+        ).select(cols)
+    )
+
+    ssen_demand.append(
+        base_getters.get_df_from_excel_s3_path(
+            config["data_source"]["S_SSEN_demand"], sheet_name="PS", columns=cols
+        ).select(cols)
+    )
+
+    ssen_demand.append(
+        base_getters.get_df_from_excel_s3_path(
+            config["data_source"]["SHET_SSEN_demand"], sheet_name="PS", columns=cols
+        ).select(cols)
+    )
+
+    ssen_demand = pl.concat(ssen_demand).with_columns(
+        pl.col("Primary Substation Name").str.to_uppercase()
+    )
+
+    return ssen_demand
 
 
 def generate_ukpn_gdf() -> gpd.GeoDataFrame:
