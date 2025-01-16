@@ -81,7 +81,12 @@ def setup_paths(read_in_s3: bool) -> dict:
 
 
 def optionally_upload_file_to_s3(
-    local_file_path: str, s3_bucket: str, s3_key: str, save_to_s3: bool
+    local_file_path: str,
+    s3_bucket: str,
+    s3_key_dir: str,
+    save_to_s3: bool,
+    filename: str,
+    subfolder: str,
 ):
     """
     Upload a local file to an S3 bucket.
@@ -89,10 +94,14 @@ def optionally_upload_file_to_s3(
     Args:
         local_file_path (str): Path to the local file.
         s3_bucket (str): Name of the S3 bucket.
-        s3_key (str): S3 key (path) where the file should be uploaded.
+        s3_key_dir (str): S3 key (path) where the file should be uploaded.
+        save_to_s3 (bool): boolean which indicates whether to save or not the
+        subfolder (str): Subfolder within S3.
+        filename (str): The actual filename to store in S3.
     """
     if save_to_s3:
         s3_client = boto3.client("s3")
+        s3_key = f"{s3_key_dir}{subfolder}/{filename}"
         s3_client.upload_file(local_file_path, s3_bucket, s3_key)
         logging.info(f"File uploaded to s3://{s3_bucket}/{s3_key}")
 
@@ -104,6 +113,7 @@ def save_gdf_to_gpkg(
     save_to_s3: bool,
     s3_bucket: str,
     s3_key_dir: str,
+    subfolder: str,
 ):
     """
     Save a GeoDataFrame to a GPKG file, then optionally upload to S3.
@@ -115,6 +125,7 @@ def save_gdf_to_gpkg(
         save_to_s3 (bool): Whether to upload the output file to S3.
         s3_bucket (str): Name of the S3 bucket.
         s3_key_dir (str): The S3 key prefix where files are stored.
+        subfolder (str): Optional subfolder within S3 for organization.
     """
     gpkg_filename = (
         f"{filename_prefix.lower().replace(' ', '_')}_with_desnz_hn_lsoa.gpkg"
@@ -124,9 +135,12 @@ def save_gdf_to_gpkg(
     gdf.to_file(filename=gpkg_local_file_path, driver="GPKG")
     logging.info(f"Saved GPKG for {filename_prefix} to {gpkg_local_file_path}")
 
+    # s3_key = f"{s3_key_dir}{subfolder}/{gpkg_filename}"
     optionally_upload_file_to_s3(
         local_file_path=gpkg_local_file_path,
         s3_bucket=s3_bucket,
-        s3_key=f"{s3_key_dir}{gpkg_filename}",
+        s3_key_dir=s3_key_dir,
+        filename=gpkg_filename,
         save_to_s3=save_to_s3,
+        subfolder=subfolder,
     )

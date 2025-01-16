@@ -109,7 +109,7 @@ def process_LA(
     """
     Processes a local authority (LA). If the LA is actually a region
     like Greater Manchester, it processes each sub-LA with the same dataset.
-    Appends mean absolute errors and average heat network scores to the list 'la_mae_data'.
+    Appends mean absolute errors, average heat network scores and missing LSOA information to the list 'la_mae_data'.
 
     Args:
         la_name (str): Name of the Local Authority.
@@ -123,74 +123,45 @@ def process_LA(
         s3_key_dir (str): S3 path prefix/folder.
         la_mae_data (list): Shared list to accumulate MAE data for each LA.
     """
-
     la_gpkg_dict = LOCAL_AUTHORITIES[la_name]
-
     # If this LA is actually a grouped region (e.g. Greater Manchester)
     if isinstance(la_gpkg_dict, dict):
         la_layer_name = la_gpkg_dict["gpkg_file"].replace(".gpkg", "")
         sub_las = la_gpkg_dict["sub_LAs"]
-
-        logging.info(f"Processing Greater Manchester (splitting into {sub_las})")
-
-        # 1. Load the entire region GPKG
-        gm_with_desnz_hn_lsoa, gm_list_of_desnz_hn_lsoas = load_transform_hn_geodata(
-            desnz_hn_gpkg_path=gpkg_path,
-            lsoa_shp_path=lsoa_shp_path,
-            layer_name=la_layer_name,
-        )
-        # 2. Save & Upload the region’s GPKG (once)
-        save_gdf_to_gpkg(
-            gdf=gm_with_desnz_hn_lsoa,
-            output_dir=output_dir,
-            filename_prefix=la_name,
-            save_to_s3=save_to_s3,
-            s3_bucket=s3_bucket,
-            s3_key_dir=s3_key_dir,
-        )
-
-        # 3. Process each sub-LA individually
-        for sub_la in sub_las:
-            logging.info(f"Processing sub-LA: {sub_la} within region {la_name}")
-            process_single_LA(
-                la_name=sub_la,
-                la_with_desnz_hn_lsoa=gm_with_desnz_hn_lsoa,
-                la_list_of_desnz_hn_lsoas=gm_list_of_desnz_hn_lsoas,
-                multiple_las=True,
-                nesta_parquet_path=nesta_parquet_path,
-                output_dir=output_dir,
-                optional_threshold=optional_threshold,
-                save_to_s3=save_to_s3,
-                s3_bucket=s3_bucket,
-                s3_key_dir=s3_key_dir,
-                la_mae_data=la_mae_data,
-            )
-
+        multiple_las = True
+        logging.info(f"Processing region: {la_name} with LAs: {sub_las}")
     else:
-        logging.info(f"Starting processing for LA: {la_name}")
         la_layer_name = la_gpkg_dict.replace(".gpkg", "")
-        la_with_desnz_hn_lsoa, la_list_of_desnz_hn_lsoas = load_transform_hn_geodata(
-            desnz_hn_gpkg_path=gpkg_path,
-            lsoa_shp_path=lsoa_shp_path,
-            layer_name=la_layer_name,
-        )
-        logging.info(f"Loaded {la_name} with DESNZ heat network LSOA data.")
+        sub_las = [la_name]
+        multiple_las = False
+        logging.info(f"Starting processing for single LA: {la_name}")
 
-        # Save & upload the single LA's GPKG
-        save_gdf_to_gpkg(
-            gdf=la_with_desnz_hn_lsoa,
-            output_dir=output_dir,
-            filename_prefix=la_name,
-            save_to_s3=save_to_s3,
-            s3_bucket=s3_bucket,
-            s3_key_dir=s3_key_dir,
-        )
-        # Then do single-LA analytics
+    # 1. Load the GPKG file
+    la_with_desnz_hn_lsoa, la_list_of_desnz_hn_lsoas = load_transform_hn_geodata(
+        desnz_hn_gpkg_path=gpkg_path,
+        lsoa_shp_path=lsoa_shp_path,
+        layer_name=la_layer_name,
+    )
+    logging.info(f"Loaded {la_name} with DESNZ heat network LSOA data.")
+
+    # 2. Save & upload GPKG file
+    save_gdf_to_gpkg(
+        gdf=la_with_desnz_hn_lsoa,
+        output_dir=output_dir,
+        filename_prefix=la_name,
+        save_to_s3=save_to_s3,
+        s3_bucket=s3_bucket,
+        s3_key_dir=s3_key_dir,
+        subfolder="gpkg",
+    )
+    # 3. Process each LA individually
+    for sub_la in sub_las:
+        logging.info(f"Processing LA: {sub_la}")
         process_single_LA(
-            la_name=la_name,
-            la_with_desnz_hn_lsoa=la_with_desnz_hn_lsoa,  # Load normally inside process_single_LA
+            la_name=sub_la,
+            la_with_desnz_hn_lsoa=la_with_desnz_hn_lsoa,
             la_list_of_desnz_hn_lsoas=la_list_of_desnz_hn_lsoas,
-            multiple_las=False,
+            multiple_las=multiple_las,
             nesta_parquet_path=nesta_parquet_path,
             output_dir=output_dir,
             optional_threshold=optional_threshold,
@@ -255,8 +226,10 @@ def process_single_LA(
     optionally_upload_file_to_s3(
         local_file_path=lsoas_json_local_file_path,
         s3_bucket=s3_bucket,
-        s3_key=f"{s3_key_dir}{lsoas_json_filename}",
+        s3_key_dir=s3_key_dir,
         save_to_s3=save_to_s3,
+        filename=lsoas_json_filename,
+        subfolder="hp_suitability_lsoas",
     )
 
     # 3. Check LSOAs not in HP suitability scores (only if single LA)
@@ -303,8 +276,10 @@ def process_single_LA(
     optionally_upload_file_to_s3(
         local_file_path=avg_score_parquet_filepath,
         s3_bucket=s3_bucket,
-        s3_key=f"{s3_key_dir}{avg_score_parquet_filename}",
+        s3_key_dir=s3_key_dir,
         save_to_s3=save_to_s3,
+        filename=avg_score_parquet_filename,
+        subfolder="avg_scores",
     )
 
     # 7. Calculate and log the Mean Absolute Error (MAE)
@@ -329,7 +304,27 @@ def process_single_LA(
         f"[{la_name}] Mean Absolute Error (MAE) for DESNZ_pilot_fraction = 0: {mae_pilot_zero}"
     )
 
-    # 8. Append metrics to a list for all local authorities
+    # 8. Convert sets to strings (or None if multiple_las == True)
+    missing_lsoas_info = {}
+    missing_lsoas_info = {
+        "not_in_hp_suitability": None if multiple_las else len(not_in_hp_suitability),
+        "la_list_of_desnz_hn_lsoas": (
+            None if multiple_las else len(set(la_list_of_desnz_hn_lsoas))
+        ),
+        "la_hp_suitability_lsoas": (
+            None if multiple_las else len(set(la_hp_suitability_lsoas))
+        ),
+    }
+    # if not multiple_las:
+    #    not_in_hp_suitability_str = ",".join(sorted(not_in_hp_suitability))
+    #    la_list_of_desnz_hn_lsoas_str = ",".join(sorted(len(la_list_of_desnz_hn_lsoas)))
+    #    la_hp_suitability_lsoas_str = ",".join(sorted(len(la_hp_suitability_lsoas)))
+    # else:
+    #    not_in_hp_suitability_str = None
+    #    la_list_of_desnz_hn_lsoas_str = None
+    #    la_hp_suitability_lsoas_str = None
+
+    # 9. Append all metrics—including the stringified sets—to la_mae_data
     la_mae_data.append(
         {
             "Local Authority": la_name,
@@ -339,10 +334,11 @@ def process_single_LA(
             "avg_hn_score": avg_hn_score,
             "avg_hn_score_pilot_nonzero": avg_hn_score_pilot_nonzero,
             "avg_hn_score_pilot_zero": avg_hn_score_pilot_zero,
+            **missing_lsoas_info,
         }
     )
 
-    # 9. Save final data (Parquet + CSV)
+    # 10. Save final data (Parquet + CSV)
     mae_parquet_filename = (
         f"{la_name.lower().replace(' ', '_')}_hp_suitability_scores_with_desnz.parquet"
     )
@@ -351,8 +347,10 @@ def process_single_LA(
     optionally_upload_file_to_s3(
         local_file_path=mae_parquet_local_file_path,
         s3_bucket=s3_bucket,
-        s3_key=f"{s3_key_dir}{mae_parquet_filename}",
+        s3_key_dir=s3_key_dir,
         save_to_s3=save_to_s3,
+        filename=mae_parquet_filename,
+        subfolder="hp_suitability_scores_with_desnz",
     )
     csv_output_filename = (
         f"{la_name.lower().replace(' ', '_')}_hp_suitability_scores_with_desnz.csv"
@@ -435,7 +433,16 @@ if __name__ == "__main__":
 
     # 6. After all LAs are processed, save the combined MAE data as CSV
     mae_df = pl.DataFrame(la_mae_data)
-    csv_path = os.path.join(output_dir, "la_mae_data.csv")
-    mae_df.write_csv(csv_path)
-    logging.info(f"Saved MAE data to {csv_path}")
+    la_mae_filename = "la_mae_data.csv"
+    la_mae_csv_path = os.path.join(output_dir, la_mae_filename)
+    mae_df.write_csv(la_mae_csv_path)
+    optionally_upload_file_to_s3(
+        local_file_path=la_mae_csv_path,
+        s3_bucket=S3_BUCKET,
+        s3_key_dir=S3_KEY_DIR,
+        save_to_s3=save_to_s3,
+        filename=la_mae_filename,
+        subfolder="la_mae",
+    )
+    logging.info(f"Saved MAE data to {la_mae_csv_path}")
     logging.info("All local authorities processed.")
