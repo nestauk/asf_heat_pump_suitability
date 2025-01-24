@@ -139,7 +139,9 @@ if __name__ == "__main__":
     uprns_in_protected_area_df = (
         protected_areas.load_transform_df_uprn_in_protected_area(epc_gdf)
     )
-    epc_df = epc_df.join(uprns_in_protected_area_df, how="left", on="UPRN")
+    epc_df = epc_df.join(
+        uprns_in_protected_area_df, how="left", on="UPRN"
+    ).with_columns(pl.col("in_protected_area").fill_null(False))
 
     logging.info(
         "Adding local authority building conservation area data availability flag for England and Wales"
