@@ -21,7 +21,7 @@ avg_gardens_df = garden_space_avg.generate_df_garden_space_avg()
 
 # %%
 gardens_df = pl.read_parquet(
-    "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/20250115_2023_Q4_EPC_garden_size_estimates_EWS_deduplicated.parquet"
+    "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/20250115_2023_Q4_EPC_garden_size_estimates_EWS_deduplicated_FOR_EVALUATION_ONLY.parquet"
 )
 
 # %%
