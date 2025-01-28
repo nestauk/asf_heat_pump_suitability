@@ -96,18 +96,69 @@ def get_tech_suitability_overall_type(ashp, hn, ashp_high_thresh, hn_high_thresh
 
 # Ad hoc manually created categories for Plymouth
 def get_tech_suitability_manual(ashp, hn):
-    if ashp < 0.68:
+    if (ashp < 0.68) & (hn > 0.7):
         return "HN suitable"
     else:
-        if (hn > 0.46) & (ashp < 0.82):
+        if ashp < 0.82:
             return "Multiple technologies may be feasible"
         else:
             return "ASHP suitable"
 
 
+def add_tenure_proportions(lsoa_df: pd.DataFrame) -> pd.DataFrame:
+
+    # Join with tenure data
+    census_tenure = get_target.transform_df_target_tenure()
+    lsoa_df_tenure = lsoa_df.merge(census_tenure.to_pandas(), how="left", on="lsoa")
+
+    # Get proportions of each tenure type
+    tenure_types = ["owner-occupied", "rental (social)", "rental (private)"]
+    lsoa_df_tenure["total_census_tenure_properties"] = lsoa_df_tenure[tenure_types].sum(
+        axis=1
+    )
+    for tenure_type in tenure_types:
+        lsoa_df_tenure[f"Proportion {tenure_type}"] = (
+            lsoa_df_tenure[tenure_type]
+            / lsoa_df_tenure["total_census_tenure_properties"]
+        )
+
+    return lsoa_df_tenure
+
+
+def get_lsoa_proportion_flats(per_property_df: pd.DataFrame) -> pd.DataFrame:
+
+    # Proportion of flats per LSOA
+    per_property_df["is_flat"] = (
+        per_property_df["property_type"] == "Flat, maisonette or apartment"
+    ).astype(int)
+    per_property_df_grouped = per_property_df.groupby("lsoa")
+    num_flats_per_lsoa = per_property_df_grouped["is_flat"].sum().reset_index()
+    num_props_per_lsoa = per_property_df_grouped.size().reset_index()
+    flats_per_lsoa = num_flats_per_lsoa.merge(num_props_per_lsoa, on="lsoa")
+    flats_per_lsoa["%flats"] = flats_per_lsoa["is_flat"] * 100 / flats_per_lsoa[0]
+
+    return flats_per_lsoa
+
+
 if __name__ == "__main__":
 
-    # Suitability scores + features per property
+    # Suitability per LSOA
+    suitability_data = pd.read_parquet(suitablitity_per_lsoa_file)
+
+    # Filter data for a particular place
+
+    place_name = "Plymouth"  # Word in the LSOA name
+    plymouth_lsoas_df = suitability_data[
+        suitability_data["lsoa_name"].apply(lambda x: place_name in str(x))
+    ]
+    plymouth_lsoas_list = list(plymouth_lsoas_df["lsoa"].unique())
+
+    plymouth_lsoas_df = add_tenure_proportions(plymouth_lsoas_df)
+
+    # Add geospatial data
+    plymouth_lsoas_gdf = load_ew_boundaries(plymouth_lsoas_df)
+
+    # Features per property
 
     per_prop_data = pl.read_parquet(
         suitability_per_property_file,
@@ -141,8 +192,12 @@ if __name__ == "__main__":
         ],
     )
 
-    lsoa_features = per_prop_data.unique(subset=["lsoa"])
-    lsoa_features = lsoa_features.to_pandas()[
+    per_prop_plymouth = per_prop_data.filter(
+        pl.col("lsoa").is_in(plymouth_lsoas_list)
+    ).to_pandas()
+
+    # Unique features per LSOA
+    lsoa_features = per_prop_plymouth.drop_duplicates(subset=["lsoa"])[
         [
             "lsoa",
             "ruc_two_fold",
@@ -152,83 +207,72 @@ if __name__ == "__main__":
         ]
     ]
 
-    # Suitability per LSOA
-    suitability_data = pd.read_parquet(suitablitity_per_lsoa_file)
-
-    # Filter data for a particular place
-    place_name = "Plymouth"  # Word in the LSOA name
-    plymouth_lsoas = suitability_data[
-        suitability_data["lsoa_name"].apply(lambda x: place_name in str(x))
-    ]
-    plymouth_lsoas_list = list(plymouth_lsoas["lsoa"].unique())
-
-    # Join with tenure data
-    census_tenure = get_target.transform_df_target_tenure()
-    plymouth_lsoas_tenure = plymouth_lsoas.merge(
-        census_tenure.to_pandas(), how="left", on="lsoa"
-    )
-
-    # Get proportions of each tenure type
-    tenure_types = ["owner-occupied", "rental (social)", "rental (private)"]
-    plymouth_lsoas_tenure["total_census_tenure_properties"] = plymouth_lsoas_tenure[
-        tenure_types
-    ].sum(axis=1)
-    for tenure_type in tenure_types:
-        plymouth_lsoas_tenure[f"Proportion {tenure_type}"] = (
-            plymouth_lsoas_tenure[tenure_type]
-            / plymouth_lsoas_tenure["total_census_tenure_properties"]
-        )
-
-    # Add geospatial data
-    plymouth_lsoas_tenure_gdf = load_ew_boundaries(plymouth_lsoas_tenure)
-
     # Join with lsoa features
-    plymouth_lsoas_tenure_gdf = plymouth_lsoas_tenure_gdf.merge(
-        lsoa_features, how="left", on="lsoa"
+    plymouth_lsoas_gdf = plymouth_lsoas_gdf.merge(lsoa_features, how="left", on="lsoa")
+
+    flats_per_lsoa = get_lsoa_proportion_flats(per_prop_plymouth)
+    plymouth_lsoas_gdf = plymouth_lsoas_gdf.merge(
+        flats_per_lsoa[["lsoa", "%flats"]], how="left", on="lsoa"
     )
 
-    plymouth_lsoas_tenure_gdf = plymouth_lsoas_tenure_gdf.round(3).rename(
-        columns=column_rename_dict
+    # Alternative way to get proportion of flats from census
+    census_prop_type = get_target.load_transform_df_target_property_type_ew()
+    census_prop_type_plymouth = census_prop_type.filter(
+        pl.col("lsoa").is_in(plymouth_lsoas_list)
     )
+    census_prop_type_plymouth = census_prop_type_plymouth.with_columns(
+        sum=pl.sum_horizontal(
+            "Detached",
+            "Semi-detached",
+            "Terraced (including end-terrace)",
+            "Flat, maisonette or apartment",
+            "Caravan or other mobile or temporary structure",
+        )
+    ).with_columns(
+        (pl.col("Flat, maisonette or apartment") * 100 / pl.col("sum")).alias(
+            "census_%flats"
+        )
+    )
+    plymouth_lsoas_gdf = plymouth_lsoas_gdf.merge(
+        census_prop_type_plymouth.to_pandas()[["lsoa", "census_%flats"]],
+        how="left",
+        on="lsoa",
+    )
+
+    # Get categorisations of HN/ASHP zones
+
+    plymouth_lsoas_gdf = plymouth_lsoas_gdf.round(3).rename(columns=column_rename_dict)
 
     quantile_thresh = 0.6
-    ashp_high_thresh = plymouth_lsoas_tenure_gdf["ASHP - Nesta"].quantile(
-        quantile_thresh
-    )
-    gshp_high_thresh = plymouth_lsoas_tenure_gdf["GSHP - Nesta"].quantile(
-        quantile_thresh
-    )
-    sgl_high_thresh = plymouth_lsoas_tenure_gdf["SGL - Nesta"].quantile(quantile_thresh)
-    hn_high_thresh = plymouth_lsoas_tenure_gdf["HN - Nesta"].quantile(quantile_thresh)
+    ashp_high_thresh = plymouth_lsoas_gdf["ASHP - Nesta"].quantile(quantile_thresh)
+    gshp_high_thresh = plymouth_lsoas_gdf["GSHP - Nesta"].quantile(quantile_thresh)
+    sgl_high_thresh = plymouth_lsoas_gdf["SGL - Nesta"].quantile(quantile_thresh)
+    hn_high_thresh = plymouth_lsoas_gdf["HN - Nesta"].quantile(quantile_thresh)
 
-    plymouth_lsoas_tenure_gdf[
-        "Overall suitability type - shared/not"
-    ] = plymouth_lsoas_tenure_gdf.apply(
-        lambda x: get_tech_suitability_overall_4_type(
-            x["ASHP - Nesta"],
-            x["GSHP - Nesta"],
-            x["SGL - Nesta"],
-            x["HN - Nesta"],
-            ashp_high_thresh,
-            gshp_high_thresh,
-            sgl_high_thresh,
-            hn_high_thresh,
-        ),
-        axis=1,
+    plymouth_lsoas_gdf["Overall suitability type - shared/not"] = (
+        plymouth_lsoas_gdf.apply(
+            lambda x: get_tech_suitability_overall_4_type(
+                x["ASHP - Nesta"],
+                x["GSHP - Nesta"],
+                x["SGL - Nesta"],
+                x["HN - Nesta"],
+                ashp_high_thresh,
+                gshp_high_thresh,
+                sgl_high_thresh,
+                hn_high_thresh,
+            ),
+            axis=1,
+        )
     )
 
-    plymouth_lsoas_tenure_gdf[
-        "Overall suitability type"
-    ] = plymouth_lsoas_tenure_gdf.apply(
+    plymouth_lsoas_gdf["Overall suitability type"] = plymouth_lsoas_gdf.apply(
         lambda x: get_tech_suitability_overall_type(
             x["ASHP - Nesta"], x["HN - Nesta"], ashp_high_thresh, hn_high_thresh
         ),
         axis=1,
     )
 
-    plymouth_lsoas_tenure_gdf[
-        "Manual suitability type"
-    ] = plymouth_lsoas_tenure_gdf.apply(
+    plymouth_lsoas_gdf["Manual suitability type"] = plymouth_lsoas_gdf.apply(
         lambda x: get_tech_suitability_manual(
             x["ASHP - Nesta"],
             x["HN - Nesta"],
@@ -236,12 +280,12 @@ if __name__ == "__main__":
         axis=1,
     )
 
-    plymouth_lsoas_tenure_gdf.to_file(
-        "plymouth_lsoas_tenure_gdf_binary_suitability.geojson", driver="GeoJSON"
+    plymouth_lsoas_gdf.to_file(
+        "plymouth_lsoas_gdf_binary_suitability.geojson", driver="GeoJSON"
     )
     # smaller version without geometry
-    plymouth_lsoas_tenure_gdf.drop(["geometry"], axis=1).to_csv(
-        "plymouth_lsoas_tenure_gdf_binary_suitability.csv"
+    plymouth_lsoas_gdf.drop(["geometry"], axis=1).to_csv(
+        "plymouth_lsoas_gdf_binary_suitability.csv"
     )
 
     # -----
@@ -265,7 +309,7 @@ if __name__ == "__main__":
     )
 
     plymouth_per_prop_data_extra = plymouth_per_prop_data_extra.rename(
-        column_rename_dict
+        {k.split("_weighted")[0]: v for k, v in column_rename_dict.items()}
     )
 
     plymouth_per_prop_data_extra = plymouth_per_prop_data_extra.with_columns(
