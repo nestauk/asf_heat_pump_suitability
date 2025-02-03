@@ -73,19 +73,23 @@ _If the threshold is not met for a given LSOA, suitability scores for that LSOA 
 Unweighted scores may not accurately represent the suitability of an LSOA for a given heating technology as a whole and
 should therefore be interpreted with caution._
 
-|                                                                                   | ASHP (S) | ASHP (N) | GSHP (S) | GSHP (N) | SGL (S) | SGL (N) | HN (S) | HN (N) |
-| --------------------------------------------------------------------------------- | -------- | -------- | -------- | -------- | ------- | ------- | ------ | ------ |
-| Is the property NOT listed?                                                       | 0.25     | 0.25     | 0.25     | 0.25     | 0.25    | 0.25    | 0.25   | 0.25   |
-| Is the property NOT in a building conservation zone?                              | 0.25     | 0.25     | 0.25     | 0.25     | 0.25    | 0.25    | 0.25   | 0.25   |
-| Is the EPC rating >= C?                                                           | 1        | 0        | 1        | 0        | 1       | 0       | 0      | 0      |
-| Is the property NOT a flat?                                                       | 1        | 1        | 1        | 1        | 0       | 0       | 0      | 0      |
-| Is the garden >10m2?                                                              | 1        | 0        | 1        | 0        | 1       | 0       | 0      | 0      |
-| Is there >2m2 of external space?                                                  | 0        | 2        | 0        | 1        | 0       | 0       | 0      | 0      |
-| Is it off-gas?                                                                    | 0.5      | 0.5      | 0.5      | 0.5      | 0.5     | 0.5     | 0.5    | 0.5    |
-| Is this property part of a building with multiple other properties (e.g. a flat)? | 0        | 0        | 0        | 0        | 2       | 2       | 2      | 2      |
-| Is there a high property density (>60 households per km2) in this LSOA?           | 0        | 0        | 0        | 0        | 2       | 2       | 0      | 0      |
-| Is this property in an urban LSOA/high heat demand density LSOA?                  | 0        | 0        | 0        | 0        | 0       | 0       | 2      | 2      |
-| Maximum points per property                                                       | 4        | 4        | 4        | 3        | 7       | 5       | 5      | 5      |
+|                                                                                                                             | ASHP (S) | ASHP (N) | GSHP (S) | GSHP (N) | SGL (S) | SGL (N) | HN (S) | HN (N) |
+| --------------------------------------------------------------------------------------------------------------------------- | -------- | -------- | -------- | -------- | ------- | ------- | ------ | ------ |
+| Is the property NOT listed?                                                                                                 | 0.25     | 0.25     | 0.25     | 0.25     | 0.25    | 0.25    | 0.25   | 0.25   |
+| Is the property NOT in a protected area\*?                                                                                  | 0.25     | 0.25     | 0.25     | 0.25     | 0.25    | 0.25    | 0.25   | 0.25   |
+| Is the property's EPC rating A, B or C?                                                                                     | 1        | 0        | 1        | 0        | 1       | 0       | 0      | 0      |
+| Is the property NOT a flat?                                                                                                 | 1        | 1        | 1        | 1        | 0       | 0       | 0      | 0      |
+| Is the property a flat?                                                                                                     | 0        | 0        | 0        | 0        | 2       | 2       | 2      | 2      |
+| Is there > `10` m2 of external space at the property?                                                                       | 1        | 0        | 1        | 0        | 1       | 0       | 0      | 0      |
+| Is there > `2` m2 of external space at the property?                                                                        | 0        | 2        | 0        | 1        | 0       | 0       | 0      | 0      |
+| Is the property off-gas?                                                                                                    | 0.5      | 0.5      | 0.5      | 0.5      | 0.5     | 0.5     | 0.5    | 0.5    |
+| Is this property in a LSOA with a high property density? (> `60` households per km2)                                        | 0        | 0        | 0        | 0        | 2       | 2       | 0      | 0      |
+| Is this property in an urban LSOA?                                                                                          | 0        | 0        | 0        | 0        | 0       | 0       | 2      | 2      |
+| Is this property in a LSOA with an anchor property?                                                                         | 0        | 0        | 0        | 0        | 0       | 0       | 1      | 1      |
+| What proportion of properties in this LSOA could the electricity grid support to have HPs? (`x` - which is between 0 and 1) | `x`      | 0        | `x`      | 0        | `x`     | 0       | 0      | 0      |
+| Maximum points per property (`x=1` for these calculations)                                                                  | 5        | 4        | 5        | 3        | 8       | 5       | 6      | 6      |
+
+\* A "protected area" refers to building conservation zones in England and Wales and World Heritage Sites in Scotland.
 
 ## Data sources and acknowledgements
 
