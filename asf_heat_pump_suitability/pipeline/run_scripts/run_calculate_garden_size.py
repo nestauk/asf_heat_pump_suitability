@@ -112,7 +112,7 @@ if __name__ == "__main__":
     epc_gardens = []
     prev = None
     total_gardens = 0
-    min = 0
+    _min = -1
 
     logging.info(
         f"Estimating garden size for properties across {len(file_matches)} pairs of land extent and building footprint files."
@@ -178,12 +178,14 @@ if __name__ == "__main__":
             interim_results = pl.concat(interim_results)
             save_as = os.path.join(
                 interim_dir,
-                f"{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_{min+1}_{i}_INTERIM.parquet",
+                f"{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_{_min+1}_{i}_INTERIM.parquet",
             )
             save_utils.save_to_s3(interim_results, save_as)
 
             # Reset to save next batch
             epc_gardens = []
+            if _min == -1:
+                _min = 0
             min += 100
 
         # Set prev
