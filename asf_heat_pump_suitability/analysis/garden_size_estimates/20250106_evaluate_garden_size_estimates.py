@@ -1,12 +1,23 @@
 # %%
 import polars as pl
 import numpy as np
+import logging
 import matplotlib.pyplot as plt
+from datetime import datetime
 from sklearn import metrics
+from asf_heat_pump_suitability.getters import base_getters
+from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     garden_space_avg,
     household_count,
 )
+
+# %%
+# PARAMS
+year = 2023
+q = 4
+interim_dir = "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/interim/"
+nations = "EWS"
 
 # %% [markdown]
 # ## Compare calculated garden size to avg
@@ -17,11 +28,43 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
 avg_gardens_df = garden_space_avg.generate_df_garden_space_avg()
 
 # %% [markdown]
-# ### 2. Load garden size estimates
+# ### 2. Load garden size estimates and deduplicate
+#
+# For properties that get joined to the same garden (i.e. they share a garden, or at least outdoor space) we decided in a sprint review that we would assign all properties which share a garden the overall size of the garden. E.g. if 10 houses share a 100m2 garden, they will all be assigned 100m2 garden size. The logic was that if a building has the appropriate outdoor space, we consider that an apartment within the building has appropriate space in theory (we are also unable to determine which apartment the garden belongs to).
+#
+# For this analysis, we have to conduct this extra division step which partitions the garden size equally among households who share a garden. E.g. the 10 houses sharing a 100m2 garden will now each get assigned 10m2. This is required to avoid double counting gardens when calculating the average and to make the resulting garden size estimates comparable to the ONS MSOA-level averages which are calculated by counting shared gardens once in their averages.
+#
+# A caveat of our deduplication here is that if there are apartments from the same building missing from the EPC dataset or missing from our garden size estimates (e.g. because they are missing valid UPRN or there are data gaps in the Microsoft buildings / INSPIRE land parcel datasets), we will overestimate the divided garden size. E.g. if we only have records for 5 of the 10 houses sharing the 100m2 garden in our dataset, they would get assigned 20m2 each instead of 10m2.
+
+# %%
+# We load the interim garden size files again and deduplicate them
+interim_files = base_getters.list_obj_s3_location(interim_dir)
+
+logging.info("Deduplicating UPRNs that were matched to multiple gardens")
+gardens_df = pl.DataFrame()
+for file in interim_files:
+    logging.info(f"Loading file: {file}")
+    df = pl.read_parquet(f"s3://{file}")
+    df = df.with_columns(pl.col(pl.Float64).round(2))
+    # We cannot take the median garden size because we have to assign each UPRN to a Cadastral Reference for the
+    # division step below
+    # Therefore we assign each duplicated UPRN the minimum garden size for that UPRN
+    df = df.filter(garden_area_m2=pl.col("garden_area_m2").min().over("UPRN"))
+    gardens_df = pl.concat([gardens_df, df])
+
+# Final round of deduplication
+gardens_df = gardens_df.filter(
+    garden_area_m2=pl.col("garden_area_m2").min().over("UPRN")
+)
+
+# Save if desired
+# save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{nations.upper()}_deduplicated_FOR_EVALUATION_ONLY.parquet"
+# save_utils.save_to_s3(gardens_df, save_as)
 
 # %%
 gardens_df = pl.read_parquet(
-    "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/20250115_2023_Q4_EPC_garden_size_estimates_EWS_deduplicated_FOR_EVALUATION_ONLY.parquet"
+    "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/20250204_2023_Q4_EPC_garden_size_estimates_EWS_deduplicated_FOR_EVALUATION_ONLY.parquet",
+    columns=["UPRN", "garden_area_m2", "NATIONALCADASTRALREFERENCE"],
 )
 
 # %%
@@ -237,12 +280,6 @@ print(
 # ### 5. Compare weighted results
 
 # %%
-# Filter to overall average garden size. We need to compare all property types to the total average to be able to use the weights
-total_avg_gardens_df = avg_gardens_df.filter(
-    pl.col("msoa_avg_outdoor_space_property_type") == "unknown"
-)
-
-# %%
 # Load weights
 weights_df = pl.read_parquet(
     "s3://asf-heat-pump-suitability/outputs/2023Q4/weights/20250102_2023_Q4_EPC_weights.parquet",
@@ -267,7 +304,10 @@ epc_df = epc_df.with_columns(
 # %%
 # Join garden estimates and average garden size
 epc_df = epc_df.join(gardens_df, how="left", on="UPRN").join(
-    total_avg_gardens_df, how="left", left_on="msoa", right_on="MSOA code"
+    avg_gardens_df,
+    how="left",
+    left_on=["msoa", "msoa_avg_outdoor_space_property_type"],
+    right_on=["MSOA code", "msoa_avg_outdoor_space_property_type"],
 )
 
 # %%
@@ -303,7 +343,9 @@ epc_df = epc_df.with_columns(
 
 # %%
 # Calculate weighted mean garden area per LSOA and filter to LSOAs with at least 15 properties
-weighted_results = epc_df.group_by(["lsoa"]).agg(
+weighted_results = epc_df.group_by(
+    ["lsoa", "msoa_avg_outdoor_space_property_type"]
+).agg(
     pl.col("weighted_divided_garden_area_m2")
     .sum()
     .alias("lsoa_total_weighted_divided_garden_area_m2"),
@@ -321,7 +363,9 @@ weighted_results = weighted_results.with_columns(
 weighted_results = weighted_results.filter(pl.col("n_properties") >= 15)
 
 # Calculate MSOA average by averaging LSOA weighted averages
-weighted_results = weighted_results.group_by("msoa").agg(
+weighted_results = weighted_results.group_by(
+    ["msoa", "msoa_avg_outdoor_space_property_type"]
+).agg(
     pl.col("lsoa_weighted_mean_divided_garden_area_m2")
     .mean()
     .alias("msoa_weighted_average_garden_area_m2"),
@@ -345,6 +389,29 @@ print(
         weighted_results["msoa_weighted_average_garden_area_m2"],
     )
 )
+
+# %%
+# Results after applying weights
+for property_type in ["Houses", "Flats", "unknown"]:
+    print(property_type)
+    _df = weighted_results.filter(
+        pl.col("msoa_avg_outdoor_space_property_type") == property_type
+    )
+    print(f"N={len(_df)}")
+    print("RMSE:")
+    print(
+        metrics.root_mean_squared_error(
+            _df["msoa_avg_outdoor_space_m2"],
+            _df["msoa_weighted_average_garden_area_m2"],
+        )
+    )
+    print("Median absolute error:")
+    print(
+        metrics.median_absolute_error(
+            _df["msoa_avg_outdoor_space_m2"],
+            _df["msoa_weighted_average_garden_area_m2"],
+        )
+    )
 
 # %%
 fig, ax = plt.subplots()
@@ -383,3 +450,52 @@ plt.plot(
 )
 plt.legend()
 plt.title("ONS MSOA average garden size vs our estimates (excluding outliers)")
+
+# %%
+# Plot scatter of average garden size estimate vs ONS values per property type
+fig, axes = plt.subplots(1, 3, figsize=(18, 4))
+
+for i, property_type in enumerate(["Houses", "Flats", "unknown"]):
+    plot = weighted_results.filter(
+        pl.col("msoa_avg_outdoor_space_property_type") == property_type
+    )
+    print(len(plot))
+    plot = plot.filter(
+        pl.col("msoa_avg_outdoor_space_m2") < 12000,
+        pl.col("msoa_weighted_average_garden_area_m2") < 4000,
+    )
+    print(len(plot))
+    axes[i].scatter(
+        plot["msoa_avg_outdoor_space_m2"],
+        plot["msoa_weighted_average_garden_area_m2"],
+        alpha=0.3,
+        s=1,
+    )
+    axes[i].set_xlabel("ONS MSOA average (m2)")
+    axes[i].set_ylabel("Estimated MSOA average (m2)")
+    axes[i].set_title(f"{property_type} (MSOA count = {plot['msoa'].n_unique()})")
+    axes[i].plot(
+        np.unique(plot["msoa_avg_outdoor_space_m2"]),
+        np.poly1d(
+            np.polyfit(
+                plot["msoa_avg_outdoor_space_m2"],
+                plot["msoa_weighted_average_garden_area_m2"],
+                1,
+            )
+        )(np.unique(plot["msoa_avg_outdoor_space_m2"])),
+        color="red",
+        linestyle="--",
+        label="Line of best fit",
+    )
+    axes[i].plot(
+        np.arange(0, plot["msoa_avg_outdoor_space_m2"].max()),
+        np.arange(0, plot["msoa_avg_outdoor_space_m2"].max()),
+        color="orange",
+        label="Ideal line",
+    )
+
+plt.gca().legend(("MSOA", "Line of best fit", "Ideal line"))
+fig.suptitle("ONS MSOA average garden size vs our estimates (excluding outliers)")
+plt.show()
+
+# %%
