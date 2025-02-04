@@ -139,9 +139,7 @@ if __name__ == "__main__":
     uprns_in_protected_area_df = (
         protected_areas.load_transform_df_uprn_in_protected_area(epc_gdf)
     )
-    epc_df = epc_df.join(
-        uprns_in_protected_area_df, how="left", on="UPRN"
-    ).with_columns(pl.col("in_protected_area").fill_null(False))
+    epc_df = epc_df.join(uprns_in_protected_area_df, how="left", on="UPRN")
 
     logging.info(
         "Adding local authority building conservation area data availability flag for England and Wales"
@@ -151,6 +149,13 @@ if __name__ == "__main__":
     )
     epc_df = epc_df.join(
         lad_cons_areas_df, how="left", left_on="lad_code", right_on="LAD23CD"
+    )
+
+    epc_df = epc_df.with_columns(
+        pl.when(pl.col("lad_conservation_area_data_available_ew") == True)
+        .then(pl.col("in_protected_area").fill_null(False))
+        .otherwise(pl.col("in_protected_area"))
+        .alias("in_protected_area")
     )
 
     logging.info("Adding property density to EPC")
