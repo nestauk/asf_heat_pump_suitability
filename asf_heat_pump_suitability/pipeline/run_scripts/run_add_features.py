@@ -152,7 +152,7 @@ if __name__ == "__main__":
     )
 
     epc_df = epc_df.with_columns(
-        pl.when(pl.col("lad_conservation_area_data_available_ew") == True)
+        pl.when((pl.col("lad_conservation_area_data_available_ew")) & pl.col("COUNTRY").is_in(["England", "Wales"]))
         .then(pl.col("in_protected_area").fill_null(False))
         .otherwise(pl.col("in_protected_area"))
         .alias("in_protected_area")
