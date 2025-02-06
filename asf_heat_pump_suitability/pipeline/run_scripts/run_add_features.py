@@ -151,6 +151,13 @@ if __name__ == "__main__":
         lad_cons_areas_df, how="left", left_on="lad_code", right_on="LAD23CD"
     )
 
+    epc_df = epc_df.with_columns(
+        pl.when((pl.col("lad_conservation_area_data_available_ew")) & pl.col("COUNTRY").is_in(["England", "Wales"]))
+        .then(pl.col("in_protected_area").fill_null(False))
+        .otherwise(pl.col("in_protected_area"))
+        .alias("in_protected_area")
+    )
+
     logging.info("Adding property density to EPC")
     lsoa_density_df = property_density.generate_df_property_density()
     epc_df = epc_df.join(lsoa_density_df, how="left", on="lsoa")
