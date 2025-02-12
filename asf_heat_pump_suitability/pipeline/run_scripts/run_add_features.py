@@ -19,7 +19,6 @@ NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet
 import logging
 import polars as pl
 import argparse
-from datetime import datetime
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
 from asf_heat_pump_suitability.pipeline.prepare_features import (
@@ -152,7 +151,10 @@ if __name__ == "__main__":
     )
 
     epc_df = epc_df.with_columns(
-        pl.when((pl.col("lad_conservation_area_data_available_ew")) & pl.col("COUNTRY").is_in(["England", "Wales"]))
+        pl.when(
+            (pl.col("lad_conservation_area_data_available_ew"))
+            & pl.col("COUNTRY").is_in(["England", "Wales"])
+        )
         .then(pl.col("in_protected_area").fill_null(False))
         .otherwise(pl.col("in_protected_area"))
         .alias("in_protected_area")
@@ -190,5 +192,5 @@ if __name__ == "__main__":
 
     # Save to S3
     if not save_as:
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_features.parquet"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/features/{year}_Q{q}_EPC_features.parquet"
     save_utils.save_to_s3(epc_df, save_as)
