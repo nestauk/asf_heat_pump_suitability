@@ -56,8 +56,13 @@ def transform_gdf_building_cons_areas() -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: building conservation areas in England and Wales
     """
     e_gdf = get_datasets.load_gdf_historic_england_conservation_areas(
-        columns=["geometry"]
+        columns=["geometry", "name"]
     ).to_crs("EPSG:27700")
+    # Remove erroneous point where the entirety of Leicester is classified as a conservation zone
+    e_gdf = e_gdf[e_gdf["name"] != "No data available for publication by HE"][
+        ["geometry"]
+    ].reset_index(drop=True)
+
     w_gdf = get_datasets.load_gdf_welsh_gov_conservation_areas(columns=["geometry"])
 
     gdf = pd.concat([e_gdf, w_gdf])
@@ -128,7 +133,7 @@ def generate_df_conservation_area_data_availability(
     # Join conservation areas to their councils
     df = council_bounds.sjoin(cons_areas_gdf, how="left", predicate="intersects")[
         [ladcd_col, "in_conservation_area_ew"]
-    ].replace("No data available for publication by HE", np.nan)
+    ]
 
     df = df.groupby(ladcd_col).agg({"in_conservation_area_ew": "count"})
     df["lad_conservation_area_data_available_ew"] = df[
