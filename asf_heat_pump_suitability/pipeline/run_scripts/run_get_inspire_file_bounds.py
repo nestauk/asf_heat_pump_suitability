@@ -73,17 +73,17 @@ if __name__ == "__main__":
         ew_gdf = land_extent.generate_gdf_file_bounds_ew(
             path=config["data_source"]["EW_inspire_land_extent_dir"]
         )
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/inspire_file_bounds_EW.geojson"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/inspire_file_bounds_EW.geojson"
         ew_gdf.to_file(save_as)
 
     if "s" in args.nations:
         s_gdf = land_extent.generate_gdf_file_bounds_s(
             config["data_source"]["S_inspire_land_extent_dir"]
         )
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/inspire_file_bounds_S.geojson"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/inspire_file_bounds_S.geojson"
         s_gdf.to_file(save_as)
 
     if args.nations == "ews":
         gdf = pd.concat([ew_gdf, s_gdf]).reset_index()
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/inspire_file_bounds_EWS.geojson"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/inspire_file_bounds_EWS.geojson"
         gdf.to_file(save_as)

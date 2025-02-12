@@ -12,7 +12,6 @@ NB: this pipeline takes the outputs from the following scripts as inputs:
 """
 
 import polars as pl
-from datetime import datetime
 from tqdm import tqdm
 import argparse
 import logging
@@ -84,7 +83,7 @@ if __name__ == "__main__":
     epc_df = epc_df.join(weights, how="left", on="UPRN")
 
     logging.info(f"Saving augmented EPC data")
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/augmented_epc/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_epc_augmented.parquet"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/augmented_epc/{y}_Q{q}_epc_augmented.parquet"
     save_utils.save_to_s3(epc_df, save_as)
 
     epc_df = epc_df.with_columns(
@@ -131,7 +130,7 @@ if __name__ == "__main__":
     for score_df in scores:
         epc_df = epc_df.join(score_df, on="UPRN", how="left")
 
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_heat_pump_suitability_per_property.parquet"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{y}_Q{q}_heat_pump_suitability_per_property.parquet"
     save_utils.save_to_s3(epc_df, save_as)
 
     logging.info("Weighting scores and aggregating per LSOA")
@@ -160,6 +159,6 @@ if __name__ == "__main__":
     ).rename({"LSOA21NM": "lsoa_name"})
 
     logging.info("Saving LSOA heat pump suitability scores")
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_heat_pump_suitability_per_lsoa"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{y}_Q{q}_heat_pump_suitability_per_lsoa"
     save_utils.save_to_s3(suitability_df, f"{save_as}.parquet")
     save_utils.save_to_s3(suitability_df, f"{save_as}.csv")

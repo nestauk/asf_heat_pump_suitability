@@ -19,7 +19,6 @@ import logging
 import polars as pl
 import s3fs
 from tqdm import tqdm
-from datetime import datetime
 import time
 import argparse
 from asf_heat_pump_suitability.pipeline.prepare_features import output_areas
@@ -177,7 +176,7 @@ if __name__ == "__main__":
 
     # 5. Save to S3
     if not save_as:
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weights"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/weights/{year}_Q{q}_EPC_weights"
     fs = s3fs.S3FileSystem()
 
     # Save weighted EPC
