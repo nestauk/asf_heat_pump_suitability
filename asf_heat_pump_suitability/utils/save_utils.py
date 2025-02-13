@@ -35,18 +35,16 @@ def upload_file_to_s3(
     local_file_path: str,
     s3_bucket: str,
     s3_key_dir: str,
-    save_to_s3: bool,
     filename: str,
     subfolder: str,
 ):
     """
-    Upload a local file to an S3 bucket, used for evaluation of our heat network suitability model using the DESNZ Heat Network pilot zones.
+    Upload a local file to an S3 bucket.
 
     Args:
         local_file_path (str): Path to the local file.
         s3_bucket (str): Name of the S3 bucket.
         s3_key_dir (str): S3 key (path) where the file should be uploaded.
-        save_to_s3 (bool): boolean which indicates whether to save or not the file to s3.
         filename (str): The actual filename to store in S3.
         subfolder (str): Subfolder within S3.
     """

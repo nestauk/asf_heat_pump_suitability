@@ -47,7 +47,7 @@ def setup_paths(read_in_s3: bool) -> dict:
         read_in_s3 (bool): If True, set up paths to read from S3. Otherwise, set up local paths.
 
     Returns:
-        dict: A dictionary containing paths for LIVERPOOL_GPKG_PATH, LSOA_SHP_PATH, and NESTA_HP_SUITABILITY_PARQUET_PATH.
+        dict: A dictionary containing paths for LSOA_SHP_PATH, and NESTA_HP_SUITABILITY_PARQUET_PATH.
     """
     paths = {}
     if read_in_s3:
@@ -75,7 +75,7 @@ def save_gdf_to_gpkg(
     Args:
         gdf (gpd.GeoDataFrame): The GeoDataFrame to write.
         output_dir (str): Local directory to save the GPKG.
-        filename_prefix (str): The prefix used for naming the GPKG file.
+        filename_prefix (str): The prefix used for naming the GPKG file. `filename_prefix` will be joined to `_with_desnz_hn_lsoa.gpkg` to generate full filename.
         save_to_s3 (bool): Whether to upload the output file to S3.
         s3_bucket (str): Name of the S3 bucket.
         s3_key_dir (str): The S3 key prefix where files are stored.
@@ -90,14 +90,14 @@ def save_gdf_to_gpkg(
     logging.info(f"Saved GPKG for {filename_prefix} to {gpkg_local_file_path}")
 
     # s3_key = f"{s3_key_dir}{subfolder}/{gpkg_filename}"
-    upload_file_to_s3(
-        local_file_path=gpkg_local_file_path,
-        s3_bucket=s3_bucket,
-        s3_key_dir=s3_key_dir,
-        filename=gpkg_filename,
-        save_to_s3=save_to_s3,
-        subfolder=subfolder,
-    )
+    if save_to_s3:
+        upload_file_to_s3(
+            local_file_path=gpkg_local_file_path,
+            s3_bucket=s3_bucket,
+            s3_key_dir=s3_key_dir,
+            filename=gpkg_filename,
+            subfolder=subfolder,
+        )
 
 
 def _compute_lsoa_coverage_stats(
@@ -130,7 +130,20 @@ def _compute_lsoa_coverage_stats(
     intersection_gdf["fraction_covered"] = (
         intersection_gdf["geometry"].area / intersection_gdf["total_area"]
     )
+    # Count total rows
+    total_rows = len(intersection_gdf)
 
+    # Count how many rows have non-null LSOA21CD
+    notna_rows = intersection_gdf["LSOA21CD"].notna().sum()
+
+    # Calculate the number of rows that would be dropped
+    dropped_count = total_rows - notna_rows
+
+    # If any rows will be dropped, log a warning
+    if dropped_count > 0:
+        logging.warning(
+            f"{dropped_count} rows in intersection geodataframe has a missing LSOA21CD and will be dropped."
+        )
     # Extract unique LSOA codes
     unique_lsoa_codes = intersection_gdf["LSOA21CD"].dropna().unique().tolist()
 

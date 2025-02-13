@@ -222,15 +222,14 @@ def process_single_LA(
     lsoas_json_local_file_path = os.path.join(output_dir, lsoas_json_filename)
     with open(lsoas_json_local_file_path, "w") as file:
         json.dump(la_hp_suitability_lsoas, file)
-
-    upload_file_to_s3(
-        local_file_path=lsoas_json_local_file_path,
-        s3_bucket=s3_bucket,
-        s3_key_dir=s3_key_dir,
-        save_to_s3=save_to_s3,
-        filename=lsoas_json_filename,
-        subfolder="hp_suitability_lsoas",
-    )
+    if save_to_s3:
+        upload_file_to_s3(
+            local_file_path=lsoas_json_local_file_path,
+            s3_bucket=s3_bucket,
+            s3_key_dir=s3_key_dir,
+            filename=lsoas_json_filename,
+            subfolder="hp_suitability_lsoas",
+        )
 
     # 3. Check LSOAs not in HP suitability scores (only if single LA)
     if not multiple_las:
@@ -273,14 +272,14 @@ def process_single_LA(
     )
     avg_score_parquet_filepath = os.path.join(output_dir, avg_score_parquet_filename)
     average_scores_df.write_parquet(avg_score_parquet_filepath)
-    upload_file_to_s3(
-        local_file_path=avg_score_parquet_filepath,
-        s3_bucket=s3_bucket,
-        s3_key_dir=s3_key_dir,
-        save_to_s3=save_to_s3,
-        filename=avg_score_parquet_filename,
-        subfolder="avg_scores",
-    )
+    if save_to_s3:
+        upload_file_to_s3(
+            local_file_path=avg_score_parquet_filepath,
+            s3_bucket=s3_bucket,
+            s3_key_dir=s3_key_dir,
+            filename=avg_score_parquet_filename,
+            subfolder="avg_scores",
+        )
 
     # 7. Calculate and log the Mean Absolute Error (MAE)
     la_hp_scores_with_desnz, mae_all = calculate_mae_for_all(
@@ -336,14 +335,14 @@ def process_single_LA(
     )
     mae_parquet_local_file_path = os.path.join(output_dir, mae_parquet_filename)
     la_hp_scores_with_desnz.write_parquet(mae_parquet_local_file_path)
-    upload_file_to_s3(
-        local_file_path=mae_parquet_local_file_path,
-        s3_bucket=s3_bucket,
-        s3_key_dir=s3_key_dir,
-        save_to_s3=save_to_s3,
-        filename=mae_parquet_filename,
-        subfolder="hp_suitability_scores_with_desnz",
-    )
+    if save_to_s3:
+        upload_file_to_s3(
+            local_file_path=mae_parquet_local_file_path,
+            s3_bucket=s3_bucket,
+            s3_key_dir=s3_key_dir,
+            filename=mae_parquet_filename,
+            subfolder="hp_suitability_scores_with_desnz",
+        )
     csv_output_filename = (
         f"{la_name.lower().replace(' ', '_')}_hp_suitability_scores_with_desnz.csv"
     )
@@ -428,13 +427,13 @@ if __name__ == "__main__":
     la_mae_filename = "la_mae_data.csv"
     la_mae_csv_path = os.path.join(output_dir, la_mae_filename)
     mae_df.write_csv(la_mae_csv_path)
-    upload_file_to_s3(
-        local_file_path=la_mae_csv_path,
-        s3_bucket=S3_BUCKET,
-        s3_key_dir=S3_KEY_DIR,
-        save_to_s3=save_to_s3,
-        filename=la_mae_filename,
-        subfolder="la_mae",
-    )
+    if save_to_s3:
+        upload_file_to_s3(
+            local_file_path=la_mae_csv_path,
+            s3_bucket=S3_BUCKET,
+            s3_key_dir=S3_KEY_DIR,
+            filename=la_mae_filename,
+            subfolder="la_mae",
+        )
     logging.info(f"Saved MAE data to {la_mae_csv_path}")
     logging.info("All local authorities processed.")
