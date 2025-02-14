@@ -80,6 +80,7 @@ NESTA_HPS_PARQUET_S3 = "s3://nesta-open-data/asf_heat_pump_suitability/2023Q4/20
 S3_BUCKET = "asf-heat-pump-suitability"
 S3_KEY_DIR = "evaluation/desnz_hn_zone_scores/"
 
+
 # Default DESNZ Pilot Fraction Threshold
 DEFAULT_THRESHOLD = 0.0  # This can be modified here instead of in multiple scripts
 
