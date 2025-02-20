@@ -12,13 +12,15 @@ import geopandas as gpd
 
 from asf_heat_pump_suitability.getters import get_target
 from asf_heat_pump_suitability.getters import get_datasets
-from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability import config, PROJECT_DIR
+
+import os
 
 # Suitability data per LSOA
-suitablitity_per_lsoa_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250114_2023_Q4_heat_pump_suitability_per_lsoa.parquet"
+suitablitity_per_lsoa_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250206_2023_Q4_heat_pump_suitability_per_lsoa.parquet"
 
 # The suitability of properties
-suitability_per_property_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250115_2023_Q4_heat_pump_suitability_per_property.parquet"
+suitability_per_property_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250206_2023_Q4_heat_pump_suitability_per_property.parquet"
 
 # Garden size per property
 garden_size_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/20250114_2023_Q4_EPC_garden_size_estimates_EWS_deduplicated.parquet"
@@ -43,55 +45,6 @@ def load_ew_boundaries(df: pd.DataFrame) -> gpd.GeoDataFrame:
     gdf = gdf.merge(df, how="right", left_on="LSOA21CD", right_on="lsoa")
 
     return gdf
-
-
-def get_tech_suitability_overall_4_type(
-    ashp,
-    gshp,
-    sgl,
-    hn,
-    ashp_high_thresh,
-    gshp_high_thresh,
-    sgl_high_thresh,
-    hn_high_thresh,
-):
-    if (ashp >= ashp_high_thresh) | (gshp >= gshp_high_thresh):
-        ind_suit = True
-    else:
-        ind_suit = False
-    if (sgl >= sgl_high_thresh) | (hn >= hn_high_thresh):
-        shared_suit = True
-    else:
-        shared_suit = False
-
-    if ind_suit & shared_suit:
-        return "Both individual and shared suitable"
-    elif ind_suit:
-        return "Individual suitable only"
-    elif shared_suit:
-        return "Shared suitable only"
-    else:
-        return "Neither suitable"
-
-
-def get_tech_suitability_overall_type(ashp, hn, ashp_high_thresh, hn_high_thresh):
-    if ashp >= ashp_high_thresh:
-        ind_suit = True
-    else:
-        ind_suit = False
-    if hn >= hn_high_thresh:
-        shared_suit = True
-    else:
-        shared_suit = False
-
-    if ind_suit & shared_suit:
-        return "Both ASHP and HN suitable"
-    elif ind_suit:
-        return "ASHP suitable only"
-    elif shared_suit:
-        return "HN suitable only"
-    else:
-        return "Neither ASHP or HN suitable"
 
 
 # Ad hoc manually created categories for Plymouth
@@ -243,35 +196,6 @@ if __name__ == "__main__":
 
     plymouth_lsoas_gdf = plymouth_lsoas_gdf.round(3).rename(columns=column_rename_dict)
 
-    quantile_thresh = 0.6
-    ashp_high_thresh = plymouth_lsoas_gdf["ASHP - Nesta"].quantile(quantile_thresh)
-    gshp_high_thresh = plymouth_lsoas_gdf["GSHP - Nesta"].quantile(quantile_thresh)
-    sgl_high_thresh = plymouth_lsoas_gdf["SGL - Nesta"].quantile(quantile_thresh)
-    hn_high_thresh = plymouth_lsoas_gdf["HN - Nesta"].quantile(quantile_thresh)
-
-    plymouth_lsoas_gdf["Overall suitability type - shared/not"] = (
-        plymouth_lsoas_gdf.apply(
-            lambda x: get_tech_suitability_overall_4_type(
-                x["ASHP - Nesta"],
-                x["GSHP - Nesta"],
-                x["SGL - Nesta"],
-                x["HN - Nesta"],
-                ashp_high_thresh,
-                gshp_high_thresh,
-                sgl_high_thresh,
-                hn_high_thresh,
-            ),
-            axis=1,
-        )
-    )
-
-    plymouth_lsoas_gdf["Overall suitability type"] = plymouth_lsoas_gdf.apply(
-        lambda x: get_tech_suitability_overall_type(
-            x["ASHP - Nesta"], x["HN - Nesta"], ashp_high_thresh, hn_high_thresh
-        ),
-        axis=1,
-    )
-
     plymouth_lsoas_gdf["Manual suitability type"] = plymouth_lsoas_gdf.apply(
         lambda x: get_tech_suitability_manual(
             x["ASHP - Nesta"],
@@ -328,4 +252,10 @@ if __name__ == "__main__":
         ).round(3)
     )
 
-    plymouth_per_prop_data_extra.write_csv("plymouth_per_prop_data_extra.csv")
+    output_directory = os.path.join(PROJECT_DIR, "outputs/area_specific_analysis/")
+    if not os.path.exists(output_directory):
+        os.makedirs(output_directory)
+
+    plymouth_per_prop_data_extra.write_csv(
+        os.path.join(output_directory, "plymouth_per_prop_data_extra.csv")
+    )
