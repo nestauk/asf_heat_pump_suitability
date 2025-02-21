@@ -1,6 +1,7 @@
 import s3fs
 import polars as pl
 import logging
+import boto3
 
 
 def save_to_s3(df: pl.DataFrame, path: str) -> None:
@@ -28,3 +29,26 @@ def save_to_s3(df: pl.DataFrame, path: str) -> None:
             "Save to S3 can only save .parquet or .csv file types."
             "Please ensure the `path` argument contains one of these file types."
         )
+
+
+def upload_file_to_s3(
+    local_file_path: str,
+    s3_bucket: str,
+    s3_key_dir: str,
+    filename: str,
+    subfolder: str,
+):
+    """
+    Upload a local file to an S3 bucket.
+
+    Args:
+        local_file_path (str): Path to the local file.
+        s3_bucket (str): Name of the S3 bucket.
+        s3_key_dir (str): S3 key (path) where the file should be uploaded.
+        filename (str): The actual filename to store in S3.
+        subfolder (str): Subfolder within S3.
+    """
+    s3_client = boto3.client("s3")
+    s3_key = f"{s3_key_dir}{subfolder}/{filename}"
+    s3_client.upload_file(local_file_path, s3_bucket, s3_key)
+    logging.info(f"File uploaded to s3://{s3_bucket}/{s3_key}")

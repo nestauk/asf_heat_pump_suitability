@@ -70,3 +70,21 @@ def parse_binary_geometry(
         return wkb.loads(binary_data, hex=True)
     else:
         return None
+
+
+def ensure_crs_match(
+    gdf_1: gpd.GeoDataFrame, gdf_2: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """ "
+    Ensure that the CRS of both GeoDataFrames match.
+
+    Args:
+        gdf_1 (gpd.GeoDataFrame)
+        gdf_2 (gpd.GeoDataFrame)
+
+    Returns:
+        gpd.GeoDataFrame: GeoDataFrame 2 reprojected to match GeoDataFrame 1 if necessary.
+    """
+    if gdf_1.crs != gdf_2.crs:
+        gdf_2 = gdf_2.to_crs(gdf_1.crs)
+    return gdf_2
