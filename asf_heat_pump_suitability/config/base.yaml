@@ -35,7 +35,9 @@ data_source:
   W_SPEN_spm_substations: "s3://asf-heat-pump-suitability/source_data/grid_operators/SPEN/distributed-generation-sp-manweb-heat-maps-spm-primary-substations.parquet"
   S_SPEN_spd_polygons: "s3://asf-heat-pump-suitability/source_data/grid_operators/SPEN/ndp-spd-primary-substation-polygons.parquet"
   W_SPEN_spm_polygons: "s3://asf-heat-pump-suitability/source_data/grid_operators/SPEN/ndp-spm-primary-group-polygons.parquet"
-  ES_SSEN_demand: "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/demand-heat-map-update-feb-24.xlsx - PS.csv"
+  E_SSEN_demand: "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/demand-heat-map-update-feb-24.xlsx - PS.csv"
+  S_SSEN_demand: "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/scotland-demand-heat-map-august-2023.xlsx"
+  SHET_SSEN_demand: "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/shetland-demand-heat-map-august-2023.xlsx"
   S_SSEN_sepd_bounds: "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/SEPD Primary Sub Boundaries"
   E_SSEN_shepd_bounds: "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/SHEPD Primary Sub Boundaries"
   E_UKPN_primaries: "s3://asf-heat-pump-suitability/source_data/grid_operators/UKPN/ukpn_primary_postcode_area.parquet"
@@ -48,7 +50,7 @@ data_source:
   S_ros_inspire_url: "https://ros.locationcentre.co.uk/inspire/"
   EW_inspire_url: "https://use-land-property-data.service.gov.uk/datasets/inspire/download"
   S_scottish_gov_DZ2011_boundaries: "s3://asf-heat-pump-suitability/source_data/2014_Scottish_Government_DataZoneBoundaries_2011_S/SG_DataZone_Bdry_2011.shp"
-  S_NRScotland_dwellings: "s3://asf-heat-pump-suitability/source_data/June2024_NRScotland_households_and_dwellings_S.xlsx"
+  S_NRScotland_households: "s3://asf-heat-pump-suitability/source_data/June2024_NRScotland_households_and_dwellings_S.xlsx"
 mapping:
   build_year_pre_cols:
     - BP_PRE_1900

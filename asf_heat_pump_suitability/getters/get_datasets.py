@@ -272,6 +272,20 @@ def load_gdf_listed_buildings(nation: str, **kwargs) -> gpd.GeoDataFrame:
     return gdf
 
 
+def load_gdf_ons_lsoa_bounds(**kwargs) -> gpd.GeoDataFrame:
+    """
+    Load raw 2021 LSOA geospatial boundary polygons for England and Wales from ONS. CRS
+    British National Grid (EPSG:27700).
+
+    Args:
+        **kwargs for geopandas.read_file()
+
+    Returns:
+        gpd.GeoDataFrame: boundary polygons for 2021 LSOAs
+    """
+    return gpd.read_file(config["data_source"]["EW_lsoa_bounds"], **kwargs)
+
+
 def load_gdf_scotgov_data_zone_bounds(**kwargs) -> gpd.GeoDataFrame:
     """
     Load raw 2011 Data Zone geospatial boundary polygons and area data for Scotland from the Scottish Government. CRS
@@ -297,7 +311,7 @@ def load_df_nrs_dwellings() -> pl.DataFrame:
         pl.DataFrame: dwelling counts per 2011 Scottish Data Zone
     """
     df = base_getters.get_df_from_excel_s3_path(
-        config["data_source"]["S_NRScotland_dwellings"], sheet_name="2023"
+        config["data_source"]["S_NRScotland_households"], sheet_name="2023"
     )
     # Remove empty rows and set column headers to correct names
     df.columns = df.row(2)

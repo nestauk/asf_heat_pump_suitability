@@ -48,8 +48,7 @@ def upload_file_to_s3(
         filename (str): The actual filename to store in S3.
         subfolder (str): Subfolder within S3.
     """
-    if save_to_s3:
-        s3_client = boto3.client("s3")
-        s3_key = f"{s3_key_dir}{subfolder}/{filename}"
-        s3_client.upload_file(local_file_path, s3_bucket, s3_key)
-        logging.info(f"File uploaded to s3://{s3_bucket}/{s3_key}")
+    s3_client = boto3.client("s3")
+    s3_key = f"{s3_key_dir}{subfolder}/{filename}"
+    s3_client.upload_file(local_file_path, s3_bucket, s3_key)
+    logging.info(f"File uploaded to s3://{s3_bucket}/{s3_key}")

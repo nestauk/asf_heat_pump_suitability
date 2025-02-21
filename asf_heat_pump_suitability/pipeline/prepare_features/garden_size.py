@@ -64,14 +64,14 @@ def generate_gdf_land_building_overlay(
 
     gdf = gdf[
         (
-            (gdf["building_intersection_area_m2"] <= outbuilding_size)
+            (gdf["building_area_m2"] <= outbuilding_size)
             & (
                 gdf["building_intersection_area_m2"]
                 >= gdf["min_size_of_small_building"]
             )
         )
         | (
-            (gdf["building_intersection_area_m2"] > outbuilding_size)
+            (gdf["building_area_m2"] > outbuilding_size)
             & (
                 gdf["building_intersection_area_m2"]
                 >= gdf["min_size_of_large_building"]

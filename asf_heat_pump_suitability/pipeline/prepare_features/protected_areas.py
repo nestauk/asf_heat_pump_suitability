@@ -4,6 +4,7 @@ import numpy as np
 import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import get_datasets
+from asf_heat_pump_suitability.pipeline.prepare_features import epc
 
 
 def load_transform_df_uprn_in_protected_area(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
@@ -55,8 +56,13 @@ def transform_gdf_building_cons_areas() -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: building conservation areas in England and Wales
     """
     e_gdf = get_datasets.load_gdf_historic_england_conservation_areas(
-        columns=["geometry"]
+        columns=["geometry", "name"]
     ).to_crs("EPSG:27700")
+    # Remove erroneous point where the entirety of Leicester is classified as a conservation zone
+    e_gdf = e_gdf[e_gdf["name"] != "No data available for publication by HE"][
+        ["geometry"]
+    ].reset_index(drop=True)
+
     w_gdf = get_datasets.load_gdf_welsh_gov_conservation_areas(columns=["geometry"])
 
     gdf = pd.concat([e_gdf, w_gdf])
@@ -72,7 +78,7 @@ def generate_df_uprn_in_whs(
     Generate dataframe to flag UPRNs located within World Heritage Sites in Scotland.
 
     Args:
-        gdf (pl.DataFrame): dataframe with point geometries per UPRN in BNG
+        gdf (gpd.GeoDataFrame): dataframe with point geometries per UPRN in BNG
         country_col (str): column containing country names
 
     Returns:
@@ -84,7 +90,10 @@ def generate_df_uprn_in_whs(
     gdf = gdf.sjoin(whs_gdf, how="left", predicate="intersects").drop_duplicates(
         subset="UPRN"
     )
-    gdf["in_world_heritage_site_s"] = gdf["in_world_heritage_site_s"].fillna(False)
+    # Fill null with False if row has geometry, otherwise leave as null
+    gdf.loc[~gdf["geometry"].is_empty, "in_world_heritage_site_s"] = gdf.loc[
+        ~gdf["geometry"].is_empty, "in_world_heritage_site_s"
+    ].fillna(False)
 
     return pl.from_pandas(gdf[["UPRN", "in_world_heritage_site_s"]])
 
@@ -109,14 +118,14 @@ def generate_df_conservation_area_data_availability(
     ladcd_col: str = "LAD23CD",
 ) -> pl.DataFrame:
     """
-    Generate dataframe of UK local authority districts (LADs) with indicator of building conservation area data
+    Generate dataframe of local authority districts (LADs) in England and Wales with indicator of building conservation area data
     availability.
 
     Args:
         ladcd_col (str): name of column in local authority district (LAD) boundaries file with LAD codes
 
     Returns:
-        pl.DataFrame: building conservation area data availability per LAD in the UK
+        pl.DataFrame: building conservation area data availability per LAD in England and Wales
     """
     cons_areas_gdf = transform_gdf_building_cons_areas()
     council_bounds = get_datasets.load_gdf_ons_council_bounds()
@@ -124,12 +133,19 @@ def generate_df_conservation_area_data_availability(
     # Join conservation areas to their councils
     df = council_bounds.sjoin(cons_areas_gdf, how="left", predicate="intersects")[
         [ladcd_col, "in_conservation_area_ew"]
-    ].replace("No data available for publication by HE", np.nan)
+    ]
 
     df = df.groupby(ladcd_col).agg({"in_conservation_area_ew": "count"})
     df["lad_conservation_area_data_available_ew"] = df[
         "in_conservation_area_ew"
     ].astype(bool)
     df = df.drop(columns=["in_conservation_area_ew"]).reset_index()
+    df = pl.from_pandas(df)
 
-    return pl.from_pandas(df)
+    df = (
+        epc.extend_df_country_col(df, lsoa_col="LAD23CD")
+        .filter(pl.col("country").is_in(["England", "Wales"]))
+        .drop("country")
+    )
+
+    return df

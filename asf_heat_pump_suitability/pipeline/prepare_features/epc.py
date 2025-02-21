@@ -15,12 +15,14 @@ def add_col_msoa_avg_outdoor_space_property_type(
     Returns:
           pl.DataFrame: EPC dataset with secondary property type mapped from ONS garden size dataset
     """
+    houses = ["Detached", "Semi-Detached", "Terraced (including end-terrace)"]
+
     df = df.with_columns(
-        pl.when(pl.col(ptype_col).str.to_lowercase().str.contains("house"))
+        pl.when(pl.col(ptype_col).is_in(houses))
         .then(pl.lit("Houses"))
         .when(pl.col(ptype_col).str.to_lowercase().str.contains("flat"))
         .then(pl.lit("Flats"))
-        .otherwise(pl.lit(ptype_col))
+        .otherwise(pl.lit("unknown"))
         .alias("msoa_avg_outdoor_space_property_type")
     )
 
@@ -50,6 +52,25 @@ def clean_df_nrooms(
     )
     df = df.with_columns(
         pl.Series(name="nrooms", values=df["nrooms"].replace(None, "unknown"))
+    )
+
+    return df
+
+
+def extend_df_country_col(df: pl.DataFrame, lsoa_col: str = "lsoa") -> pl.DataFrame:
+    """
+    Add a new column to a dataframe based on LSOA/DataZone code.
+
+    Args:
+        df (pl.DataFrame): dataframe with column containing LSOA / DataZone code
+        lsoa_col (str): column containing LSOA / DataZone code
+
+    Returns:
+        pl.DataFrame: dataframe with new "country" column
+    """
+    df = df.with_columns(pl.col(lsoa_col).str.slice(0, 1).alias("country"))
+    df = df.with_columns(
+        pl.col("country").replace({"E": "England", "S": "Scotland", "W": "Wales"})
     )
 
     return df
