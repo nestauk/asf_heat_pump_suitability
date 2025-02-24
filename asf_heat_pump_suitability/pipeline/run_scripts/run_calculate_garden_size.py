@@ -186,7 +186,7 @@ if __name__ == "__main__":
             epc_gardens = []
             if _min == -1:
                 _min = 0
-            min += 100
+            _min += 100
 
         # Set prev
         prev = land_file
