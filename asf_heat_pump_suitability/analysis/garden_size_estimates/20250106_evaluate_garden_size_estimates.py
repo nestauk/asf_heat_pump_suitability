@@ -3,6 +3,7 @@ import polars as pl
 import numpy as np
 import logging
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 from datetime import datetime
 from sklearn import metrics
 from asf_heat_pump_suitability.getters import base_getters
@@ -18,6 +19,10 @@ year = 2023
 q = 4
 interim_dir = "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/interim/"
 nations = "EWS"
+
+primary_colour = "#0000FF"
+secondary_colour = "#FF6E47"
+tertiary_colour = "#18A48C"
 
 # %% [markdown]
 # ## Compare calculated garden size to avg
@@ -83,12 +88,50 @@ gardens_df = gardens_df.join(
     uprn_count, how="left", on="NATIONALCADASTRALREFERENCE"
 ).join(cadastral_garden_size, how="left", on="NATIONALCADASTRALREFERENCE")
 
+# %%
+# Look at garden size estimate distribution
+plot_df = gardens_df.unique(subset="NATIONALCADASTRALREFERENCE")
+max = plot_df["cadastral_garden_size_m2"].quantile(0.97)
+
+font = {"fontname": "Helvetica"}
+
+fig, ax = plt.subplots()
+counts, edges, bars = ax.hist(
+    plot_df.filter(pl.col("cadastral_garden_size_m2") <= max)[
+        "cadastral_garden_size_m2"
+    ],
+    bins=50,
+    color="#0000FF",
+)
+ax.set_title(
+    "Distribution of estimated garden area for EPC properties\n(where available) in Great Britain (up to 97th percentile)",
+    **font,
+)
+ax.set_xlabel("Estimated garden area (m2)", **font)
+
+scale_y = 1e6
+ticks_y = ticker.FuncFormatter(lambda x, pos: "{0:g}".format(x / scale_y))
+ax.yaxis.set_major_formatter(ticks_y)
+ax.set_ylabel("Count of gardens (millions)", **font)
+ax.set_ylim(0, 2_500_000)
+
+plt.tight_layout()
+plt.show()
+
+# %%
+# Check for disclosiveness of plot
+counts
+
+# %%
 # Divide shared gardens equally among UPRNs sharing gardens
 gardens_df = gardens_df.with_columns(
     (pl.col("cadastral_garden_size_m2") / pl.col("UPRN_count")).alias(
         "divided_garden_area_m2"
     )
 )
+
+# %%
+len(gardens_df.filter(pl.col("garden_area_m2") <= 10)) / len(gardens_df) * 100
 
 # %% [markdown]
 # ### 3. Join EPC with gardens and MSOA averages
@@ -175,6 +218,7 @@ for i, property_type in enumerate(
             "diff"
         ],
         bins=bins,
+        color=primary_colour,
     )
     axes[i].set_title(property_type)
     axes[i].set_xlabel("Estimated garden size error")
@@ -196,6 +240,7 @@ plt.scatter(
     plot["msoa_avg_outdoor_space_m2"],
     plot["mean_divided_garden_area_m2"],
     alpha=0.3,
+    color=primary_colour,
     s=1,
 )
 plt.xlabel("ONS MSOA average (m2)")
@@ -207,11 +252,13 @@ plt.plot(
             plot["msoa_avg_outdoor_space_m2"], plot["mean_divided_garden_area_m2"], 1
         )
     )(np.unique(plot["msoa_avg_outdoor_space_m2"])),
-    color="red",
+    color=secondary_colour,
     linestyle="--",
     label="Line of best fit",
 )
-plt.plot(np.arange(0, 2000), np.arange(0, 2000), color="orange", label="Ideal line")
+plt.plot(
+    np.arange(0, 2000), np.arange(0, 2000), color=tertiary_colour, label="Ideal line"
+)
 plt.legend()
 plt.title("ONS MSOA average garden size vs our estimates (excluding outliers)")
 
@@ -233,6 +280,7 @@ for i, property_type in enumerate(["Houses", "Flats", "unknown"]):
         plot["msoa_avg_outdoor_space_m2"],
         plot["mean_divided_garden_area_m2"],
         alpha=0.3,
+        color=primary_colour,
         s=1,
     )
     axes[i].set_xlabel("ONS MSOA average (m2)")
@@ -247,14 +295,14 @@ for i, property_type in enumerate(["Houses", "Flats", "unknown"]):
                 1,
             )
         )(np.unique(plot["msoa_avg_outdoor_space_m2"])),
-        color="red",
+        color=secondary_colour,
         linestyle="--",
         label="Line of best fit",
     )
     axes[i].plot(
         np.arange(0, plot["msoa_avg_outdoor_space_m2"].max()),
         np.arange(0, plot["msoa_avg_outdoor_space_m2"].max()),
-        color="orange",
+        color=tertiary_colour,
         label="Ideal line",
     )
 
@@ -425,6 +473,7 @@ plt.scatter(
     plot["msoa_avg_outdoor_space_m2"],
     plot["msoa_weighted_average_garden_area_m2"],
     alpha=0.3,
+    color=primary_colour,
     s=1,
 )
 plt.xlabel("ONS MSOA average (m2)")
@@ -438,14 +487,14 @@ plt.plot(
             1,
         )
     )(np.unique(plot["msoa_avg_outdoor_space_m2"])),
-    color="red",
+    color=secondary_colour,
     linestyle="--",
     label="Line of best fit",
 )
 plt.plot(
     np.arange(0, plot["msoa_avg_outdoor_space_m2"].max()),
     np.arange(0, plot["msoa_avg_outdoor_space_m2"].max()),
-    color="orange",
+    color=tertiary_colour,
     label="Ideal line",
 )
 plt.legend()
@@ -469,6 +518,7 @@ for i, property_type in enumerate(["Houses", "Flats", "unknown"]):
         plot["msoa_avg_outdoor_space_m2"],
         plot["msoa_weighted_average_garden_area_m2"],
         alpha=0.3,
+        color=primary_colour,
         s=1,
     )
     axes[i].set_xlabel("ONS MSOA average (m2)")
@@ -483,14 +533,14 @@ for i, property_type in enumerate(["Houses", "Flats", "unknown"]):
                 1,
             )
         )(np.unique(plot["msoa_avg_outdoor_space_m2"])),
-        color="red",
+        color=secondary_colour,
         linestyle="--",
         label="Line of best fit",
     )
     axes[i].plot(
         np.arange(0, plot["msoa_avg_outdoor_space_m2"].max()),
         np.arange(0, plot["msoa_avg_outdoor_space_m2"].max()),
-        color="orange",
+        color=tertiary_colour,
         label="Ideal line",
     )
 
