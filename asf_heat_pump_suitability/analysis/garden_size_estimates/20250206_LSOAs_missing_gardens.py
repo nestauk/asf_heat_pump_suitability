@@ -193,7 +193,7 @@ gardens_gdf = land_extent_gdf.sjoin(
 # %%
 matches = features_gdf.sjoin(gardens_gdf, how="inner", predicate="intersects")
 print(
-    f"{round(matches['UPRN'].nunique() / features_gdf['UPRN'].nunique() * 100, 2)}% of properties with missing LSOAs are matched to a land parcel with buildings"
+    f"{round(matches['UPRN'].nunique() / features_gdf['UPRN'].nunique() * 100, 2)}% of properties in LSOAs missing gardens are matched to a land parcel with buildings"
 )
 
 print("\nThey are located in the following LSOAs:")
