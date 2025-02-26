@@ -17,6 +17,7 @@ import argparse
 import logging
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
+from asf_heat_pump_suitability.pipeline.prepare_features import epc
 from asf_heat_pump_suitability.pipeline.suitability import calculate_suitability
 
 
@@ -86,11 +87,9 @@ if __name__ == "__main__":
     save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/augmented_epc/{y}_Q{q}_epc_augmented.parquet"
     save_utils.save_to_s3(epc_df, save_as)
 
-    epc_df = epc_df.with_columns(
-        pl.col("garden_area_m2")
-        .fill_null(pl.col("msoa_avg_outdoor_space_m2"))
-        .alias("garden_area_m2")
-    ).drop("msoa_avg_outdoor_space_m2")
+    epc_df = epc.fill_col_missing_garden_size(
+        df=epc_df, estimate_col="garden_area_m2", avg_col="msoa_avg_outdoor_space_m2"
+    )
 
     logging.info("Filtering EPC data to rows with n_features >= minimum threshold")
     features = [
