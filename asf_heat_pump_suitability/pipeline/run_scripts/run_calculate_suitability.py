@@ -8,7 +8,7 @@ python -i asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_suitabili
 NB: this pipeline takes the outputs from the following scripts as inputs:
 - asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py
 - asf_heat_pump_suitability/pipeline/run_scripts/run_add_features.py
-- asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size.py
+- asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size.py [deduplicated garden size data required]
 """
 
 import polars as pl
