@@ -1,6 +1,43 @@
 import polars as pl
 
 
+def fill_col_missing_garden_size(
+    df: pl.DataFrame,
+    estimate_col: str = "garden_area_m2",
+    avg_col: str = "msoa_avg_outdoor_space_m2",
+) -> pl.DataFrame:
+    """
+    Fill missing garden size estimates with MSOA average outdoor space reported by ONS first, then fill remaining
+    missing garden size estimates with MSOA median average calculated from available garden size estimates per MSOA.
+
+    Args:
+        df (pl.DataFrame): EPC dataset with estimated garden area, and ONS MSOA average outdoor space columns
+        estimate_col (str): name of estimated garden area column with missing values to fill. Default "garden_area_m2".
+        avg_col (str): name of ONS MSOA average outdoor space column. Default "msoa_avg_outdoor_space_m2".
+
+    Returns:
+        pl.DataFrame: EPC dataset with missing estimated garden area data filled with MSOA averages, and added
+        "msoa_median_garden_area_m2" column.
+    """
+    msoa_median_estimate_df = (
+        df.select(["msoa", estimate_col])
+        .group_by(["msoa"])
+        .median()
+        .rename({estimate_col: "msoa_median_garden_area_m2"})
+    )
+
+    df = df.join(msoa_median_estimate_df, how="left", on="msoa")
+
+    df = df.with_columns(
+        pl.col(estimate_col)
+        .fill_null(pl.col(avg_col))
+        .fill_null(pl.col("msoa_median_garden_area_m2"))
+        .alias(estimate_col),
+    )
+
+    return df
+
+
 def add_col_msoa_avg_outdoor_space_property_type(
     df: pl.DataFrame, ptype_col: str = "property_type"
 ) -> pl.DataFrame:
