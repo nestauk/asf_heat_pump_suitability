@@ -339,3 +339,36 @@ def load_desnz_geodata(
     hn_gdf = pyogrio.read_dataframe(gpkg_path, layer=layer_name)
     lsoa_gdf = gpd.read_file(shp_path)
     return hn_gdf, lsoa_gdf
+
+
+def load_df_scot_gov_data_zone_LA() -> pd.DataFrame:
+    """
+    Load Scottish Gov data zones with the local authority they are part of.
+    From https://statistics.gov.scot/data/data-zone-lookup-2022.
+    """
+    df = pd.read_csv(
+        config["data_source"]["S_data_zone_LA"],
+        usecols=["DZ22_Code", "DZ22_Name", "LA_Name", "LA_Code", "SPD_Name"],
+        encoding="iso-8859-1",
+    )
+    return df
+
+
+def load_df_gov_LSOA_LA() -> pd.DataFrame:
+    """
+    Load data.gov data of LSOA and the local authority they are part of.
+    """
+    df = pd.read_csv(
+        config["data_source"]["EW_LSOA_LA"], usecols=["LSOA21CD", "LAD23NM", "LAD23CD"]
+    )
+    return df
+
+
+def load_df_gov_LSOA_region() -> pd.DataFrame:
+    """
+    Load data.gov data of LSOA and the region they are part of.
+    """
+    df = pd.read_csv(
+        config["data_source"]["EW_LSOA_region"], usecols=["LSOA21CD", "RGN22NM"]
+    )
+    return df
