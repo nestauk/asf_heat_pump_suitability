@@ -162,11 +162,11 @@ if __name__ == "__main__":
     # ----- Import data -----
 
     # Suitability data per LSOA
-    suitablitity_per_lsoa_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/2023_Q4_heat_pump_suitability_per_lsoa.parquet"
+    suitablitity_per_lsoa_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250305_2023_Q4_heat_pump_suitability_per_lsoa.parquet"
     suitability_data = pd.read_parquet(suitablitity_per_lsoa_file)
 
     # Suitability data per property
-    suitability_per_property_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/2023_Q4_heat_pump_suitability_per_property.parquet"
+    suitability_per_property_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250305_2023_Q4_heat_pump_suitability_per_property.parquet"
     per_prop_data = pl.read_parquet(
         suitability_per_property_file,
     )
