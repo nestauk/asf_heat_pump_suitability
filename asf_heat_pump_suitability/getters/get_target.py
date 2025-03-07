@@ -74,6 +74,7 @@ def load_transform_df_target_property_type_ew() -> pl.DataFrame:
             pl.sum_horizontal(
                 [
                     "In a purpose-built block of flats or tenement",
+                    "Part of a converted or shared house, including bedsits",
                     "Part of another converted building, for example, former school, church or warehouse",
                     "In a commercial building, for example, in an office building, hotel or over a shop",
                 ]
