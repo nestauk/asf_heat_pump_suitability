@@ -208,5 +208,4 @@ def get_df_from_parquet(path: str, is_s3: bool = False, **kwargs) -> pl.DataFram
         return polars_df
     else:
         # Read directly from local file system
-        print("ISSUE IDENTIFIED")
         return pl.read_parquet(path, **kwargs)
