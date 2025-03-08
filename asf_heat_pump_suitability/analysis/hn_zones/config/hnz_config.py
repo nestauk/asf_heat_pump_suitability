@@ -106,7 +106,7 @@ TARGET_CRS = "EPSG:27700"
 # Default DESNZ Pilot Fraction Threshold
 DEFAULT_THRESHOLD = 0.0  # This can be modified here instead of in multiple scripts
 
-ABSOLUTE_ERROR_THRESHOLD_ABSENT = 0.0  # Threshold for 'abs_error' when DESNZ HN zone is absent (if change from 0, this no means no longer absent)
+ABSOLUTE_ERROR_THRESHOLD_ABSENT = 0  # Threshold for 'abs_error' when DESNZ HN zone is absent (if change from 0, this no means no longer absent)
 ABSOLUTE_ERROR_THRESHOLD_PRESENT = (
     0.000001  # Threshold for 'abs_error' when DESNZ HN zone is present
 )
