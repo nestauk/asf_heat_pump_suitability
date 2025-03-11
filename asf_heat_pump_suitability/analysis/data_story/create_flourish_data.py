@@ -435,6 +435,18 @@ if __name__ == "__main__":
         norwich_suitability["social_rental_averaged"] > 0.5
     )
 
+    # For colouring LSOAs of interest
+    norwich_lsoa_interest = {
+        "Norwich 017C": "a",
+        "Norwich 011H": "b",
+        "Norwich 011B": "c",
+        "Norwich 011A": "d",
+        "Norwich 009C": "e",
+    }
+    norwich_suitability["lsoa_interest"] = norwich_suitability["lsoa_name"].map(
+        norwich_lsoa_interest
+    )
+
     norwich_suitability.to_csv(
         os.path.join(output_directory, "norwich_suitability.csv")
     )
@@ -509,6 +521,9 @@ if __name__ == "__main__":
         norwich_suitability_interest, how="right", left_on="LSOA21CD", right_on="lsoa"
     )
 
+    norwich_suitability_interest["lsoa_interest"] = norwich_suitability_interest[
+        "lsoa_name"
+    ].map(norwich_lsoa_interest)
     norwich_suitability_interest.round(3).to_file(
         os.path.join(output_directory, "norwich_suitability_interest.geojson"),
         driver="GeoJSON",
@@ -532,3 +547,28 @@ if __name__ == "__main__":
             "data_story_suitability_data_per_lsoa_caerphilly_argyll.csv",
         )
     )
+
+    # Per property stats for Caerphilly
+    caer_lsoa_list = suitability_data[suitability_data["LA_Name"] == "Caerphilly"][
+        "lsoa"
+    ].unique()
+    caer_per_prop = per_prop_data.filter(pl.col("lsoa").is_in(caer_lsoa_list))
+
+    print(per_prop_data["property_type"].value_counts(normalize=True))
+    print(caer_per_prop["property_type"].value_counts(normalize=True))
+    print(per_prop_data["in_protected_area"].value_counts(normalize=True))
+    print(caer_per_prop["in_protected_area"].value_counts(normalize=True))
+
+    # Per property stats for Argyll and Bute
+    argyll_lsoa_list = suitability_data[
+        suitability_data["LA_Name"] == "Argyll and Bute"
+    ]["lsoa"].unique()
+    argyll_per_prop = per_prop_data.filter(pl.col("lsoa").is_in(argyll_lsoa_list))
+
+    print(argyll_per_prop["ruc_two_fold"].value_counts(normalize=True))
+    print(argyll_per_prop["off_gas"].value_counts(normalize=True))
+
+    west_dun_lsoa_list = suitability_data[
+        suitability_data["LA_Name"] == "West Dunbartonshire"
+    ]["lsoa"].unique()
+    west_dun_per_prop = per_prop_data.filter(pl.col("lsoa").is_in(west_dun_lsoa_list))
