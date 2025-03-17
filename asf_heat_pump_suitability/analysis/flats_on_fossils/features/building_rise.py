@@ -95,9 +95,13 @@ def clean_col_flat_storey_count(df: pl.DataFrame) -> pl.DataFrame:
     Returns:
         pl.DataFrame: EPC data with cleaned `FLAT_STOREY_COUNT` column
     """
+    logging.warning("Replacing FLAT_STOREY_COUNT values of `20+` with `20`")
     df = df.with_columns(
         pl.col("FLAT_STOREY_COUNT")
         .cast(pl.String)
+        .replace(
+            "20+", "20"
+        )  # This is appropriate here because we are using storeys to determine rise
         .replace("", "unknown")
         .cast(pl.Float64, strict=False)
     ).with_columns(
