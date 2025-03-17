@@ -203,7 +203,9 @@ def filter_df_minimum_features(
 def compute_df_weighted_score(df, threshold=0.5):
     """
     Calculate [un]weighted suitability scores per EPC property in a single LSOA. Scores will only be weighted if the
-    proportion of EPC properties in the LSOA with weight data is above the specified threshold.
+    proportion of EPC properties in the LSOA with weight data is above the specified threshold. If rows are weighted,
+    we reweight them to ensure weights sum to 1 after dummy rows are removed. This is equivalent to assigning all
+    dummy rows the weighted average score of all non-dummy rows.
 
     Args:
         df: EPC dataset filtered to a single LSOA with suitability scores per property for each tech type and with proportional weights
