@@ -339,3 +339,15 @@ def load_desnz_geodata(
     hn_gdf = pyogrio.read_dataframe(gpkg_path, layer=layer_name)
     lsoa_gdf = gpd.read_file(shp_path)
     return hn_gdf, lsoa_gdf
+
+
+def load_lsoa_lad_lookup(**kwargs):
+    """ """
+    df = pl.read_csv(config["data_source"]["EW_ons_lsoa_lad_lookup"], **kwargs)
+    return df
+
+
+def load_dz_lookup(**kwargs):
+    """ """
+    df = pl.read_csv(config["data_source"]["S_dz_lookup"], **kwargs)
+    return df
