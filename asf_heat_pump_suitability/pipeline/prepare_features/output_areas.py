@@ -4,6 +4,18 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import get_datasets
 
 
+def load_df_lsoa_dz_codes_names() -> pl.DataFrame:
+    """ """
+    lsoa_df = get_datasets.load_df_lsoa_lad_lookup(
+        columns=["LSOA21CD", "LSOA21NM"]
+    ).rename({"LSOA21CD": "lsoa_code", "LSOA21NM": "lsoa_name"})
+    dz_df = get_datasets.load_df_dz_lookup(
+        columns=["DZ2011_Code", "DZ2011_Name"]
+    ).rename({"DZ2011_Code": "lsoa_code", "DZ2011_Name": "lsoa_name"})
+
+    return pl.concat([lsoa_df, dz_df])
+
+
 def sjoin_df_uprn_lad_code(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
     """
     Geospatial join between UPRNs with x,y coordinates and local authority (LAD) boundaries to match UPRNs with the code for
