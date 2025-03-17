@@ -217,7 +217,7 @@ def compute_df_weighted_score(df, threshold=0.5):
         pl.when(
             (pl.col("proportional_weight").is_not_null().sum() / len(df)) >= threshold
         )
-        .then(pl.col("proportional_weight") / pl.col("proportional_weight").sum())
+        .then(pl.col("proportional_weight"))
         .otherwise(1)  # Otherwise we use a weight of 1 per row
         .alias("use_weight"),
         pl.when(

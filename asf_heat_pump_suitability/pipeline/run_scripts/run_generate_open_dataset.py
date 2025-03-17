@@ -72,7 +72,7 @@ if __name__ == "__main__":
             pl.when(
                 (pl.col("proportional_weight").is_not_null().sum() / len(df)) >= 0.5
             )
-            .then(pl.col("proportional_weight") / pl.col("proportional_weight").sum())
+            .then(pl.col("proportional_weight"))
             .otherwise(1)
             .alias("use_weight"),
             pl.when(
