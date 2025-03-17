@@ -15,8 +15,10 @@ import polars as pl
 from tqdm import tqdm
 import argparse
 import logging
+from datetime import datetime
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
+from asf_heat_pump_suitability.pipeline.prepare_features import output_areas
 from asf_heat_pump_suitability.pipeline.suitability import calculate_suitability
 
 
@@ -83,7 +85,7 @@ if __name__ == "__main__":
     epc_df = epc_df.join(weights, how="left", on="UPRN")
 
     logging.info(f"Saving augmented EPC data")
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/augmented_epc/{y}_Q{q}_epc_augmented.parquet"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/augmented_epc/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_epc_augmented.parquet"
     save_utils.save_to_s3(epc_df, save_as)
 
     epc_df = epc_df.with_columns(
@@ -130,10 +132,14 @@ if __name__ == "__main__":
     for score_df in scores:
         epc_df = epc_df.join(score_df, on="UPRN", how="left")
 
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{y}_Q{q}_heat_pump_suitability_per_property.parquet"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_heat_pump_suitability_per_property.parquet"
     save_utils.save_to_s3(epc_df, save_as)
 
     logging.info("Weighting scores and aggregating per LSOA")
+    use_cols = ["lsoa", "proportional_weight"] + [
+        col for col in epc_df.columns if "score" in col
+    ]
+    epc_df = epc_df.select(use_cols)
     weighted_scores = []
     for lsoa_code in tqdm(epc_df["lsoa"].drop_nulls().unique()):
         lsoa_df = epc_df.filter(pl.col("lsoa") == lsoa_code)
@@ -148,17 +154,13 @@ if __name__ == "__main__":
     suitability_df = pl.DataFrame(weighted_scores).filter(pl.col("n_properties") >= 15)
     suitability_df = suitability_df.with_columns(pl.col(pl.Float64).round(3))
 
-    # TODO add Data Zone names
-    logging.info("Get LSOA names and join to suitability dataset")
-    lsoa_names_df = pl.read_csv(
-        config["data_source"]["EW_ons_lsoa_lad_lookup"],
-        columns=["LSOA21CD", "LSOA21NM"],
-    )
+    logging.info("Get LSOA / DZ names and join to suitability dataset")
+    lsoa_names_df = output_areas.load_df_lsoa_dz_codes_names()
     suitability_df = suitability_df.join(
-        lsoa_names_df, left_on="lsoa", right_on="LSOA21CD", how="left"
-    ).rename({"LSOA21NM": "lsoa_name"})
+        lsoa_names_df, left_on="lsoa", right_on="lsoa_code", how="left"
+    )
 
     logging.info("Saving LSOA heat pump suitability scores")
-    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{y}_Q{q}_heat_pump_suitability_per_lsoa"
+    save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_heat_pump_suitability_per_lsoa"
     save_utils.save_to_s3(suitability_df, f"{save_as}.parquet")
     save_utils.save_to_s3(suitability_df, f"{save_as}.csv")
