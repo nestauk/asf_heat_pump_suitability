@@ -341,13 +341,18 @@ def load_desnz_geodata(
     return hn_gdf, lsoa_gdf
 
 
-def load_lsoa_lad_lookup(**kwargs):
+def load_df_lsoa_lad_lookup(**kwargs) -> pl.DataFrame:
     """ """
     df = pl.read_csv(config["data_source"]["EW_ons_lsoa_lad_lookup"], **kwargs)
     return df
 
 
-def load_dz_lookup(**kwargs):
+def load_df_dz_lookup(**kwargs) -> pl.DataFrame:
     """ """
-    df = pl.read_csv(config["data_source"]["S_dz_lookup"], **kwargs)
+    df = pl.read_csv(
+        config["data_source"]["S_dz_lookup"],
+        infer_schema_length=5000,
+        ignore_errors=True,
+        **kwargs,
+    )
     return df
