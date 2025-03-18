@@ -3,7 +3,8 @@ Functions to calculate suitability of different HP technologies.
 """
 
 import polars as pl
-from asf_heat_pump_suitability.pipeline.suitability import scoring
+from asf_heat_pump_suitability.pipeline.suitability import scoring, aggregate_features
+from asf_heat_pump_suitability.pipeline.prepare_features import epc
 
 
 def compute_df_avg_score_per_epc(
@@ -228,7 +229,8 @@ def compute_df_weighted_score(df, threshold=0.5):
         .then(True)
         .otherwise(False)
         .alias("scores_weighted"),
-    )
+    ).filter(pl.col("use_weight").is_not_null())
+
     for col in score_cols:
         df = df.with_columns(
             (pl.col(col) * pl.col("use_weight")).alias(f"{col}_weighted")
@@ -242,11 +244,12 @@ def compute_dict_lsoa_suitability_scores(df: pl.DataFrame, lsoa: str) -> dict:
     Calculate average heat pump suitability scores for one LSOA per tech type.
 
     Args:
-        df (pl.DataFrame): LSOA with weighted suitability scores per tech type
+        df (pl.DataFrame): EPC dataset filtered to a single LSOA with weighted suitability scores per property for each tech type
+        (some LSOAs will have only properties with weights of 1)
         lsoa (str): LSOA code
 
     Returns:
-        dict: suitability scores for one LSOA for each tech type
+        dict: [un]weighted average suitability scores for one LSOA for each tech type
     """
     scores_dict = {"lsoa": lsoa}
     assert df["scores_weighted"].n_unique() == 1
@@ -260,3 +263,35 @@ def compute_dict_lsoa_suitability_scores(df: pl.DataFrame, lsoa: str) -> dict:
     scores_dict["n_properties"] = len(df)
 
     return scores_dict
+
+
+def aggregate_dict_lsoa_suitability_and_features(
+    df: pl.DataFrame, lsoa_code: str
+) -> dict:
+    """
+    Compute single aggregate weighted score for one LSOA and weight and aggregate features to provide LSOA-level
+    averages.
+
+    Args:
+        df (pl.DataFrame): EPC dataset with [un]weighted suitability scores per EPC record
+        lsoa_code (str): LSOA code to aggregate for
+
+    Returns:
+        dict: [un]weighted average suitability scores for one LSOA for each tech type with average features for the LSOA
+    """
+    # Filter df to specified LSOA
+    lsoa_df = df.filter(pl.col("lsoa") == lsoa_code)
+
+    # Compute weighted score for each property in one LSOA - this dataset will be one row per property in a single LSOA
+    lsoa_df = compute_df_weighted_score(lsoa_df)
+
+    # Weight and aggregate the features to LSOA-level for one LSOA
+    lsoa_df = aggregate_features.extend_df_feature_weight(lsoa_df)
+    lsoa_df = epc.convert_df_epc_rating(lsoa_df)
+    lsoa_features_dict = aggregate_features.aggregate_dict_features_per_lsoa(lsoa_df)
+
+    # Calculate LSOA-level weighted scores - this dict will contain weighted average suitability scores for one LSOA
+    lsoa_scores_dict = compute_dict_lsoa_suitability_scores(lsoa_df, lsoa_code)
+
+    # Return joined dicts containing weighted average suitability scores and features for one LSOA
+    return lsoa_scores_dict | lsoa_features_dict
