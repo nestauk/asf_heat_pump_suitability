@@ -1,6 +1,28 @@
 import polars as pl
 
 
+def convert_df_epc_rating(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Extend dataframe with new `epc_c_plus` column indicating whether EPC rating is C or above.
+
+    Args:
+        df (pl.DataFrame): EPC dataset with `CURRENT_ENERGY_RATING` column
+
+    Returns:
+        pl.DataFrame: EPC dataset with `epc_c_plus` column
+    """
+    df = df.with_columns(
+        pl.when(
+            pl.col("CURRENT_ENERGY_RATING").str.to_uppercase().is_in(["A", "B", "C"])
+        )
+        .then(True)
+        .otherwise(False)
+        .alias("epc_c_plus")
+    )
+
+    return df
+
+
 def add_col_msoa_avg_outdoor_space_property_type(
     df: pl.DataFrame, ptype_col: str = "property_type"
 ) -> pl.DataFrame:
