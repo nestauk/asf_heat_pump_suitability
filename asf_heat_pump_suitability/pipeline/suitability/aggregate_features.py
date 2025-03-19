@@ -48,15 +48,15 @@ def aggregate_dict_features_per_lsoa(df: pl.DataFrame) -> dict:
         "proportion_in_conservation_area": (
             df["in_protected_area"] * df["feature_weight"]
         ).sum()
-        / df["total_weight"],
+        / df["total_weight"].min(),
         "proportion_listed_building": (
             df["listed_building"] * df["feature_weight"]
         ).sum()
-        / df["total_weight"],
+        / df["total_weight"].min(),
         "proportion_epc_c_plus": (df["epc_c_plus"] * df["feature_weight"]).sum()
-        / df["total_weight"],
+        / df["total_weight"].min(),
         "proportion_off_gas": (df["off_gas"] * df["feature_weight"]).sum()
-        / df["total_weight"],
+        / df["total_weight"].min(),
     }
 
     return features_dict
