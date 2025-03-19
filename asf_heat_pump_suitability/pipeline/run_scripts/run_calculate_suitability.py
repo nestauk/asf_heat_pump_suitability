@@ -18,7 +18,10 @@ import logging
 from datetime import datetime
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
-from asf_heat_pump_suitability.pipeline.prepare_features import epc, output_areas
+from asf_heat_pump_suitability.pipeline.prepare_features import (
+    property_type,
+    output_areas,
+)
 from asf_heat_pump_suitability.pipeline.suitability import (
     calculate_suitability,
 )
@@ -132,15 +135,29 @@ if __name__ == "__main__":
             )
         )
 
-    # Must have at least 15 properties to be included in final dataset
+    logging.info(
+        "Filtering to LSOAs with data for at least 15 properties to be included in final dataset"
+    )
     suitability_df = pl.DataFrame(weighted_scores).filter(pl.col("n_properties") >= 15)
     suitability_df = suitability_df.with_columns(pl.col(pl.Float64).round(3))
 
-    logging.info("Getting LSOA & DZ names and join to suitability dataset")
-    lsoa_names_df = output_areas.load_df_lsoa_dz_codes_names()
-    suitability_df = suitability_df.join(
-        lsoa_names_df, left_on="lsoa", right_on="lsoa_code", how="left"
+    logging.info("Getting proportion of flats in each LSOA from the census data")
+    proportion_flats_df = (
+        property_type.transform_df_proportion_census_property_types()
+        .filter(pl.col("property_type") == "Flat, maisonette or apartment")
+        .select(["lsoa", "census_proportion"])
+        .rename({"census_proportion": "census_proportion_flats"})
     )
+
+    logging.info("Getting LSOA & DZ names")
+    lsoa_names_df = output_areas.load_df_lsoa_dz_codes_names()
+
+    logging.info(
+        "Joining proportion of flats and LSOA & DZ names to suitability dataset"
+    )
+    suitability_df = suitability_df.join(
+        proportion_flats_df, how="left", on="lsoa"
+    ).join(lsoa_names_df, left_on="lsoa", right_on="lsoa_code", how="left")
 
     logging.info("Saving LSOA heat pump suitability scores")
     save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_heat_pump_suitability_per_lsoa"
