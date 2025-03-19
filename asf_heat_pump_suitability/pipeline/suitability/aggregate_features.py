@@ -3,19 +3,23 @@ import polars as pl
 
 def extend_df_feature_weight(df: pl.DataFrame) -> pl.DataFrame:
     """
-    Add new column containing `feature_weight` per property to weighted EPC data.
+    Add new column containing `feature_weight` per property to weighted EPC data for one LSOA.
 
     Args:
-        df (pl.DataFrame): EPC dataset with one row per property with `scores_weighted` and `proportional_weight` columns
+        df (pl.DataFrame): EPC data filtered to single LSOA with one row per property with `scores_weighted` and `proportional_weight` columns
 
     Returns:
-        pl.DataFrame: EPC dataset with new `feature_weight` column to use for computing weighted proportions of features
+        pl.DataFrame: EPC data for one LSOA with new `feature_weight` column to use for computing weighted proportions of features
     """
     df = df.with_columns(
         pl.when(pl.col("scores_weighted"))
         .then(pl.col("proportional_weight"))
         .otherwise(1)
-        .alias("feature_weight")
+        .alias("feature_weight"),
+        pl.when(pl.col("scores_weighted"))
+        .then(1)
+        .otherwise(len(df))
+        .alias("total_weight"),
     )
 
     return df
@@ -44,15 +48,15 @@ def aggregate_dict_features_per_lsoa(df: pl.DataFrame) -> dict:
         "proportion_in_conservation_area": (
             df["in_protected_area"] * df["feature_weight"]
         ).sum()
-        / df["feature_weight"].sum(),
+        / df["total_weight"],
         "proportion_listed_building": (
             df["listed_building"] * df["feature_weight"]
         ).sum()
-        / df["feature_weight"].sum(),
+        / df["total_weight"],
         "proportion_epc_c_plus": (df["epc_c_plus"] * df["feature_weight"]).sum()
-        / df["feature_weight"].sum(),
+        / df["total_weight"],
         "proportion_off_gas": (df["off_gas"] * df["feature_weight"]).sum()
-        / df["feature_weight"].sum(),
+        / df["total_weight"],
     }
 
     return features_dict
