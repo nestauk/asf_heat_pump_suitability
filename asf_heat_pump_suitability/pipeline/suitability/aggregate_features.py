@@ -39,7 +39,6 @@ def aggregate_dict_features_per_lsoa(df: pl.DataFrame) -> dict:
         "heatpump_installation_percentage": df[
             "heatpump_installation_percentage"
         ].min(),
-        # TODO add census flats proportion
         # Property (or postcode)-level features which will be different per row
         "median_garden_estimate_m2": df["garden_area_m2"].median(),
         "proportion_in_conservation_area": (
