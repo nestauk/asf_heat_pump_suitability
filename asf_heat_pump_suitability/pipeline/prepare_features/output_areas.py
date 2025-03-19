@@ -5,7 +5,12 @@ from asf_heat_pump_suitability.getters import get_datasets
 
 
 def load_df_lsoa_dz_codes_names() -> pl.DataFrame:
-    """ """
+    """
+    Load dataset of LSOA / DZ codes with corresponding names.
+
+    Returns:
+        pl.DataFrame: LSOA / DZ codes and names
+    """
     lsoa_df = get_datasets.load_df_lsoa_lad_lookup(
         columns=["LSOA21CD", "LSOA21NM"]
     ).rename({"LSOA21CD": "lsoa_code", "LSOA21NM": "lsoa_name"})

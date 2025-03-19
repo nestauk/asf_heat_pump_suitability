@@ -342,13 +342,29 @@ def load_desnz_geodata(
 
 
 def load_df_lsoa_lad_lookup(**kwargs) -> pl.DataFrame:
-    """ """
+    """
+    Load LSOA to LAD lookup table from ONS.
+
+    Args:
+        **kwargs for `polars.read_csv()`
+
+    Returns:
+        pl.DataFrame: LSOA to LAD lookup table for England and Wales
+    """
     df = pl.read_csv(config["data_source"]["EW_ons_lsoa_lad_lookup"], **kwargs)
     return df
 
 
 def load_df_dz_lookup(**kwargs) -> pl.DataFrame:
-    """ """
+    """
+    Load Data Zone to LAD lookup table from Scottish Government.
+
+    Args:
+        **kwargs for `polars.read_csv()`
+
+    Returns:
+        pl.DataFrame: DZ to LAD lookup table for Scotland
+    """
     df = pl.read_csv(
         config["data_source"]["S_dz_lookup"],
         infer_schema_length=5000,
