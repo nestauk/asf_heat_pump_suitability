@@ -34,7 +34,9 @@ def deduplicate_df_epc_building_footprints(df: pl.DataFrame) -> pl.DataFrame:
     return df.unique(subset="UPRN", keep="none")
 
 
-def extend_df_building_rise(df: pl.DataFrame, mps: float) -> pl.DataFrame:
+def extend_df_building_rise(
+    df: pl.DataFrame, mps: float, roof_height: float = 2.3
+) -> pl.DataFrame:
     """
     Add `building_rise` column to dataframe using `FLAT_STOREY_COUNT` and `height` columns. Buildings are partitioned
     into low- (<=3 storeys), medium- (4-10 storeys) and high-rise (>10 storeys).
@@ -42,16 +44,18 @@ def extend_df_building_rise(df: pl.DataFrame, mps: float) -> pl.DataFrame:
     Args:
         df (pl.DataFrame): EPC records with `FLAT_STOREY_COUNT` and building `height` data
         mps (float): meters per storey used to calculate storey counts from building height
+        roof_height (float): constant roof height in meters to use in calculation. Default 2.3 which is the national
+        regulation minimum ceiling height in the UK.
 
     Returns:
         pl.DataFrame: EPC data with `building_rise` column
     """
     df = clean_col_flat_storey_count(df)
-    df = extend_df_building_storey_count(df, mps)
+    df = extend_df_building_storey_count(df, mps, roof_height)
 
     df = df.with_columns(
-        pl.col("FLAT_STOREY_COUNT")
-        .fill_null(pl.col("building_storey_count"))
+        pl.col("calculated_storey_count")
+        .fill_null(pl.col("FLAT_STOREY_COUNT"))
         .alias("storey_count")
     ).with_columns(
         pl.when((pl.col("storey_count") > 0) & (pl.col("storey_count") <= 3))
@@ -67,19 +71,24 @@ def extend_df_building_rise(df: pl.DataFrame, mps: float) -> pl.DataFrame:
     return df
 
 
-def extend_df_building_storey_count(df: pl.DataFrame, mps: float) -> pl.DataFrame:
+def extend_df_building_storey_count(
+    df: pl.DataFrame, mps: float, roof_height: float
+) -> pl.DataFrame:
     """
     Calculate storey count of a building by dividing building height by `mps` value.
 
     Args:
         df (pl.DataFrame): dataset with `height` column
         mps (float): meters per storey used to calculate storey counts from building height
+        roof_height (float): constant roof height in meters to use in calculation
 
     Returns:
-        pl.DataFrame: dataframe with `building_storey_count` column
+        pl.DataFrame: dataframe with `calculated_storey_count` column
     """
     df = df.with_columns(
-        (pl.col("height") / mps).round().alias("building_storey_count")
+        ((pl.col("height") - roof_height) / mps)
+        .round()
+        .alias("calculated_storey_count")
     )
 
     return df
