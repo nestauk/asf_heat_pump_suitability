@@ -4,6 +4,7 @@ import shapely
 import argparse
 from tqdm import tqdm
 from asf_heat_pump_suitability.utils import save_utils
+from asf_heat_pump_suitability.getters import get_datasets
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     building_footprint,
     lat_lon,
@@ -44,7 +45,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--save_as",
-        help="Path to save output file with garden size per EPC record to. If unspecified, save with default filename.",
+        help="Path to save output file with building footprint information per EPC record to. If unspecified, save with default filename.",
         type=str,
         required=False,
         default=None,
@@ -64,6 +65,12 @@ if __name__ == "__main__":
     epc_gdf = lat_lon.generate_gdf_uprn_coords(epc_df, usecols=["UPRN"])[
         ["UPRN", "geometry"]
     ]
+
+    logging.info("Loading UK UPRNs")
+    uk_uprns_gdf = get_datasets.get_df_osopen_uprn_latlon()
+    uk_uprns_gdf = lat_lon.generate_gdf_uprn_coords(
+        uk_uprns_gdf, usecols=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
+    )[["UPRN", "geometry"]]
 
     microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
 
@@ -90,11 +97,22 @@ if __name__ == "__main__":
             continue
 
         uprn_gdf = epc_gdf.loc[epc_gdf["UPRN"].isin(uprns)]
+        uprns_per_building_df = (
+            building_footprints_gdf[["building_id", "geometry"]]
+            .sjoin(uk_uprns_gdf, how="left", predicate="contains")
+            .drop(columns=["index_right"])
+            .groupby("building_id")
+            .agg({"UPRN": "count"})
+            .rename(columns={"UPRN": "UPRN_count_per_building"})
+        )
+
         epc_footprint_dfs.append(
             pl.from_pandas(
                 building_footprints_gdf.sjoin(
                     uprn_gdf, how="inner", predicate="contains"
-                ).drop(columns=["index_right", "geometry"])
+                )
+                .drop(columns=["index_right", "geometry"])
+                .join(uprns_per_building_df, how="left", on="building_id")
             )
         )
 
