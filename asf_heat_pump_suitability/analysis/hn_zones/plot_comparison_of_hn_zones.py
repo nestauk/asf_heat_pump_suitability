@@ -29,18 +29,19 @@ for one or more Local Authorities (LAs). It iterates over LAs defined in a confi
     - Plots ASHP vs. HN scores for all LSOAs in the LA.
 
 **Usage**:
-    python plot_comparison_of_hn_zones_all.py [--read_from_s3]
+    python plot_comparison_of_hn_zones.py [--read_from_s3]
 
 **Example**:
     # Run the script with local files only
-    python plot_comparison_of_hn_zones_all.py
+    python plot_comparison_of_hn_zones.py
 
     # Run the script, reading files from S3
-    python plot_comparison_of_hn_zones_all.py --read_from_s3
+    python plot_comparison_of_hn_zones.py --read_from_s3
 """
 
 import logging
 import argparse
+import os
 from asf_heat_pump_suitability.getters.get_datasets import (
     load_n_hn_ashp_scores,
     load_la_data,
@@ -110,6 +111,7 @@ if __name__ == "__main__":
 
     # Iterate over each Local Authority in config
     for la_name, la_value in LOCAL_AUTHORITIES.items():
+        la_snake_name = la_name.lower().replace(" ", "_")
         # If the LA is actually a region dict (e.g., Greater Manchester), skip or handle sub-LAs separately
         if isinstance(la_value, dict):
             logging.info(f"Skipping region '{la_name}' because it has sub-LAs.")
@@ -120,7 +122,7 @@ if __name__ == "__main__":
         try:
             # 1. Load data (HP Parquet, LSOA JSON, average threshold Parquet)
             hp_scores_pd, la_lsoas, avg_hn_scores_df = load_la_data(
-                la_name=la_name,
+                la_name=la_snake_name,
                 input_dir=INPUT_DIR,
                 s3_bucket=S3_BUCKET,
                 s3_key_dir=S3_KEY_DIR,
@@ -131,49 +133,53 @@ if __name__ == "__main__":
             la_lsoa_gdf = load_and_filter_lsoa_geometries(
                 la_lsoas=la_lsoas, lsoa_shp_path=LSOA_SHP_PATH_S3, target_crs=TARGET_CRS
             )
+            # Create LA plots directory if it doesn't exist yet
+            output_la_plots_dir = os.path.join(OUTPUT_PLOTS_DIR, la_snake_name)
+            os.makedirs(output_la_plots_dir, exist_ok=True)
 
             # 3. Plot LSOA geometries
             plot_lsoa_geometries(
                 la_lsoa_geometries_gdf=la_lsoa_gdf,
-                la_name=la_name,
-                output_dir=OUTPUT_PLOTS_DIR,
+                la_name=la_snake_name,
+                output_dir=output_la_plots_dir,
             )
 
             # 4. Merge data with geometries
             la_hp_gdf = merge_hp_suitability_data_with_geometries(
                 hp_suitability_scores_pd=hp_scores_pd,
                 la_lsoa_geometries_gdf=la_lsoa_gdf,
-                la_name=la_name,
+                la_name=la_snake_name,
                 target_crs=TARGET_CRS,
             )
 
             # 5. Overlay of DESNZ pilot fraction zones
+            geopkg_input_dir = os.path.join(INPUT_DIR, "extracted_gpkg")
             plot_overlay(
                 la_hp_suitability_gdf=la_hp_gdf,
-                la_name=la_name,
-                input_dir=INPUT_DIR,
-                output_dir=OUTPUT_PLOTS_DIR,
+                la_name=la_snake_name,
+                input_dir=geopkg_input_dir,
+                output_dir=output_la_plots_dir,
             )
 
             # 6. Plot absolute error maps (example thresholds)
             plot_absolute_error_map(
                 la_hp_suitability_gdf=la_hp_gdf,
-                la_name=la_name,
+                la_name=la_snake_name,
                 score=ABSOLUTE_ERROR_THRESHOLD_PRESENT,
-                output_dir=OUTPUT_PLOTS_DIR,
+                output_dir=output_la_plots_dir,
             )
             plot_absolute_error_map(
                 la_hp_suitability_gdf=la_hp_gdf,
-                la_name=la_name,
+                la_name=la_snake_name,
                 score=ABSOLUTE_ERROR_THRESHOLD_ABSENT,
-                output_dir=OUTPUT_PLOTS_DIR,
+                output_dir=output_la_plots_dir,
             )
 
             # 7. Plot average Nesta HN score vs. fraction coverage threshold
             plot_hn_avg_score_vs_fraction_threshold(
                 average_hn_scores_coverage_df=avg_hn_scores_df,
-                la_name=la_name,
-                output_dir=OUTPUT_PLOTS_DIR,
+                la_name=la_snake_name,
+                output_dir=output_la_plots_dir,
             )
 
             # 8. Merge the global ASHP column (df_ashp_suitability) onto the LA DataFrame
@@ -189,16 +195,18 @@ if __name__ == "__main__":
             # 9. Plot ASHP vs. HN scatter with *fixed* global axes
             plot_ashp_vs_hn_scatter(
                 merged_df=la_hp_gdf_merged,
-                la_name=la_name,
+                la_name=la_snake_name,
                 global_x_min=global_x_min,
                 global_x_max=global_x_max,
                 global_y_min=global_y_min,
                 global_y_max=global_y_max,
-                output_dir=OUTPUT_PLOTS_DIR,
+                output_dir=output_la_plots_dir,
             )
 
             # Print the output directory after processing each LA
-            logging.info(f"Plots for {la_name} have been saved to {OUTPUT_PLOTS_DIR}")
+            logging.info(
+                f"Plots for {la_name} have been saved to {output_la_plots_dir}"
+            )
 
         except Exception as err:
             logging.error(f"Error processing {la_name}: {err}")

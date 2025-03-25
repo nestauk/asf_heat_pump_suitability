@@ -10,13 +10,9 @@ from tenacity import retry, stop_after_attempt
 import warnings
 import pyogrio
 from typing import Tuple, List
-from asf_heat_pump_suitability.analysis.hn_zones.config.hnz_config import (
-    S3_BUCKET,
-    S3_KEY_DIR,
-    OUTPUT_DIR,
-)
 import boto3
 import json
+import io
 
 # Ignore RunTimeWarning when loading Microsoft building footprint files
 # as reading from gzipped stream should be faster than unzipping and loading data
@@ -373,7 +369,7 @@ def load_n_hn_ashp_scores(
     )
     logging.info(f"Loading global HP suitability data from {path}...")
 
-    df_hps_polars = base_getters.get_df_from_parquet(
+    df_hps_polars = base_getters.get_pl_df_from_parquet(
         path, read_from_s3
     )  # function auto-detects "s3://" vs local
     df_hps = df_hps_polars.to_pandas()
@@ -420,10 +416,9 @@ def load_la_data(
     Raises:
         IOError: If any file fails to load, or if expected columns are missing.
     """
-    la_snake = la_name.lower().replace(" ", "_")
-    hp_parquet = f"{la_snake}_hp_suitability_scores_with_desnz.parquet"
-    lsoa_json = f"{la_snake}_hp_suitability_lsoas.json"
-    avg_scores_parquet = f"{la_snake}_average_scores_by_threshold.parquet"
+    hp_parquet = f"hp_suitability_scores_with_desnz/{la_name}_hp_suitability_scores_with_desnz.parquet"
+    lsoa_json = f"hp_suitability_lsoas/{la_name}_hp_suitability_lsoas.json"
+    avg_scores_parquet = f"avg_scores/{la_name}_average_scores_by_threshold.parquet"
 
     hp_parquet_local = os.path.join(input_dir, hp_parquet)
     lsoa_json_local = os.path.join(input_dir, lsoa_json)
@@ -440,7 +435,9 @@ def load_la_data(
             hp_obj = s3_client.get_object(
                 Bucket=s3_bucket, Key=f"{s3_key_dir}{hp_parquet}"
             )
-            hp_suitability_scores_pd = pd.read_parquet(hp_obj["Body"])
+            body = hp_obj["Body"].read()
+            buffer = io.BytesIO(body)
+            hp_suitability_scores_pd = pd.read_parquet(buffer)
 
             # 2) LSOA JSON
             lsoa_obj = s3_client.get_object(
@@ -449,10 +446,10 @@ def load_la_data(
             la_lsoas = json.loads(lsoa_obj["Body"].read())
 
             # 3) Average scores Parquet
-            avg_obj = s3_client.get_object(
-                Bucket=s3_bucket, Key=f"{s3_key_dir}{avg_scores_parquet}"
+            avg_hn_scores_s3_path = f"s3://{s3_bucket}/{s3_key_dir}{avg_scores_parquet}"
+            average_hn_scores_coverage_df = base_getters.get_pl_df_from_parquet(
+                avg_hn_scores_s3_path, read_from_s3
             )
-            average_hn_scores_coverage_df = pl.read_parquet(avg_obj["Body"])
         else:
             # Local reading approach
             hp_suitability_scores_pd = pd.read_parquet(hp_parquet_local)

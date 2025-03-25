@@ -157,7 +157,7 @@ def list_obj_s3_location(location: str) -> list:
     return o
 
 
-def get_df_from_parquet_s3_path(path: str, **kwargs) -> pl.DataFrame:
+def get_pl_df_from_parquet_s3_path(path: str, **kwargs) -> pl.DataFrame:
     """
     Get dataframe from Parquet file stored in s3 path.
 
@@ -187,7 +187,7 @@ def get_gdf_from_gpkg_s3_path(path: str, **kwargs) -> gpd.GeoDataFrame:
     return gdf
 
 
-def get_df_from_parquet(path: str, is_s3: bool = False, **kwargs) -> pl.DataFrame:
+def get_pl_df_from_parquet(path: str, is_s3: bool = False, **kwargs) -> pl.DataFrame:
     """
     Get a Polars dataframe from a Parquet file, either from local disk or from an S3 URI.
 
@@ -201,11 +201,10 @@ def get_df_from_parquet(path: str, is_s3: bool = False, **kwargs) -> pl.DataFram
     Returns:
         pl.DataFrame: Loaded Parquet file as a Polars DataFrame.
     """
+
     if is_s3:
-        # We use your existing utility that fetches the raw bytes from S3
-        polars_df = get_content_from_s3_path(path, **kwargs)  # returns bytes
-        # Convert to an in-memory buffer and read with Polars
-        return polars_df
+        # Read from s3
+        return get_pl_df_from_parquet_s3_path(path, **kwargs)
     else:
         # Read directly from local file system
         return pl.read_parquet(path, **kwargs)

@@ -107,9 +107,8 @@ def plot_ashp_vs_hn_scatter(
 
     ax.grid(True, linestyle="--", alpha=0.3)
 
-    la_snake = la_name.lower().replace(" ", "_")
-    out_png = os.path.join(output_dir, f"{la_snake}_ashp_vs_hn_scatter_fixed.png")
-    out_pdf = os.path.join(output_dir, f"{la_snake}_ashp_vs_hn_scatter_fixed.pdf")
+    out_png = os.path.join(output_dir, f"{la_name}_ashp_vs_hn_scatter_fixed.png")
+    out_pdf = os.path.join(output_dir, f"{la_name}_ashp_vs_hn_scatter_fixed.pdf")
     plt.savefig(out_png, bbox_inches="tight")
     plt.savefig(out_pdf, bbox_inches="tight")
     plt.close(fig)
@@ -134,9 +133,8 @@ def plot_lsoa_geometries(
     plt.title(f"{la_name} - LSOA Geometries")
     plt.axis("off")
 
-    la_snake = la_name.lower().replace(" ", "_")
-    plt.savefig(os.path.join(output_dir, f"{la_snake}_lsoas.png"))
-    plt.savefig(os.path.join(output_dir, f"{la_snake}_lsoas.pdf"))
+    plt.savefig(os.path.join(output_dir, f"{la_name}_lsoas.png"))
+    plt.savefig(os.path.join(output_dir, f"{la_name}_lsoas.pdf"))
     plt.close(fig)
 
 
@@ -157,8 +155,8 @@ def plot_overlay(
         output_dir (str): Directory to save plot outputs.
     """
     logging.info(f"Plotting overlay of DESNZ pilot heat network zones for {la_name}...")
-    la_snake = la_name.lower().replace(" ", "_")
-    gpkg_filename = f"{la_snake}_with_desnz_hn_lsoa.gpkg"
+
+    gpkg_filename = f"{la_name}_with_desnz_hn_lsoa.gpkg"
     gpkg_local_file_path = os.path.join(input_dir, gpkg_filename)
 
     # Split LSOAs into "in zone" vs. "out of zone"
@@ -217,8 +215,8 @@ def plot_overlay(
     plt.title(f"{la_name} - Overlay of DESNZ Pilot Heat Network Zones")
     plt.axis("off")
 
-    out_png = os.path.join(output_dir, f"{la_snake}_overlay_desnz_pilot.png")
-    out_pdf = os.path.join(output_dir, f"{la_snake}_overlay_desnz_pilot.pdf")
+    out_png = os.path.join(output_dir, f"{la_name}_overlay_desnz_pilot.png")
+    out_pdf = os.path.join(output_dir, f"{la_name}_overlay_desnz_pilot.pdf")
     plt.savefig(out_png)
     plt.savefig(out_pdf)
     plt.close(fig)
@@ -299,9 +297,8 @@ def plot_absolute_error_map(
     plt.title(f"{la_name} - Absolute Error Map ({label_str})")
     plt.axis("off")
 
-    la_snake = la_name.lower().replace(" ", "_")
-    out_png = os.path.join(output_dir, f"{la_snake}_abs_error_map_score_{score}.png")
-    out_pdf = os.path.join(output_dir, f"{la_snake}_abs_error_map_score_{score}.pdf")
+    out_png = os.path.join(output_dir, f"{la_name}_abs_error_map_score_{score}.png")
+    out_pdf = os.path.join(output_dir, f"{la_name}_abs_error_map_score_{score}.pdf")
     plt.savefig(out_png, bbox_inches="tight")
     plt.savefig(out_pdf, bbox_inches="tight")
     plt.close(fig)
@@ -392,9 +389,8 @@ def plot_hn_avg_score_vs_fraction_threshold(
     )
     ax.legend(frameon=False)
 
-    la_snake = la_name.lower().replace(" ", "_")
-    out_png = os.path.join(output_dir, f"{la_snake}_hn_avg_score_vs_fraction.png")
-    out_pdf = os.path.join(output_dir, f"{la_snake}_hn_avg_score_vs_fraction.pdf")
+    out_png = os.path.join(output_dir, f"{la_name}_hn_avg_score_vs_fraction.png")
+    out_pdf = os.path.join(output_dir, f"{la_name}_hn_avg_score_vs_fraction.pdf")
     plt.savefig(out_png)
     plt.savefig(out_pdf)
     plt.close(fig)
