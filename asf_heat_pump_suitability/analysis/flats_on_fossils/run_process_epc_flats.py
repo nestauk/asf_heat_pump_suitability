@@ -61,7 +61,10 @@ if __name__ == "__main__":
             ("ADDRESS1", pl.String),
             ("ADDRESS2", pl.String),
             ("POSTCODE", pl.String),
+            ("LOCAL_AUTHORITY_LABEL", pl.String),
+            ("COUNTRY", pl.String),
             ("PROPERTY_TYPE", pl.String),
+            ("BUILT_FORM", pl.String),
             ("FLAT_STOREY_COUNT", pl.String),
             ("MAIN_FUEL", pl.String),
             ("MAINHEAT_DESCRIPTION", pl.String),
@@ -76,7 +79,10 @@ if __name__ == "__main__":
             "ADDRESS1",
             "ADDRESS2",
             "POSTCODE",
+            "LOCAL_AUTHORITY_LABEL",
+            "COUNTRY",
             "PROPERTY_TYPE",
+            "BUILT_FORM",
             "FLAT_STOREY_COUNT",
             "MAIN_FUEL",
             "MAINHEAT_DESCRIPTION",
@@ -100,6 +106,16 @@ if __name__ == "__main__":
 
     logging.info("Joining building footprint data to EPC")
     epc_df = epc_df.join(epc_footprint_df, how="left", on="UPRN")
+
+    logging.info("Calculating property density per building")
+    epc_df = epc_df.with_columns(
+        (pl.col("UPRN_count_per_building") / pl.col("building_area_m2")).alias(
+            "property_per_m2"
+        ),
+        (pl.col("building_area_m2") / pl.col("UPRN_count_per_building")).alias(
+            "avg_property_footprint_m2"
+        ),
+    )
 
     logging.info("Adding fuel type information")
     epc_df = fuel_type.extend_df_fuel_type(epc_df)
