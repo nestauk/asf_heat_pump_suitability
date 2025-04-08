@@ -72,9 +72,8 @@ if __name__ == "__main__":
         uk_uprns_gdf, usecols=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
     )[["UPRN", "geometry"]]
 
-    microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
-
     logging.info("Getting list of UPRNs for each building footprint file")
+    microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
     uprns_per_file = microsoft_file_bounds.sjoin(
         epc_gdf, how="inner", predicate="intersects"
     )
@@ -96,6 +95,7 @@ if __name__ == "__main__":
             )
             continue
 
+        # Join UPRNs to their building footprints
         uprn_gdf = epc_gdf.loc[epc_gdf["UPRN"].isin(uprns)]
         uprns_per_building_df = (
             building_footprints_gdf[["building_id", "geometry"]]
