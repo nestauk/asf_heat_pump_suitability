@@ -68,6 +68,8 @@ if __name__ == "__main__":
             ("FLAT_STOREY_COUNT", pl.String),
             ("MAIN_FUEL", pl.String),
             ("MAINHEAT_DESCRIPTION", pl.String),
+            ("MAINS_GAS_FLAG", pl.String),
+            ("HOTWATER_DESCRIPTION", pl.String),
         ]
     )
 
@@ -86,6 +88,8 @@ if __name__ == "__main__":
             "FLAT_STOREY_COUNT",
             "MAIN_FUEL",
             "MAINHEAT_DESCRIPTION",
+            "MAINS_GAS_FLAG",
+            "HOTWATER_DESCRIPTION",
         ],
     ).cast(epc_schema)
 
