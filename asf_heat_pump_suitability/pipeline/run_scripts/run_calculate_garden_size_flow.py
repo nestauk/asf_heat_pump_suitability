@@ -1,12 +1,12 @@
 """
-Calculate garden area (m2) where possible for properties in the domestic EPC register using Land Registry data and
+Flow to calculate garden area (m2) where possible for properties in the domestic EPC register using Land Registry data and
 Microsoft Building Footprints data.
 
 To run:
-python -i asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size.py --epc [path/to/EPC/data] -y [YYYY] -q [Q] -n ews
+python asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size_flow.py run --epc [path/to/EPC/data] --year [YYYY] --quarter [Q] --nations ews --max-num-splits 400
 
 [Set -n nation flag to "ew" or "s" for generating garden size estimates for either England and Wales or Scotland INSPIRE
-files only. It is recommended to process England-Wales and Scotland separately due to long run time (2+ days).]
+files only.]
 
 NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
@@ -15,6 +15,7 @@ import logging
 import shapely.errors
 import polars as pl
 import geopandas as gpd
+import pandas as pd
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     lat_lon,
@@ -81,14 +82,13 @@ class CalculateGardenSizeFlow(FlowSpec):
         self.file_matches = garden_size.match_series_files_land_building(
             land_files_gdf=land_file_bounds, building_files_gdf=microsoft_file_bounds
         )
+        self.land_files = list(self.file_matches.index.unique())
 
         logging.info(
             f"Estimating garden size for properties across {len(self.file_matches)} pairs of land extent and building footprint files."
         )
 
-        self.next(
-            self.estimate_garden_size, foreach=list(self.file_matches.index.unique())
-        )
+        self.next(self.estimate_garden_size, foreach="land_files")
 
     @step
     def estimate_garden_size(self):
@@ -98,10 +98,11 @@ class CalculateGardenSizeFlow(FlowSpec):
         # Prepare land parcel data
         land_parcels_gdf = land_extent.transform_gdf_land_parcels(f"s3://{land_file}")
 
+        building_footprints_gdfs = []
         for building_file in building_files:
             # Prepare building footprints data
             try:
-                building_footprints_gdf = (
+                _building_footprints_gdf = (
                     building_footprint.transform_gdf_building_footprints(building_file)
                 )
             except shapely.errors.GEOSException as e:
@@ -110,6 +111,14 @@ class CalculateGardenSizeFlow(FlowSpec):
                     f"Skipping this land extent & building footprint pairing."
                 )
                 continue
+            else:
+                _building_footprints_gdf["microsoft_building_footprint_file"] = (
+                    building_file
+                )
+                building_footprints_gdfs.append(_building_footprints_gdf)
+
+        if building_footprints_gdfs:
+            building_footprints_gdf = pd.concat(building_footprints_gdfs)
 
             # Get intersection of building footprint polygons and land polygons
             intersection_gdf = garden_size.generate_gdf_land_building_overlay(
@@ -123,7 +132,6 @@ class CalculateGardenSizeFlow(FlowSpec):
             )
             gardens_gdf = gardens_gdf.assign(
                 inspire_land_extent_file=land_file,
-                microsoft_building_footprint_file=building_file,
             )
 
             # Match EPC UPRNs with land parcels and gardens using UPRN coordinates
@@ -136,14 +144,16 @@ class CalculateGardenSizeFlow(FlowSpec):
             ).drop(columns=["geometry", "index_right"])
 
             self.epc_df = pl.from_pandas(epc_df)
-            self.next(self.join)
+
+        self.next(self.concatenate_garden_size_dfs)
 
     @step
-    def join(self, inputs):
+    def concatenate_garden_size_dfs(self, inputs):
         self.epc_gardens_df = pl.concat([input.epc_df for input in inputs])
         logging.info(
             f"Garden size calculated for {len(self.epc_gardens_df)} EPC properties in total."
         )
+        self.next(self.end)
 
     @step
     def end(self):
