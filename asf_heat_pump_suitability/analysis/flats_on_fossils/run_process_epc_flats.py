@@ -122,7 +122,7 @@ if __name__ == "__main__":
     )
 
     logging.info("Adding fuel type information")
-    epc_df = fuel_type.extend_df_fuel_type(epc_df)
+    epc_df = fuel_type.extend_df_central_heating_information(epc_df)
 
     if not args.save_as:
         args.save_as = f"s3://asf-heat-pump-suitability/outputs/{args.year}Q{args.quarter}/analysis/{args.year}_Q{args.quarter}_epc_flats_processed.parquet"
