@@ -23,7 +23,7 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
     building_footprint,
     garden_size,
 )
-from metaflow import FlowSpec, step, Parameter
+from metaflow import FlowSpec, step, Parameter, batch
 
 
 class CalculateGardenSizeFlow(FlowSpec):
@@ -91,6 +91,7 @@ class CalculateGardenSizeFlow(FlowSpec):
 
         self.next(self.estimate_garden_size, foreach="land_files")
 
+    @batch()
     @step
     def estimate_garden_size(self):
         land_file = self.input
@@ -156,6 +157,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         )
         self.next(self.end)
 
+    @batch()
     @step
     def end(self):
         save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}.parquet"
