@@ -5,10 +5,10 @@ Microsoft Building Footprints data.
 To run:
 python asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size_flow.py run --epc [path/to/EPC/data] --year [YYYY] --quarter [Q] --nations ews --max-num-splits 400
 
-[Set -n nation flag to "ew" or "s" for generating garden size estimates for either England and Wales or Scotland INSPIRE
+[Set --nations flag to "ew" or "s" for generating garden size estimates for either England and Wales or Scotland INSPIRE
 files only.]
 
-NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
+NB: this flow takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
 
 import logging
@@ -55,6 +55,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         help="Nations to get INSPIRE land registry file bounds for. Select from England and Wales (ew); Scotland (s); or all (ews).",
         type=str,
         required=True,
+        default="ews",
     )
 
     @step
