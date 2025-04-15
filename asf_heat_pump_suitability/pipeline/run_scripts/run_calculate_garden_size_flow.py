@@ -91,7 +91,7 @@ class CalculateGardenSizeFlow(FlowSpec):
 
         self.next(self.estimate_garden_size, foreach="land_files")
 
-    @batch()
+    @batch(cpu=2, memory=16000)
     @step
     def estimate_garden_size(self):
         land_file = self.input
@@ -157,7 +157,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         )
         self.next(self.end)
 
-    @batch()
+    @batch(cpu=2, memory=16000)
     @step
     def end(self):
         save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}.parquet"
