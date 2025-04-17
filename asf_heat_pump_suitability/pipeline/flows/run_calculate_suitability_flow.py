@@ -14,9 +14,10 @@ NB: this pipeline takes the outputs from the following scripts as inputs:
 import polars as pl
 import itertools
 import logging
+from tqdm import tqdm
 from datetime import datetime
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.utils import save_utils
+from asf_heat_pump_suitability.utils import parallel_utils, save_utils
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     property_type,
     output_areas,
@@ -24,7 +25,7 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
 from asf_heat_pump_suitability.pipeline.suitability import (
     calculate_suitability,
 )
-from metaflow import FlowSpec, step, Parameter
+from metaflow import FlowSpec, step, Parameter, batch
 
 
 class CalculateSuitabilityFlow(FlowSpec):
@@ -120,21 +121,10 @@ class CalculateSuitabilityFlow(FlowSpec):
         for score_df in scores:
             self.epc_df = self.epc_df.join(score_df, on="UPRN", how="left")
 
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.year}/suitability/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_heat_pump_suitability_per_property.parquet"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/suitability/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_heat_pump_suitability_per_property.parquet"
         save_utils.save_to_s3(self.epc_df, save_as)
 
-        lsoas = self.epc_df["lsoa"].drop_nulls().unique()
-
-        # Get chunks of 1000 LSOAs
-        self.lsoa_chunks = [list(chunk) for chunk in zip(*[iter(lsoas)] * 1000)]
-        self.next(self.weight_scores, foreach="lsoa_chunks")
-
-    @step
-    def weight_scores(self):
-        """
-        Apply weights to scores and aggregate for each LSOA.
-        """
-        logging.info("Weighting scores and aggregating per LSOA")
+        # Filter to relevant columns
         use_cols = (
             ["lsoa", "proportional_weight"]
             + [col for col in self.epc_df.columns if "score" in col]
@@ -142,11 +132,25 @@ class CalculateSuitabilityFlow(FlowSpec):
         )
         self.epc_df = self.epc_df.select(use_cols)
 
+        # Chunk into dfs of 1000 LSOAs
+        self.chunks = parallel_utils.chunk_df_by_group(
+            self.epc_df, group_col="lsoa", n=1000
+        )
+        self.next(self.weight_scores, foreach="chunks")
+
+    @batch(cpu=2, memory=4000)
+    @step
+    def weight_scores(self):
+        """
+        Apply weights to scores and aggregate for each LSOA.
+        """
+        logging.info("Weighting scores and aggregating per LSOA")
         self.weighted_scores = []
-        for lsoa_code in self.input:
+
+        for lsoa_code in tqdm(self.input["lsoa"].unique()):
             self.weighted_scores.append(
                 calculate_suitability.aggregate_dict_lsoa_suitability_and_features(
-                    self.epc_df, lsoa_code
+                    self.input, lsoa_code
                 )
             )
 
@@ -157,7 +161,9 @@ class CalculateSuitabilityFlow(FlowSpec):
         """
         Concatenate all weighted LSOA suitability scores together and filter to LSOAs with at least 15 records.
         """
-        self.weighted_scores = list(itertools.chain.from_iterable(inputs))
+        self.weighted_scores = list(
+            itertools.chain.from_iterable([input.weighted_scores for input in inputs])
+        )
         logging.info(
             "Filtering to LSOAs with data for at least 15 properties to be included in final dataset"
         )
