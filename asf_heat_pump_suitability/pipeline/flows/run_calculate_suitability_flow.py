@@ -11,21 +11,19 @@ NB: this pipeline takes the outputs from the following scripts as inputs:
 - asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size.py
 """
 
-import polars as pl
-import itertools
+import os
+
+# Upgrading pip and installing requirements
+os.system("python -m pip install --upgrade pip")
+os.system(
+    f"pip install -r {os.path.dirname(os.path.realpath(__file__))}/calculate_suitability_requirements.txt 1> /dev/null"
+)
+print(
+    f"{os.path.dirname(os.path.realpath(__file__))}/calculate_suitability_requirements.txt"
+)
+from metaflow import FlowSpec, step, batch, Parameter
+
 import logging
-from tqdm import tqdm
-from datetime import datetime
-from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.utils import parallel_utils, save_utils
-from asf_heat_pump_suitability.pipeline.prepare_features import (
-    property_type,
-    output_areas,
-)
-from asf_heat_pump_suitability.pipeline.suitability import (
-    calculate_suitability,
-)
-from metaflow import FlowSpec, step, Parameter, batch
 
 
 class CalculateSuitabilityFlow(FlowSpec):
@@ -68,6 +66,10 @@ class CalculateSuitabilityFlow(FlowSpec):
         """
         Load input datasets and start flow.
         """
+        import polars as pl
+        from datetime import datetime
+        from asf_heat_pump_suitability import config
+
         self.features = config["features"]
 
         logging.info("Loading EPC data with features")
@@ -81,9 +83,11 @@ class CalculateSuitabilityFlow(FlowSpec):
         self.epc_df = self.epc_df.join(gardens, how="left", on="UPRN")
         self.epc_df = self.epc_df.join(weights, how="left", on="UPRN")
 
-        logging.info(f"Saving augmented EPC data")
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/augmented_epc/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_epc_augmented.parquet"
-        save_utils.save_to_s3(self.epc_df, save_as)
+        self.epc_df = self.epc_df.sample(n=1000)
+
+        # logging.info(f"Saving augmented EPC data")
+        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/augmented_epc/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_epc_augmented.parquet"
+        # save_utils.save_to_s3(self.epc_df, save_as)
         self.next(self.process_features_for_suitability)
 
     @step
@@ -91,6 +95,11 @@ class CalculateSuitabilityFlow(FlowSpec):
         """
         Process EPC dataset in preparation for calculating suitability.
         """
+        import polars as pl
+        from asf_heat_pump_suitability.pipeline.suitability import (
+            calculate_suitability,
+        )
+
         self.epc_df = self.epc_df.with_columns(
             pl.col("garden_area_m2")
             .fill_null(pl.col("msoa_avg_outdoor_space_m2"))
@@ -108,6 +117,13 @@ class CalculateSuitabilityFlow(FlowSpec):
         """
         Calculate suitability score per tech type per EPC record.
         """
+        from datetime import datetime
+        from asf_heat_pump_suitability import config
+        from asf_heat_pump_suitability.pipeline.utils import parallel_utils
+        from asf_heat_pump_suitability.pipeline.suitability import (
+            calculate_suitability,
+        )
+
         tech_types = config["tech_types"]
         scores = []
         for tech_type in tech_types:
@@ -121,8 +137,8 @@ class CalculateSuitabilityFlow(FlowSpec):
         for score_df in scores:
             self.epc_df = self.epc_df.join(score_df, on="UPRN", how="left")
 
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/suitability/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_heat_pump_suitability_per_property.parquet"
-        save_utils.save_to_s3(self.epc_df, save_as)
+        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/suitability/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_heat_pump_suitability_per_property.parquet"
+        # save_utils.save_to_s3(self.epc_df, save_as)
 
         # Filter to relevant columns
         use_cols = (
@@ -134,7 +150,7 @@ class CalculateSuitabilityFlow(FlowSpec):
 
         # Chunk into dfs of 1000 LSOAs
         self.chunks = parallel_utils.chunk_df_by_group(
-            self.epc_df, group_col="lsoa", n=1000
+            self.epc_df, group_col="lsoa", n=100
         )
         self.next(self.weight_scores, foreach="chunks")
 
@@ -144,6 +160,9 @@ class CalculateSuitabilityFlow(FlowSpec):
         """
         Apply weights to scores and aggregate for each LSOA.
         """
+        from tqdm import tqdm
+        from asf_heat_pump_suitability.pipeline.suitability import calculate_suitability
+
         logging.info("Weighting scores and aggregating per LSOA")
         self.weighted_scores = []
 
@@ -161,6 +180,9 @@ class CalculateSuitabilityFlow(FlowSpec):
         """
         Concatenate all weighted LSOA suitability scores together and filter to LSOAs with at least 15 records.
         """
+        import polars as pl
+        import itertools
+
         self.weighted_scores = list(
             itertools.chain.from_iterable([input.weighted_scores for input in inputs])
         )
@@ -180,6 +202,11 @@ class CalculateSuitabilityFlow(FlowSpec):
         Calculate the proportion of flats in each LSOA from the census data and join it to the suitability scores.
         Join LSOA and DZ names to suitability scores.
         """
+        from asf_heat_pump_suitability.pipeline.prepare_features import (
+            property_type,
+            output_areas,
+        )
+
         logging.info("Getting proportion of flats in each LSOA from the census data")
         proportion_flats_df = (
             property_type.transform_df_proportion_census_property_types()
@@ -205,15 +232,18 @@ class CalculateSuitabilityFlow(FlowSpec):
         """
         Save outputs to S3.
         """
+        from datetime import datetime
+        from asf_heat_pump_suitability.pipeline.utils import save_utils
+
         logging.info("Saving LSOA heat pump suitability scores")
         save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/suitability/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_heat_pump_suitability_per_lsoa"
         save_utils.save_to_s3(self.suitability_df, f"{save_as}.parquet")
         save_utils.save_to_s3(self.suitability_df, f"{save_as}.csv")
 
-        logging.info("Saving open dataset to nesta-open-data S3 bucket")
-        save_as = f"s3://nesta-open-data/asf_heat_pump_suitability/{self.year}Q{self.quarter}/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_EPC_heat_pump_suitability_per_lsoa"
-        save_utils.save_to_s3(self.suitability_df, f"{save_as}.parquet")
-        save_utils.save_to_s3(self.suitability_df, f"{save_as}.csv")
+        # logging.info("Saving open dataset to nesta-open-data S3 bucket")
+        # save_as = f"s3://nesta-open-data/asf_heat_pump_suitability/{self.year}Q{self.quarter}/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_EPC_heat_pump_suitability_per_lsoa"
+        # save_utils.save_to_s3(self.suitability_df, f"{save_as}.parquet")
+        # save_utils.save_to_s3(self.suitability_df, f"{save_as}.csv")
         self.next(self.end)
 
     @step
