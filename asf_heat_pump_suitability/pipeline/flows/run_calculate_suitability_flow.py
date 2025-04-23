@@ -119,7 +119,7 @@ class CalculateSuitabilityFlow(FlowSpec):
         """
         from datetime import datetime
         from asf_heat_pump_suitability import config
-        from asf_heat_pump_suitability.pipeline.utils import parallel_utils
+        from asf_heat_pump_suitability.utils import parallel_utils
         from asf_heat_pump_suitability.pipeline.suitability import (
             calculate_suitability,
         )
@@ -160,6 +160,9 @@ class CalculateSuitabilityFlow(FlowSpec):
         """
         Apply weights to scores and aggregate for each LSOA.
         """
+        os.system(
+            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@153_parallelise_suitability_script"
+        )
         from tqdm import tqdm
         from asf_heat_pump_suitability.pipeline.suitability import calculate_suitability
 
@@ -202,6 +205,7 @@ class CalculateSuitabilityFlow(FlowSpec):
         Calculate the proportion of flats in each LSOA from the census data and join it to the suitability scores.
         Join LSOA and DZ names to suitability scores.
         """
+        import polars as pl
         from asf_heat_pump_suitability.pipeline.prepare_features import (
             property_type,
             output_areas,
