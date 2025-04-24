@@ -356,7 +356,7 @@ def load_n_hn_ashp_scores(
       - 'HN_N_avg_score_weighted'
 
     Args:
-        nesta_hps_parquet_path (dict): Dictionary with local and s3 paths to the Nesta HP suitability Parquet file.
+        nesta_hps_parquet_path (dict): Dictionary with "local" and "s3" paths to the Nesta HP suitability Parquet file.
         read_from_s3 (bool): Whether to read the Parquet file from an s3 path or local path.
 
     Returns:
@@ -369,10 +369,7 @@ def load_n_hn_ashp_scores(
     )
     logging.info(f"Loading global HP suitability data from {path}...")
 
-    df_hps_polars = base_getters.get_pl_df_from_parquet(
-        path, read_from_s3
-    )  # function auto-detects "s3://" vs local
-    df_hps = df_hps_polars.to_pandas()
+    df_hps = pd.read_parquet(path)
 
     needed = {"lsoa", "ASHP_N_avg_score_weighted", "HN_N_avg_score_weighted"}
     if not needed.issubset(df_hps.columns):
@@ -420,10 +417,6 @@ def load_la_data(
     lsoa_json = f"hp_suitability_lsoas/{la_name}_hp_suitability_lsoas.json"
     avg_scores_parquet = f"avg_scores/{la_name}_average_scores_by_threshold.parquet"
 
-    hp_parquet_local = os.path.join(input_dir, hp_parquet)
-    lsoa_json_local = os.path.join(input_dir, lsoa_json)
-    avg_scores_local = os.path.join(input_dir, avg_scores_parquet)
-
     logging.info(f"Loading data files for '{la_name}'...")
 
     try:
@@ -451,6 +444,9 @@ def load_la_data(
                 avg_hn_scores_s3_path, read_from_s3
             )
         else:
+            hp_parquet_local = os.path.join(input_dir, hp_parquet)
+            lsoa_json_local = os.path.join(input_dir, lsoa_json)
+            avg_scores_local = os.path.join(input_dir, avg_scores_parquet)
             # Local reading approach
             hp_suitability_scores_pd = pd.read_parquet(hp_parquet_local)
             with open(lsoa_json_local, "r") as file:
