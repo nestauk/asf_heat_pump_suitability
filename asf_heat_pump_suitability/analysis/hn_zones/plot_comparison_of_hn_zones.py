@@ -42,7 +42,7 @@ for one or more Local Authorities (LAs). It iterates over LAs defined in a confi
 import logging
 import argparse
 import os
-from asf_heat_pump_suitability.getters.get_datasets import (
+from hnz_getters.get_datasets import (
     load_n_hn_ashp_scores,
     load_la_data,
 )
