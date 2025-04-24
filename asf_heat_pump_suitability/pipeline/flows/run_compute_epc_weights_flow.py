@@ -1,0 +1,228 @@
+"""
+Weight properties with Iterative Proportional Fitting per LSOA / Data Zone according to the
+following features:
+- property type (detached, semi-detached, terraced, flats, other);
+- tenure (owner-occupied, social rental, private rental)
+- build year (pre- and post-1930 split, and unknown); [applies to England and Wales only*]
+
+*Data Zones in Scotland are the closest equivalent to LSOAs in England and Wales. They are reweighted on two features
+only (property type and tenure) because there is no target build year data aggregated to Data Zone-level available for
+Scotland.
+
+To run:
+python -i asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc [path/to/EPC] -y [YYYY] -q [Q]
+
+NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
+"""
+
+import logging
+import polars as pl
+from tqdm import tqdm
+import time
+import itertools
+from asf_heat_pump_suitability.pipeline.prepare_features import output_areas
+from asf_heat_pump_suitability.pipeline.reweight_epc import (
+    prepare_target,
+    prepare_sample,
+    reweight_epc,
+)
+from asf_heat_pump_suitability.utils import parallel_utils, save_utils
+from metaflow import FlowSpec, step, batch, Parameter
+
+
+class ComputeEpcWeightsFlow(FlowSpec):
+    epc_path = Parameter(
+        name="epc",
+        help="Path to processed and deduplicated EPC dataset in parquet file format",
+        type=str,
+        required=True,
+    )
+
+    year = Parameter(
+        name="year",
+        help="EPC data year. Format YYYY",
+        type=int,
+        required=True,
+    )
+
+    quarter = Parameter(
+        name="quarter",
+        help="EPC data quarter",
+        type=int,
+        required=True,
+    )
+
+    @step
+    def start(self):
+        """
+        Set parameters, load EPC data and start flow.
+        """
+        # Set reweighting features for each nation
+        self.country_features = [
+            ("Scotland", ["property_type", "tenure"]),
+            ("England", ["property_type", "tenure", "build_year"]),
+            ("Wales", ["property_type", "tenure", "build_year"]),
+        ]
+
+        # Import processed & deduplicated EPC
+        logging.info(f"Loading EPC file from path: {self.epc_path}")
+        self.epc_df = pl.read_parquet(
+            self.epc_path,
+            columns=[
+                "UPRN",
+                "POSTCODE",
+                "COUNTRY",
+                "TENURE",
+                "PROPERTY_TYPE",
+                "BUILT_FORM",
+                "CONSTRUCTION_AGE_BAND",
+            ],
+        )
+
+        self.epc_df = self.epc_df.sample(n=1000)
+
+        self.next(self.join_lsoa_code)
+
+    @step
+    def join_lsoa_code(self):
+        """
+        Join LSOA code to each record in EPC.
+        """
+        # Join ONS Postcode Directory LSOA col
+        self.epc_df = output_areas.standardise_col_postcode(
+            self.epc_df, pcd_col="POSTCODE"
+        )
+        lsoa_df = output_areas.load_transform_df_lsoas()
+        self.epc_df = self.epc_df.join(lsoa_df, how="left", on="POSTCODE")
+        self.next(self.prepare_for_reweighting)
+
+    @step
+    def prepare_for_reweighting(self):
+        """
+        Prepare EPC data for reweighting.
+        """
+        # Add standardised weighting feature columns to EPC and drop rows missing data required for reweighting
+        self.epc_df = self.epc_df.drop_nulls(subset=["lsoa"])
+        self.epc_df = prepare_sample.add_cols_weighting_features(self.epc_df)
+        self.next(
+            self.prepare_for_country_specific_reweighting, foreach="country_features"
+        )
+
+    @step
+    def prepare_for_country_specific_reweighting(self):
+        """ """
+        country, self.features = self.input
+        logging.info(
+            f"Running reweighting for {country}. Reweighting using the following features: {self.features}"
+        )
+        epc_cleaned_df = self.epc_df.filter(pl.col("COUNTRY") == country)
+        assert len(epc_cleaned_df) > 0, f"No EPC records found for {country}."
+
+        self.epc_cleaned_df = prepare_sample.drop_nulls_feature_cols(
+            df=epc_cleaned_df, features=self.features
+        )
+
+        self.chunks = parallel_utils.chunk_df_by_group(
+            self.epc_cleaned_df, group_col="lsoa", n=100
+        )
+
+        # Generate target marginals for all features and LSOAs
+        self.target_marginals = prepare_target.get_dict_target_marginals(
+            features=self.features
+        )
+
+        self.next(self.reweight_properties_per_lsoa, foreach="chunks")
+
+    @step
+    def reweight_properties_per_lsoa(self):
+        """ """
+        # Prepare results dicts
+        self.weights = {"UPRN": [], "lsoa": [], "weight": [], "proportional_weight": []}
+        self.lsoa_stats = {"lsoa": [], "time": [], "lost_rows": []}
+
+        for lsoa in tqdm(self.input["lsoa"].unique()):
+            try:
+                start = time.time()
+                sample, lost_rows = reweight_epc.generate_balance_sample(
+                    df=self.input,
+                    features=self.features,
+                    lsoa=lsoa,
+                    target_marginals=self.target_marginals,
+                )
+                target = prepare_target.generate_balance_target_population(
+                    target_marginals=self.target_marginals, lsoa=lsoa
+                )
+                weighted_sample = reweight_epc.generate_weighted_sample(
+                    balance_sample=sample, balance_target=target
+                )
+                _weights = reweight_epc.get_dict_sample_weights(
+                    weighted_sample=weighted_sample
+                )
+
+                # Add outputs weights for LSOA to dict
+                self.weights["UPRN"].extend(_weights["UPRN"])
+                # Adding LSOA required for dummy rows
+                self.weights["lsoa"].extend(
+                    [lsoa for i in range(len(_weights["UPRN"]))]
+                )
+                self.weights["weight"].extend(_weights["weight"])
+                self.weights["proportional_weight"].extend(
+                    _weights["proportional_weight"]
+                )
+
+                # LSOA stats
+                end = time.time()
+                self.lsoa_stats["lsoa"].append(lsoa)
+                self.lsoa_stats["time"].append(end - start)
+                self.lsoa_stats["lost_rows"].append(lost_rows)
+
+            except KeyError:
+                print(f"No target data found for LSOA: {lsoa}. Skipping.")
+                continue
+
+        self.next(self.join_weights)
+
+    @step
+    def join_weights(self, inputs):
+        """ """
+        # Get df of UPRNs, reweighting features, and weights for all nations
+        self.weights_df = pl.DataFrame(
+            list(itertools.chain.from_iterable([input.weights for input in inputs]))
+        )
+        self.lsoa_stats_df = pl.DataFrame(
+            list(itertools.chain.from_iterable([input.lsoa_stats for input in inputs]))
+        )
+        self.next(self.join_countries)
+
+    @step
+    def join_countries(self, inputs):
+        """ """
+        self.weights_df = pl.concat([input.weights_df for input in inputs])
+        self.lsoa_stats_df = pl.concat([input.lsoa_stats_df for input in inputs])
+        self.next(self.join_weights_to_epc)
+
+    @step
+    def join_weights_to_epc(self):
+        """ """
+        # Left join ensures we retain dummy rows which we need to retain for reweighting evaluation
+        self.epc_df = self.epc_df.select(
+            ["UPRN", "property_type", "tenure", "build_year"]
+        )
+        self.weights_df = self.weights_df.join(self.epc_df, how="left", on="UPRN")
+        self.next(self.save_results)
+
+    @step
+    def save_results(self):
+        """ """
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/weights/{self.year}_Q{self.quarter}_EPC_weights"
+        save_utils.save_to_s3(self.weights_df, f"{save_as}.parquet")
+        save_utils.save_to_s3(self.lsoa_stats_df, f"{save_as}_stats.parquet")
+        self.next(self.end)
+
+    @step
+    def end(self):
+        logging.info("Compute EPC weights flow complete!")
+
+
+if __name__ == "__main__":
+    ComputeEpcWeightsFlow()
