@@ -79,7 +79,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
             ],
         )
 
-        self.epc_df = self.epc_df.sample(n=1000)
+        self.epc_df = self.epc_df.sample(n=1000, seed=2)
 
         self.next(self.join_lsoa_code)
 
@@ -137,10 +137,17 @@ class ComputeEpcWeightsFlow(FlowSpec):
     def reweight_properties_per_lsoa(self):
         """ """
         # Prepare results dicts
-        self.weights = {"UPRN": [], "lsoa": [], "weight": [], "proportional_weight": []}
-        self.lsoa_stats = {"lsoa": [], "time": [], "lost_rows": []}
+        self.lsoa = []
+        self.uprn = []
+        self.lsoas = []
+        self.weight = []
+        self.proportional_weight = []
+        self.time = []
+        self.lost_rows = []
 
         for lsoa in tqdm(self.input["lsoa"].unique()):
+            self.lsoa.append(lsoa)
+
             try:
                 start = time.time()
                 sample, lost_rows = reweight_epc.generate_balance_sample(
@@ -149,35 +156,39 @@ class ComputeEpcWeightsFlow(FlowSpec):
                     lsoa=lsoa,
                     target_marginals=self.target_marginals,
                 )
-                target = prepare_target.generate_balance_target_population(
-                    target_marginals=self.target_marginals, lsoa=lsoa
-                )
-                weighted_sample = reweight_epc.generate_weighted_sample(
-                    balance_sample=sample, balance_target=target
-                )
-                _weights = reweight_epc.get_dict_sample_weights(
-                    weighted_sample=weighted_sample
-                )
 
-                # Add outputs weights for LSOA to dict
-                self.weights["UPRN"].extend(_weights["UPRN"])
-                # Adding LSOA required for dummy rows
-                self.weights["lsoa"].extend(
-                    [lsoa for i in range(len(_weights["UPRN"]))]
-                )
-                self.weights["weight"].extend(_weights["weight"])
-                self.weights["proportional_weight"].extend(
-                    _weights["proportional_weight"]
-                )
+                if sample:
+                    target = prepare_target.generate_balance_target_population(
+                        target_marginals=self.target_marginals, lsoa=lsoa
+                    )
+                    weighted_sample = reweight_epc.generate_weighted_sample(
+                        balance_sample=sample, balance_target=target
+                    )
+                    _weights = reweight_epc.get_dict_sample_weights(
+                        weighted_sample=weighted_sample
+                    )
+
+                    # Add output weights for LSOA to dict
+                    self.uprn.extend(_weights["UPRN"])
+                    # Adding LSOA required for dummy rows
+                    self.lsoas.extend([lsoa for i in range(len(_weights["UPRN"]))])
+                    self.weight.extend(_weights["weight"])
+                    self.proportional_weight.extend(_weights["proportional_weight"])
+
+                else:
+                    print(
+                        f"No records remaining to reweight after preprocessing for LSOA: {lsoa}. Skipping."
+                    )
 
                 # LSOA stats
                 end = time.time()
-                self.lsoa_stats["lsoa"].append(lsoa)
-                self.lsoa_stats["time"].append(end - start)
-                self.lsoa_stats["lost_rows"].append(lost_rows)
+                self.time.append(end - start)
+                self.lost_rows.append(lost_rows)
 
             except KeyError:
                 print(f"No target data found for LSOA: {lsoa}. Skipping.")
+                self.time.append(None)
+                self.lost_rows.append(None)
                 continue
 
         self.next(self.join_weights)
@@ -185,18 +196,49 @@ class ComputeEpcWeightsFlow(FlowSpec):
     @step
     def join_weights(self, inputs):
         """ """
+        self.epc_df = inputs[0].epc_df
+
         # Get df of UPRNs, reweighting features, and weights for all nations
         self.weights_df = pl.DataFrame(
-            list(itertools.chain.from_iterable([input.weights for input in inputs]))
+            {
+                "UPRN": list(
+                    itertools.chain.from_iterable([input.uprn for input in inputs])
+                ),
+                "lsoa": list(
+                    itertools.chain.from_iterable([input.lsoas for input in inputs])
+                ),
+                "weight": list(
+                    itertools.chain.from_iterable([input.weight for input in inputs])
+                ),
+                "proportional_weight": list(
+                    itertools.chain.from_iterable(
+                        [input.proportional_weight for input in inputs]
+                    )
+                ),
+            }
         )
+
+        # Get df of stats for all nations
         self.lsoa_stats_df = pl.DataFrame(
-            list(itertools.chain.from_iterable([input.lsoa_stats for input in inputs]))
+            {
+                "lsoa": list(
+                    itertools.chain.from_iterable([input.lsoa for input in inputs])
+                ),
+                "time": list(
+                    itertools.chain.from_iterable([input.time for input in inputs])
+                ),
+                "lost_rows": list(
+                    itertools.chain.from_iterable([input.lost_rows for input in inputs])
+                ),
+            }
         )
+
         self.next(self.join_countries)
 
     @step
     def join_countries(self, inputs):
         """ """
+        self.epc_df = inputs[0].epc_df
         self.weights_df = pl.concat([input.weights_df for input in inputs])
         self.lsoa_stats_df = pl.concat([input.lsoa_stats_df for input in inputs])
         self.next(self.join_weights_to_epc)
