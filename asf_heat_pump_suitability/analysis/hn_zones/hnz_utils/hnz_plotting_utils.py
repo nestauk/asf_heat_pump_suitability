@@ -32,7 +32,7 @@ def get_global_min_max(
             ['ASHP_N_avg_score_weighted', 'HN_N_avg_score_weighted'] for *all* LAs.
 
     Returns:
-        (x_min, x_max, y_min, y_max) with rounded values.
+        (x_min, x_max, y_min, y_max) with x_min,x_max being min, max of Nesta ASHP score and y_min, y_max being min, max of Nesta HN score.
     """
     x_min = df_hp_suitability["ASHP_N_avg_score_weighted"].min()
     x_max = df_hp_suitability["ASHP_N_avg_score_weighted"].max()
@@ -57,7 +57,7 @@ def plot_ashp_vs_hn_scatter(
 ) -> None:
     """
     Creates a scatter plot of ASHP (x-axis) vs Nesta HN (y-axis) scores for each LSOA,
-    coloring each point by the DESNZ pilot fraction, with fixed axis ranges *across* all LAs.
+    coloring each point by the DESNZ pilot fraction, with fixed axis ranges derived from *across* all LAs.
 
     Args:
         merged_df (pd.DataFrame): DataFrame containing:
@@ -151,7 +151,7 @@ def plot_overlay(
     Args:
         la_hp_suitability_gdf (gpd.GeoDataFrame): GeoDataFrame with LA's LSOA geometries and 'DESNZ_pilot_fraction' > 0.
         la_name (str): Name of the local authority.
-        input_dir (str): Directory to read the GPKG file from.
+        input_dir (str): Directory to read the LA's heat network zones GPKG file from.
         output_dir (str): Directory to save plot outputs.
     """
     logging.info(f"Plotting overlay of DESNZ pilot heat network zones for {la_name}...")
@@ -235,14 +235,11 @@ def plot_absolute_error_map(
     Args:
         la_hp_suitability_gdf (gpd.GeoDataFrame): LA's LSOA geometries + 'absolute_error' & 'DESNZ_pilot_fraction'.
         la_name (str): Name of the local authority (for labeling).
-        score (float): Score threshold. If > 0, filter 'DESNZ_pilot_fraction' >= score. If 0, fraction == 0 only.
+        score (float): Score threshold. If > 0, filter 'DESNZ_pilot_fraction' >= score. If 0, fraction == 0 only. Range 0-1.
         output_dir (str): Directory where plots will be saved.
 
     Raises:
         ValueError: If 'score' is negative.
-
-    if score < 0:
-        raise ValueError("Score must be a non-negative value.")
     """
 
     if score < 0:
@@ -308,17 +305,17 @@ def plot_hn_avg_score_vs_fraction_threshold(
     average_hn_scores_coverage_df: pl.DataFrame,
     la_name: str,
     output_dir: str,
-):
+) -> None:
     """
-    Plots the average Nesta HN score against the DESNZ Pilot Fraction threshold for a given LA.
-    Fits a linear regression line and displays R² in the top-left corner of the plot.
-    Saves plot as PNG/PDF.
+        Plots the average Nesta HN score against the DESNZ Pilot Fraction threshold for a given LA.
+    ) -> None:
+        Saves plot as PNG/PDF.
 
-    Args:
-        average_hn_scores_coverage_df (pl.DataFrame): Data with columns:
-            ['DESNZ_pilot_fraction_threshold', 'HN_N_avg_score_weighted'].
-        la_name (str): Local Authority name for labeling.
-        output_dir (str): Directory to save the plot.
+        Args:
+            average_hn_scores_coverage_df (pl.DataFrame): Data with columns:
+                ['DESNZ_pilot_fraction_threshold', 'HN_N_avg_score_weighted'].
+            la_name (str): Local Authority name for labeling.
+            output_dir (str): Directory to save the plot.
     """
     logging.info(
         f"Plotting average HN score vs DESNZ pilot fraction threshold for {la_name}..."

@@ -1,18 +1,12 @@
 import polars as pl
 import pandas as pd
 import geopandas as gpd
-import os
 import logging
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters, schemas
 from io import StringIO
 from tenacity import retry, stop_after_attempt
 import warnings
-import pyogrio
-from typing import Tuple, List
-import boto3
-import json
-import io
 
 # Ignore RunTimeWarning when loading Microsoft building footprint files
 # as reading from gzipped stream should be faster than unzipping and loading data

@@ -46,7 +46,7 @@ from hnz_getters.get_datasets import (
     load_n_hn_ashp_scores,
     load_la_data,
 )
-from asf_heat_pump_suitability.utils.geo_utils import (
+from preprocessing_la import (
     load_and_filter_lsoa_geometries,
     merge_hp_suitability_data_with_geometries,
 )

@@ -141,7 +141,7 @@ def load_la_data(
 
             # 3) Average scores Parquet
             avg_hn_scores_s3_path = f"s3://{s3_bucket}/{s3_key_dir}{avg_scores_parquet}"
-            average_hn_scores_coverage_df = base_getters.get_pl_df_from_parquet(
+            average_hn_scores_coverage_df = base_getters.get_df_from_parquet(
                 avg_hn_scores_s3_path, read_from_s3
             )
         else:
