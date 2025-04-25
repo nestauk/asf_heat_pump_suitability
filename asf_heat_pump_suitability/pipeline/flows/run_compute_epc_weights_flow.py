@@ -1,5 +1,5 @@
 """
-Weight properties with Iterative Proportional Fitting per LSOA / Data Zone according to the
+FLow to weight properties with Iterative Proportional Fitting per LSOA / Data Zone according to the
 following features:
 - property type (detached, semi-detached, terraced, flats, other);
 - tenure (owner-occupied, social rental, private rental)
@@ -10,7 +10,7 @@ only (property type and tenure) because there is no target build year data aggre
 Scotland.
 
 To run:
-python -i asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --epc [path/to/EPC] -y [YYYY] -q [Q]
+python asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --datastore=s3 run --epc [path/to/EPC] -y [YYYY] -q [Q]
 
 NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
@@ -99,9 +99,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
     @step
     def prepare_for_reweighting(self):
         """
-        Prepare EPC data for reweighting.
+        Standardise EPC features used in weighting and drop EPC rows missing data required for reweighting.
         """
-        # Add standardised weighting feature columns to EPC and drop rows missing data required for reweighting
         self.epc_df = self.epc_df.drop_nulls(subset=["lsoa"])
         self.epc_df = prepare_sample.add_cols_weighting_features(self.epc_df)
         self.next(
@@ -110,7 +109,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
     @step
     def prepare_for_country_specific_reweighting(self):
-        """ """
+        """
+        For each country, conduct country-specific preprocessing on the EPC data to prepare for reweighting.
+        """
         country, self.features = self.input
         logging.info(
             f"Running reweighting for {country}. Reweighting using the following features: {self.features}"
@@ -135,7 +136,10 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
     @step
     def reweight_properties_per_lsoa(self):
-        """ """
+        """
+        For each chunk of EPC data per country, calculate weights for all properties in each LSOA / DZ using the census
+        data.
+        """
         # Prepare results dicts
         self.lsoa = []
         self.uprn = []
@@ -195,7 +199,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
     @step
     def join_weights(self, inputs):
-        """ """
+        """
+        Join chunks of weighted EPC data and weighting stats together per country.
+        """
         self.epc_df = inputs[0].epc_df
 
         # Get df of UPRNs, reweighting features, and weights for all nations
@@ -237,7 +243,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
     @step
     def join_countries(self, inputs):
-        """ """
+        """
+        Join weighted EPC data per country together.
+        """
         self.epc_df = inputs[0].epc_df
         self.weights_df = pl.concat([input.weights_df for input in inputs])
         self.lsoa_stats_df = pl.concat([input.lsoa_stats_df for input in inputs])
@@ -245,7 +253,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
     @step
     def join_weights_to_epc(self):
-        """ """
+        """
+        Merge weighted EPC with reweighting features.
+        """
         # Left join ensures we retain dummy rows which we need to retain for reweighting evaluation
         self.epc_df = self.epc_df.select(
             ["UPRN", "property_type", "tenure", "build_year"]
@@ -255,7 +265,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
     @step
     def save_results(self):
-        """ """
+        """
+        Save reweighted EPC data and reweighting stats to S3.
+        """
         save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/weights/{self.year}_Q{self.quarter}_EPC_weights"
         save_utils.save_to_s3(self.weights_df, f"{save_as}.parquet")
         save_utils.save_to_s3(self.lsoa_stats_df, f"{save_as}_stats.parquet")
@@ -263,6 +275,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
     @step
     def end(self):
+        """
+        End flow.
+        """
         logging.info("Compute EPC weights flow complete!")
 
 
