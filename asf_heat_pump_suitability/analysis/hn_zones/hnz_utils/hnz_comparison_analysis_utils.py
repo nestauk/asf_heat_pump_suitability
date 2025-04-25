@@ -28,7 +28,7 @@ import polars as pl
 import logging
 from asf_heat_pump_suitability.utils.save_utils import upload_file_to_s3
 from hnz_getters.get_datasets import load_desnz_geodata
-from asf_heat_pump_suitability.utils.geo_utils import ensure_crs_match
+from preprocessing_la import ensure_crs_match
 from config.hnz_config import (
     LSOA_SHP_PATH_LOCAL,
     LSOA_SHP_PATH_S3,
