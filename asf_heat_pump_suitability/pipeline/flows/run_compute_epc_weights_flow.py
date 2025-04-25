@@ -15,18 +15,6 @@ python asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py
 NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
 
-import logging
-import polars as pl
-from tqdm import tqdm
-import time
-import itertools
-from asf_heat_pump_suitability.pipeline.prepare_features import output_areas
-from asf_heat_pump_suitability.pipeline.reweight_epc import (
-    prepare_target,
-    prepare_sample,
-    reweight_epc,
-)
-from asf_heat_pump_suitability.utils import parallel_utils, save_utils
 from metaflow import FlowSpec, step, batch, Parameter
 
 
@@ -57,6 +45,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         Set parameters, load EPC data and start flow.
         """
+        import polars as pl
+        import logging
+
         # Set reweighting features for each nation
         self.country_features = [
             ("Scotland", ["property_type", "tenure"]),
@@ -88,6 +79,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         Join LSOA code to each record in EPC.
         """
+        from asf_heat_pump_suitability.pipeline.prepare_features import output_areas
+
         # Join ONS Postcode Directory LSOA col
         self.epc_df = output_areas.standardise_col_postcode(
             self.epc_df, pcd_col="POSTCODE"
@@ -101,19 +94,35 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         Standardise EPC features used in weighting and drop EPC rows missing data required for reweighting.
         """
+        from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
+
         self.epc_df = self.epc_df.drop_nulls(subset=["lsoa"])
         self.epc_df = prepare_sample.add_cols_weighting_features(self.epc_df)
         self.next(
             self.prepare_for_country_specific_reweighting, foreach="country_features"
         )
 
+    @batch(cpu=2, memory=4000)
     @step
     def prepare_for_country_specific_reweighting(self):
         """
         For each country, conduct country-specific preprocessing on the EPC data to prepare for reweighting.
         """
+        # TODO update to dev branch before merge
+        # Install repo on batch machine to access modules
+        import os
+
+        os.system(
+            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@154_parallelise_reweighting"
+        )
+        from asf_heat_pump_suitability.utils import parallel_utils
+        from asf_heat_pump_suitability.pipeline.reweight_epc import (
+            prepare_sample,
+            prepare_target,
+        )
+
         country, self.features = self.input
-        logging.info(
+        print(
             f"Running reweighting for {country}. Reweighting using the following features: {self.features}"
         )
         epc_cleaned_df = self.epc_df.filter(pl.col("COUNTRY") == country)
@@ -134,12 +143,27 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
         self.next(self.reweight_properties_per_lsoa, foreach="chunks")
 
+    @batch(cpu=2, memory=4000)
     @step
     def reweight_properties_per_lsoa(self):
         """
         For each chunk of EPC data per country, calculate weights for all properties in each LSOA / DZ using the census
         data.
         """
+        # TODO update to dev branch before merge
+        # Install repo on batch machine to access modules
+        import os
+
+        os.system(
+            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@154_parallelise_reweighting"
+        )
+        from tqdm import tqdm
+        import time
+        from asf_heat_pump_suitability.pipeline.reweight_epc import (
+            prepare_target,
+            reweight_epc,
+        )
+
         # Prepare results dicts
         self.lsoa = []
         self.uprn = []
@@ -202,6 +226,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         Join chunks of weighted EPC data and weighting stats together per country.
         """
+        import polars as pl
+        import itertools
+
         self.epc_df = inputs[0].epc_df
 
         # Get df of UPRNs, reweighting features, and weights for all nations
@@ -246,6 +273,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         Join weighted EPC data per country together.
         """
+        import polars as pl
+
         self.epc_df = inputs[0].epc_df
         self.weights_df = pl.concat([input.weights_df for input in inputs])
         self.lsoa_stats_df = pl.concat([input.lsoa_stats_df for input in inputs])
@@ -268,6 +297,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         Save reweighted EPC data and reweighting stats to S3.
         """
+        from asf_heat_pump_suitability.utils import save_utils
+
         save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/weights/{self.year}_Q{self.quarter}_EPC_weights"
         save_utils.save_to_s3(self.weights_df, f"{save_as}.parquet")
         save_utils.save_to_s3(self.lsoa_stats_df, f"{save_as}_stats.parquet")
@@ -278,6 +309,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         End flow.
         """
+        import logging
+
         logging.info("Compute EPC weights flow complete!")
 
 
