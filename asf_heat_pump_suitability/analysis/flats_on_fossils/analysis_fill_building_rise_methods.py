@@ -10,7 +10,8 @@ import polars as pl
 import numpy as np
 import matplotlib.pyplot as plt
 import sklearn
-from sklearn.model_selection import train_test_split
+from sklearn import linear_model
+from sklearn.model_selection import train_test_split, GroupShuffleSplit
 from sklearn import metrics
 from tqdm import tqdm
 import geopandas as gdf
@@ -349,6 +350,9 @@ model_df = (
 # %%
 model_df.shape
 
+# %% [markdown]
+# #### Test LR without grouping by building ID
+
 # %%
 uprn_sample = model_df["UPRN"].to_list()
 X = model_df.select(["height", "property_per_m2"])
@@ -361,6 +365,54 @@ X_train, X_test, y_train, y_test = train_test_split(
 # %%
 # Train model
 reg = sklearn.linear_model.LinearRegression().fit(X_train, y_train)
+
+# %%
+# R2 on training data
+reg.score(X_train, y_train)
+
+# %%
+# R2 on test data
+reg.score(X_test, y_test)
+
+# %%
+reg.coef_
+
+# %% [markdown]
+# #### Test LR with grouping by building ID
+
+# %%
+uprn_sample = model_df["UPRN"].to_list()
+X = model_df.select(["height", "property_per_m2"])
+y = model_df["FLAT_STOREY_COUNT"]
+groups = model_df["building_id"]
+gss = GroupShuffleSplit(n_splits=1, test_size=0.25, random_state=1)
+
+# %%
+train_index, test_index = next(gss.split(X, y, groups))
+
+# %%
+train_groups, test_groups = groups[train_index], groups[test_index]
+
+# %%
+# Check the train and test sets are mutually exclusive
+assert not set(train_groups) & set(test_groups)
+
+# %%
+X_train = model_df.filter(pl.col("building_id").is_in(train_groups)).select(
+    ["height", "property_per_m2"]
+)
+X_test = model_df.filter(pl.col("building_id").is_in(test_groups)).select(
+    ["height", "property_per_m2"]
+)
+
+y_train = model_df.filter(pl.col("building_id").is_in(train_groups))[
+    "FLAT_STOREY_COUNT"
+]
+y_test = model_df.filter(pl.col("building_id").is_in(test_groups))["FLAT_STOREY_COUNT"]
+
+# %%
+# Train model
+reg = linear_model.LinearRegression().fit(X_train, y_train)
 
 # %%
 # R2 on training data
