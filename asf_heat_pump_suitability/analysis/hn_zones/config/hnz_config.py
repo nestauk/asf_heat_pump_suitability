@@ -74,22 +74,12 @@ LSOA_SHP_PATH_LOCAL = os.path.join(
 )
 LSOA_SHP_PATH_S3 = "s3://asf-heat-pump-suitability/source_data/Lower_layer_Super_Output_Areas_2021_EW_BFE_V9_-9107090204806789093/LSOA_2021_EW_BFE_V9.shp"
 
-# NESTA_HPS_PARQUET_LOCAL = os.path.join(
-#    PROJECT_DIR,
-#    "asf_heat_pump_suitability/analysis/hn_zones/input_data/nesta_heat_network_suitability/20240925_2023_Q4_EPC_heat_pump_suitability_per_lsoa.parquet",
-# )
-# NESTA_HPS_PARQUET_LOCAL = os.path.join(
-#    PROJECT_DIR,
-#    "asf_heat_pump_suitability/analysis/hn_zones/input_data/nesta_heat_network_suitability/20250206_2023_Q4_heat_pump_suitability_per_lsoa.parquet",
-# )
 NESTA_HPS_PARQUET_LOCAL = os.path.join(
     PROJECT_DIR,
-    "asf_heat_pump_suitability/analysis/hn_zones/input_data/nesta_heat_network_suitability/20250305_2023_Q4_heat_pump_suitability_per_lsoa.parquet",
+    "asf_heat_pump_suitability/analysis/hn_zones/input_data/nesta_heat_network_suitability/20250319_2023_Q4_heat_pump_suitability_per_lsoa.parquet",
 )
 
-# NESTA_HPS_PARQUET_S3 = "s3://nesta-open-data/asf_heat_pump_suitability/2023Q4/20240925_2023_Q4_EPC_heat_pump_suitability_per_lsoa.parquet"
-# NESTA_HPS_PARQUET_S3 = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250206_2023_Q4_heat_pump_suitability_per_lsoa.parquet"
-NESTA_HPS_PARQUET_S3 = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250305_2023_Q4_heat_pump_suitability_per_lsoa.parquet"
+NESTA_HPS_PARQUET_S3 = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250319_2023_Q4_heat_pump_suitability_per_lsoa.parquet"
 
 NESTA_HPS_PARQUET_PATHS = {
     "local": NESTA_HPS_PARQUET_LOCAL,

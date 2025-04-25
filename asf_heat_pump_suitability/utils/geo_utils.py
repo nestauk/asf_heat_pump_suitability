@@ -52,7 +52,7 @@ def get_polygon_gdf_bounds(gdf: gpd.GeoDataFrame) -> shapely.Polygon:
 
 
 def parse_binary_geometry(
-    binary_data: Union[BaseGeometry, bytes, str]
+    binary_data: Union[BaseGeometry, bytes, str],
 ) -> Union[BaseGeometry, None]:
     """
     Parse binary geometry data into Shapely geometry object.
@@ -92,16 +92,16 @@ def ensure_crs_match(
 
 
 def load_and_filter_lsoa_geometries(
-    la_lsoas: List[str], lsoa_shp_path: str, target_crs: str
+    lsoas: List[str], lsoa_shp_path: str, target_crs: str
 ) -> gpd.GeoDataFrame:
     """
     Loads and preprocesses LSOA geospatial data by:
       - Reading a shapefile.
       - Converting to a target CRS if necessary.
-      - Filtering LSOAs to just those that belong to the specified local authority.
+      - Filtering LSOAs to just those specified.
 
     Args:
-        la_lsoas (List[str]): List of LSOA codes for the current local authority.
+        lsoas (List[str]): List of LSOA codes to get geometries for.
         lsoa_shp_path (str): Path (local or S3) to the national LSOA shapefile.
         target_crs (str): The target Coordinate Reference System (e.g., "EPSG:27700").
 
@@ -119,27 +119,25 @@ def load_and_filter_lsoa_geometries(
         logging.info(f"Converting shapefile to {target_crs}")
         lsoa_gdf = lsoa_gdf.to_crs(target_crs)
 
-    la_lsoa_geometries_gdf = lsoa_gdf[lsoa_gdf["LSOA21CD"].isin(la_lsoas)]
-    if la_lsoa_geometries_gdf.empty:
-        raise ValueError(
-            "No LSOAs found for this local authority in the provided LSOA shapefile."
-        )
+    lsoa_gdf = lsoa_gdf[lsoa_gdf["LSOA21CD"].isin(lsoas)]
+    if lsoa_gdf.empty:
+        raise ValueError("Specified LSOAs not found in the provided LSOA shapefile.")
 
-    return la_lsoa_geometries_gdf
+    return lsoa_gdf
 
 
 def merge_hp_suitability_data_with_geometries(
-    hp_suitability_scores_pd: pd.DataFrame,
+    hn_scores_pd: pd.DataFrame,
     la_lsoa_geometries_gdf: gpd.GeoDataFrame,
     la_name: str,
     target_crs: str,
 ) -> gpd.GeoDataFrame:
     """
-    Merges the LA's heat pump suitability scores (pandas DataFrame) with its LSOA geometries (GeoDataFrame).
+    Merges the LA's heat network suitability scores (pandas DataFrame) with its LSOA geometries (GeoDataFrame).
     Ensures the final merged result is also a GeoDataFrame in the target CRS.
 
     Args:
-        hp_suitability_scores_pd (pd.DataFrame): DataFrame containing columns like 'LSOA21CD' or 'DESNZ_pilot_fraction'.
+        hn_scores_pd (pd.DataFrame): DataFrame containing columns like 'LSOA21CD' and "DESNZ_pilot_fraction".
         la_lsoa_geometries_gdf (gpd.GeoDataFrame): LSOA geometry data for the LA.
         la_name (str): Local Authority name, used for logging.
         target_crs (str): The target Coordinate Reference System (e.g., "EPSG:27700").
@@ -151,9 +149,7 @@ def merge_hp_suitability_data_with_geometries(
         ValueError: If the merge results in empty data or missing geometry.
     """
     logging.info(f"Merging suitability data with geometries for {la_name}...")
-    merged = hp_suitability_scores_pd.merge(
-        la_lsoa_geometries_gdf, on="LSOA21CD", how="left"
-    )
+    merged = hn_scores_pd.merge(la_lsoa_geometries_gdf, on="LSOA21CD", how="left")
 
     if merged.empty:
         raise ValueError(

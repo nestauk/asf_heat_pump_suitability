@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
         try:
             # 1. Load data (HP Parquet, LSOA JSON, average threshold Parquet)
-            hp_scores_pd, la_lsoas, avg_hn_scores_df = load_la_data(
+            hn_scores_pd, la_lsoas, avg_hn_scores_df = load_la_data(
                 la_name=la_snake_name,
                 input_dir=INPUT_DIR,
                 s3_bucket=S3_BUCKET,
@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
             # 2. Preprocess LSOA geometries
             la_lsoa_gdf = load_and_filter_lsoa_geometries(
-                la_lsoas=la_lsoas, lsoa_shp_path=LSOA_SHP_PATH_S3, target_crs=TARGET_CRS
+                lsoas=la_lsoas, lsoa_shp_path=LSOA_SHP_PATH_S3, target_crs=TARGET_CRS
             )
             # Create LA plots directory if it doesn't exist yet
             output_la_plots_dir = os.path.join(OUTPUT_PLOTS_DIR, la_snake_name)
@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
             # 4. Merge data with geometries
             la_hp_gdf = merge_hp_suitability_data_with_geometries(
-                hp_suitability_scores_pd=hp_scores_pd,
+                hn_scores_pd=hn_scores_pd,
                 la_lsoa_geometries_gdf=la_lsoa_gdf,
                 la_name=la_snake_name,
                 target_crs=TARGET_CRS,

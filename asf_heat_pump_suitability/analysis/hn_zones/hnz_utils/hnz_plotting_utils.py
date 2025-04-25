@@ -143,7 +143,7 @@ def plot_overlay(
     la_name: str,
     input_dir: str,
     output_dir: str,
-):
+) -> None:
     """
     Overlays the LA's DESNZ pilot fraction > 0 on top of the LA's heat network zones from the GPKG file,
     if found. Saves to PNG and PDF.
@@ -227,7 +227,7 @@ def plot_absolute_error_map(
     la_name: str,
     score: float,
     output_dir: str,
-):
+) -> None:
     """
     Plots an absolute error map for the specified local authority based on DESNZ pilot fraction.
     Saves the plot as PNG and PDF.
