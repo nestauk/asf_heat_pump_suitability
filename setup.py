@@ -20,7 +20,7 @@ setup(
     install_requires=read_lines(BASE_DIR / "requirements.txt"),
     extras_require={"dev": read_lines(BASE_DIR / "requirements_dev.txt")},
     packages=find_packages(exclude=["docs"]),
-    package_data={"config": [".txt", "*.yaml"]},
+    package_data={"": ["*.txt", "*.yaml"]},
     version="0.1.0",
     description="Early-stage scoping of a project to identify which homes/streets are likely to be suitable (or unsuitable) for which types of heat pumps.",
     author="Nesta",
