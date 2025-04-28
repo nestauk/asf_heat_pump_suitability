@@ -115,6 +115,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
         os.system(
             "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@154_parallelise_reweighting"
         )
+        import polars as pl
         from asf_heat_pump_suitability.utils import parallel_utils
         from asf_heat_pump_suitability.pipeline.reweight_epc import (
             prepare_sample,
