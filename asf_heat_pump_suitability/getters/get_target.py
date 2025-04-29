@@ -108,12 +108,15 @@ def load_transform_df_target_property_type_scotland() -> pl.DataFrame:
     Returns:
         pl.Dataframe: counts of property type for all data zones in Scotland
     """
-    df = pl.scan_csv(
-        config["data_source"]["S_census_accommodation_type"],
-        skip_rows=10,
-        columns=list(range(0, 11)),
-        infer_schema_length=10000,
-    ).collect()
+    df = (
+        pl.scan_csv(
+            config["data_source"]["S_census_accommodation_type"],
+            skip_rows=10,
+            infer_schema_length=10000,
+        )
+        .collect()
+        .select(list(range(0, 11)))
+    )
     df = (
         df[1:]
         .drop_nulls(subset=cs.numeric())
@@ -180,12 +183,15 @@ def load_transform_df_target_tenure_scotland() -> pl.DataFrame:
     Returns:
         pl.DataFrame: tenure type counts per data zone in Scotland
     """
-    df = pl.scan_csv(
-        config["data_source"]["S_census_tenure"],
-        skip_rows=10,
-        columns=list(range(1, 4)),
-        infer_schema_length=10000,
-    ).collect()
+    df = (
+        pl.scan_csv(
+            config["data_source"]["S_census_tenure"],
+            skip_rows=10,
+            infer_schema_length=10000,
+        )
+        .collect()
+        .select(list(range(1, 4)))
+    )
     df = (
         df.drop_nulls()
         .rename({"Intermediate Zone - Data Zone 2011": "lsoa"})
