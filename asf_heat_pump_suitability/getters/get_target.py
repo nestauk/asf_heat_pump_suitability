@@ -13,7 +13,7 @@ def get_df_target_nrooms() -> pl.DataFrame:
     Returns:
         pl.Dataframe: counts of total number of rooms for properties in all LSOAs in England and Wales
     """
-    df = pl.scan_csv(config["data_source"]["EW_census_number_of_rooms"])
+    df = pl.scan_csv(config["data_source"]["EW_census_number_of_rooms"]).collect()
     df = (
         df.drop(
             [
@@ -31,7 +31,7 @@ def get_df_target_nrooms() -> pl.DataFrame:
         .rename({"9": "9+"})
     )
 
-    return df.collect()
+    return df
 
 
 def transform_df_target_property_type() -> pl.DataFrame:
@@ -55,7 +55,7 @@ def load_transform_df_target_property_type_ew() -> pl.DataFrame:
     Returns:
         pl.Dataframe: counts of property type for all LSOAs in England and Wales
     """
-    df = pl.scan_csv(config["data_source"]["EW_census_accommodation_type"])
+    df = pl.scan_csv(config["data_source"]["EW_census_accommodation_type"]).collect()
     df = (
         df.select(
             [
@@ -98,7 +98,7 @@ def load_transform_df_target_property_type_ew() -> pl.DataFrame:
         )
     )
 
-    return df.collect()
+    return df
 
 
 def load_transform_df_target_property_type_scotland() -> pl.DataFrame:
@@ -113,7 +113,7 @@ def load_transform_df_target_property_type_scotland() -> pl.DataFrame:
         skip_rows=10,
         columns=list(range(0, 11)),
         infer_schema_length=10000,
-    )
+    ).collect()
     df = (
         df[1:]
         .drop_nulls(subset=cs.numeric())
@@ -156,7 +156,7 @@ def load_transform_df_target_property_type_scotland() -> pl.DataFrame:
         != 0
     )
 
-    return df.collect()
+    return df
 
 
 def transform_df_target_tenure() -> pl.DataFrame:
@@ -185,7 +185,7 @@ def load_transform_df_target_tenure_scotland() -> pl.DataFrame:
         skip_rows=10,
         columns=list(range(1, 4)),
         infer_schema_length=10000,
-    )
+    ).collect()
     df = (
         df.drop_nulls()
         .rename({"Intermediate Zone - Data Zone 2011": "lsoa"})
@@ -210,9 +210,7 @@ def load_transform_df_target_tenure_scotland() -> pl.DataFrame:
         != 0
     )
 
-    return df.select(
-        ["lsoa", "owner-occupied", "rental (social)", "rental (private)"]
-    ).collect()
+    return df.select(["lsoa", "owner-occupied", "rental (social)", "rental (private)"])
 
 
 def load_transform_df_target_tenure_ew() -> pl.DataFrame:
@@ -222,7 +220,7 @@ def load_transform_df_target_tenure_ew() -> pl.DataFrame:
     Returns:
         pl.Dataframe: counts of tenure type for all LSOAs in England and Wales
     """
-    df = pl.scan_csv(config["data_source"]["EW_census_tenure"])
+    df = pl.scan_csv(config["data_source"]["EW_census_tenure"]).collect()
 
     owned_cols = [
         "Owned: Owns with a mortgage or loan",
@@ -261,7 +259,7 @@ def load_transform_df_target_tenure_ew() -> pl.DataFrame:
         )
     )
 
-    return df.collect()
+    return df
 
 
 def get_df_target_build_year(
@@ -281,7 +279,7 @@ def get_df_target_build_year(
     Returns:
         pl.Dataframe: counts of properties built before and after given year for all LSOAs in England and Wales.
     """
-    df = pl.scan_csv(config["data_source"]["EW_cdrc_dwelling_age"])
+    df = pl.scan_csv(config["data_source"]["EW_cdrc_dwelling_age"]).collect()
     df = (
         df.with_columns(
             [
@@ -293,7 +291,7 @@ def get_df_target_build_year(
         .select(["lsoa", f"pre_{year_label}", f"post_{year_label}", "unknown"])
     )
 
-    return df.collect()
+    return df
 
 
 def get_df_target_build_year_la() -> pl.DataFrame:
