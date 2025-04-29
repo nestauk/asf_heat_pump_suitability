@@ -102,7 +102,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
             self.prepare_for_country_specific_reweighting, foreach="country_features"
         )
 
-    @batch(cpu=2, memory=4000)
+    @batch(cpu=2, memory=1000)
     @step
     def prepare_for_country_specific_reweighting(self):
         """
@@ -144,7 +144,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
         self.next(self.reweight_properties_per_lsoa, foreach="chunks")
 
-    @batch(cpu=2, memory=4000)
+    @batch(cpu=2, memory=1000)
     @step
     def reweight_properties_per_lsoa(self):
         """
