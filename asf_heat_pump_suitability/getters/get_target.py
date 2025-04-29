@@ -115,7 +115,7 @@ def load_transform_df_target_property_type_scotland() -> pl.DataFrame:
             infer_schema_length=10000,
         )
         .collect()
-        .select(list(range(0, 11)))
+        .select(pl.nth(range(0, 11)))
     )
     df = (
         df[1:]
@@ -190,7 +190,7 @@ def load_transform_df_target_tenure_scotland() -> pl.DataFrame:
             infer_schema_length=10000,
         )
         .collect()
-        .select(list(range(1, 4)))
+        .select(pl.nth(range(1, 4)))
     )
     df = (
         df.drop_nulls()
