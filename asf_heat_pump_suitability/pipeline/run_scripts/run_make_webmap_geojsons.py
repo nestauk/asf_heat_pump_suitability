@@ -76,7 +76,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "-o",
         "--output_dir",
-        help="output directory or s3 prefix, defaults to config base.yaml if not stated.",
+        help="output directory or s3 prefix, defaults to directory listed in config base.yaml if not stated.",
         type=str,
         default=None
     )
