@@ -20,7 +20,7 @@ The s3 locations of the necessary geojsons are specified in config/base.yml and 
 
 All flag are optional and can be used as follows:
 
-The --scores or -s flag allows you to pass the full s3 uri or local filepath to sutiability scores data. The default
+The --scores or -s flag allows you to pass the full s3 uri or local filepath to suitability scores data. The default
 approach is to try to find the latest available scores data in the heat pump suitability s3 bucket.
 
 The --date_outputs or -d flag can be used to prepend the date to the output file in the form YYYYMMDD_ the default is
