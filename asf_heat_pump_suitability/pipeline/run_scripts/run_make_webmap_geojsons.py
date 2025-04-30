@@ -2,7 +2,7 @@
 Create geojson files to use as inputs to tippecanoe map tiler for the heatpump suitability webmap.
 
 This script gets the relevant England & Wales LSOA and Scotland DataZone boundaries from the /mapdata/ prefix in
-the heat pump suitability s3 bucket. Merges the geometries. Joins the suitability scoring (provided via config or as a flag)
+the heat pump suitability s3 bucket. Concatenates the geometries. Joins the suitability scoring (provided via config or as a flag)
 to the merged geometries and writes the output back to s3 (as default) or a local file.
 
 We're using four levels of generalisation for the geojsons, to reflect the level of detail needed at different
@@ -27,7 +27,7 @@ The --date_outputs or -d flag can be used to prepend the date to the output file
 False (no date prepended).
 
 The --output_dir or -o flag can be used to specify the output location as either a local directory or s3 prefix. The
-default is to use the 
+default is to use the directory listed in the config 'base.yaml' under 'webmap_data_source; out_key'.
 
 To run:
 python -i asf_heat_pump_suitability/pipeline/run_scripts/run_make_webmap_geojsons.py
@@ -35,17 +35,15 @@ python -i asf_heat_pump_suitability/pipeline/run_scripts/run_make_webmap_geojson
 
 import pandas as pd
 import geopandas as gpd
-import boto3
-import fsspec
-import s3fs
 import os
 import sys
 import argparse
 import logging
 from argparse import ArgumentParser
 from datetime import datetime
-from urllib.parse import urlparse
+
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.utils import webmap_utils
 
 logger = logging.getLogger(__name__)
 
@@ -84,91 +82,6 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _keys(s3_paginator, bucket_name, prefix='/', delimiter='/', start_after=''):
-    """s3 bucket key generator."""
-    prefix = prefix.lstrip(delimiter)
-    start_after = (start_after or prefix) if prefix.endswith(delimiter) else start_after
-    for page in s3_paginator.paginate(Bucket=bucket_name, Prefix=prefix, StartAfter=start_after):
-        for content in page.get('Contents', ()):
-            yield content['Key']
-
-def get_latest_scores_parquet_file_uri() -> str:
-    # Make s3 client
-    s3_paginator = boto3.client('s3').get_paginator('list_objects_v2')
-    # Get candidates
-    candidates = [key for key in _keys(s3_paginator, 'asf-heat-pump-suitability', prefix='outputs/')
-                  if "/suitability/" in key]
-    # Get unique Year-Quarters, which conceptually represent folders.
-    year_quarters = (pd.to_datetime(list(set([candidate.split("/")[1].replace("Q", "-Q")
-                                             for candidate in candidates])))
-                      .sort_values(ascending=False))
-    # Iterate over year_quarter to find the most recent heat_pump_suitability_per_lsoa.parquet
-    candidate_file = None
-    i = 0
-    try:
-        while not candidate_file:
-            # Iterate as long as you haven't identified a candidate file.
-            year_quarter = year_quarters[i]
-            year_quarter_str = year_quarter.to_period("Q").strftime("%YQ%q")
-            # get candidates from the required year_quarter, filename and date structure.
-            # Assumes that 8 characters followed by _ at start of file is a date.
-            year_quarter_candidates = [candidate for candidate in candidates
-                                    if (f"/{year_quarter_str}/" in candidate)
-                                    & ('heat_pump_suitability_per_lsoa.parquet' in candidate)
-                                    & (candidate.split("/")[-1].split("_")[0].__len__() == 8)]
-            if len(year_quarter_candidates) == 1:
-                # if only 1 option, use that.
-                candidate_file = year_quarter_candidates[0]
-            elif len(year_quarter_candidates) > 1:
-                # get most recent dated file
-                year_quarter_candidates_dates = [candidate.split("/")[-1].split("_")[0] for candidate in year_quarter_candidates]
-                # argmax will return the first max index if there are multiple matches.
-                latest_file_id = pd.to_datetime(year_quarter_candidates_dates).argmax()
-                # use the most recently dated file
-                candidate_file = year_quarter_candidates[latest_file_id]
-            else:
-                # increment
-                i += 1
-    except:
-        # If iteration fails it will likely be due to an index error on year_quarter.
-        # However the root cause is file not found, so raise that error.
-        raise FileNotFoundError("Could find latest suitability score file automatically, please enter filepath manually.")
-    
-    return f"s3://asf-heat-pump-suitability/{candidate_file}"
-
-
-def get_file_uri(filestring: str) -> str:
-    """Check if filestring passed exists and return."""
-    # First check if local file
-    fs = fsspec.filesystem('file')
-    if fs.exists(filestring):
-        return filestring
-    # Now check if it's an s3 file
-    fs = s3fs.S3FileSystem()
-    if fs.exists(filestring):
-        return filestring
-    # If it's not a local or s3 file, raise an error.
-    raise FileNotFoundError(f"Couldn't find {filestring} as either a local or s3-based file.")
-
-
-def check_output_directory(directorystring: str) -> str:
-    """Check if the output directory exists."""
-    uri = urlparse(directorystring)
-    # if s3, test bucket exists
-    if uri.scheme == 's3':
-        s3 = boto3.resource('s3')
-        try:
-            s3.meta.client.head_bucket(Bucket=uri.netloc)
-            return directorystring
-        except:
-            raise OSError(f"Couldn't connect to S3 Bucket: {uri.netloc}, check it exists and is accessible.")
-    elif uri.scheme == "":
-        # assume local file, test if it exists
-        if os.path.isdir(directorystring):
-            return directorystring
-    raise OSError(f"Couldn't connect to {directorystring} check it exists and is accessible.")
-
-
 if __name__ == "__main__":
     args = parse_arguments()
 
@@ -176,10 +89,10 @@ if __name__ == "__main__":
     if args.scores == "LATEST":
         # Get latest version of suitability scores.
         logger.info(f"Getting latest scores file.")
-        file_uri = get_latest_scores_parquet_file_uri()
+        file_uri = webmap_utils.get_str_latest_scores_parquet_file_uri()
     else:
         logger.info(f"Checking user provided scores file path.")
-        file_uri = get_file_uri(args.scores)
+        file_uri = webmap_utils.check_exists_str_file_uri(args.scores)
 
     # check parquet - probably assuming a single-part parquet file (e.g. non-spark-like)
     filename, file_extension = os.path.splitext(file_uri)
@@ -189,10 +102,10 @@ if __name__ == "__main__":
     if args.output_dir:
         # If an output directory has been specified, check it exists.
         logger.info(f"Checking user provided output directory.")
-        output_dir = check_output_directory(args.output_dir)
+        output_dir = webmap_utils.check_exists_str_output_directory(args.output_dir)
     else:
-        logger.info(f"Getting output directory from config.")
         output_dir = config['webmap_data_source']['out_key']
+        logger.info(f"Using output directory from config: {output_dir}")
 
     # Load scores file
     logger.info(f"Reading suitability scores from {file_uri}")
@@ -208,15 +121,15 @@ if __name__ == "__main__":
     logger.info(f"Creating output geojsons.")
     for i, (ew, s) in enumerate(key_order):
         # Load geometries
-        ew_geojson = gpd.read_file(geojson_filestrings[ew]).loc[:, ['LSOA21CD', 'geometry']].rename(columns={'LSOA21CD': 'area_code'})
-        s_geojson = gpd.read_file(geojson_filestrings[s]).loc[:, ['DataZone', 'geometry']].rename(columns={'DataZone': 'area_code'})
+        ew_gdf = gpd.read_file(geojson_filestrings[ew]).loc[:, ['LSOA21CD', 'geometry']].rename(columns={'LSOA21CD': 'area_code'})
+        s_gdf = gpd.read_file(geojson_filestrings[s]).loc[:, ['DataZone', 'geometry']].rename(columns={'DataZone': 'area_code'})
 
         # Merge England and Wales LSOAs with Scottish DataZones.
-        ews_geojson = pd.concat([ew_geojson, s_geojson], ignore_index=True)
-        del ew_geojson, s_geojson
+        ews_gdf = pd.concat([ew_gdf, s_gdf], ignore_index=True)
+        del ew_gdf, s_gdf
 
         # Merge relevant heat pump suitability data
-        ews_geojson = ews_geojson.merge(
+        ews_gdf = ews_gdf.merge(
             scores[['lsoa', 'ASHP_S_avg_score_weighted', 'ASHP_N_avg_score_weighted',
                     'GSHP_S_avg_score_weighted', 'GSHP_N_avg_score_weighted',
                     'SGL_S_avg_score_weighted', 'SGL_N_avg_score_weighted',
@@ -229,12 +142,8 @@ if __name__ == "__main__":
             outfile = f"{output_dir}{datetime.today().strftime('%Y%m%d')}_{outfile_name[i]}.geojson"
         else:
             outfile = f"{output_dir}{outfile_name[i]}.geojson"
-        ews_geojson[['area_code', 'ASHP_S_avg_score_weighted', 'ASHP_N_avg_score_weighted',
-                     'GSHP_S_avg_score_weighted', 'GSHP_N_avg_score_weighted',
-                     'SGL_S_avg_score_weighted', 'SGL_N_avg_score_weighted',
-                     'HN_S_avg_score_weighted', 'HN_N_avg_score_weighted', 'geometry']].to_file(outfile)
+        ews_gdf[['area_code', 'ASHP_S_avg_score_weighted', 'ASHP_N_avg_score_weighted',
+                 'GSHP_S_avg_score_weighted', 'GSHP_N_avg_score_weighted',
+                 'SGL_S_avg_score_weighted', 'SGL_N_avg_score_weighted',
+                 'HN_S_avg_score_weighted', 'HN_N_avg_score_weighted', 'geometry']].to_file(outfile)
         logger.info(f"Geojson output created for {outfile_name[i]}")
-    # exit prompt if run in interactive mode
-    logger.info(f"Script completed.")
-    if sys.flags.interactive:
-        os._exit(os.EX_OK)
