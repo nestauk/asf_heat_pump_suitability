@@ -58,6 +58,7 @@ if __name__ == "__main__":
     epc_schema = OrderedDict(
         [
             ("UPRN", pl.String),
+            ("INSPECTION_DATE", pl.Date),
             ("ADDRESS1", pl.String),
             ("ADDRESS2", pl.String),
             ("POSTCODE", pl.String),
@@ -78,6 +79,7 @@ if __name__ == "__main__":
         args.epc,
         columns=[
             "UPRN",
+            "INSPECTION_DATE",
             "ADDRESS1",
             "ADDRESS2",
             "POSTCODE",
