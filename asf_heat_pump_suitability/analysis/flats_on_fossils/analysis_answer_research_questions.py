@@ -173,6 +173,34 @@ plt.pie(
 plt.title("Proportion of EPC flats by building rise type in GB")
 plt.show()
 
+# %%
+plot_df_nations = (
+    flats_epc_df.filter(pl.col("building_rise").is_not_null())
+    .group_by(["COUNTRY", "building_rise_title"])
+    .agg(pl.len().alias("count"))
+    .with_columns(
+        (pl.col("count") / pl.col("count").sum().over("COUNTRY"))
+        .round(3)
+        .alias("proportion")
+    )
+    .sort(["COUNTRY", "building_rise_title"])
+)
+
+fig, axs = plt.subplots(plot_df_nations["COUNTRY"].n_unique(), figsize=(8, 15))
+fig.suptitle("Proportion of EPC flats by building rise type per GB nation")
+
+for country, ax in zip(plot_df_nations["COUNTRY"].unique(), axs.ravel()):
+    plot_df = plot_df_nations.filter(pl.col("COUNTRY") == country)
+    ax.set_title(country)
+    ax.pie(
+        plot_df["proportion"],
+        labels=plot_df["building_rise_title"],
+        startangle=90,
+        counterclock=False,
+        colors=["#0000FF", "#FDB633", "#9A1BBE", "#18A48C"],
+        wedgeprops={"edgecolor": "black", "linewidth": 1},
+    )
+
 # %% [markdown]
 # ## 3. What proportion of flats use communal/ individual heating in the UK? (& heat networks?)
 
@@ -204,37 +232,58 @@ plt.ylabel("Percentage of flats with community heating")
 plt.tight_layout()
 plt.show()
 
+# %% [markdown]
+# ### Comparison with English Housing Survey data
+#
+# Below, we compare our numbers with numbers from the English Housing Survey 2021 to 2022 report in the energy chapter (URL: https://www.gov.uk/government/statistics/english-housing-survey-2021-to-2022-energy/english-housing-survey-2021-to-2022-energy). See annex table 2.1 for the values we used in this comparison (URL: https://www.gov.uk/government/statistics/english-housing-survey-2021-to-2022-energy).
+#
+# We were unable to identify what the EHS defines as high or low-rise buildings so we assumed the government definition of high-rise was used: a building that has at least 7 storeys or is at least 18 metres high (URL: https://www.gov.uk/government/collections/managing-high-rise-residential-buildings). We applied this definition to our data using the FLAT_STOREY_COUNT variable (including values imputed from building height data using our linear regression model). We then calculated the proportion of high rises on communal heating in our dataset and compared to the EHS values.
+#
+# Note, this calculation assumes that the 19% of rows missing information about communal heating are NOT randomly missing (because we are not removing these rows). We are assuming that the majority of these missing rows are non-communal. This is because the communal heating flag is derived from the MAIN FUEL column in EPC. The MAIN FUEL column contains values of the following natures: 'community scheme'; 'gas (community)', 'gas (not community)'. We are making the assumption that originally, communal heating systems were simply labelled 'community scheme' and individual systems were labelled with the specific fuel type. Then there may have been an update to EPC reporting whereby both communal and individual systems were labelled with fuel type AND whether or not they are communal systems.
+#
+# Ultimately, our data compares well when we apply the above assumption and our results are about 3 percentage points higher than the EHS numbers.
+
 # %%
 # Comparison with EHS data
+
+# Label flats in our dataset as high-rise or not per the EHS definition where possible
 flats_epc_df = flats_epc_df.with_columns(
     pl.when(pl.col("govt_defined_high_rise").is_null())
     .then(None)
     .when(pl.col("govt_defined_high_rise"))
     .then(pl.lit("high-rise"))
-    .otherwise(pl.lit("low-rise"))
+    .otherwise(pl.lit("not high-rise"))
     .alias("ehs_building_rise")
 )
 
+# Get total counts of high-rise / not flats in England
 total_ehs_buildings_per_rise_df = (
-    flats_epc_df["ehs_building_rise"]
+    flats_epc_df.filter(
+        pl.col("COUNTRY") == "England",
+        pl.col("ehs_building_rise").is_not_null(),
+    )["ehs_building_rise"]
     .value_counts(sort=True, normalize=False)
     .rename({"count": "total_count"})
 )
 
-flats_epc_df.filter(pl.col("ehs_building_rise").is_not_null()).group_by(
-    ["ehs_building_rise", "community_heating"]
-).agg(pl.col("UPRN").count()).join(
+# Calculate the proportion of high-rise on communal heating
+flats_epc_df.filter(
+    pl.col("COUNTRY") == "England",
+    pl.col("ehs_building_rise").is_not_null(),
+).group_by(["ehs_building_rise", "community_heating"]).agg(pl.col("UPRN").count()).join(
     total_ehs_buildings_per_rise_df, how="left", on="ehs_building_rise"
 ).with_columns(
     (pl.col("UPRN") / pl.col("total_count") * 100).alias("percentage_per_rise_type")
 )
 
 # %%
-# Proportion of high-rise flats with communal heating according to EHS
+# Proportion of high-rise flats with communal heating according to EHS (our value = 37.8%)
+# Our absolute value is 261,203 vs EHS value of 211,472
 print(211 / 616)
 
 # %%
-# Proportion of non high-rise flats with communal heating according to EHS
+# Proportion of non high-rise flats with communal heating according to EHS (our value = 9.1%)
+# Our absolute value is 353,552 vs EHS value of ~298,000
 print(298 / 4780)
 
 # %% [markdown]
@@ -439,12 +488,58 @@ plot_df = (
 plot_df.index = plot_df["Number of storeys"]
 plot_df = plot_df.drop("Number of storeys", axis=1)
 
-plot_df.plot(kind="bar")
+# %%
+plot_df.plot(kind="bar", figsize=(10, 5))
 
 plt.ylabel("Percentage of flats")
 plt.gca().yaxis.set_major_formatter(ticker.FormatStrFormatter("%.0f"))
 plt.gca().xaxis.set_tick_params(rotation=0)
 plt.title("Percentage of flats on different heating fuel types by number of storeys")
+plt.tight_layout()
+plt.show()
+
+# %%
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib import ticker
+
+
+bins = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]
+labels = [
+    "1‑2",
+    "3‑4",
+    "5‑6",
+    "7‑8",
+    "9‑10",
+    "11‑12",
+    "13‑14",
+    "15‑16",
+    "17‑18",
+    "19‑20",
+    "21‑22",
+    "23‑24",
+    "25‑26",
+    "27‑28",
+    "29‑30",
+]
+plot_df["bin"] = pd.cut(plot_df.index, bins=bins, labels=labels, right=True)
+plot_df = plot_df.groupby("bin").sum()  # aggregate percentages within each bin
+plot_df = plot_df.div(plot_df.sum(axis=1), axis=0) * 100  # convert to 0‑100 %
+
+
+ax = plot_df.plot(
+    kind="bar", stacked=True, figsize=(10, 6), width=0.8, edgecolor="none"
+)
+
+
+ax.set_ylabel("Share of flats (%)")
+ax.set_xlabel("Number of storeys")
+ax.set_title("Heating‑fuel mix by building height")
+ax.yaxis.set_major_locator(ticker.MultipleLocator(20))
+ax.yaxis.set_major_formatter(ticker.PercentFormatter())
+
+ax.legend(title="", bbox_to_anchor=(1.02, 1), loc="upper left")
+ax.grid(axis="y", linestyle=":", linewidth=0.5)
 plt.tight_layout()
 plt.show()
 
