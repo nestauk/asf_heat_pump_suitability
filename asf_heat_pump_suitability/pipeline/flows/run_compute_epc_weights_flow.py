@@ -70,7 +70,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
             ],
         )
 
-        self.epc_df = self.epc_df.sample(n=1000, seed=2)
+        # self.epc_df = self.epc_df.sample(n=1000, seed=2)
 
         self.next(self.join_lsoa_code)
 
@@ -102,7 +102,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
             self.prepare_for_country_specific_reweighting, foreach="country_features"
         )
 
-    @batch(cpu=2, memory=1000)
+    @batch(cpu=2, memory=16000)
     @step
     def prepare_for_country_specific_reweighting(self):
         """
@@ -134,7 +134,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
         )
 
         self.chunks = parallel_utils.chunk_df_by_group(
-            self.epc_cleaned_df, group_col="lsoa", n=100
+            self.epc_cleaned_df, group_col="lsoa", n=1000
         )
 
         # Generate target marginals for all features and LSOAs
@@ -144,7 +144,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
         self.next(self.reweight_properties_per_lsoa, foreach="chunks")
 
-    @batch(cpu=2, memory=1000)
+    @batch(cpu=2, memory=16000)
     @step
     def reweight_properties_per_lsoa(self):
         """
