@@ -13,14 +13,14 @@ NB: this pipeline takes the outputs from the following scripts as inputs:
 
 import os
 
-# Upgrading pip and installing requirements
-os.system("python -m pip install --upgrade pip")
-os.system(
-    f"pip install -r {os.path.dirname(os.path.realpath(__file__))}/calculate_suitability_requirements.txt 1> /dev/null"
-)
-print(
-    f"{os.path.dirname(os.path.realpath(__file__))}/calculate_suitability_requirements.txt"
-)
+# # Upgrading pip and installing requirements
+# os.system("python -m pip install --upgrade pip")
+# os.system(
+#     f"pip install -r {os.path.dirname(os.path.realpath(__file__))}/calculate_suitability_requirements.txt 1> /dev/null"
+# )
+# print(
+#     f"{os.path.dirname(os.path.realpath(__file__))}/calculate_suitability_requirements.txt"
+# )
 from metaflow import FlowSpec, step, batch, Parameter
 
 import logging
