@@ -71,7 +71,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
         )
 
         # TODO remove before merge
-        # self.epc_df = self.epc_df.sample(n=1000, seed=2)
+        self.epc_df = self.epc_df.sample(n=1000, seed=2)
 
         self.next(self.join_lsoa_code)
 
@@ -103,7 +103,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
             self.prepare_for_country_specific_reweighting, foreach="country_features"
         )
 
-    @batch(cpu=2, memory=16000)
+    # @batch(cpu=2, memory=16000)
+    @batch(cpu=2, memory=1000)
     @step
     def prepare_for_country_specific_reweighting(self):
         """
@@ -135,7 +136,10 @@ class ComputeEpcWeightsFlow(FlowSpec):
         )
 
         self.chunks = parallel_utils.chunk_df_by_group(
-            self.epc_cleaned_df, group_col="lsoa", n=1000
+            # self.epc_cleaned_df, group_col="lsoa", n=1000
+            self.epc_cleaned_df,
+            group_col="lsoa",
+            n=100,
         )
 
         # Generate target marginals for all features and LSOAs
@@ -145,7 +149,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
         self.next(self.reweight_properties_per_lsoa, foreach="chunks")
 
-    @batch(cpu=2, memory=16000)
+    # @batch(cpu=2, memory=16000)
+    @batch(cpu=2, memory=1000)
     @step
     def reweight_properties_per_lsoa(self):
         """
@@ -301,7 +306,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         from asf_heat_pump_suitability.utils import save_utils
 
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/weights/{self.year}_Q{self.quarter}_EPC_weights"
+        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/weights/{self.year}_Q{self.quarter}_EPC_weights"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/weights/{self.year}_Q{self.quarter}_EPC_weights_SAMPLE"
         save_utils.save_to_s3(self.weights_df, f"{save_as}.parquet")
         save_utils.save_to_s3(self.lsoa_stats_df, f"{save_as}_stats.parquet")
         self.next(self.end)
