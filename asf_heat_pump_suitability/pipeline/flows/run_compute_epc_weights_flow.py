@@ -70,6 +70,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
             ],
         )
 
+        # TODO remove before merge
         # self.epc_df = self.epc_df.sample(n=1000, seed=2)
 
         self.next(self.join_lsoa_code)
