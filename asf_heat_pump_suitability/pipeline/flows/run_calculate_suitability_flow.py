@@ -84,9 +84,9 @@ class CalculateSuitabilityFlow(FlowSpec):
         self.epc_df = self.epc_df.join(gardens, how="left", on="UPRN")
         self.epc_df = self.epc_df.join(weights, how="left", on="UPRN")
 
-        logging.info(f"Saving augmented EPC data")
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/augmented_epc/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_epc_augmented.parquet"
-        save_utils.save_to_s3(self.epc_df, save_as)
+        # logging.info(f"Saving augmented EPC data")
+        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/augmented_epc/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_epc_augmented.parquet"
+        # save_utils.save_to_s3(self.epc_df, save_as)
         self.next(self.process_features_for_suitability)
 
     @step
@@ -153,16 +153,20 @@ class CalculateSuitabilityFlow(FlowSpec):
         )
         self.next(self.weight_scores, foreach="chunks")
 
-    @batch(cpu=2, memory=4000)
+    @batch(cpu=2, memory=1000)
     @step
     def weight_scores(self):
         """
         Apply weights to scores and aggregate for each LSOA.
         """
+        import os
+
         os.system(
-            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git"
+            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@153_parallelise_suitability_script"
         )
         from tqdm import tqdm
+
+        print("Attempting suitability import")
         from asf_heat_pump_suitability.pipeline.suitability import calculate_suitability
 
         print("Weighting scores and aggregating per LSOA")
