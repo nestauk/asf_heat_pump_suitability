@@ -1,7 +1,6 @@
 """asf_heat_pump_suitability."""
 
 import logging
-import os
 import logging.config
 from pathlib import Path
 from typing import Optional
@@ -11,9 +10,7 @@ import yaml
 
 def get_yaml_config(file_path: Path) -> Optional[dict]:
     """Fetch yaml config and return as dict if it exists."""
-    print(os.listdir(Path(__file__).parent))
     if file_path.exists():
-        print(file_path)
         with open(file_path, "rt") as f:
             return yaml.load(f.read(), Loader=yaml.FullLoader)
 
