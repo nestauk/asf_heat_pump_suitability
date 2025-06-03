@@ -173,11 +173,14 @@ class CalculateGardenSizeFlow(FlowSpec):
         logging.info(
             f"Garden size calculated for {len(self.epc_gardens_df)} EPC properties in total."
         )
-        self.next(self.end)
+        self.next(self.save_outputs)
 
     # @batch(cpu=2, memory=16000)
     @step
-    def end(self):
+    def save_outputs(self):
+        """
+        Save outputs to S3.
+        """
         import polars as pl
         from asf_heat_pump_suitability.utils import save_utils
         from asf_heat_pump_suitability.pipeline.prepare_features import garden_size
@@ -194,6 +197,17 @@ class CalculateGardenSizeFlow(FlowSpec):
 
         save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_deduplicated.parquet"
         save_utils.save_to_s3(self.epc_gardens_df, save_as)
+
+        self.next(self.end)
+
+    @step
+    def end(self):
+        """
+        Finish flow.
+        """
+        import logging
+
+        logging.info("Calculate garden size flow complete!")
 
 
 if __name__ == "__main__":
