@@ -11,18 +11,6 @@ files only.]
 NB: this flow takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
 
-import logging
-import shapely.errors
-import polars as pl
-import geopandas as gpd
-import pandas as pd
-from asf_heat_pump_suitability.utils import save_utils
-from asf_heat_pump_suitability.pipeline.prepare_features import (
-    lat_lon,
-    land_extent,
-    building_footprint,
-    garden_size,
-)
 from metaflow import FlowSpec, step, Parameter, batch
 
 
@@ -63,6 +51,16 @@ class CalculateGardenSizeFlow(FlowSpec):
         """
         Load datasets and start flow.
         """
+        import logging
+        import polars as pl
+        import geopandas as gpd
+        from asf_heat_pump_suitability.utils import parallel_utils
+        from asf_heat_pump_suitability.pipeline.prepare_features import (
+            building_footprint,
+            garden_size,
+            lat_lon,
+        )
+
         logging.info("Load EPC UPRNs")
         epc_df = pl.read_parquet(self.epc, columns=["UPRN"])
 
@@ -80,86 +78,110 @@ class CalculateGardenSizeFlow(FlowSpec):
         microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
 
         # Match land extent files with overlapping building footprint files
-        self.file_matches = garden_size.match_series_files_land_building(
+        file_matches = garden_size.match_series_files_land_building(
             land_files_gdf=land_file_bounds, building_files_gdf=microsoft_file_bounds
         )
-        self.land_files = list(self.file_matches.index.unique())
+        self.chunked_file_matches = parallel_utils.chunk_df(file_matches, size=30)
 
         logging.info(
             f"Estimating garden size for properties across {len(self.file_matches)} pairs of land extent and building footprint files."
         )
 
-        self.next(self.estimate_garden_size, foreach="land_files")
+        self.next(self.estimate_garden_size, foreach="chunked_file_matches")
 
     @batch(cpu=2, memory=16000)
     @step
     def estimate_garden_size(self):
-        land_file = self.input
-        building_files = self.file_matches.filter(like=land_file, axis=0).values
+        import os
 
-        # Prepare land parcel data
-        land_parcels_gdf = land_extent.transform_gdf_land_parcels(f"s3://{land_file}")
+        os.system(
+            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@153_parallelise_garden_script"
+        )
 
-        building_footprints_gdfs = []
-        for building_file in building_files:
+        import shapely
+        import geopandas as gpd
+        from asf_heat_pump_suitability.pipeline.prepare_features import (
+            building_footprint,
+            garden_size,
+            land_extent,
+        )
+
+        prev = None
+        self.epc_gardens = []
+
+        for land_file, building_file in self.input.items():
+            if land_file != prev:
+                # Prepare land parcel data
+                land_parcels_gdf = land_extent.transform_gdf_land_parcels(
+                    f"s3://{land_file}"
+                )
+
             # Prepare building footprints data
             try:
-                _building_footprints_gdf = (
+                building_footprints_gdf = (
                     building_footprint.transform_gdf_building_footprints(building_file)
                 )
             except shapely.errors.GEOSException as e:
-                logging.warning(
+                print(
                     f"Error loading building footprint file {building_file}. Error message: {e}.\n"
                     f"Skipping this land extent & building footprint pairing."
                 )
                 continue
             else:
-                _building_footprints_gdf["microsoft_building_footprint_file"] = (
+                building_footprints_gdf["microsoft_building_footprint_file"] = (
                     building_file
                 )
-                building_footprints_gdfs.append(_building_footprints_gdf)
 
-        if building_footprints_gdfs:
-            building_footprints_gdf = pd.concat(building_footprints_gdfs)
+                # Get intersection of building footprint polygons and land polygons
+                intersection_gdf = garden_size.generate_gdf_land_building_overlay(
+                    land_parcels_gdf=land_parcels_gdf,
+                    building_footprints_gdf=building_footprints_gdf,
+                )
 
-            # Get intersection of building footprint polygons and land polygons
-            intersection_gdf = garden_size.generate_gdf_land_building_overlay(
-                land_parcels_gdf=land_parcels_gdf,
-                building_footprints_gdf=building_footprints_gdf,
-            )
+                # Get garden size
+                gardens_gdf = garden_size.generate_gdf_garden_size(
+                    intersection_gdf, land_parcels_gdf
+                )
+                gardens_gdf = gardens_gdf.assign(
+                    inspire_land_extent_file=land_file,
+                    microsoft_building_footprint_file=building_file,
+                )
 
-            # Get garden size
-            gardens_gdf = garden_size.generate_gdf_garden_size(
-                intersection_gdf, land_parcels_gdf
-            )
-            gardens_gdf = gardens_gdf.assign(
-                inspire_land_extent_file=land_file,
-            )
+                # Match EPC UPRNs with land parcels and gardens using UPRN coordinates
+                # This will keep only EPC records for which garden size can be estimated
+                epc_df = gpd.sjoin(
+                    self.epc_gdf,
+                    gardens_gdf,
+                    how="inner",
+                    predicate="intersects",
+                ).drop(columns=["geometry", "index_right"])
 
-            # Match EPC UPRNs with land parcels and gardens using UPRN coordinates
-            # This will keep only EPC records for which garden size can be estimated
-            epc_df = gpd.sjoin(
-                self.epc_gdf,
-                gardens_gdf,
-                how="inner",
-                predicate="intersects",
-            ).drop(columns=["geometry", "index_right"])
-
-            self.epc_df = pl.from_pandas(epc_df)
+                epc_df = pl.from_pandas(epc_df)
+                self.epc_gardens.append(epc_df)
 
         self.next(self.concatenate_garden_size_dfs)
 
     @step
     def concatenate_garden_size_dfs(self, inputs):
-        self.epc_gardens_df = pl.concat([input.epc_df for input in inputs])
+        import itertools
+        import polars as pl
+        import logging
+
+        self.epc_gardens_df = pl.concat(
+            list(itertools.chain.from_iterable([input.epc_gardens for input in inputs]))
+        )
         logging.info(
             f"Garden size calculated for {len(self.epc_gardens_df)} EPC properties in total."
         )
         self.next(self.end)
 
-    @batch(cpu=2, memory=16000)
+    # @batch(cpu=2, memory=16000)
     @step
     def end(self):
+        import polars as pl
+        from asf_heat_pump_suitability.utils import save_utils
+        from asf_heat_pump_suitability.pipeline.prepare_features import garden_size
+
         save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}.parquet"
         save_utils.save_to_s3(self.epc_gardens_df, save_as)
 
