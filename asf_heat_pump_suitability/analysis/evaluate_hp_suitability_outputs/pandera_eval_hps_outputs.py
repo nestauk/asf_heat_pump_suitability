@@ -61,7 +61,7 @@ def add_schema_column(
         col (str): The name of the column to register or update.
         dtype: The data type of the column (e.g., `float`, `str`, `pl.Boolean`).
         *checks: Any number of Pandera `Check` objects to validate column values.
-        **kw: Additional keyword arguments for column properties (e.g., `required`, `nullable`, `unique`).
+        **kw: Additional Pandera keyword arguments for column properties (e.g., `required`, `nullable`, `unique`).
     """
     if col in schema_columns:  # merge with existing
         prev = schema_columns[col]
