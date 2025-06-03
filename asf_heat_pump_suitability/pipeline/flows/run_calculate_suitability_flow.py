@@ -168,7 +168,7 @@ class CalculateSuitabilityFlow(FlowSpec):
         print("Weighting scores and aggregating per LSOA")
         self.weighted_scores = []
 
-        for lsoa_code in tqdm(self.input["lsoa"].unique()):
+        for lsoa_code in tqdm(self.input["lsoa"].drop_nulls().unique()):
             self.weighted_scores.append(
                 calculate_suitability.aggregate_dict_lsoa_suitability_and_features(
                     self.input, lsoa_code
