@@ -15,10 +15,26 @@ import polars as pl
 import pandera.polars as pa
 import json
 import config.dq_config as cfg
+import argparse
 from pandera.polars import Check, Column, DataFrameSchema
 from asf_heat_pump_suitability.analysis.hn_zones.hnz_utils.log_utils import (
     setup_logging_and_file_path,
 )
+
+# ------------------------------------------------------------------------------
+# Argument parsing for data path
+# ------------------------------------------------------------------------------
+parser = argparse.ArgumentParser(
+    description="data quality checks for heat pump suitability data."
+)
+parser.add_argument(
+    "--data-path",
+    type=str,
+    default=cfg.DATA_PATH,
+    help="Path to the data CSV file (local or S3 URI).",
+)
+args = parser.parse_args()
+data_path = args.data_path
 
 # ------------------------------------------------------------------------------
 # Logging setup
@@ -31,14 +47,17 @@ setup_logging_and_file_path(output_dir=cfg.OUTPUT_DIR, log_filename=cfg.LOG_FILE
 # 1.  BUILD SCHEMA
 # ---------------------------------------------------------------------------
 
-schema_columns: dict[str, Column] = {}
+# schema_columns: dict[str, Column] = {}
 
 
-def add(col: str, dtype, *checks, **kw):
+def add_schema_column(
+    schema_columns: dict[str, Column], col: str, dtype: any, *checks, **kw
+):
     """
     Registers or updates a column in the `schema_columns` dictionary for schema validation.
 
     Args:
+        schema_columns (dict): The dictionary holding schema columns.
         col (str): The name of the column to register or update.
         dtype: The data type of the column (e.g., `float`, `str`, `pl.Boolean`).
         *checks: Any number of Pandera `Check` objects to validate column values.
@@ -51,27 +70,35 @@ def add(col: str, dtype, *checks, **kw):
     schema_columns[col] = Column(dtype, checks=list(checks), **kw)
 
 
+schema_col = {}
 # -- primary key ------------------------------------------------------------ #
-add("lsoa", str, unique=True, required=True, nullable=False)
+add_schema_column(
+    schema_col, col="lsoa", dtype=str, unique=True, required=True, nullable=False
+)
 
 # -- score + proportion columns in [0, 1] ----------------------------------- #
 for c in (*cfg.SCORE_COLUMNS, *cfg.PROPORTION_COLUMNS):
-    add(c, float, Check.in_range(0, 1), required=True, nullable=True)
+    add_schema_column(
+        schema_col, c, float, Check.in_range(0, 1), required=True, nullable=True
+    )
 
 # -- boolean ---------------------------------------------------------------- #
 for c in cfg.BOOLEAN_COLUMNS:
-    add(c, pl.Boolean, required=True, nullable=True)
+    add_schema_column(schema_col, col=c, dtype=pl.Boolean, required=True, nullable=True)
 
 # -- categorical ------------------------------------------------------------ #
 for c, allowed in cfg.CATEGORICAL_COLUMNS.items():
-    add(c, str, Check.isin(allowed), required=True, nullable=True)
+    add_schema_column(
+        schema_col, c, str, Check.isin(allowed), required=True, nullable=True
+    )
 
 # -- non-negative ----------------------------------------------------------- #
-for c in cfg.NON_NEGATIVE_COLUMNS:
-    add(c, float, Check.ge(0), required=True, nullable=True)
+for c in cfg.NUMERIC_COLUMNS:
+    add_schema_column(schema_col, c, float, Check.ge(0), required=True, nullable=True)
 
 # -- 0–100 percentage ------------------------------------------------------- #
-add(
+add_schema_column(
+    schema_col,
     "heatpump_installation_percentage",
     float,
     Check.in_range(0, 100),
@@ -80,44 +107,51 @@ add(
 )
 
 # -- lsoa name -------------------------------------------------------------- #
-add("lsoa_name", str, required=True, nullable=True)
+add_schema_column(schema_col, "lsoa_name", str, required=True, nullable=True)
 
 # finally create the schema
-schema = DataFrameSchema(schema_columns, strict=False, coerce=True)
+schema = DataFrameSchema(schema_col, strict=False, coerce=True)
 
 
 # ------------------------------------------------------------------------------
 # 2. LOAD WITH POLARS
 # ------------------------------------------------------------------------------
 try:
-    df_pol = pl.read_csv(cfg.DATA_PATH)
+    df_pol = pl.read_csv(data_path)
     logging.info("Data loaded successfully with Polars!")
 except FileNotFoundError:
-    logging.error(f"File not found at path: {cfg.DATA_PATH}")
+    logging.error(f"File not found at path: {data_path}")
     raise
 except Exception:
-    logging.exception(f"Could not load data from {cfg.DATA_PATH}")
+    logging.exception(f"Could not load data from {data_path}")
     raise
+
+# log any columns in the data that aren’t covered by the schema
+extra_cols = set(df_pol.columns) - set(schema.columns.keys())
+if extra_cols:
+    logging.info(
+        "Columns skipped by schema validation (strict=False): %s",
+        sorted(extra_cols),
+    )
 
 # ------------------------------------------------------------------------------
 # 3. VALIDATE WITH PANDERA (Polars backend)
 # ------------------------------------------------------------------------------
 logging.info("=== Validating with Pandera Schema ===")
 try:
-    df_valid = schema.validate(df_pol, lazy=True)
-    logging.info("Data validated successfully with Pandera!")
+    df_pol = schema.validate(df_pol, lazy=True)
+    logging.info("Data schema and ranges validated successfully with Pandera!")
 except pa.errors.SchemaErrors as err:
     logging.warning("Pandera validation failed!")
     logging.warning(json.dumps(err.message, indent=2))
     logging.info("Continuing with unvalidated data.")
-    df_valid = df_pol.clone()
 
 
 # ------------------------------------------------------------------------------
 # 4. OUTLIER DETECTION (Z-Score) IN POLARS
 # ------------------------------------------------------------------------------
 # compute z-score columns for numeric columns
-df_valid = df_valid.with_columns(
+df_pol = df_pol.with_columns(
     [
         ((pl.col(c) - pl.col(c).mean()) / pl.col(c).std()).alias(f"{c}_z")
         for c in cfg.NUMERIC_COLUMNS
@@ -126,49 +160,66 @@ df_valid = df_valid.with_columns(
 logging.info("=== Outlier Detection (Z-Score) ===")
 
 Z = cfg.OUTLIER_ZSCORE_THRESHOLD
-num_cols = cfg.NUMERIC_COLUMNS
+logging.info("No outliers detected in any columns (z > %.1f).", Z)
 
 
 # outlier counts (1-row wide → long)
-outlier_counts = df_valid.select(
-    [(pl.col(f"{c}_z") > Z).sum().alias(c) for c in num_cols]
-).transpose(include_header=True, header_name="variable", column_names=["n_out"])
+outlier_counts = df_pol.select(
+    [(pl.col(f"{c}_z") > Z).sum().alias(c) for c in cfg.NUMERIC_COLUMNS]
+).transpose(include_header=True, header_name="variable", column_names=["n_outliers"])
 
 # non-null counts the same way
-nonnull_counts = df_valid.select(
-    [pl.col(c).is_not_null().sum().alias(c) for c in num_cols]
+nonnull_counts = df_pol.select(
+    [pl.col(c).is_not_null().sum().alias(c) for c in cfg.NUMERIC_COLUMNS]
 ).transpose(include_header=True, header_name="variable", column_names=["n_total"])
 
-outlier_counts = (
-    outlier_counts.join(nonnull_counts, on="variable")
-    .with_columns((pl.col("n_out") / pl.col("n_total") * 100).alias("pct"))
-    .filter(pl.col("n_out") > 0)
+outlier_counts = outlier_counts.join(nonnull_counts, on="variable").with_columns(
+    (pl.col("n_outliers") / pl.col("n_total") * 100).alias("pct")
 )
 
 
 if outlier_counts.is_empty():
-    logging.info("No outliers detected (z > %.1f).", Z)
+    logging.info("No outliers detected in any columns (z > %.1f).", Z)
 else:
     logging.warning("Columns with outliers (z > %.1f):", Z)
     for row in outlier_counts.iter_rows(named=True):
         logging.warning(
-            "  - %s: %d rows (%.2f%%)", row["variable"], row["n_out"], row["pct"]
+            "  - %s: %d rows (%.2f%%)", row["variable"], row["n_outliers"], row["pct"]
         )
 
+# compute mean/std for each column
+stats_list = [
+    {"variable": c, "mean": float(df_pol[c].mean()), "std": float(df_pol[c].std())}
+    for c in cfg.NUMERIC_COLUMNS
+]
+stats_df = pl.DataFrame(stats_list)
+
+# merge stats into our summary
+final_summary = outlier_counts.join(stats_df, on="variable")
+
+# log every column, flagging nonzero outliers
+for row in final_summary.iter_rows(named=True):
+    msg = (
+        f"{row['variable']}: mean={row['mean']:.3f}, std={row['std']:.3f}, "
+        f"outliers={row['n_outliers']} ({row['pct']:.2f}%)"
+    )
+    if row["n_outliers"] > 0:
+        logging.warning(msg)
+    else:
+        logging.info(msg)
 
 # ------------------------------------------------------------------------------
 # 5. SUMMARY
 # ------------------------------------------------------------------------------
 logging.info("=== DATA QUALITY CHECK SUMMARY ===")
-logging.info("Rows: %d, Columns: %d", df_valid.height, df_valid.width)
-logging.info("Column dtypes: %s", df_valid.dtypes)
+logging.info("Rows: %d, Columns: %d", df_pol.height, df_pol.width)
+logging.info("Column dtypes: %s", df_pol.dtypes)
 
 # --- Full numeric summary to CSV ------------------------------------------ #
-summary_df = df_valid.select(cfg.NUMERIC_COLUMNS).describe()
 summary_file = (
     Path(cfg.OUTPUT_DIR)
-    / f"{Path(cfg.DATA_PATH).stem}_numeric_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    / f"{Path(data_path).stem}_numeric_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 )
-summary_df.write_csv(summary_file)
+final_summary.write_csv(summary_file)
 logging.info("Full numeric summary ➜ %s", summary_file)
 logging.info("Data Quality Checks Complete.")

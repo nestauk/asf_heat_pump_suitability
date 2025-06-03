@@ -10,7 +10,6 @@ Defines:
 
 from asf_heat_pump_suitability import PROJECT_DIR
 import os
-import os
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -88,7 +87,8 @@ NUMERIC_COLUMNS = [
     "census_proportion_flats",
 ]
 
-# Proportion columns in [0, 1]
+
+# Proportion columns expected to be between [0, 1]
 PROPORTION_COLUMNS = [
     "proportion_in_conservation_area",
     "proportion_listed_building",
@@ -121,11 +121,4 @@ SCORE_COLUMNS = [
     "SGL_N_avg_score_weighted",
     "HN_S_avg_score_weighted",
     "HN_N_avg_score_weighted",
-]
-
-# Columns that must be >= 0
-NON_NEGATIVE_COLUMNS = [
-    "median_garden_estimate_m2",
-    "property_density_km2",
-    "n_properties",
 ]
