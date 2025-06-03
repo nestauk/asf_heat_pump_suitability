@@ -11,16 +11,6 @@ NB: this pipeline takes the outputs from the following scripts as inputs:
 - asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size.py
 """
 
-import os
-
-# # Upgrading pip and installing requirements
-# os.system("python -m pip install --upgrade pip")
-# os.system(
-#     f"pip install -r {os.path.dirname(os.path.realpath(__file__))}/calculate_suitability_requirements.txt 1> /dev/null"
-# )
-# print(
-#     f"{os.path.dirname(os.path.realpath(__file__))}/calculate_suitability_requirements.txt"
-# )
 from metaflow import FlowSpec, step, batch, Parameter
 
 import logging
@@ -109,6 +99,10 @@ class CalculateSuitabilityFlow(FlowSpec):
         self.epc_df = calculate_suitability.filter_df_minimum_features(
             self.epc_df, features=self.features
         )
+
+        # TODO remove before merge
+        self.epc_df = self.epc_df.sample(n=1000, seed=2)
+
         self.next(self.calculate_scores_per_epc_record)
 
     @step
@@ -136,8 +130,8 @@ class CalculateSuitabilityFlow(FlowSpec):
         for score_df in scores:
             self.epc_df = self.epc_df.join(score_df, on="UPRN", how="left")
 
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/suitability/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_heat_pump_suitability_per_property.parquet"
-        save_utils.save_to_s3(self.epc_df, save_as)
+        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/suitability/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_heat_pump_suitability_per_property.parquet"
+        # save_utils.save_to_s3(self.epc_df, save_as)
 
         # Filter to relevant columns
         use_cols = (
@@ -149,10 +143,14 @@ class CalculateSuitabilityFlow(FlowSpec):
 
         # Chunk into dfs of 1000 LSOAs
         self.chunks = parallel_utils.chunk_df_by_group(
-            self.epc_df, group_col="lsoa", n=1000
+            # self.epc_df, group_col="lsoa", n=1000
+            self.epc_df,
+            group_col="lsoa",
+            n=100,
         )
         self.next(self.weight_scores, foreach="chunks")
 
+    # @batch(cpu=2, memory=16000)
     @batch(cpu=2, memory=1000)
     @step
     def weight_scores(self):
@@ -165,8 +163,6 @@ class CalculateSuitabilityFlow(FlowSpec):
             "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@153_parallelise_suitability_script"
         )
         from tqdm import tqdm
-
-        print("Attempting suitability import")
         from asf_heat_pump_suitability.pipeline.suitability import calculate_suitability
 
         print("Weighting scores and aggregating per LSOA")
@@ -243,14 +239,16 @@ class CalculateSuitabilityFlow(FlowSpec):
         from asf_heat_pump_suitability.pipeline.utils import save_utils
 
         logging.info("Saving LSOA heat pump suitability scores")
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/suitability/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_heat_pump_suitability_per_lsoa"
+        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/suitability/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_heat_pump_suitability_per_lsoa"
+
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/suitability/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_heat_pump_suitability_per_lsoa_SAMPLE"
         save_utils.save_to_s3(self.suitability_df, f"{save_as}.parquet")
         save_utils.save_to_s3(self.suitability_df, f"{save_as}.csv")
 
-        logging.info("Saving open dataset to nesta-open-data S3 bucket")
-        save_as = f"s3://nesta-open-data/asf_heat_pump_suitability/{self.year}Q{self.quarter}/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_EPC_heat_pump_suitability_per_lsoa"
-        save_utils.save_to_s3(self.suitability_df, f"{save_as}.parquet")
-        save_utils.save_to_s3(self.suitability_df, f"{save_as}.csv")
+        # logging.info("Saving open dataset to nesta-open-data S3 bucket")
+        # save_as = f"s3://nesta-open-data/asf_heat_pump_suitability/{self.year}Q{self.quarter}/{datetime.today().strftime('%Y%m%d')}_{self.year}_Q{self.quarter}_EPC_heat_pump_suitability_per_lsoa"
+        # save_utils.save_to_s3(self.suitability_df, f"{save_as}.parquet")
+        # save_utils.save_to_s3(self.suitability_df, f"{save_as}.csv")
         self.next(self.end)
 
     @step
