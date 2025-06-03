@@ -89,7 +89,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         )
 
         logging.info(
-            f"Estimating garden size for properties across {len(self.file_matches)} pairs of land extent and building footprint files."
+            f"Estimating garden size for properties across {len(file_matches)} pairs of land extent and building footprint files."
         )
 
         self.next(self.estimate_garden_size, foreach="chunked_file_matches")
