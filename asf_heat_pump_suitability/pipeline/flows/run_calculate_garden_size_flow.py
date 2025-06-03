@@ -101,7 +101,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         import os
 
         os.system(
-            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@153_parallelise_garden_script"
+            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@152_parallelise_garden_script"
         )
 
         import shapely
