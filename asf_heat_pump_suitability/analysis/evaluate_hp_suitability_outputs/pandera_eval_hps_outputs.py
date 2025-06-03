@@ -215,11 +215,22 @@ logging.info("=== DATA QUALITY CHECK SUMMARY ===")
 logging.info("Rows: %d, Columns: %d", df_pol.height, df_pol.width)
 logging.info("Column dtypes: %s", df_pol.dtypes)
 
-# --- Full numeric summary to CSV ------------------------------------------ #
+# --- Full numeric summary to CSV ------------------------------------------- #
 summary_file = (
     Path(cfg.OUTPUT_DIR)
     / f"{Path(data_path).stem}_numeric_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 )
 final_summary.write_csv(summary_file)
 logging.info("Full numeric summary ➜ %s", summary_file)
+
+# --- Numeric descriptive statistics (“describe”) to CSV --------------------- #
+# Polars’ describe() gives you count, mean, std, min, max, quartiles, etc.
+describe_df = df_pol.select(cfg.NUMERIC_COLUMNS).describe()
+describe_file = (
+    Path(cfg.OUTPUT_DIR)
+    / f"{Path(data_path).stem}_numeric_describe_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+)
+describe_df.write_csv(describe_file)
+logging.info("Numeric descriptive stats ➜ %s", describe_file)
+
 logging.info("Data Quality Checks Complete.")
