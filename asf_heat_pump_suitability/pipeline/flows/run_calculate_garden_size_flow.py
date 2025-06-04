@@ -95,7 +95,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         self.next(self.estimate_garden_size, foreach="chunked_file_matches")
 
     # @batch(cpu=2, memory=16000)
-    @batch(cpu=2, memory=1000)
+    @batch(cpu=2, memory=16000)
     @step
     def estimate_garden_size(self):
         import os
@@ -164,7 +164,11 @@ class CalculateGardenSizeFlow(FlowSpec):
                 ).drop(columns=["geometry", "index_right"])
 
                 epc_df = pl.from_pandas(epc_df)
-                self.epc_gardens.append(epc_df)
+                self.epc_gardens.append(
+                    epc_df.with_columns(
+                        pl.col("NATIONALCADASTRALREFERENCE").cast(pl.String)
+                    )
+                )
 
         self.next(self.concatenate_garden_size_dfs)
 
