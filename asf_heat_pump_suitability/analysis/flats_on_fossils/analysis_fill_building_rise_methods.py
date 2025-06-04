@@ -713,15 +713,12 @@ uprn_sample = model_df["UPRN"].to_list()
 X = model_df.select(["height", "property_per_m2"])
 y = model_df["FLAT_STOREY_COUNT"]
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.25, random_state=1
-)
-
 # Train final candidate model
 reg = LinearRegression().fit(X, y)
 
 # %%
-reg.score(X, y)
+print(reg.score(X, y))
+print(reg.coef_)
 
 # %%
 # Get full data predictions of final candidate model
@@ -732,6 +729,7 @@ plt.hist(residuals, bins=100)
 plt.title(
     "Distribution of residuals from selected model for predicting flat storey count"
 )
+plt.xlim(-15, 15)
 plt.xlabel("Residuals (true - predicted storey count)")
 plt.ylabel("Frequency")
 plt.axvline(0, color="red", linestyle="--", label="Zero line")
@@ -742,7 +740,7 @@ plt.show()
 pred_lists_to_plot = [y] + [candidate_preds]
 
 # # Uncomment to see the results for the polynomial linear regression model
-# poly_reg = LinearRegression().fit(X_poly, y)
+poly_reg = LinearRegression().fit(X_poly, y)
 # pred_lists_to_plot = [y] + [poly_reg.predict(X_poly)]
 
 labels = {
@@ -827,6 +825,7 @@ print(prediction_accuracy_df["accurate_prediction"].value_counts(normalize=True)
 
 # %%
 pred_lists_to_plot = [y] + [candidate_preds]
+# pred_lists_to_plot = [y] + [poly_reg.predict(X_poly)]
 
 labels = {
     "preds_0": "Actual",
@@ -855,18 +854,18 @@ results_df.to_pandas().set_index("storeys").plot(kind="bar", figsize=(10, 5))
 plt.xlabel("Storey count")
 plt.ylabel("Count of flats")
 plt.title(
-    "Count of flats per predicted storey count (after rounding) from candidate model, and models trained across 3 folds"
+    "Count of flats per predicted storey count (after rounding) from candidate model"
 )
 plt.xlim(0, 36)
 plt.show()
 
 # %%
-pred = reg.predict(X_test)
-resid = pred - y_test
+pred = reg.predict(X)
+resid = pred - y
 # Compute residuals
 resid_df = pd.DataFrame(
     {
-        "height": X_test["height"],
+        "height": X["height"],
         "resid": resid,
     }
 )
