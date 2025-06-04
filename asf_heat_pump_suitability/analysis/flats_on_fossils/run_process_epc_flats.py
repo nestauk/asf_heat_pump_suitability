@@ -1,3 +1,15 @@
+"""
+Process EPC data for flats analysis:
+- filter to records for flats only
+- join with building height and footprint data
+- process central heating fuel type information
+
+To run:
+python -i asf_heat_pump_suitability/analysis/flats_on_fossils/run_process_epc_flats.py --epc [path/to/EPC] -y [YYYY] -q [Q]
+
+NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
+"""
+
 import polars as pl
 from collections import OrderedDict
 import argparse
