@@ -1,11 +1,19 @@
+"""
+Functions to process EPC MAIN_FUEL and MAINHEAT_DESCRIPTION data to extract:
+- fuel_type: type of fuel used in central heating, String
+- main_heating_fuel_class: class of fuel used in central heating (e.g. fossil fuel), String
+- community_heating: flag to indicate whether property uses community heating or not, Boolean
+"""
+
 import polars as pl
 
 
 def extend_df_central_heating_information(df: pl.DataFrame) -> pl.DataFrame:
     """
     Add `fuel_type` and `community_heating` columns to EPC dataset using data in `MAIN_FUEL` and `MAINHEAT_DESCRIPTION`
-    columns. `fuel_type` contains central heating fuel type information, and `community_heating` contains boolean
-    values indicating whether the property is on a communal heating system or not.
+    columns. `fuel_type` contains central heating fuel type information which condenses the data from `MAIN_FUEL` into
+    fewer categories. `community_heating` contains boolean values indicating whether the property is on a communal
+    heating system or not.
 
     Args:
         df (pl.DataFrame): EPC dataset with `MAIN_FUEL` and `MAINHEAT_DESCRIPTION` columns
@@ -35,33 +43,45 @@ def extend_df_central_heating_information(df: pl.DataFrame) -> pl.DataFrame:
         .fill_null(pl.col("fill_fuel_type_2"))
         .fill_null(pl.col("fill_fuel_type_3")),
         pl.col("community_heating").fill_null(pl.col("fill_community_heating")),
-    ).drop(["fill_fuel_type", "fill_community_heating"])
+    ).drop(
+        [
+            "fill_fuel_type",
+            "fill_fuel_type_2",
+            "fill_fuel_type_3",
+            "fill_community_heating",
+        ]
+    )
 
-    df = extend_df_fossil_fuel_heating(df)
+    df = extend_df_main_heating_fuel_class(df)
 
     return df
 
 
-def extend_df_fossil_fuel_heating(df: pl.DataFrame) -> pl.DataFrame:
+def extend_df_main_heating_fuel_class(df: pl.DataFrame) -> pl.DataFrame:
     """
-    Add `fossil_fuel_heating` column to EPC dataset using derived `fuel_type` column. `fossil_fuel_heating` contains
-    boolean values to indicate whether the central heating uses fossil fuels or not.
+    Add `main_heating_fuel_class` column to EPC dataset using derived `fuel_type` column. `main_heating_fuel_class`
+    contains classes of heating fuel: fossil fuel, electric, biofuels or waste, no heating, unknown.
 
     Args:
         df (pl.DataFrame): EPC dataset with derived `fuel_type` column
 
     Returns:
-        pl.DataFrame: EPC dataset with `fossil_fuel_heating` column
+        pl.DataFrame: EPC dataset with `main_heating_fuel_class` column
     """
     fossil_fuels = ["gas", "oil", "coal", "LNG", "LPG", "B30"]
+    biomass_fuels = ["biofuel", "biogas", "biomass", "bioethanol", "wood", "waste"]
 
     df = df.with_columns(
         pl.when(pl.col("fuel_type").is_in(fossil_fuels))
-        .then(True)
-        .when(pl.col("fuel_type").is_not_null())
-        .then(False)
-        .otherwise(None)
-        .alias("fossil_fuel_heating")
+        .then(pl.lit("fossil_fuel"))
+        .when(pl.col("fuel_type") == "electricity")
+        .then(pl.lit("electric"))
+        .when(pl.col("fuel_type").is_in(biomass_fuels))
+        .then(pl.lit("biofuels or waste"))
+        .when(pl.col("fuel_type") == "no heating")
+        .then(pl.lit("no heating"))
+        .otherwise(pl.lit("unknown"))
+        .alias("main_heating_fuel_class")
     )
 
     return df
@@ -95,11 +115,12 @@ def extend_df_fuel_type(df: pl.DataFrame, epc_col: str, name: str) -> pl.DataFra
         .then(pl.lit("coal"))
         .when(pl.col(epc_col).str.to_lowercase().str.contains("anthracite"))
         .then(pl.lit("coal"))
-        # RENEWABLES
+        # ELECTRIC
         .when(pl.col(epc_col).str.to_lowercase().str.contains("electric"))
         .then(pl.lit("electricity"))
         .when(pl.col(epc_col).str.to_lowercase().str.contains("heat pump"))
         .then(pl.lit("electricity"))
+        # BIOFUELS / WASTE
         .when(pl.col(epc_col).str.to_lowercase().str.contains("biofuel"))
         .then(pl.lit("biofuel"))
         .when(pl.col(epc_col).str.to_lowercase().str.contains("biogas"))
@@ -113,6 +134,9 @@ def extend_df_fuel_type(df: pl.DataFrame, epc_col: str, name: str) -> pl.DataFra
         .when(pl.col(epc_col).str.to_lowercase().str.contains("bioethanol"))
         .then(pl.lit("bioethanol"))
         # Oil comes last because it's in the word 'boiler'
+        # TODO update code to discriminate between 'oil' and 'boiler' due to
+        # potential edge cases where a 'gas' boiler is specified (without
+        # specifying mains gas
         .when(pl.col(epc_col).str.to_lowercase().str.contains("oil"))
         .then(pl.lit("oil"))
         # NO HEATING
@@ -174,7 +198,10 @@ def extend_df_hot_water_fuel_type(df: pl.DataFrame, name: str) -> pl.DataFrame:
     """
     df = df.with_columns(
         pl.when(
-            pl.col("HOTWATER_DESCRIPTION").str.to_lowercase().str.contains("recovery")
+            # Waste heat recovery
+            pl.col("HOTWATER_DESCRIPTION")
+            .str.to_lowercase()
+            .str.contains("recovery")
         )
         .then(pl.lit("waste"))
         .when(
