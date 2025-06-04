@@ -1,3 +1,13 @@
+"""
+Spatial join EPC data with Microsoft Building Footprint data. Resulting dataframe has building information for all
+EPC records where available, including building footprint area and building height.
+
+To run:
+python -i asf_heat_pump_suitability/analysis/flats_on_fossils/run_join_epc_building_footprints.py --epc [path/to/EPC] -y [YYYY] -q [Q]
+
+NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
+"""
+
 import polars as pl
 import logging
 import shapely
