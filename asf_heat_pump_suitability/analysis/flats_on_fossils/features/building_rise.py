@@ -1,23 +1,30 @@
+"""
+Functions to process and convert height and storey count data to building rise type:
+- low rise (1-3 storeys)
+- medium rise (4-10 storeys)
+- high rise (11+ storeys)
+"""
+
 import polars as pl
-import numpy as np
 import logging
 
 
 def filter_df_epc_building_footprints(df: pl.DataFrame) -> pl.DataFrame:
     """
-    Filter out EPC rows with no building height data.
+    Filter out EPC rows with no building height data or where building height is 0m.
 
     Args:
         df (pl.DataFrame): building height data joined to EPC data
 
     Returns:
-        pl.DataFrame: EPC records with building height data
+        pl.DataFrame: EPC records with building height data greater than 0m
     """
-    n = (df["height"] == -1).sum()
+    # Buildings with no height data are labelled with '-1' height
+    n = (df["height"] <= 0).sum()
     logging.info(
         f"Dropping {n} rows of building footprint data with no building height information"
     )
-    return df.filter(pl.col("height") != -1)
+    return df.filter(pl.col("height") > 0)
 
 
 def deduplicate_df_epc_building_footprints(df: pl.DataFrame) -> pl.DataFrame:
@@ -40,7 +47,7 @@ def extend_df_building_rise_from_storey_count(
 ) -> pl.DataFrame:
     """
     Add new column to dataframe with building rise classification derived from storey count. Buildings are classified
-    into low- (<=3 storeys), medium- (4-10 storeys) and high-rise (>10 storeys).
+    into low- (1-3 storeys), medium- (4-10 storeys) and high-rise (>10 storeys).
 
     Args:
         df (pl.DataFrame): dataset with storey count per record
@@ -82,6 +89,7 @@ def clean_col_flat_storey_count(df: pl.DataFrame) -> pl.DataFrame:
         .replace("", "unknown")
         .cast(pl.Float64, strict=False)
     ).with_columns(
+        # We assume values below 1 are an error
         pl.when(pl.col("FLAT_STOREY_COUNT") <= 0)
         .then(None)
         .otherwise(pl.col("FLAT_STOREY_COUNT"))
