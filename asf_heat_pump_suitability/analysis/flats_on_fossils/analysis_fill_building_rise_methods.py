@@ -7,21 +7,30 @@
 
 # %%
 import polars as pl
+import pandas as pd
 import numpy as np
+from tqdm import tqdm
+
+# Plotting
 import matplotlib.pyplot as plt
+
+# Modelling
 import sklearn
-from sklearn import linear_model
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split, GroupShuffleSplit
 from sklearn import metrics
 import statsmodels.formula.api as sm
-from tqdm import tqdm
-import geopandas as gdf
+
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.analysis.flats_on_fossils.features import building_rise
 
 # %% [markdown]
 # ## 1. Load processed EPC data for flats
 # This file is the result of processing the EPC data with the `asf_heat_pump_suitability/analysis/flats_with_fossils/run_process_epc_flats.py` script.
+#
+# We do some preprocessing to our data before analysis:
+# - exclude rows where country is Scotland (due to systemic error discovered in Scottish data, as explained in the `analysis_explore_storey_and_height_data.ipynb` notebook)
+# - exclude building heights below 2m as we assume this is inaccurate
 
 # %%
 # Import latest EPC data
@@ -43,7 +52,8 @@ flats_epc_df = (
         .then(pl.col("height"))
         .otherwise(None)
         .alias("height"),
-        # Manual check shows the building with max storey count is incorrect
+        # Manual check on google maps shows the building with max storey count is incorrect
+        # We correct it because it is so erroneous (EPC data: 83 storeys, google maps: 3 storeys)
         pl.when(pl.col("UPRN") == "100080510780.0")
         .then(3)
         .otherwise(pl.col("FLAT_STOREY_COUNT"))
@@ -55,7 +65,9 @@ flats_epc_df = (
 
 # %% [markdown]
 # ## 2. Add tall buildings in UK
-# It appears that high rises likely don't have the correct height / storey count data (see `analysis_explore_storey_and_height_data.py` notebook) and the models are therefore underestimating their storey counts because the heights and storey counts are too low. We will try filling some of this data in using data about the tallest buildings in the UK taken from Wikipedia (URL: https://en.wikipedia.org/wiki/List_of_tallest_buildings_in_the_United_Kingdom) and tall buildings in Manchester (URL: https://en.wikipedia.org/wiki/List_of_tallest_buildings_and_structures_in_Greater_Manchester). The dataset covers all current buildings which are over 100m tall in the UK and over 50m in Manchester. The data contains building max height in meters and storey count.
+# It appears that high rises likely don't have the correct height / storey count data (see `analysis_explore_storey_and_height_data.py` notebook). The high rises appear to have too low storey counts AND too low heights in some cases, which means that the model will not learn they are high rises - it will just classify them as lower rises. If we correct some of the high-rise storey counts, our model will be better calibrated to the actual ground truth and therefore have improved accuracy.
+#
+# We will therefore try filling some of this data in using data about the tallest buildings in the UK taken from Wikipedia (URL: https://en.wikipedia.org/wiki/List_of_tallest_buildings_in_the_United_Kingdom) and tall buildings in Manchester (URL: https://en.wikipedia.org/wiki/List_of_tallest_buildings_and_structures_in_Greater_Manchester). The dataset covers all current buildings which are over 100m tall in the UK and over 50m in Manchester. The data contains building max height in meters and storey count.
 #
 # We're interested in using the storey count information only, not height data, to improve our model. This is because our model converts height to storey counts and correcting only some, not all, of the height data will skew our model.
 #
@@ -340,10 +352,8 @@ flats_epc_df["method_2_building_rise"].value_counts()
 #
 # First we prepare the dataset for modelling:
 # - exclude rows with null values in features or target values
-# - exclude rows where country is Scotland (due to systemic error discovered in Scottish data)
-# - exclude rows where building height is <3m
-#
-# We don't set a minimum threshold for meters per storey because our hypothesis is that the building height data underestimates the height of taller buildings. Therefore, we are allowing meters per storey values which are smaller than is realistic to train the model to predict higher storey counts for taller buildings.
+# - exclude rows where country is Scotland (due to systemic error discovered in Scottish data) (already done)
+# - exclude rows where building height is <2m
 #
 # We group buildings by building ID to ensure that the same buildings are not represented in both the training and test sets.
 
@@ -372,7 +382,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 # %%
 # Train model
-reg = sklearn.linear_model.LinearRegression().fit(X_train, y_train)
+reg = LinearRegression().fit(X_train, y_train)
 
 # %%
 # R2 on training data
@@ -434,7 +444,7 @@ poly_features = sklearn.preprocessing.PolynomialFeatures(degree=3)
 X_poly = poly_features.fit_transform(X)
 
 # %%
-reg = sklearn.linear_model.LinearRegression().fit(X_poly, y)
+reg = LinearRegression().fit(X_poly, y)
 
 # %%
 # R2 value of model subset
@@ -605,6 +615,9 @@ X = model_df.select(["height", "property_per_m2"])
 y = model_df["FLAT_STOREY_COUNT"]
 
 # %%
+(model_df["property_per_m2"] * 100).describe()
+
+# %%
 model = sm.ols("FLAT_STOREY_COUNT ~ height + property_per_m2", model_df.to_pandas())
 results = model.fit()
 
@@ -660,7 +673,7 @@ for i in tqdm(range(0, 50)):
         ]
 
         # Train model
-        reg = linear_model.LinearRegression().fit(X_train, y_train)
+        reg = LinearRegression().fit(X_train, y_train)
 
         # R2 on test data
         test_r2.append(reg.score(X_test, y_test))
@@ -705,7 +718,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 # Train final candidate model
-reg = linear_model.LinearRegression().fit(X, y)
+reg = LinearRegression().fit(X, y)
 
 # %%
 reg.score(X, y)
@@ -719,6 +732,9 @@ plt.hist(residuals, bins=100)
 plt.title(
     "Distribution of residuals from selected model for predicting flat storey count"
 )
+plt.xlabel("Residuals (true - predicted storey count)")
+plt.ylabel("Frequency")
+plt.axvline(0, color="red", linestyle="--", label="Zero line")
 plt.show()
 
 # %%
@@ -726,7 +742,7 @@ plt.show()
 pred_lists_to_plot = [y] + [candidate_preds]
 
 # # Uncomment to see the results for the polynomial linear regression model
-# poly_reg = sklearn.linear_model.LinearRegression().fit(X_poly, y)
+# poly_reg = LinearRegression().fit(X_poly, y)
 # pred_lists_to_plot = [y] + [poly_reg.predict(X_poly)]
 
 labels = {
@@ -844,6 +860,36 @@ plt.title(
 plt.xlim(0, 36)
 plt.show()
 
+# %%
+pred = reg.predict(X_test)
+resid = pred - y_test
+# Compute residuals
+resid_df = pd.DataFrame(
+    {
+        "height": X_test["height"],
+        "resid": resid,
+    }
+)
+
+# Bin height into 2m intervals
+resid_df["height_bin"] = pd.cut(resid_df["height"], bins=np.arange(0, 60, 2))
+
+# Group by bin, compute mean residual
+grouped = resid_df.groupby("height_bin")["resid"].agg(["mean", "count"]).reset_index()
+
+# Extract bin centres for plotting
+grouped["bin_center"] = grouped["height_bin"].apply(lambda x: x.mid)
+
+# Plot
+plt.figure(figsize=(7, 5))
+plt.plot(grouped["bin_center"], grouped["mean"], marker="o", linestyle="-")
+plt.axhline(0, color="k", linestyle="--")
+plt.xlabel("Height (binned)")
+plt.ylabel("Mean residual (Predicted − True)")
+plt.title("Mean residual by height bin")
+plt.grid(True, linestyle="--", alpha=0.5)
+plt.show()
+
 # %% [markdown]
 # ## Predict storey count
 #
@@ -918,7 +964,7 @@ print(
 # %%
 save_utils.save_to_s3(
     flats_epc_df,
-    "s3://asf-heat-pump-suitability/outputs/2024Q3/analysis/2024_Q3_epc_flats_processed_filled_storey_count.parquet",
+    "s3://asf-heat-pump-suitability/outputs/2024Q3/analysis/2024_Q3_epc_flats_processed_filled_storey_count_EW.parquet",
 )
 
 # %%
