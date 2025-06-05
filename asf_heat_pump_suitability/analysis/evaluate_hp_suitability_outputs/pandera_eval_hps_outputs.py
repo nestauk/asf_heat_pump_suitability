@@ -1,5 +1,5 @@
 """
-This script performs data quality checks and statistical analysis on heat pump suitability data.
+This script performs data quality checks and statistical analysis on heat pump suitability data. Specifically this takes the heat pump suitability per LSOA data which is an output from asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_suitability.py
 
 Key functionalities:
 1. Validates the dataset schema using Pandera (Polars backend).
@@ -20,6 +20,11 @@ from pandera.polars import Check, Column, DataFrameSchema
 from asf_heat_pump_suitability.analysis.hn_zones.hnz_utils.log_utils import (
     setup_logging_and_file_path,
 )
+from urllib.parse import urlparse
+from pathlib import Path
+from datetime import datetime
+from asf_heat_pump_suitability import PROJECT_DIR
+from typing import Tuple
 
 # ------------------------------------------------------------------------------
 # Argument parsing for data path
@@ -30,24 +35,50 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--data-path",
     type=str,
-    default=cfg.DATA_PATH,
-    help="Path to the data CSV file (local or S3 URI).",
+    default=cfg.DATA_S3_URI,
+    help="Path to the heat pump suitability per LSOA data CSV file (local or S3 URI).",
 )
 args = parser.parse_args()
 data_path = args.data_path
 
-# ------------------------------------------------------------------------------
-# Logging setup
-# ------------------------------------------------------------------------------
 
-setup_logging_and_file_path(output_dir=cfg.OUTPUT_DIR, log_filename=cfg.LOG_FILENAME)
+# ------------------------------------------------------------------------------
+# Util functions
+# ------------------------------------------------------------------------------
+def make_paths_from_data_path(data_path: str, project_dir: str) -> Tuple[str, str]:
+    """Creates a timestamped logs directory and log filename from a data path.
+
+    Args:
+        data_path (str): Local file path or S3 URI of the data file.
+        project_dir (str): Root directory of the project.
+
+    Returns:
+        Tuple[str, str]:
+            - output_dir: Path to the created logs directory.
+            - logfile: Log filename in the format "<base>_<TIMESTAMP>_dq.log".
+    """
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if data_path.startswith("s3://"):
+        key = urlparse(data_path).path.lstrip("/")
+    else:
+        key = Path(data_path).name
+    base = Path(key).stem
+    outdir = (
+        Path(project_dir) / "analysis" / "evaluate_hp_suitability_outputs" / "logs" / ts
+    )
+    outdir.mkdir(parents=True, exist_ok=True)
+    logfile = f"{base}_{ts}_dq.log"
+    return str(outdir), logfile
+
+
+output_dir, log_filename = make_paths_from_data_path(data_path, PROJECT_DIR)
+
+setup_logging_and_file_path(output_dir=output_dir, log_filename=log_filename)
 
 
 # ---------------------------------------------------------------------------
 # 1.  BUILD SCHEMA
 # ---------------------------------------------------------------------------
-
-# schema_columns: dict[str, Column] = {}
 
 
 def add_schema_column(
@@ -160,7 +191,7 @@ df_pol = df_pol.with_columns(
 logging.info("=== Outlier Detection (Z-Score) ===")
 
 Z = cfg.OUTLIER_ZSCORE_THRESHOLD
-logging.info("No outliers detected in any columns (z > %.1f).", Z)
+logging.info("Outlier Z-score threshold: (z > %.1f).", Z)
 
 
 # outlier counts (1-row wide → long)
@@ -217,7 +248,7 @@ logging.info("Column dtypes: %s", df_pol.dtypes)
 
 # --- Full numeric summary to CSV ------------------------------------------- #
 summary_file = (
-    Path(cfg.OUTPUT_DIR)
+    Path(output_dir)
     / f"{Path(data_path).stem}_numeric_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 )
 final_summary.write_csv(summary_file)
@@ -227,7 +258,7 @@ logging.info("Full numeric summary ➜ %s", summary_file)
 # Polars’ describe() gives you count, mean, std, min, max, quartiles, etc.
 describe_df = df_pol.select(cfg.NUMERIC_COLUMNS).describe()
 describe_file = (
-    Path(cfg.OUTPUT_DIR)
+    Path(output_dir)
     / f"{Path(data_path).stem}_numeric_describe_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 )
 describe_df.write_csv(describe_file)
