@@ -2,43 +2,14 @@
 Configuration file for data quality checks and analysis.
 
 Defines:
-- File paths, logging setup, and timestamped output directories.
+- S3 URI for the dataset.
 - Expected dataset structure, including column names and types.
 - Validation rules for numeric, proportion, boolean, and categorical columns.
 - Thresholds for outlier detection (z-scores) and non-negative constraints.
 """
 
-from asf_heat_pump_suitability import PROJECT_DIR
-import os
-from datetime import datetime
-from urllib.parse import urlparse
-
-# Path to data file
-# timestamp for tracking
-TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
-
 # S3 URI for the data file
 DATA_S3_URI = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250319_2023_Q4_heat_pump_suitability_per_lsoa.csv"
-
-# parse bucket and key from the URI (if you still need them elsewhere)
-parsed_uri = urlparse(DATA_S3_URI)
-S3_BUCKET = parsed_uri.netloc
-S3_KEY = parsed_uri.path.lstrip("/")
-
-# output directory for logs (local)
-OUTPUT_DIR = os.path.join(
-    PROJECT_DIR,
-    "asf_heat_pump_suitability/analysis/evaluate_hp_suitability_outputs/logs",
-    TIMESTAMP,
-)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-# path to use in the rest of the pipeline (read straight from S3)
-DATA_PATH = DATA_S3_URI
-
-# append timestamp to log filename
-DATA_FILE_NAME = os.path.basename(S3_KEY)
-LOG_FILENAME = f"{os.path.splitext(DATA_FILE_NAME)[0]}_{TIMESTAMP}_dq.log"
 
 # Expected columns
 EXPECTED_COLUMNS = [
