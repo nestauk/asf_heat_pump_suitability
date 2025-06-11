@@ -81,7 +81,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         file_matches = garden_size.match_series_files_land_building(
             land_files_gdf=land_file_bounds, building_files_gdf=microsoft_file_bounds
         )
-        self.chunked_file_matches = parallel_utils.chunk_df(file_matches, size=30)
+        # self.chunked_file_matches = parallel_utils.chunk_df(file_matches, size=30)
 
         # # TODO remove before merge
         self.chunked_file_matches = parallel_utils.chunk_df(
