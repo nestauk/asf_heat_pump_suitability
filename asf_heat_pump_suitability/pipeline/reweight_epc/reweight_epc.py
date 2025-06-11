@@ -5,7 +5,6 @@ Functions to reweight EPC using IPF against target marginals.
 import polars as pl
 import random
 from typing import Dict, Tuple
-import logging
 import balance
 from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_target
 
