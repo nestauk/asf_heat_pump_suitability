@@ -1,5 +1,5 @@
 """
-FLow to weight properties with Iterative Proportional Fitting per LSOA / Data Zone according to the
+Flow to weight properties with Iterative Proportional Fitting per LSOA / Data Zone according to the
 following features:
 - property type (detached, semi-detached, terraced, flats, other);
 - tenure (owner-occupied, social rental, private rental)
@@ -19,6 +19,10 @@ from metaflow import FlowSpec, step, batch, Parameter
 
 
 class ComputeEpcWeightsFlow(FlowSpec):
+    """
+    Flow to weight properties with Iterative Proportional Fitting per LSOA / Data Zone.
+    """
+
     epc_path = Parameter(
         name="epc",
         help="Path to processed and deduplicated EPC dataset in parquet file format",
@@ -93,7 +97,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
     @step
     def prepare_for_reweighting(self):
         """
-        Standardise EPC features used in weighting and drop EPC rows missing data required for reweighting.
+        Standardise EPC features used in weighting and drop EPC rows missing data required for reweighting (missing LSOA
+        information or reweighting features).
         """
         from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
 
@@ -154,8 +159,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
     @step
     def reweight_properties_per_lsoa(self):
         """
-        For each chunk of EPC data per country, calculate weights for all properties in each LSOA / DZ using the census
-        data.
+        For each chunk of EPC data per country, use Iterative Proportional Fitting (IPF) to calculate weights for all
+        properties per LSOA / DZ. Properties are weighted so that the total proportions of each target feature match as
+        closely as possible to the target marginals of each target feature in the census data for the LSOA / DZ.
         """
         # TODO update to dev branch before merge
         # Install repo on batch machine to access modules
@@ -236,6 +242,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
         import polars as pl
         import itertools
 
+        # This line exists to persist the epc_df variable to the next step in the flow
         self.epc_df = inputs[0].epc_df
 
         # Get df of UPRNs, reweighting features, and weights for all nations
