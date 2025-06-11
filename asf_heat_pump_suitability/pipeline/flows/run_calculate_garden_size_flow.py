@@ -84,9 +84,9 @@ class CalculateGardenSizeFlow(FlowSpec):
         self.chunked_file_matches = parallel_utils.chunk_df(file_matches, size=30)
 
         # # TODO remove before merge
-        # self.chunked_file_matches = parallel_utils.chunk_df(
-        #     file_matches.sample(3), size=1
-        # )
+        self.chunked_file_matches = parallel_utils.chunk_df(
+            file_matches.sample(3), size=1
+        )
 
         logging.info(
             f"Estimating garden size for properties across {len(file_matches)} pairs of land extent and building footprint files."
@@ -95,11 +95,14 @@ class CalculateGardenSizeFlow(FlowSpec):
         self.next(self.estimate_garden_size, foreach="chunked_file_matches")
 
     @batch(cpu=2, memory=16000)
-    # @batch(cpu=2, memory=32000)
     @step
     def estimate_garden_size(self):
+        """
+        Estimate garden size per property using land registry polygons and building footprints.
+        """
         import os
 
+        # TODO update to dev before merge
         os.system(
             "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@152_parallelise_garden_script"
         )
@@ -174,6 +177,9 @@ class CalculateGardenSizeFlow(FlowSpec):
 
     @step
     def concatenate_garden_size_dfs(self, inputs):
+        """
+        Concatenate estimated garden size data into one dataframe.
+        """
         import itertools
         import polars as pl
         import logging
@@ -186,7 +192,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         )
         self.next(self.save_outputs)
 
-    @batch(cpu=2, memory=16000)
+    # @batch(cpu=2, memory=16000)
     @step
     def save_outputs(self):
         """
@@ -196,8 +202,8 @@ class CalculateGardenSizeFlow(FlowSpec):
         from asf_heat_pump_suitability.utils import save_utils
         from asf_heat_pump_suitability.pipeline.prepare_features import garden_size
 
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}.parquet"
-        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_SAMPLE.parquet"
+        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}.parquet"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_SAMPLE.parquet"
         save_utils.save_to_s3(self.epc_gardens_df, save_as)
 
         self.epc_gardens_df = self.epc_gardens_df.with_columns(
@@ -207,8 +213,8 @@ class CalculateGardenSizeFlow(FlowSpec):
             self.epc_gardens_df
         )
 
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_deduplicated.parquet"
-        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_deduplicated_SAMPLE.parquet"
+        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_deduplicated.parquet"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_deduplicated_SAMPLE.parquet"
         save_utils.save_to_s3(self.epc_gardens_df, save_as)
 
         self.next(self.end)
