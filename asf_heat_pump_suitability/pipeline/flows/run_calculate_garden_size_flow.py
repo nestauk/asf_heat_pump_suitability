@@ -3,7 +3,7 @@ Flow to calculate garden area (m2) where possible for properties in the domestic
 Microsoft Building Footprints data.
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size_flow.py run --epc [path/to/EPC/data] --year [YYYY] --quarter [Q] --nations ews --max-num-splits 400
+python asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size_flow.py run --epc [path/to/EPC/data] --year [YYYY] --quarter [Q] --nations ews
 
 [Set --nations flag to "ew" or "s" for generating garden size estimates for either England and Wales or Scotland INSPIRE
 files only.]
