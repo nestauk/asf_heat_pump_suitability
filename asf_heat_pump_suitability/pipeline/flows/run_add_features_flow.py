@@ -11,7 +11,7 @@ Add new features to EPC dataset:
 - presence of anchor properties per LSOA
 
 To run:
-python -i asf_heat_pump_suitability/pipeline/run_scripts/run_add_features.py --epc [path/to/EPC] -y [YYYY] -q [Q]
+python -i asf_heat_pump_suitability/pipeline/run_scripts/run_add_features_flow.py --datastore=s3 run --epc_path [path/to/EPC] --year [YYYY] --quarter [Q]
 
 NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
@@ -170,7 +170,14 @@ class AddFeaturesFlow(FlowSpec):
             ["PROPERTY_TYPE", "BUILT_FORM"]
         )
 
-        self.next(self.add_average_garden_size_per_msoa)
+        self.next(
+            self.add_average_garden_size_per_msoa,
+            self.add_property_density,
+            self.add_off_gas_flag,
+            self.add_listed_building_status,
+            self.add_grid_capacity,
+            self.add_anchor_property_flag,
+        )
 
     @step
     def add_average_garden_size_per_msoa(self):
@@ -186,14 +193,14 @@ class AddFeaturesFlow(FlowSpec):
         logging.info("Adding average garden size per MSOA to EPC")
         garden_space_avg_msoa_df = garden_space_avg.generate_df_garden_space_avg()
         self.epc_df = epc.add_col_msoa_avg_outdoor_space_property_type(self.epc_df)
-        self.epc_df = self.epc_df.join(
+        self.feature_df = self.epc_df.join(
             garden_space_avg_msoa_df,
             how="left",
             left_on=["msoa", "msoa_avg_outdoor_space_property_type"],
             right_on=["MSOA code", "msoa_avg_outdoor_space_property_type"],
         )
 
-        self.next(self.add_property_density)
+        self.next(self.join)
 
     @step
     def add_property_density(self):
@@ -205,9 +212,9 @@ class AddFeaturesFlow(FlowSpec):
 
         logging.info("Adding property density to EPC")
         lsoa_density_df = property_density.generate_df_property_density()
-        self.epc_df = self.epc_df.join(lsoa_density_df, how="left", on="lsoa")
+        self.feature_df = self.epc_df.join(lsoa_density_df, how="left", on="lsoa")
 
-        self.next(self.add_off_gas_flag)
+        self.next(self.join)
 
     @step
     def add_off_gas_flag(self):
@@ -219,9 +226,9 @@ class AddFeaturesFlow(FlowSpec):
 
         logging.info("Adding off gas grid column to EPC")
         off_gas_postcodes = off_gas.process_off_gas_data()
-        self.epc_df = off_gas.add_off_gas_feature(self.epc_df, off_gas_postcodes)
+        self.feature_df = off_gas.add_off_gas_feature(self.epc_df, off_gas_postcodes)
 
-        self.next(self.add_listed_building_status)
+        self.next(self.join)
 
     @step
     def add_listed_building_status(self):
@@ -236,11 +243,11 @@ class AddFeaturesFlow(FlowSpec):
         listed_buildings_df = listed_buildings.generate_df_epc_listed_buildings(
             epc_df=self.epc_df
         )
-        self.epc_df = self.epc_df.join(
+        self.feature_df = self.epc_df.join(
             listed_buildings_df, how="left", on="UPRN"
         ).with_columns(pl.col("listed_building").fill_null(False))
 
-        self.next(self.add_grid_capacity)
+        self.next(self.join)
 
     @step
     def add_grid_capacity(self):
@@ -255,9 +262,9 @@ class AddFeaturesFlow(FlowSpec):
         grid_capacities = grid_capacity.calculate_grid_capacity().select(
             ["lsoa", "heatpump_installation_percentage"]
         )
-        self.epc_df = self.epc_df.join(grid_capacities, how="left", on="lsoa")
+        self.feature_df = self.epc_df.join(grid_capacities, how="left", on="lsoa")
 
-        self.next(self.add_anchor_property_flag)
+        self.next(self.join)
 
     @step
     def add_anchor_property_flag(self):
@@ -274,9 +281,27 @@ class AddFeaturesFlow(FlowSpec):
         anchor_properties_df = anchor_properties.identify_anchor_properties_df().select(
             ["lsoa", "has_anchor_property"]
         )
-        self.epc_df = self.epc_df.join(
+        self.feature_df = self.epc_df.join(
             anchor_properties_df, how="left", on="lsoa"
         ).with_columns(pl.col("has_anchor_property").fill_null(False))
+
+        self.next(self.join)
+
+    @step
+    def join(self, inputs):
+        """
+        Join all new feature datasets together and join to EPC.
+        """
+        for input in inputs:
+            # Identify columns with new features
+            new_cols = ["UPRN"] + [
+                col
+                for col in input.feature_df.columns
+                if col not in self.epc_df.columns
+            ]
+            self.epc_df = self.epc_df.join(
+                input.feature_df.select(new_cols), how="left", on="UPRN"
+            )
 
         self.next(self.save_output)
 
@@ -289,7 +314,7 @@ class AddFeaturesFlow(FlowSpec):
 
         # Save to S3
         if not self.save_as:
-            save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/features/{self.year}_Q{self.quarter}_EPC_features_test.parquet"
+            self.save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/features/{self.year}_Q{self.quarter}_EPC_features_test.parquet"
         save_utils.save_to_s3(self.epc_df, self.save_as)
 
         self.next(self.end)
