@@ -71,6 +71,22 @@ class AddFeaturesFlow(FlowSpec):
             ],
         )
 
+        self.next(self.clean_property_type)
+
+    @step
+    def clean_property_type(self):
+        """
+        Clean property type column.
+        """
+        import logging
+        from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
+
+        logging.info("Cleaning property type data in EPC")
+        # Below we process the EPC `PROPERTY_TYPE` column and rename, then drop the original column
+        self.epc_df = prepare_sample.add_col_property_type(self.epc_df).drop(
+            ["PROPERTY_TYPE", "BUILT_FORM"]
+        )
+
         self.next(self.add_output_areas)
 
     @step
@@ -113,7 +129,15 @@ class AddFeaturesFlow(FlowSpec):
         # uprn_lad_df = output_areas.sjoin_df_uprn_lad_code(self.epc_gdf)
         # self.epc_df = self.epc_df.drop("lad_code").join(uprn_lad_df, how="left", on="UPRN")
 
-        self.next(self.add_protected_area_flag)
+        self.next(
+            self.add_protected_area_flag,
+            self.add_average_garden_size_per_msoa,
+            self.add_property_density,
+            self.add_off_gas_flag,
+            self.add_listed_building_status,
+            self.add_grid_capacity,
+            self.add_anchor_property_flag,
+        )
 
     @step
     def add_protected_area_flag(self):
@@ -154,30 +178,7 @@ class AddFeaturesFlow(FlowSpec):
             .alias("in_protected_area")
         )
 
-        self.next(self.clean_property_type)
-
-    @step
-    def clean_property_type(self):
-        """
-        Clean property type column.
-        """
-        import logging
-        from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
-
-        logging.info("Cleaning property type data in EPC")
-        # Below we process the EPC `PROPERTY_TYPE` column and rename, then drop the original column
-        self.epc_df = prepare_sample.add_col_property_type(self.epc_df).drop(
-            ["PROPERTY_TYPE", "BUILT_FORM"]
-        )
-
-        self.next(
-            self.add_average_garden_size_per_msoa,
-            self.add_property_density,
-            self.add_off_gas_flag,
-            self.add_listed_building_status,
-            self.add_grid_capacity,
-            self.add_anchor_property_flag,
-        )
+        self.next(self.join)
 
     @step
     def add_average_garden_size_per_msoa(self):
