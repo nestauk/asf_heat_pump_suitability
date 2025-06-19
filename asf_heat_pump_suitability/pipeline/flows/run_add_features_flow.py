@@ -41,14 +41,6 @@ class AddFeaturesFlow(FlowSpec):
         required=True,
     )
 
-    save_as = Parameter(
-        name="save_as",
-        help="S3 path to save enhanced EPC dataset to. If unspecified, save with default filename.",
-        type=str,
-        default=None,
-        required=False,
-    )
-
     @step
     def start(self):
         """
@@ -69,6 +61,11 @@ class AddFeaturesFlow(FlowSpec):
                 "BUILT_FORM",
                 "CURRENT_ENERGY_RATING",
             ],
+        ).with_columns(
+            pl.when(pl.col("UPRN").str.contains(r"[a-zA-Z]"))
+            .then(False)
+            .otherwise(True)
+            .alias("valid_UPRN")
         )
 
         self.next(self.clean_property_type)
@@ -129,15 +126,7 @@ class AddFeaturesFlow(FlowSpec):
         # uprn_lad_df = output_areas.sjoin_df_uprn_lad_code(self.epc_gdf)
         # self.epc_df = self.epc_df.drop("lad_code").join(uprn_lad_df, how="left", on="UPRN")
 
-        self.next(
-            self.add_protected_area_flag,
-            self.add_average_garden_size_per_msoa,
-            self.add_property_density,
-            self.add_off_gas_flag,
-            self.add_listed_building_status,
-            self.add_grid_capacity,
-            self.add_anchor_property_flag,
-        )
+        self.next(self.add_protected_area_flag)
 
     @step
     def add_protected_area_flag(self):
@@ -172,13 +161,14 @@ class AddFeaturesFlow(FlowSpec):
             pl.when(
                 (pl.col("lad_conservation_area_data_available_ew"))
                 & pl.col("COUNTRY").is_in(["England", "Wales"])
+                & pl.col("valid_UPRN")
             )
             .then(pl.col("in_protected_area").fill_null(False))
             .otherwise(pl.col("in_protected_area"))
             .alias("in_protected_area")
         )
 
-        self.next(self.join)
+        self.next(self.add_average_garden_size_per_msoa)
 
     @step
     def add_average_garden_size_per_msoa(self):
@@ -194,14 +184,14 @@ class AddFeaturesFlow(FlowSpec):
         logging.info("Adding average garden size per MSOA to EPC")
         garden_space_avg_msoa_df = garden_space_avg.generate_df_garden_space_avg()
         self.epc_df = epc.add_col_msoa_avg_outdoor_space_property_type(self.epc_df)
-        self.feature_df = self.epc_df.join(
+        self.epc_df = self.epc_df.join(
             garden_space_avg_msoa_df,
             how="left",
             left_on=["msoa", "msoa_avg_outdoor_space_property_type"],
             right_on=["MSOA code", "msoa_avg_outdoor_space_property_type"],
         )
 
-        self.next(self.join)
+        self.next(self.add_property_density)
 
     @step
     def add_property_density(self):
@@ -213,9 +203,9 @@ class AddFeaturesFlow(FlowSpec):
 
         logging.info("Adding property density to EPC")
         lsoa_density_df = property_density.generate_df_property_density()
-        self.feature_df = self.epc_df.join(lsoa_density_df, how="left", on="lsoa")
+        self.epc_df = self.epc_df.join(lsoa_density_df, how="left", on="lsoa")
 
-        self.next(self.join)
+        self.next(self.add_off_gas_flag)
 
     @step
     def add_off_gas_flag(self):
@@ -227,9 +217,9 @@ class AddFeaturesFlow(FlowSpec):
 
         logging.info("Adding off gas grid column to EPC")
         off_gas_postcodes = off_gas.process_off_gas_data()
-        self.feature_df = off_gas.add_off_gas_feature(self.epc_df, off_gas_postcodes)
+        self.epc_df = off_gas.add_off_gas_feature(self.epc_df, off_gas_postcodes)
 
-        self.next(self.join)
+        self.next(self.add_listed_building_status)
 
     @step
     def add_listed_building_status(self):
@@ -244,11 +234,16 @@ class AddFeaturesFlow(FlowSpec):
         listed_buildings_df = listed_buildings.generate_df_epc_listed_buildings(
             epc_df=self.epc_df
         )
-        self.feature_df = self.epc_df.join(
+        self.epc_df = self.epc_df.join(
             listed_buildings_df, how="left", on="UPRN"
-        ).with_columns(pl.col("listed_building").fill_null(False))
+        ).with_columns(
+            pl.when(pl.col("valid_UPRN"))
+            .then(pl.col("listed_building").fill_null(False))
+            .otherwise(pl.col("listed_building"))
+            .alias("listed_building")
+        )
 
-        self.next(self.join)
+        self.next(self.add_grid_capacity)
 
     @step
     def add_grid_capacity(self):
@@ -263,9 +258,9 @@ class AddFeaturesFlow(FlowSpec):
         grid_capacities = grid_capacity.calculate_grid_capacity().select(
             ["lsoa", "heatpump_installation_percentage"]
         )
-        self.feature_df = self.epc_df.join(grid_capacities, how="left", on="lsoa")
+        self.epc_df = self.epc_df.join(grid_capacities, how="left", on="lsoa")
 
-        self.next(self.join)
+        self.next(self.add_anchor_property_flag)
 
     @step
     def add_anchor_property_flag(self):
@@ -282,27 +277,9 @@ class AddFeaturesFlow(FlowSpec):
         anchor_properties_df = anchor_properties.identify_anchor_properties_df().select(
             ["lsoa", "has_anchor_property"]
         )
-        self.feature_df = self.epc_df.join(
+        self.epc_df = self.epc_df.join(
             anchor_properties_df, how="left", on="lsoa"
         ).with_columns(pl.col("has_anchor_property").fill_null(False))
-
-        self.next(self.join)
-
-    @step
-    def join(self, inputs):
-        """
-        Join all new feature datasets together and join to EPC.
-        """
-        for input in inputs:
-            # Identify columns with new features
-            new_cols = ["UPRN"] + [
-                col
-                for col in input.feature_df.columns
-                if col not in self.epc_df.columns
-            ]
-            self.epc_df = self.epc_df.join(
-                input.feature_df.select(new_cols), how="left", on="UPRN"
-            )
 
         self.next(self.save_output)
 
@@ -313,10 +290,8 @@ class AddFeaturesFlow(FlowSpec):
         """
         from asf_heat_pump_suitability.utils import save_utils
 
-        # Save to S3
-        if not self.save_as:
-            self.save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/features/{self.year}_Q{self.quarter}_EPC_features_test.parquet"
-        save_utils.save_to_s3(self.epc_df, self.save_as)
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/features/{self.year}_Q{self.quarter}_EPC_features_test.parquet"
+        save_utils.save_to_s3(self.epc_df, save_as)
 
         self.next(self.end)
 
