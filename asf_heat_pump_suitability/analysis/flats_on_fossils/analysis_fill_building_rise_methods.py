@@ -740,7 +740,7 @@ plt.show()
 pred_lists_to_plot = [y] + [candidate_preds]
 
 # # Uncomment to see the results for the polynomial linear regression model
-poly_reg = LinearRegression().fit(X_poly, y)
+# poly_reg = LinearRegression().fit(X_poly, y)
 # pred_lists_to_plot = [y] + [poly_reg.predict(X_poly)]
 
 labels = {
@@ -895,17 +895,34 @@ plt.show()
 # Use the selected model to predict the storey counts on the full EPC flats data set
 
 # %%
+# Predict storey count for all buildings with height data in the dataset
+prediction_df = flats_epc_df.filter(
+    pl.col("height").is_not_null(), pl.col("property_per_m2").is_not_null()
+).select(["UPRN", "height", "property_per_m2"])
+
+prediction_df = prediction_df.with_columns(
+    final_storey_count=np.round(
+        reg.predict(prediction_df.select(["height", "property_per_m2"]))
+    )
+)
+
+# Join predictions to EPC flats dataset
+if "final_storey_count" in flats_epc_df.columns:
+    flats_epc_df = flats_epc_df.drop("final_storey_count")
+flats_epc_df = flats_epc_df.join(
+    prediction_df.select(["UPRN", "final_storey_count"]), how="left", on="UPRN"
+)
+
+# %%
 # Exclude storey counts below 1 and over 100 and fill missing FLAT STOREY COUNT data with these estimates
 flats_epc_df = flats_epc_df.with_columns(
-    pl.when(
-        (pl.col("method_3_storey_count") < 1) | (pl.col("method_3_storey_count") > 100)
-    )
+    pl.when((pl.col("final_storey_count") < 1) | (pl.col("final_storey_count") > 100))
     .then(None)
-    .otherwise(pl.col("method_3_storey_count"))
-    .alias("method_3_storey_count_clean")
+    .otherwise(pl.col("final_storey_count"))
+    .alias("final_storey_count_clean")
 ).with_columns(
     pl.col("FLAT_STOREY_COUNT")
-    .fill_null(pl.col("method_3_storey_count_clean"))
+    .fill_null(pl.col("final_storey_count_clean"))
     .alias("storey_count")
 )
 
