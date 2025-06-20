@@ -3,12 +3,12 @@ Calculate suitability scores of different low-carbon heating technologies in Nes
 properties and LSOAs.
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_suitability.py run --weights [path/to/weighted/EPC] --features [path/to/EPC/with/features] --gardens [path/to/garden/size/estimates] -y [YYYY] -q [Q] --max-workers 8
+python asf_heat_pump_suitability/pipeline/flows/run_calculate_suitability_flow.py --datastore=s3 run --weights [path/to/weighted/EPC] --features [path/to/EPC/with/features] --gardens [path/to/garden/size/estimates] --year [YYYY] --quarter [Q] --max-workers 18
 
 NB: this pipeline takes the outputs from the following scripts as inputs:
-- asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py
-- asf_heat_pump_suitability/pipeline/run_scripts/run_add_features.py
-- asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size.py
+- asf_heat_pump_suitability/pipeline/flows/run_compute_epc_weights_flow.py
+- asf_heat_pump_suitability/pipeline/flows/run_add_features_flow.py
+- asf_heat_pump_suitability/pipeline/flows/run_calculate_garden_size_flow.py
 """
 
 from metaflow import FlowSpec, step, batch, Parameter
