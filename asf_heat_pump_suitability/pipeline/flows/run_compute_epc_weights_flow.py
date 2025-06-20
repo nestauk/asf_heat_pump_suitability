@@ -57,6 +57,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         Load EPC data and start flow.
         """
+        dataset_desc = "sample" if self.sample else "full"
+        print(f"Running CalculateSuitabilityFlow on {dataset_desc} EPC dataset.")
+
         import polars as pl
 
         # Set reweighting features for each nation
@@ -82,13 +85,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
         )
 
         if self.sample:
-            print("Running ComputeEpcWeightsFlow on a sample of EPC data (N=1000)")
+            print("Sampling 1000 rows from EPC data to run pipeline on")
             self.epc_df = self.epc_df.sample(n=1000, seed=2)
-            self.batch_memory = 1000
-        else:
-            self.batch_memory = 16000
-
-        print(f"Setting memory for batch steps to {self.batch_memory} MB")
 
         self.next(self.join_lsoa_code)
 
@@ -121,8 +119,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
             self.prepare_for_country_specific_reweighting, foreach="country_features"
         )
 
-    # @batch(cpu=2, memory=16000)
-    @batch(cpu=2, memory=1000)
+    @batch(cpu=2, memory=16000)
     @step
     def prepare_for_country_specific_reweighting(self):
         """
@@ -169,8 +166,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
         self.next(self.reweight_properties_per_lsoa, foreach="chunks")
 
-    # @batch(cpu=2, memory=16000)
-    @batch(cpu=2, memory=1000)
+    @batch(cpu=2, memory=16000)
     @step
     def reweight_properties_per_lsoa(self):
         """
