@@ -62,6 +62,9 @@ class CalculateSuitabilityFlow(FlowSpec):
         """
         Load input datasets and start flow.
         """
+        dataset_desc = "sample" if self.sample else "full"
+        print(f"Running CalculateSuitabilityFlow on {dataset_desc} EPC dataset.")
+
         import polars as pl
         from datetime import datetime
         from asf_heat_pump_suitability import config
@@ -109,6 +112,7 @@ class CalculateSuitabilityFlow(FlowSpec):
         )
 
         if self.sample:
+            print("Sampling 1000 rows from EPC data to run pipeline on")
             self.epc_df = self.epc_df.sample(n=1000, seed=2)
 
         self.next(self.calculate_scores_per_epc_record)
@@ -164,8 +168,7 @@ class CalculateSuitabilityFlow(FlowSpec):
 
         self.next(self.weight_scores, foreach="chunks")
 
-    # @batch(cpu=2, memory=16000)
-    @batch(cpu=2, memory=1000)
+    @batch(cpu=2, memory=16000)
     @step
     def weight_scores(self):
         """
