@@ -64,7 +64,12 @@ def make_paths_from_data_path(data_path: str, project_dir: str) -> Tuple[str, st
         key = Path(data_path).name
     base = Path(key).stem
     outdir = (
-        Path(project_dir) / "analysis" / "evaluate_hp_suitability_outputs" / "logs" / ts
+        Path(project_dir)
+        / "asf_heat_pump_suitability"
+        / "pipeline"
+        / "data_qc"
+        / "logs"
+        / ts
     )
     outdir.mkdir(parents=True, exist_ok=True)
     logfile = f"{base}_{ts}_dq.log"
