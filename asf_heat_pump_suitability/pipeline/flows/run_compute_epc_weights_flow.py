@@ -10,7 +10,7 @@ only (property type and tenure) because there is no target build year data aggre
 Scotland.
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --datastore=s3 run --epc [path/to/EPC] -y [YYYY] -q [Q]
+python asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --datastore=s3 run --epc [path/to/EPC] --year [YYYY] --quarter [Q]
 
 NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
@@ -39,18 +39,25 @@ class ComputeEpcWeightsFlow(FlowSpec):
 
     quarter = Parameter(
         name="quarter",
-        help="EPC data quarter",
+        help="EPC data quarter, 1-4",
         type=int,
         required=True,
+    )
+
+    sample = Parameter(
+        name="sample",
+        help="Set to True to sample 1000 rows from the EPC dataset to run the flow on. Defaults to False which runs the flow on the full EPC dataset.",
+        type=bool,
+        default=False,
+        required=False,
     )
 
     @step
     def start(self):
         """
-        Set parameters, load EPC data and start flow.
+        Load EPC data and start flow.
         """
         import polars as pl
-        import logging
 
         # Set reweighting features for each nation
         self.country_features = [
@@ -60,7 +67,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
         ]
 
         # Import processed & deduplicated EPC
-        logging.info(f"Loading EPC file from path: {self.epc_path}")
+        print(f"Loading EPC file from path: {self.epc_path}")
         self.epc_df = pl.read_parquet(
             self.epc_path,
             columns=[
@@ -74,8 +81,14 @@ class ComputeEpcWeightsFlow(FlowSpec):
             ],
         )
 
-        # TODO remove before merge
-        self.epc_df = self.epc_df.sample(n=1000, seed=2)
+        if self.sample:
+            print("Running ComputeEpcWeightsFlow on a sample of EPC data (N=1000)")
+            self.epc_df = self.epc_df.sample(n=1000, seed=2)
+            self.batch_memory = 1000
+        else:
+            self.batch_memory = 16000
+
+        print(f"Setting memory for batch steps to {self.batch_memory} MB")
 
         self.next(self.join_lsoa_code)
 
@@ -97,8 +110,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
     @step
     def prepare_for_reweighting(self):
         """
-        Standardise EPC features used in weighting and drop EPC rows missing data required for reweighting (missing LSOA
-        information or reweighting features).
+        Standardise EPC features used in weighting and drop EPC rows missing data required for reweighting (those missing
+        LSOA information or reweighting features).
         """
         from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
 
@@ -140,12 +153,14 @@ class ComputeEpcWeightsFlow(FlowSpec):
             df=epc_cleaned_df, features=self.features
         )
 
-        self.chunks = parallel_utils.chunk_df_by_group(
-            # self.epc_cleaned_df, group_col="lsoa", n=1000
-            self.epc_cleaned_df,
-            group_col="lsoa",
-            n=100,
-        )
+        if self.sample:
+            self.chunks = parallel_utils.chunk_df_by_group(
+                self.epc_cleaned_df, group_col="lsoa", n=100
+            )
+        else:
+            self.chunks = parallel_utils.chunk_df_by_group(
+                self.epc_cleaned_df, group_col="lsoa", n=1000
+            )
 
         # Generate target marginals for all features and LSOAs
         self.target_marginals = prepare_target.get_dict_target_marginals(
@@ -162,6 +177,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
         For each chunk of EPC data per country, use Iterative Proportional Fitting (IPF) to calculate weights for all
         properties per LSOA / DZ. Properties are weighted so that the total proportions of each target feature match as
         closely as possible to the target marginals of each target feature in the census data for the LSOA / DZ.
+
+        This step also saves information about how long each LSOA / DZ takes to reweight and how many EPC rows are
+        not weighted due to preprocessing.
         """
         # TODO update to dev branch before merge
         # Install repo on batch machine to access modules
@@ -262,7 +280,13 @@ class ComputeEpcWeightsFlow(FlowSpec):
                         [input.proportional_weight for input in inputs]
                     )
                 ),
-            }
+            },
+            schema={
+                "UPRN": pl.String,
+                "lsoa": pl.String,
+                "weight": pl.Float64,
+                "proportional_weight": pl.Float64,
+            },
         )
 
         # Get df of stats for all nations
@@ -277,7 +301,8 @@ class ComputeEpcWeightsFlow(FlowSpec):
                 "lost_rows": list(
                     itertools.chain.from_iterable([input.lost_rows for input in inputs])
                 ),
-            }
+            },
+            schema={"lsoa": pl.String, "time": pl.Float64, "lost_rows": pl.Float64},
         )
 
         self.next(self.join_countries)
@@ -285,7 +310,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
     @step
     def join_countries(self, inputs):
         """
-        Join weighted EPC data per country together.
+        Concatenate weighted EPC data from each country together into single dataframe.
         """
         import polars as pl
 
@@ -313,8 +338,9 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         from asf_heat_pump_suitability.utils import save_utils
 
-        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/weights/{self.year}_Q{self.quarter}_EPC_weights"
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/weights/{self.year}_Q{self.quarter}_EPC_weights_SAMPLE"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/weights/{self.year}_Q{self.quarter}_EPC_weights"
+        if self.sample:
+            save_as = save_as + "_SAMPLE"
         save_utils.save_to_s3(self.weights_df, f"{save_as}.parquet")
         save_utils.save_to_s3(self.lsoa_stats_df, f"{save_as}_stats.parquet")
         self.next(self.end)
@@ -324,9 +350,7 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         End flow.
         """
-        import logging
-
-        logging.info("Compute EPC weights flow complete!")
+        print("Compute EPC weights flow complete!")
 
 
 if __name__ == "__main__":
