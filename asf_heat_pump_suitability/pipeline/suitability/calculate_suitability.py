@@ -164,7 +164,7 @@ def compute_df_max_score_per_epc(df: pl.DataFrame, tech_type: str) -> pl.DataFra
         .otherwise(0)
         .alias("anchor_properties_max"),
         pl.when(pl.col("heatpump_installation_percentage").is_not_null())
-        .then(scoring.epc_threshold_scores.get(tech_type))
+        .then(scoring.grid_capacity_scores.get(tech_type))
         .otherwise(0)
         .alias("grid_capacity_max"),
     )
