@@ -10,7 +10,7 @@ only (property type and tenure) because there is no target build year data aggre
 Scotland.
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_compute_epc_weights.py --datastore=s3 run --epc [path/to/EPC] --year [YYYY] --quarter [Q]
+python asf_heat_pump_suitability/pipeline/flows/run_compute_epc_weights_flow.py --datastore=s3 run --epc [path/to/EPC] --year [YYYY] --quarter [Q]
 
 NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
