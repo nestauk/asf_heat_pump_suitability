@@ -12,6 +12,8 @@ Scotland.
 To run:
 python asf_heat_pump_suitability/pipeline/flows/run_compute_epc_weights_flow.py --datastore=s3 run --epc [path/to/EPC] --year [YYYY] --quarter [Q]
 
+Set --sample to True to run on a sample of 1000 EPC records
+
 NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
 
@@ -125,12 +127,11 @@ class ComputeEpcWeightsFlow(FlowSpec):
         """
         For each country, conduct country-specific preprocessing on the EPC data to prepare for reweighting.
         """
-        # TODO update to dev branch before merge
         # Install repo on batch machine to access modules
         import os
 
         os.system(
-            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@154_parallelise_reweighting"
+            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git"
         )
         import polars as pl
         from asf_heat_pump_suitability.utils import parallel_utils
@@ -177,12 +178,11 @@ class ComputeEpcWeightsFlow(FlowSpec):
         This step also saves information about how long each LSOA / DZ takes to reweight and how many EPC rows are
         not weighted due to preprocessing.
         """
-        # TODO update to dev branch before merge
         # Install repo on batch machine to access modules
         import os
 
         os.system(
-            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@154_parallelise_reweighting"
+            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git"
         )
         from tqdm import tqdm
         import time
