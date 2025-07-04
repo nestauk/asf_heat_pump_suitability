@@ -5,6 +5,8 @@ properties and LSOAs.
 To run:
 python asf_heat_pump_suitability/pipeline/flows/run_calculate_suitability_flow.py --datastore=s3 run --weights [path/to/weighted/EPC] --features [path/to/EPC/with/features] --gardens [path/to/garden/size/estimates] --year [YYYY] --quarter [Q] --max-workers 18
 
+Set --sample to True to run on a sample of 1000 EPC records
+
 NB: this pipeline takes the outputs from the following scripts as inputs:
 - asf_heat_pump_suitability/pipeline/flows/run_compute_epc_weights_flow.py
 - asf_heat_pump_suitability/pipeline/flows/run_add_features_flow.py
@@ -176,9 +178,8 @@ class CalculateSuitabilityFlow(FlowSpec):
         """
         import os
 
-        # TODO update to dev before merge
         os.system(
-            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@153_parallelise_suitability_script"
+            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git"
         )
         from tqdm import tqdm
         from asf_heat_pump_suitability.pipeline.suitability import calculate_suitability
