@@ -24,3 +24,4 @@ numpy<2.0.0
 fiona
 bs4
 metaflow
+pandera
