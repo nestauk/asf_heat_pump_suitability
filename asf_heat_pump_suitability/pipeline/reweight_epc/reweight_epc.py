@@ -67,7 +67,7 @@ def generate_balance_sample(
 
     Returns:
         Tuple[balance.sample_class.Sample, int]: EPC data sample for a single LSOA prepared for weighting with number of
-        rows lost during preprocessing
+        rows lost during preprocessing. Returns `None` in place of EPC data sample if all EPC rows are lost during preprocessing.
     """
     # Get EPC sample filtered for single given LSOA
     cols = ["lsoa", "UPRN"]
@@ -88,18 +88,22 @@ def generate_balance_sample(
         sample = sample.filter(~pl.col(feature).is_in(missing))
     lost_rows = len_before - len(sample)
 
-    # TODO generating dummies will fail and cause pipeline error if all rows are removed from sample in code above
-    # TODO we need to check if len(sample) > 0 and only proceed with remaining code if it is
-    # Add dummy rows for feature categories missing from sample but present in target
-    dummies = generate_df_dummies(lsoa_marginals=lsoa_marginals, sample=sample)
-    sample = pl.concat([sample, dummies[sample.columns]])
+    if len(sample) > 0:
+        # Add dummy rows for feature categories missing from sample but present in target
+        dummies = generate_df_dummies(lsoa_marginals=lsoa_marginals, sample=sample)
+        sample = pl.concat([sample, dummies[sample.columns]])
 
-    # Convert to balance sample
-    cols.remove("lsoa")
-    balance_sample = sample.to_pandas()
-    balance_sample = balance.Sample.from_frame(balance_sample[cols], id_column="UPRN")
+        # Convert to balance sample
+        cols.remove("lsoa")
+        balance_sample = sample.to_pandas()
+        balance_sample = balance.Sample.from_frame(
+            balance_sample[cols], id_column="UPRN"
+        )
 
-    return balance_sample, lost_rows
+        return balance_sample, lost_rows
+
+    else:
+        return None, lost_rows
 
 
 def generate_df_dummies(
