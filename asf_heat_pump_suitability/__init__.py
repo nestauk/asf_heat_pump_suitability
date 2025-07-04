@@ -1,4 +1,5 @@
 """asf_heat_pump_suitability."""
+
 import logging
 import logging.config
 from pathlib import Path

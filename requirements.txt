@@ -24,3 +24,4 @@ numpy<2.0.0
 fiona~=1.1
 bs4~=0.0
 pandera~=0.24
+metaflow
