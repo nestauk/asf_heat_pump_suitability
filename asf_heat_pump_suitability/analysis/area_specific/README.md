@@ -39,3 +39,7 @@ Which creates the following:
 ## A note on simplifying geojson files
 
 Sometimes the geojsons created can be very large files, an online tool `https://mapshaper.org/` can help simplify these files (e.g. by 45%) without losing much noticiable definition on Flourish.
+
+## The Stoke ward in Plymouth
+
+The jupyter notebook `asf_heat_pump_suitability/analysis/area_specific/Stoke.ipynb` contains code to create datasets to plot in Flourish.
