@@ -51,6 +51,8 @@ data_source:
   EW_inspire_url: "https://use-land-property-data.service.gov.uk/datasets/inspire/download"
   S_scottish_gov_DZ2011_boundaries: "s3://asf-heat-pump-suitability/source_data/2014_Scottish_Government_DataZoneBoundaries_2011_S/SG_DataZone_Bdry_2011.shp"
   S_NRScotland_households: "s3://asf-heat-pump-suitability/source_data/June2024_NRScotland_households_and_dwellings_S.xlsx"
+  stoke_ward_boundary: "s3://asf-heat-pump-suitability/source_data/stoke_ward_boundary.geojson"
+  SX_Greenspace: "s3://asf-heat-pump-suitability/source_data/SX_Greenspace/SX_GreenspaceSite.shp"
 mapping:
   build_year_pre_cols:
     - BP_PRE_1900
