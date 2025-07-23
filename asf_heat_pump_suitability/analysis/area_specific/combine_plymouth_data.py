@@ -21,13 +21,13 @@ from asf_heat_pump_suitability.analysis.area_specific.area_specific_analysis_uti
 import os
 
 # Suitability data per LSOA
-suitablitity_per_lsoa_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250206_2023_Q4_heat_pump_suitability_per_lsoa.parquet"
+suitability_per_lsoa_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250319_2023_Q4_heat_pump_suitability_per_lsoa.parquet"
 
 # The suitability of properties
-per_property_file_name = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250206_2023_Q4_heat_pump_suitability_per_property.parquet"
+per_property_file_name = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitability/20250319_2023_Q4_heat_pump_suitability_per_property.parquet"
 
 # Garden size per property
-garden_size_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/20250114_2023_Q4_EPC_garden_size_estimates_EWS_deduplicated.parquet"
+garden_size_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/20250224_2023_Q4_EPC_garden_size_estimates_EWS_deduplicated.parquet"
 
 
 # Ad hoc manually created categories for Plymouth
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         os.makedirs(output_directory)
 
     # Suitability per LSOA
-    per_lsoa_df = pd.read_parquet(suitablitity_per_lsoa_file)
+    per_lsoa_df = pd.read_parquet(suitability_per_lsoa_file)
 
     # Filter data for a particular place
 

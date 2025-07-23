@@ -21,7 +21,6 @@ per_property_column_names = [
     "lsoa",
     "LATITUDE",
     "LONGITUDE",
-    "UPRN_duplicated",
     "CURRENT_ENERGY_RATING",
     "property_type",
     "off_gas",
