@@ -1,5 +1,5 @@
 """
-Combine, filter and process the HP suitability data for Plymouth
+Combine, filter and process the HP suitability data for Wales
 """
 
 import pandas as pd
@@ -30,15 +30,15 @@ per_property_file_name = "s3://asf-heat-pump-suitability/outputs/2023Q4/suitabil
 garden_size_file = "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/20250224_2023_Q4_EPC_garden_size_estimates_EWS_deduplicated.parquet"
 
 
-# Ad hoc manually created categories for Plymouth
+# Ad hoc manually created categories for Wales
 def get_tech_suitability_manual(ashp, hn):
-    if (ashp < 0.68) & (hn > 0.7):
+    if (ashp < 0.775) & (hn > 0.6):
         return "HN suitable"
     else:
-        if ashp < 0.82:
-            return "Multiple technologies may be feasible"
-        else:
+        if ((ashp > 0.8) & (hn < 0.4)) | (ashp > 0.9):
             return "ASHP suitable"
+        else:
+            return "Multiple technologies may be feasible"
 
 
 if __name__ == "__main__":
@@ -52,13 +52,11 @@ if __name__ == "__main__":
     # Suitability per LSOA
     per_lsoa_df = pd.read_parquet(suitability_per_lsoa_file)
 
-    # Filter data for a particular place
+    # Filter data for Wales
 
-    place_name = "Plymouth"  # Word in the LSOA name
-    plymouth_per_lsoa_df = per_lsoa_df[
-        per_lsoa_df["lsoa_name"].apply(lambda x: place_name in str(x))
-    ]
-    plymouth_lsoas_list = list(plymouth_per_lsoa_df["lsoa"].unique())
+    wales_per_lsoa_df = per_lsoa_df[per_lsoa_df["lsoa"].str.startswith("W")]
+
+    wales_lsoas_list = list(wales_per_lsoa_df["lsoa"].unique())
 
     # Features per property
 
@@ -67,24 +65,22 @@ if __name__ == "__main__":
         columns=per_property_column_names,
     )
 
-    plymouth_per_property_df = per_property_df.filter(
-        pl.col("lsoa").is_in(plymouth_lsoas_list)
+    wales_per_property_df = per_property_df.filter(
+        pl.col("lsoa").is_in(wales_lsoas_list)
     )
 
     # -----
     # Per LSOA data
 
-    plymouth_per_lsoa_df = enhance_features_per_lsoa(
-        plymouth_per_property_df.to_pandas(), plymouth_per_lsoa_df
+    wales_per_lsoa_df = enhance_features_per_lsoa(
+        wales_per_property_df.to_pandas(), wales_per_lsoa_df
     )
 
     # Get manual categorisations of HN/ASHP zones
 
-    plymouth_per_lsoa_df = plymouth_per_lsoa_df.round(3).rename(
-        columns=column_rename_dict
-    )
+    wales_per_lsoa_df = wales_per_lsoa_df.round(3).rename(columns=column_rename_dict)
 
-    plymouth_per_lsoa_df["Manual suitability type"] = plymouth_per_lsoa_df.apply(
+    wales_per_lsoa_df["Manual suitability type"] = wales_per_lsoa_df.apply(
         lambda x: get_tech_suitability_manual(
             x["ASHP - Nesta"],
             x["HN - Nesta"],
@@ -93,15 +89,15 @@ if __name__ == "__main__":
     )
 
     # Add geospatial data
-    plymouth_lsoas_gdf = load_ew_boundaries(plymouth_per_lsoa_df)
+    wales_lsoas_gdf = load_ew_boundaries(wales_per_lsoa_df)
 
-    plymouth_lsoas_gdf.to_file(
-        os.path.join(output_directory, "plymouth_lsoas_gdf_binary_suitability.geojson"),
+    wales_lsoas_gdf.to_file(
+        os.path.join(output_directory, "wales_lsoas_gdf_binary_suitability.geojson"),
         driver="GeoJSON",
     )
     # smaller version without geometry (but keeps area names)
-    plymouth_lsoas_gdf.drop(["geometry"], axis=1).to_csv(
-        os.path.join(output_directory, "plymouth_lsoas_gdf_binary_suitability.csv")
+    wales_lsoas_gdf.drop(["geometry"], axis=1).to_csv(
+        os.path.join(output_directory, "wales_lsoas_gdf_binary_suitability.csv")
     )
 
     # -----
@@ -111,10 +107,10 @@ if __name__ == "__main__":
         garden_size_file,
     )
 
-    plymouth_per_property_df = process_per_property_features(
-        plymouth_per_property_df, property_garden_size
+    wales_per_property_df = process_per_property_features(
+        wales_per_property_df, property_garden_size
     )
 
-    plymouth_per_property_df.write_csv(
-        os.path.join(output_directory, "plymouth_per_prop_data_extra.csv")
+    wales_per_property_df.write_csv(
+        os.path.join(output_directory, "wales_per_prop_data_extra.csv")
     )
