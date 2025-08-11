@@ -7,8 +7,6 @@ from asf_heat_pump_suitability.getters import base_getters, schemas
 from io import StringIO
 from tenacity import retry, stop_after_attempt
 import warnings
-import pyogrio
-from typing import Tuple
 
 # Ignore RunTimeWarning when loading Microsoft building footprint files
 # as reading from gzipped stream should be faster than unzipping and loading data
@@ -318,27 +316,6 @@ def load_df_nrs_dwellings() -> pl.DataFrame:
     df = df[3:].cast(schemas.nrs_dwellings)
 
     return df
-
-
-def load_desnz_geodata(
-    gpkg_path: str, shp_path: str, layer_name: str
-) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
-    """
-    Load DESNZ heat network polygons from a GeoPackage and LSOA shapefile.
-
-    Args:
-        desnz_hn_gpkg_path (str): Path to the DESNZ Heat Network GeoPackage.
-        lsoa_shp_path (str): Path to the LSOA shapefile.
-        layer_name (str): Layer name in the GeoPackage.
-
-    Returns:
-        Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
-            - DESNZ heat network zones as a GeoDataFrame.
-            - LSOA polygons as a GeoDataFrame.
-    """
-    hn_gdf = pyogrio.read_dataframe(gpkg_path, layer=layer_name)
-    lsoa_gdf = gpd.read_file(shp_path)
-    return hn_gdf, lsoa_gdf
 
 
 def load_df_lsoa_lad_lookup(**kwargs) -> pl.DataFrame:
