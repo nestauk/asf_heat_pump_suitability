@@ -10,6 +10,70 @@ This file contains functions for:
 import polars as pl
 
 
+def categorise_cluster_suitability(
+    cluster_size: int,
+    hn_area: bool,
+    city_centre: bool,
+    has_outdoor_space: bool,
+) -> str:
+    """
+    Categorises the suitability of a cluster based on its size and characteristics.
+
+
+    Args:
+        cluster_size (int): The number of UPRNs in the cluster.
+        hn_area (bool): Indicates if the cluster is in a heat network area.
+        city_centre (bool): Indicates if the cluster is close to the city centre.
+        has_outdoor_space (bool): Indicates if the cluster has outdoor space.
+
+    Returns:
+        str: A string representing the suitability category of the cluster.
+    """
+
+    if cluster_size == 1:
+        return "individual_ashp"
+    elif hn_area:  # if the cluster is in a heat network area
+        return "heat_network"
+    else:  # not in a heat network area
+        if city_centre:
+            return "heat_network"
+        else:
+            if cluster_size > 20:
+                if has_outdoor_space:
+                    return "shared_ground_loop"
+                else:
+                    return "collective_ashp"
+            else:
+                return "collective_ashp"
+
+
+def create_suitability_categorisation_df(cluster_df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Creates a new column with the suitability categorisation for each cluster.
+
+    Args:
+        cluster_df (pl.DataFrame): DataFrame containing information about each cluster of properties.
+
+    Returns:
+        pl.DataFrame: cluster_df with an additional column for the suitability categorisation.
+    """
+
+    cluster_df = cluster_df.with_columns(
+        pl.struct(["cluster_size", "hn_area", "city_centre", "has_outdoor_space"])
+        .map_elements(
+            lambda row: categorise_cluster_suitability(
+                row["cluster_size"],
+                row["hn_area"],
+                row["city_center"],
+                row["has_outdoor_space"],
+            )
+        )
+        .alias("suitable_scheme")
+    )
+
+    return cluster_df
+
+
 def create_feasibility_scoring_df(
     df: pl.DataFrame, weights: dict, cols_to_aggregate: list = None
 ) -> pl.DataFrame:
