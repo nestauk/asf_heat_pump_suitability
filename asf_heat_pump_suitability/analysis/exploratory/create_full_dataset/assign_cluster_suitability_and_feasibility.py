@@ -10,15 +10,19 @@ This file contains functions for:
 import polars as pl
 
 
-def categorise_cluster_suitability(
+def assign_str_suitable_techology_scheme(
     cluster_size: int,
     hn_area: bool,
     city_centre: bool,
     has_outdoor_space: bool,
 ) -> str:
     """
-    Categorises the suitability of a cluster based on its size and characteristics.
-
+    Categorises a cluster (based on its size and other characteristics) into its
+    most suitable technology scheme:
+    - "individual_ashp": Individual air source heat pump (ASHP)
+    - "collective_ashp": Collective purchasing of ASHP
+    - "shared_ground_loop": Shared Ground Loop (SGL)
+    - "heat_network": Heat Network (HN)
 
     Args:
         cluster_size (int): The number of UPRNs in the cluster.
@@ -47,9 +51,9 @@ def categorise_cluster_suitability(
                 return "collective_ashp"
 
 
-def create_suitability_categorisation_df(cluster_df: pl.DataFrame) -> pl.DataFrame:
+def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFrame:
     """
-    Creates a new column with the suitability categorisation for each cluster.
+    Adds a new column to cluster_df with the suitability categorisation for each cluster.
 
     Args:
         cluster_df (pl.DataFrame): DataFrame containing information about each cluster of properties.
@@ -61,7 +65,7 @@ def create_suitability_categorisation_df(cluster_df: pl.DataFrame) -> pl.DataFra
     cluster_df = cluster_df.with_columns(
         pl.struct(["cluster_size", "hn_area", "city_centre", "has_outdoor_space"])
         .map_elements(
-            lambda row: categorise_cluster_suitability(
+            lambda row: assign_str_suitable_techology_scheme(
                 row["cluster_size"],
                 row["hn_area"],
                 row["city_center"],
@@ -74,7 +78,7 @@ def create_suitability_categorisation_df(cluster_df: pl.DataFrame) -> pl.DataFra
     return cluster_df
 
 
-def create_feasibility_scoring_df(
+def create_df_feasibility_scoring(
     df: pl.DataFrame,
     weights: dict,
     cols_to_aggregate: list = None,
@@ -155,13 +159,13 @@ def create_feasibility_scoring_df(
 
     for scheme in weights.keys():
         scheme_features = set(weights.get(scheme).keys())
-        if not scheme_features.issubset(set(cols_to_aggregate)):
+        if not scheme_features.issubset(set(cols_to_aggregate + ["cluster_size"])):
             raise ValueError(
                 f"{scheme} scheme: The features you're providing weights for do not exist."
             )
 
     # Aggregating data by cluster
-    cluster_stats = df.groupby("cluster").agg(
+    cluster_stats = df.group_by("cluster").agg(
         pl.col(cols_to_aggregate).mean().name.prefix("perc_"),
         pl.col("cluster").count().alias("cluster_size"),
     )
@@ -186,28 +190,44 @@ def create_feasibility_scoring_df(
         # Feasibility scores for each category
         (
             sum(
-                pl.col(f"perc_{key}") * weight
+                (
+                    pl.col(f"perc_{key}") * weight
+                    if key != "cluster_size"
+                    else pl.col(f"cluster_size") * weight
+                )
                 for key, weight in individual_ashp_feasibility_weights.items()
             )
             / sum(individual_ashp_feasibility_weights.values())
         ).alias("individual_ashp_feasibility"),
         (
             sum(
-                pl.col(f"perc_{key}") * weight
+                (
+                    pl.col(f"perc_{key}") * weight
+                    if key != "cluster_size"
+                    else pl.col(f"cluster_size") * weight
+                )
                 for key, weight in collective_ashp_feasibility_weights.items()
             )
             / sum(collective_ashp_feasibility_weights.values())
         ).alias("collective_ashp_feasibility"),
         (
             sum(
-                pl.col(f"perc_{key}") * weight
+                (
+                    pl.col(f"perc_{key}") * weight
+                    if key != "cluster_size"
+                    else pl.col(f"cluster_size") * weight
+                )
                 for key, weight in sgl_feasibility_weights.items()
             )
             / sum(sgl_feasibility_weights.values())
         ).alias("sgl_feasibility"),
         (
             sum(
-                pl.col(f"perc_{key}") * weight
+                (
+                    pl.col(f"perc_{key}") * weight
+                    if key != "cluster_size"
+                    else pl.col(f"cluster_size") * weight
+                )
                 for key, weight in hn_feasibility_weights.items()
             )
             / sum(hn_feasibility_weights.values())
