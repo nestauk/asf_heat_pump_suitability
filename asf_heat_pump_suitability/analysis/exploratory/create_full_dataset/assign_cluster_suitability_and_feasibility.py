@@ -113,7 +113,7 @@ def create_feasibility_scoring_df(
         )
         # Creating close_to_city_centre from distance_to_city_centre and city_centre_threshold
         df = df.with_columns(
-            (pl.col("distance_to_city_centre") <= anchor_loads_threshold).alias(
+            (pl.col("distance_to_city_centre") <= city_centre_threshold).alias(
                 "close_to_city_centre"
             )
         )
