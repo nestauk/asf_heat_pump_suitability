@@ -19,21 +19,8 @@ import geopandas as gpd
 import polars as pl
 import pandas as pd
 import fiona
-import momepy
-import folium
-import networkx as nx
-import rustworkx as rx
-import osmnx as ox
 import numpy as np
-from scipy.sparse import csr_matrix
-from sklearn.cluster import DBSCAN, HDBSCAN
-import graphblas_algorithms as ga
-import matplotlib.cm as cm
 import matplotlib.pyplot as plt
-from tqdm import tqdm
-from matplotlib import collections
-import libpysal
-import spopt
 from sklearn.preprocessing import OneHotEncoder
 from sklearn import metrics
 from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
