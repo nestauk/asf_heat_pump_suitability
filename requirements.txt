@@ -4,7 +4,7 @@ balance~=0.10
 jupytext~=1.17
 fastexcel~=0.13
 scikit-learn<=1.2.2
-matplotlib==3.5.2
+matplotlib~=3.10.2
 tqdm~=4.67
 geopandas~=1.0
 shapely~=2.1
