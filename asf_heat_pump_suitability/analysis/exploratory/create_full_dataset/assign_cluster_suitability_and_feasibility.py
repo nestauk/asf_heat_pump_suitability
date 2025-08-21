@@ -1,9 +1,9 @@
 """
-Cluster technology suitability and feasibility scoring.
+Assigns a suitable technology and computes feasibility scoring for each cluster.
 
 This file contains functions for:
--  computing the feasibility scores for different heating schemes and clusters;
--  categorising clusters with the most suitable technology scheme.
+- categorising/assigning each cluster with the most suitable technology scheme.
+- computing the feasibility scores for different heating schemes and clusters;
 """
 
 # package imports
@@ -75,7 +75,11 @@ def create_suitability_categorisation_df(cluster_df: pl.DataFrame) -> pl.DataFra
 
 
 def create_feasibility_scoring_df(
-    df: pl.DataFrame, weights: dict, cols_to_aggregate: list = None
+    df: pl.DataFrame,
+    weights: dict,
+    cols_to_aggregate: list = None,
+    anchor_loads_threshold: float = 500,
+    city_centre_threshold: float = 500,
 ) -> pl.DataFrame:
     """
     Computes the feasibility score for each scheme and cluster in the dataset.
@@ -90,6 +94,8 @@ def create_feasibility_scoring_df(
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
         weights (dict): Dictionary containing the weights for each scheme and feature used in feasibility scoring.
         cols_to_aggregate (list, optional): List of columns to aggregate. If None, defaults to a predefined list.
+        anchor_loads_threshold (float, optional): default threhold for distance to anchor loads in meteres. Defaults to 500 m.
+        city_centre_threshold (float, optional): default threhold for distance to city center in meteres. Defaults to 500 m.
 
     Returns:
         pl.DataFrame: DataFrame with aggregated feasibility scores for each cluster.
@@ -98,6 +104,19 @@ def create_feasibility_scoring_df(
     if cols_to_aggregate is None:
         # Creating a column for not in conservation area
         df = df.with_columns((~pl.col("in_cons_area")).alias("not_in_cons_area"))
+
+        # Creating close_to_anchor_loads from distance_to_anchor_loads and anchor_loads_threhold
+        df = df.with_columns(
+            (pl.col("distance_to_anchor_loads") <= anchor_loads_threshold).alias(
+                "close_to_anchor_loads"
+            )
+        )
+        # Creating close_to_city_centre from distance_to_city_centre and city_centre_threshold
+        df = df.with_columns(
+            (pl.col("distance_to_city_centre") <= anchor_loads_threshold).alias(
+                "close_to_city_centre"
+            )
+        )
 
         # Columns to compute percentages for feasibility scoring
         cols_to_aggregate = [
