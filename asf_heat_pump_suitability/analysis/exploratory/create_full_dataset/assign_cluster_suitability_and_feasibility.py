@@ -92,10 +92,16 @@ def create_feasibility_scoring_df(
 
     Args:
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
-        weights (dict): Dictionary containing the weights for each scheme and feature used in feasibility scoring.
+        weights (dict): Dictionary containing the weights for each scheme and features used in feasibility scoring.
+            'weights' should contain the following keys (schemes):
+                "individual_ashp_feasibility", "collective_ashp_feasibility", "sgl_feasibility" and "hn_feasibility"
+            The value corresponding to each scheme should be a dictionary whith where keys subsets of features in cols_to_aggregate
         cols_to_aggregate (list, optional): List of columns to aggregate. If None, defaults to a predefined list.
         anchor_loads_threshold (float, optional): default threhold for distance to anchor loads in meteres. Defaults to 500 m.
         city_centre_threshold (float, optional): default threhold for distance to city center in meteres. Defaults to 500 m.
+
+    Raises:
+        ValueError: if schemes or features provided in weights do not exist.
 
     Returns:
         pl.DataFrame: DataFrame with aggregated feasibility scores for each cluster.
@@ -135,6 +141,24 @@ def create_feasibility_scoring_df(
             "close_to_anchor_loads",
             "close_to_city_centre",
         ]
+
+    expected_schemes = {
+        "individual_ashp_feasibility",
+        "collective_ashp_feasibility",
+        "sgl_feasibility",
+        "hn_feasibility",
+    }
+    if set(weights.keys()) != expected_schemes:
+        raise ValueError(
+            "There are incorrect or missing keys in the 'weights' dictionary."
+        )
+
+    for scheme in weights.keys():
+        scheme_features = set(weights.get(scheme).keys())
+        if not scheme_features.issubset(set(cols_to_aggregate)):
+            raise ValueError(
+                f"{scheme} scheme: The features you're providing weights for do not exist."
+            )
 
     # Aggregating data by cluster
     cluster_stats = df.groupby("cluster").agg(
