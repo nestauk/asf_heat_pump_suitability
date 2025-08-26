@@ -101,8 +101,8 @@ def create_df_feasibility_scoring(
                 "individual_ashp_feasibility", "collective_ashp_feasibility", "sgl_feasibility" and "hn_feasibility"
             The value corresponding to each tech type should be a dictionary where keys are subsets of features in cols_to_aggregate
         cols_to_aggregate (list, optional): List of columns to aggregate. If None, defaults to a predefined list.
-        anchor_loads_threshold (float, optional): default threhold for distance to anchor loads in meteres. Defaults to 500 m.
-        city_centre_threshold (float, optional): default threhold for distance to city center in meteres. Defaults to 500 m.
+        anchor_loads_threshold (float, optional): threshold for distance to anchor loads in metres. Defaults to 500 m.
+        city_centre_threshold (float, optional): threshold for distance to city centre in metres. Defaults to 500 m.
 
     Raises:
         ValueError: if schemes or features provided in weights do not exist.
