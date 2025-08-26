@@ -10,7 +10,7 @@ This file contains functions for:
 import polars as pl
 
 
-def assign_str_suitable_techology_scheme(
+def assign_str_suitable_tech_type(
     cluster_size: int,
     hn_area: bool,
     city_centre: bool,
@@ -65,7 +65,7 @@ def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFra
     cluster_df = cluster_df.with_columns(
         pl.struct(["cluster_size", "hn_area", "city_centre", "has_outdoor_space"])
         .map_elements(
-            lambda row: assign_str_suitable_techology_scheme(
+            lambda row: assign_str_suitable_tech_type(
                 row["cluster_size"],
                 row["hn_area"],
                 row["city_center"],

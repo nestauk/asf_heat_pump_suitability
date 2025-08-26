@@ -49,7 +49,7 @@ plymouth_data = plymouth_data.with_columns(
 from assign_cluster_suitability_and_feasibility import create_df_feasibility_scoring
 
 # %%
-# Dictionary of weights for computing feasibility scores for each scheme
+# Dictionary of weights for computing feasibility scores for each tech type
 weights = {
     "individual_ashp_feasibility": {
         "owner_occupied": 1,
