@@ -81,7 +81,7 @@ def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFra
 def create_df_feasibility_scoring(
     df: pl.DataFrame,
     weights: dict,
-    cols_to_aggregate: list = None,
+    features: list = None,
     anchor_loads_threshold: float = 500,
     city_centre_threshold: float = 500,
 ) -> pl.DataFrame:
@@ -100,7 +100,7 @@ def create_df_feasibility_scoring(
             'weights' should contain the following keys (tech types):
                 "individual_ashp_feasibility", "collective_ashp_feasibility", "sgl_feasibility" and "hn_feasibility"
             The value corresponding to each tech type should be a dictionary where keys are subsets of features in cols_to_aggregate
-        cols_to_aggregate (list, optional): List of columns to aggregate. If None, defaults to a predefined list.
+        features (list, optional): List of features. If None, defaults to a predefined list.
         anchor_loads_threshold (float, optional): threshold for distance to anchor loads in metres. Defaults to 500 m.
         city_centre_threshold (float, optional): threshold for distance to city centre in metres. Defaults to 500 m.
 
@@ -111,7 +111,7 @@ def create_df_feasibility_scoring(
         pl.DataFrame: DataFrame with aggregated feasibility scores for each cluster.
     """
 
-    if cols_to_aggregate is None:
+    if features is None:
         # Creating a column for not in conservation area
         df = df.with_columns((~pl.col("in_cons_area")).alias("not_in_cons_area"))
 
@@ -129,7 +129,7 @@ def create_df_feasibility_scoring(
         )
 
         # Columns to compute percentages for feasibility scoring
-        cols_to_aggregate = [
+        features = [
             "owner_occupied",
             "high_income_decile",
             "on_gas",
@@ -159,14 +159,14 @@ def create_df_feasibility_scoring(
 
     for scheme in weights.keys():
         scheme_features = set(weights.get(scheme).keys())
-        if not scheme_features.issubset(set(cols_to_aggregate + ["cluster_size"])):
+        if not scheme_features.issubset(set(features + ["cluster_size"])):
             raise ValueError(
                 f"{scheme} scheme: The features you're providing weights for do not exist."
             )
 
     # Aggregating data by cluster
     cluster_stats = df.group_by("cluster").agg(
-        pl.col(cols_to_aggregate).mean().name.prefix("perc_"),
+        pl.col(features).mean().name.prefix("perc_"),
         pl.col("cluster").count().alias("cluster_size"),
     )
 
