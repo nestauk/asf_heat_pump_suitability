@@ -96,7 +96,7 @@ def create_df_feasibility_scoring(
 
     Args:
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
-        weights (dict): Dictionary containing the weights for each scheme and features used in feasibility scoring.
+        weights (dict): Dictionary containing the weights for each tech type and features used in feasibility scoring.
             'weights' should contain the following keys (schemes):
                 "individual_ashp_feasibility", "collective_ashp_feasibility", "sgl_feasibility" and "hn_feasibility"
             The value corresponding to each scheme should be a dictionary whith where keys subsets of features in cols_to_aggregate
