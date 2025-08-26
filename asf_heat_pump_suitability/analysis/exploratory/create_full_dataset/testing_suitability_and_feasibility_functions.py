@@ -71,6 +71,8 @@ weights = {
         "flats": 1,
         # "on_communal_heating": 1,
         "has_outdoor_space": 1,
+        "not_listed": 1,
+        "not_in_conservation_area": 1,
         # "cluster_size": 1
     },
     "hn_feasibility": {
