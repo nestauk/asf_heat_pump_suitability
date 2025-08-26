@@ -166,13 +166,8 @@ def create_df_feasibility_scoring(
 
     # Aggregating data by cluster
     cluster_stats = df.group_by("cluster").agg(
-        pl.col(features).mean().name.prefix("perc_"),
+        ((pl.col(features).mean()).cast(pl.Float64) * 100).name.prefix("perc_"),
         pl.col("cluster").count().alias("cluster_size"),
-    )
-
-    # Convert proportions to percentages for columns with prefix "perc_"
-    cluster_stats = cluster_stats.with_columns(
-        (pl.col("^perc_.*$").cast(pl.Float64) * 100).name.keep()
     )
 
     # Extracting weights for each feasibility scoring category
