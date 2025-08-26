@@ -178,10 +178,6 @@ def create_df_feasibility_scoring(
 
     # Compute feasibility scores using the percentages and the weights
     cluster_stats = cluster_stats.with_columns(
-        # Cluster identifier
-        pl.col("cluster").alias("cluster"),
-        # Number of UPRNs in the cluster
-        pl.col("cluster_size").alias("cluster_size"),
         # Feasibility scores for each category
         (
             sum(
