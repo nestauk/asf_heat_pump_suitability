@@ -18,7 +18,7 @@ def assign_str_suitable_techology_scheme(
 ) -> str:
     """
     Categorises a cluster (based on its size and other characteristics) into its
-    most suitable technology scheme:
+    most suitable low carbon heating technology:
     - "individual_ashp": Individual air source heat pump (ASHP)
     - "collective_ashp": Collective purchasing of ASHP
     - "shared_ground_loop": Shared Ground Loop (SGL)
