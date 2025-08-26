@@ -72,7 +72,7 @@ def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFra
                 row["has_outdoor_space"],
             )
         )
-        .alias("best_tech")
+        .alias("most_suitable_tech")
     )
 
     return cluster_df
