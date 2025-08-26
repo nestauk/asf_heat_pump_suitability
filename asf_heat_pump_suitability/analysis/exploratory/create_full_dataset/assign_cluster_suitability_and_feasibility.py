@@ -97,9 +97,9 @@ def create_df_feasibility_scoring(
     Args:
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
         weights (dict): Dictionary containing the weights for each tech type and features used in feasibility scoring.
-            'weights' should contain the following keys (schemes):
+            'weights' should contain the following keys (tech types):
                 "individual_ashp_feasibility", "collective_ashp_feasibility", "sgl_feasibility" and "hn_feasibility"
-            The value corresponding to each scheme should be a dictionary whith where keys subsets of features in cols_to_aggregate
+            The value corresponding to each tech type should be a dictionary where keys are subsets of features in cols_to_aggregate
         cols_to_aggregate (list, optional): List of columns to aggregate. If None, defaults to a predefined list.
         anchor_loads_threshold (float, optional): default threhold for distance to anchor loads in meteres. Defaults to 500 m.
         city_centre_threshold (float, optional): default threhold for distance to city center in meteres. Defaults to 500 m.
