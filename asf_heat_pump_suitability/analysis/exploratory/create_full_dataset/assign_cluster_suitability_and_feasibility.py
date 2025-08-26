@@ -86,7 +86,7 @@ def create_df_feasibility_scoring(
     city_centre_threshold: float = 500,
 ) -> pl.DataFrame:
     """
-    Computes the feasibility score for each scheme and cluster in the dataset.
+    Computes the feasibility score for each tech type and cluster in the dataset.
 
     Schemes include:
     - Individual Air Source Heat Pump (ASHP)
