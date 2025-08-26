@@ -94,6 +94,6 @@ cols = [
 ]
 
 # %%
-create_df_feasibility_scoring(df=plymouth_data, weights=weights, cols_to_aggregate=cols)
+create_df_feasibility_scoring(df=plymouth_data, weights=weights, features=cols)
 
 # %%
