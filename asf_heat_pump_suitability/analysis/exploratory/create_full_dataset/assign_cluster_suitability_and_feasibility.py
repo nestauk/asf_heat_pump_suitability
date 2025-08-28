@@ -114,6 +114,33 @@ def prepare_df_for_feasibility_scoring(
     return df
 
 
+def calculate_feasibility_expression(tech_specific_weights: dict) -> pl.Expr:
+    """
+    Generates a Polars expression to calculate a weighted feasibility score.
+
+    Args:
+        weights_dict: A dictionary of the format {feature_name: weight}.
+
+    Returns:
+        pl.Expr: A Polars expression for the calculated score.
+    """
+    # Sum of all weights to normalize the score
+    total_weight = sum(tech_specific_weights.values())
+
+    # Compute weighted sum i.e. sum(feature_value * weight)
+    weighted_cols_sum = pl.sum_horizontal(
+        (
+            pl.col(f"perc_{feature}") * weight
+            if feature != "cluster_size"  # most features will have a "perc_" prefix
+            else pl.col("cluster_size")
+            * weight  # cluster_size does not have a "perc_" prefix
+        )
+        for feature, weight in tech_specific_weights.items()
+    )
+
+    return weighted_cols_sum / total_weight
+
+
 def create_df_feasibility_scoring(
     df: pl.DataFrame,
     features: list = config.features,
@@ -168,59 +195,15 @@ def create_df_feasibility_scoring(
         pl.col("cluster").count().alias("cluster_size"),
     )
 
-    # Extracting weights for each feasibility scoring category
-    individual_ashp_feasibility_weights = weights.get("individual_ashp_feasibility")
-    collective_ashp_feasibility_weights = weights.get("collective_ashp_feasibility")
-    sgl_feasibility_weights = weights.get("sgl_feasibility")
-    hn_feasibility_weights = weights.get("hn_feasibility")
+    # Create feasibility expressions for all tech types and store as list
+    tech_feasibility_scores = [
+        calculate_feasibility_expression(tech_specific_weights=weights.get(tech)).alias(
+            tech
+        )
+        for tech in expected_tech_types
+    ]
 
-    # Compute feasibility scores using the percentages and the weights
-    cluster_stats = cluster_stats.with_columns(
-        # Feasibility scores for each category
-        (
-            sum(
-                (
-                    pl.col(f"perc_{key}") * weight
-                    if key != "cluster_size"
-                    else pl.col(f"cluster_size") * weight
-                )
-                for key, weight in individual_ashp_feasibility_weights.items()
-            )
-            / sum(individual_ashp_feasibility_weights.values())
-        ).alias("individual_ashp_feasibility"),
-        (
-            sum(
-                (
-                    pl.col(f"perc_{key}") * weight
-                    if key != "cluster_size"
-                    else pl.col(f"cluster_size") * weight
-                )
-                for key, weight in collective_ashp_feasibility_weights.items()
-            )
-            / sum(collective_ashp_feasibility_weights.values())
-        ).alias("collective_ashp_feasibility"),
-        (
-            sum(
-                (
-                    pl.col(f"perc_{key}") * weight
-                    if key != "cluster_size"
-                    else pl.col(f"cluster_size") * weight
-                )
-                for key, weight in sgl_feasibility_weights.items()
-            )
-            / sum(sgl_feasibility_weights.values())
-        ).alias("sgl_feasibility"),
-        (
-            sum(
-                (
-                    pl.col(f"perc_{key}") * weight
-                    if key != "cluster_size"
-                    else pl.col(f"cluster_size") * weight
-                )
-                for key, weight in hn_feasibility_weights.items()
-            )
-            / sum(hn_feasibility_weights.values())
-        ).alias("hn_feasibility"),
-    )
+    # Add feasibility scores as new columns to cluster_stats
+    cluster_stats = cluster_stats.with_columns(tech_feasibility_scores)
 
     return cluster_stats
