@@ -2,12 +2,14 @@
 Assigns a suitable technology and computes feasibility scoring for each cluster.
 
 This file contains functions for:
-- categorising/assigning each cluster with the most suitable technology scheme.
-- computing the feasibility scores for different heating schemes and clusters;
+- preparing the dataframe for feasibility scoring and suitability categorisation;
+- categorising/assigning each cluster with the most suitable technology.
+- computing the feasibility scores for different tech types and clusters;
 """
 
 # package imports
 import polars as pl
+import config
 
 
 def assign_str_suitable_tech_type(
@@ -78,17 +80,87 @@ def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFra
     return cluster_df
 
 
-def create_df_feasibility_scoring(
+def prepare_df_for_feasibility_scoring(
     df: pl.DataFrame,
-    weights: dict,
-    features: list = None,
     anchor_loads_threshold: float = 500,
     city_centre_threshold: float = 500,
 ) -> pl.DataFrame:
     """
+    Prepares the dataframe for feasibility scoring. This includes:
+    - Transforming categorical variables into dummy/indicator variables.
+    - Creating new binary features based on existing columns and specified thresholds.
+    - Scaling the cluster size to be between 0 and 100.
+    - Renaming columns for clarity.
+
+    Args:
+        df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
+        anchor_loads_threshold (float, optional): threshold for distance to anchor loads in metres. Defaults to 500 m.
+        city_centre_threshold (float, optional): threshold for distance to city centre in metres. Defaults to 500 m.
+
+    Returns:
+        pl.DataFrame: DataFrame ready for feasibility scoring.
+    """
+
+    # Transform predicted_tenure and predicted_property_type into dummies
+    df = df.to_dummies("predicted_tenure")
+    df = df.rename(
+        {
+            "predicted_tenure_owner-occupied": "owner_occupied",
+            "predicted_tenure_rental (social)": "social_housing",
+        }
+    )
+
+    df = df.to_dummies("predicted_property_type")
+    df = df.rename({"predicted_property_type_Flat, maisonette or apartment": "flats"})
+
+    # Compute on_gas
+    df = df.df((~pl.col("use_off_gas")).alias("on_gas"))
+
+    # Compute not_in_listed_building
+    df = df.with_columns(
+        (~pl.col("in_listed_building")).alias("not_in_listed_building")
+    )
+    df = df.with_columns(
+        (~pl.col("in_conservation_area")).alias("not_in_conservation_area")
+    )
+
+    # Create has_outdoor_space from garden_area_m2
+    df = df.with_columns((pl.col("garden_area_m2") > 0).alias("has_outdoor_space"))
+
+    # scale cluster size to be between 0 and 100
+    df = df.with_columns(
+        (
+            (pl.col("cluster_size") - pl.col("cluster_size").min())
+            / (pl.col("cluster_size").max() - pl.col("cluster_size").min())
+            * 100
+        ).alias("cluster_size")
+    )
+
+    # Creating close_to_anchor_loads from distance_to_anchor_loads and anchor_loads_threhold
+    df = df.with_columns(
+        (pl.col("distance_to_anchor_loads") <= anchor_loads_threshold).alias(
+            "close_to_anchor_loads"
+        )
+    )
+    # Creating close_to_city_centre from distance_to_city_centre and city_centre_threshold
+    df = df.with_columns(
+        (pl.col("distance_to_city_centre") <= city_centre_threshold).alias(
+            "close_to_city_centre"
+        )
+    )
+
+    return df
+
+
+def create_df_feasibility_scoring(
+    df: pl.DataFrame,
+    features: list = config.features,
+    weights: dict = config.weights,
+) -> pl.DataFrame:
+    """
     Computes the feasibility score for each tech type and cluster in the dataset.
 
-    Schemes include:
+    Tech types include:
     - Individual Air Source Heat Pump (ASHP)
     - Collective purchasing of ASHP
     - Shared Ground Loop (SGL)
@@ -96,72 +168,36 @@ def create_df_feasibility_scoring(
 
     Args:
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
-        weights (dict): Dictionary containing the weights for each tech type and features used in feasibility scoring.
+        features (list, optional): List of features used in the feasibility scoring.
+            Defaults to a predefined list.
+        weights (dict, optional): Dictionary containing the weights for each tech type and features used in feasibility scoring.
             'weights' should contain the following keys (tech types):
                 "individual_ashp_feasibility", "collective_ashp_feasibility", "sgl_feasibility" and "hn_feasibility"
-            The value corresponding to each tech type should be a dictionary where keys are subsets of features in cols_to_aggregate
-        features (list, optional): List of features. If None, defaults to a predefined list.
-        anchor_loads_threshold (float, optional): threshold for distance to anchor loads in metres. Defaults to 500 m.
-        city_centre_threshold (float, optional): threshold for distance to city centre in metres. Defaults to 500 m.
+            The value corresponding to each tech type should be a dictionary where keys are subsets of features in features
 
     Raises:
-        ValueError: if schemes or features provided in weights do not exist.
+        ValueError: if tech types or features provided in weights do not exist.
 
     Returns:
         pl.DataFrame: DataFrame with aggregated feasibility scores for each cluster.
     """
-
-    if features is None:
-        # Creating a column for not in conservation area
-        df = df.with_columns((~pl.col("in_cons_area")).alias("not_in_cons_area"))
-
-        # Creating close_to_anchor_loads from distance_to_anchor_loads and anchor_loads_threhold
-        df = df.with_columns(
-            (pl.col("distance_to_anchor_loads") <= anchor_loads_threshold).alias(
-                "close_to_anchor_loads"
-            )
-        )
-        # Creating close_to_city_centre from distance_to_city_centre and city_centre_threshold
-        df = df.with_columns(
-            (pl.col("distance_to_city_centre") <= city_centre_threshold).alias(
-                "close_to_city_centre"
-            )
-        )
-
-        # Columns to compute percentages for feasibility scoring
-        features = [
-            "owner_occupied",
-            "high_income_decile",
-            "on_gas",
-            "not_listed",
-            "not_in_cons_area",
-            "social_housing",
-            "flats",
-            "on_communal_heating",
-            "has_outdoor_space",
-            "in_listed_buildings",
-            "in_cons_area",
-            "in_hn",
-            "close_to_anchor_loads",
-            "close_to_city_centre",
-        ]
-
-    expected_schemes = {
+    expected_tech_types = {
         "individual_ashp_feasibility",
         "collective_ashp_feasibility",
         "sgl_feasibility",
         "hn_feasibility",
     }
-    if set(weights.keys()) != expected_schemes:
+
+    if set(weights.keys()) != expected_tech_types:
         raise ValueError(
             "There are incorrect or missing keys in the 'weights' dictionary."
         )
 
-    for scheme in weights.keys():
-        scheme_features = set(weights.get(scheme).keys())
-        if not scheme_features.issubset(set(features + ["cluster_size"])):
+    for tech in weights.keys():
+        tech_features = set(weights.get(tech).keys())
+        if not tech_features.issubset(set(features + ["cluster_size"])):
             raise ValueError(
-                f"{scheme} scheme: The features you're providing weights for do not exist."
+                f"{tech}: The features you're providing weights for do not exist."
             )
 
     # Aggregating data by cluster
