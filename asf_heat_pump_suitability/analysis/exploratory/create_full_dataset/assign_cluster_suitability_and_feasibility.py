@@ -144,12 +144,13 @@ def calculate_feasibility_expression(tech_specific_weights: dict) -> pl.Expr:
 def create_df_feasibility_scoring(
     df: pl.DataFrame,
     features: list = config.features,
+    expected_tech_types: set = config.expected_tech_types,
     weights: dict = config.weights,
 ) -> pl.DataFrame:
     """
     Computes the feasibility score for each tech type and cluster in the dataset.
 
-    Tech types include:
+    Tech types can include:
     - Individual Air Source Heat Pump (ASHP)
     - Collective purchasing of ASHP
     - Shared Ground Loop (SGL)
@@ -159,10 +160,9 @@ def create_df_feasibility_scoring(
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
         features (list, optional): List of features used in the feasibility scoring.
             Defaults to a predefined list.
-        weights (dict, optional): Dictionary containing the weights for each tech type and features used in feasibility scoring.
-            'weights' should contain the following keys (tech types):
-                "individual_ashp_feasibility", "collective_ashp_feasibility", "sgl_feasibility" and "hn_feasibility"
-            The value corresponding to each tech type should be a dictionary where keys are subsets of features in features
+        expected_tech_types (set, optional): Set of expected technology types for feasibility scoring.
+        weights (dict, optional): Dictionary containing the weights for each feature used to compute feasibility for specific tech types.
+            in the format {'tech_type_1': {'feature_1': weight_1, 'feature_2': weight_2, ...}, ..., 'tech_type_n': {...}}
 
     Raises:
         ValueError: if tech types or features provided in weights do not exist.
@@ -170,13 +170,6 @@ def create_df_feasibility_scoring(
     Returns:
         pl.DataFrame: DataFrame with aggregated feasibility scores for each cluster.
     """
-    expected_tech_types = {
-        "individual_ashp_feasibility",
-        "collective_ashp_feasibility",
-        "sgl_feasibility",
-        "hn_feasibility",
-    }
-
     if set(weights.keys()) != expected_tech_types:
         raise ValueError(
             "There are incorrect or missing keys in the 'weights' dictionary."
@@ -198,7 +191,7 @@ def create_df_feasibility_scoring(
     # Create feasibility expressions for all tech types and store as list
     tech_feasibility_scores = [
         calculate_feasibility_expression(tech_specific_weights=weights.get(tech)).alias(
-            tech
+            tech + "_feasibility"
         )
         for tech in expected_tech_types
     ]
