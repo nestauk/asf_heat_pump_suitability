@@ -12,50 +12,13 @@ import polars as pl
 import config
 
 
-def assign_str_suitable_tech_type(
-    cluster_size: int,
-    hn_area: bool,
-    city_centre: bool,
-    has_outdoor_space: bool,
-) -> str:
+def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFrame:
     """
-    Categorises a cluster (based on its size and other characteristics) into its
-    most suitable low carbon heating technology:
+    Adds a new column to cluster_df with most suitable low carbon heating technology for each cluster:
     - "individual_ashp": Individual air source heat pump (ASHP)
     - "collective_ashp": Collective purchasing of ASHP
     - "shared_ground_loop": Shared Ground Loop (SGL)
     - "heat_network": Heat Network (HN)
-
-    Args:
-        cluster_size (int): The number of UPRNs in the cluster.
-        hn_area (bool): Indicates if the cluster is in a heat network area.
-        city_centre (bool): Indicates if the cluster is close to the city centre.
-        has_outdoor_space (bool): Indicates if the cluster has outdoor space.
-
-    Returns:
-        str: A string representing the suitability category of the cluster.
-    """
-
-    if cluster_size == 1:
-        return "individual_ashp"
-    elif hn_area:  # if the cluster is in a heat network area
-        return "heat_network"
-    else:  # not in a heat network area
-        if city_centre:
-            return "heat_network"
-        else:
-            if cluster_size > 20:
-                if has_outdoor_space:
-                    return "shared_ground_loop"
-                else:
-                    return "collective_ashp"
-            else:
-                return "collective_ashp"
-
-
-def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Adds a new column to cluster_df with the suitability categorisation for each cluster.
 
     Args:
         cluster_df (pl.DataFrame): DataFrame containing information about each cluster of properties.
@@ -64,20 +27,19 @@ def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFra
         pl.DataFrame: cluster_df with an additional column for the suitability categorisation.
     """
 
-    cluster_df = cluster_df.with_columns(
-        pl.struct(["cluster_size", "hn_area", "city_centre", "has_outdoor_space"])
-        .map_elements(
-            lambda row: assign_str_suitable_tech_type(
-                row["cluster_size"],
-                row["hn_area"],
-                row["city_center"],
-                row["has_outdoor_space"],
-            )
-        )
-        .alias("most_suitable_tech")
+    most_suitable_tech = (
+        pl.when(pl.col("cluster_size") == 1)
+        .then(pl.lit("individual_ashp"))
+        .when(pl.col("in_heat_network_zone"))
+        .then(pl.lit("heat_network"))
+        .when(pl.col("city_centre"))
+        .then(pl.lit("heat_network"))
+        .when((pl.col("cluster_size") > 20) & pl.col("has_outdoor_space"))
+        .then(pl.lit("shared_ground_loop"))
+        .otherwise(pl.lit("collective_ashp"))
     )
 
-    return cluster_df
+    return cluster_df.with_columns(most_suitable_tech=most_suitable_tech)
 
 
 def prepare_df_for_feasibility_scoring(
