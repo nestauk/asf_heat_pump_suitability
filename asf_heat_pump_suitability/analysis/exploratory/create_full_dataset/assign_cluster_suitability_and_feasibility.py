@@ -135,7 +135,7 @@ def prepare_df_for_feasibility_scoring(
     df = df.rename({"predicted_property_type_Flat, maisonette or apartment": "flats"})
 
     # Compute on_gas
-    df = df.df((~pl.col("use_off_gas")).alias("on_gas"))
+    df = df.with_columns((~pl.col("use_off_gas")).alias("on_gas"))
 
     # Compute not_in_listed_building
     df = df.with_columns(
