@@ -12,6 +12,65 @@ import polars as pl
 import config
 
 
+def prepare_df_for_suitability_categorisation(
+    df: pl.DataFrame,
+    city_centre_oas: set = config.city_centre_oas,
+    outdoor_space_threshold: float = 0,
+) -> pl.DataFrame:
+    """
+    Prepares the dataframe for suitability categorisation. This includes:
+    - Identifying clusters close to the city center or in heat network zones
+    - Identifying clusters with outdoor space
+
+    Args:
+        df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
+        city_centre_oas (set, optional): OAs that are considered part of the city center. Should be an oa21 format.
+            Defaults to config.city_centre_oas.
+        outdoor_space_threshold (float, optional): Threshold for outdoor space in meters. Defaults to 0.
+        i.e. if garden_area_m2 > 0, then has_outdoor_space = True
+
+    Returns:
+        pl.DataFrame: DataFrame ready for suitability categorisation.
+    """
+    # Create city_centre column based on whether the UPRN is in the set of city centre OAs
+    df = df.with_columns(pl.col("oa21").is_in(city_centre_oas).alias("in_city_centre"))
+
+    # Transform predicted_tenure and predicted_property_type into dummies
+    df = df.to_dummies("predicted_property_type")
+    df = df.rename({"predicted_property_type_Flat, maisonette or apartment": "flats"})
+
+    cluster_df = df.groupby("cluster").agg(
+        # Cluster size
+        pl.col("UPRN").count().alias("cluster_size"),
+        # Heat network zone logic: if at least one property in the cluster is in a heat network zone,
+        # the whole cluster is considered to be in a heat network zone
+        pl.col("in_heat_network_zone").max().alias("in_heat_network_zone"),
+        # City centre logic: if at least one property in the cluster is in the city centre,
+        # the whole cluster is considered to be close to the city centre
+        pl.col("in_city_centre").max().alias("in_city_centre"),
+        # Outdoor space logic:
+        (
+            # Properties other than flats: sum garden_area_m2 for all properties
+            pl.col("garden_area_m2").filter(pl.col("flats") != 1).sum().fill_null(0)
+            +
+            # For flats, we only want to count the garden_size once per building
+            pl.struct(["building_id", "garden_area_m2"])
+            .filter(pl.col("flats") == 1)
+            .unique(subset=["building_id"])
+            .struct.field("garden_area_m2")
+            .sum()
+            .fill_null(0)
+        ).alias("total_outdoor_space"),
+    )
+
+    cluster_df = cluster_df.with_columns(
+        (pl.col("total_outdoor_space") > outdoor_space_threshold).alias(
+            "has_outdoor_space"
+        )
+    )
+    return cluster_df
+
+
 def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFrame:
     """
     Adds a new column to cluster_df with most suitable low carbon heating technology for each cluster:
