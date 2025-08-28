@@ -171,15 +171,20 @@ def create_df_feasibility_scoring(
         pl.DataFrame: DataFrame with aggregated feasibility scores for each cluster.
     """
     if set(weights.keys()) != expected_tech_types:
+        incorrect_techs = [w for w in weights.keys() if w not in expected_tech_types]
+        missing_techs = [t for t in expected_tech_types if t not in weights.keys()]
         raise ValueError(
-            "There are incorrect or missing keys in the 'weights' dictionary."
+            f"There are incorrect or missing keys in the 'weights' dictionary.\n Incorrect techs: {incorrect_techs}\n Missing techs: {missing_techs}"
         )
 
     for tech in weights.keys():
         tech_features = set(weights.get(tech).keys())
         if not tech_features.issubset(set(features + ["cluster_size"])):
+            do_not_exist = [
+                f for f in tech_features if f not in set(features + ["cluster_size"])
+            ]
             raise ValueError(
-                f"{tech}: The features you're providing weights for do not exist."
+                f"{tech}: The features you're providing weights for do not exist:\n{do_not_exist}"
             )
 
     # Aggregating data by cluster
