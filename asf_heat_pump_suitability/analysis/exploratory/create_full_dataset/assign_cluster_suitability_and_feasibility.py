@@ -26,7 +26,7 @@ def prepare_df_for_suitability_categorisation(
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
         city_centre_oas (set, optional): OAs that are considered part of the city center. Should be an oa21 format.
             Defaults to config.city_centre_oas.
-        outdoor_space_threshold (float, optional): Threshold for outdoor space in meters. Defaults to 0.
+        outdoor_space_threshold (float, optional): Threshold for outdoor space in meters squared. Defaults to 0.
         i.e. if garden_area_m2 > 0, then has_outdoor_space = True
 
     Returns:
@@ -39,7 +39,7 @@ def prepare_df_for_suitability_categorisation(
     df = df.to_dummies("predicted_property_type")
     df = df.rename({"predicted_property_type_Flat, maisonette or apartment": "flats"})
 
-    cluster_df = df.groupby("cluster").agg(
+    cluster_df = df.group_by("cluster").agg(
         # Cluster size
         pl.col("UPRN").count().alias("cluster_size"),
         # Heat network zone logic: if at least one property in the cluster is in a heat network zone,
@@ -56,7 +56,7 @@ def prepare_df_for_suitability_categorisation(
             # For flats, we only want to count the garden_size once per building
             pl.struct(["building_id", "garden_area_m2"])
             .filter(pl.col("flats") == 1)
-            .unique(subset=["building_id"])
+            .gather(pl.col("building_id").filter(pl.col("flats") == 1).arg_unique())
             .struct.field("garden_area_m2")
             .sum()
             .fill_null(0)
@@ -71,7 +71,7 @@ def prepare_df_for_suitability_categorisation(
     return cluster_df
 
 
-def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFrame:
+def create_df_suitability_categorisation(df: pl.DataFrame) -> pl.DataFrame:
     """
     Adds a new column to cluster_df with most suitable low carbon heating technology for each cluster:
     - "individual_ashp": Individual air source heat pump (ASHP)
@@ -80,7 +80,7 @@ def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFra
     - "heat_network": Heat Network (HN)
 
     Args:
-        cluster_df (pl.DataFrame): DataFrame containing information about each cluster of properties.
+        df (pl.DataFrame): DataFrame containing information about each cluster of properties.
 
     Returns:
         pl.DataFrame: cluster_df with an additional column for the suitability categorisation.
@@ -91,18 +91,19 @@ def create_df_suitability_categorisation(cluster_df: pl.DataFrame) -> pl.DataFra
         .then(pl.lit("individual_ashp"))
         .when(pl.col("in_heat_network_zone"))
         .then(pl.lit("heat_network"))
-        .when(pl.col("city_centre"))
+        .when(pl.col("in_city_centre"))
         .then(pl.lit("heat_network"))
         .when((pl.col("cluster_size") > 20) & pl.col("has_outdoor_space"))
         .then(pl.lit("shared_ground_loop"))
         .otherwise(pl.lit("collective_ashp"))
     )
 
-    return cluster_df.with_columns(most_suitable_tech=most_suitable_tech)
+    return df.with_columns(most_suitable_tech=most_suitable_tech)
 
 
 def prepare_df_for_feasibility_scoring(
     df: pl.DataFrame,
+    features: list = config.features,
     anchor_loads_threshold: float = 500,
     city_centre_threshold: float = 500,
 ) -> pl.DataFrame:
@@ -158,6 +159,21 @@ def prepare_df_for_feasibility_scoring(
         (pl.col("distance_to_city_centre") <= city_centre_threshold).alias(
             "close_to_city_centre"
         )
+    )
+
+    # Aggregating data by cluster
+    df = df.group_by("cluster").agg(
+        ((pl.col(features).mean()).cast(pl.Float64) * 100).name.prefix("perc_"),
+        pl.col("UPRN").count().alias("cluster_size"),
+    )
+
+    # scale cluster size to be between 0 and 100
+    df = df.with_columns(
+        (
+            (pl.col("cluster_size") - pl.col("cluster_size").min())
+            / (pl.col("cluster_size").max() - pl.col("cluster_size").min())
+            * 100
+        ).alias("cluster_size")
     )
 
     return df
@@ -236,21 +252,6 @@ def create_df_feasibility_scoring(
                 f"{tech}: The features you're providing weights for do not exist:\n{do_not_exist}"
             )
 
-    # Aggregating data by cluster
-    cluster_stats = df.group_by("cluster").agg(
-        ((pl.col(features).mean()).cast(pl.Float64) * 100).name.prefix("perc_"),
-        pl.col("cluster").count().alias("cluster_size"),
-    )
-
-    # scale cluster size to be between 0 and 100
-    cluster_stats = cluster_stats.with_columns(
-        (
-            (pl.col("cluster_size") - pl.col("cluster_size").min())
-            / (pl.col("cluster_size").max() - pl.col("cluster_size").min())
-            * 100
-        ).alias("cluster_size")
-    )
-
     # Create feasibility expressions for all tech types and store as list
     tech_feasibility_scores = [
         calculate_feasibility_expression(tech_specific_weights=weights.get(tech)).alias(
@@ -260,6 +261,6 @@ def create_df_feasibility_scoring(
     ]
 
     # Add feasibility scores as new columns to cluster_stats
-    cluster_stats = cluster_stats.with_columns(tech_feasibility_scores)
+    df = df.with_columns(tech_feasibility_scores)
 
-    return cluster_stats
+    return df
