@@ -63,16 +63,20 @@ plymouth_data = plymouth_data.with_columns(
 from assign_cluster_suitability_and_feasibility import (
     prepare_df_for_feasibility_scoring,
 )
-from config import features
+from config import features, city_centre_oas
 
 # %%
 feasibility_scoring_data = prepare_df_for_feasibility_scoring(
-    df=plymouth_data, features=features
+    df=plymouth_data,
+    features=features,
+    anchor_loads_threshold=500,
+    outdoor_space_threshold=30,
+    city_centre_oas=city_centre_oas,
 )
 
 # %%
 from assign_cluster_suitability_and_feasibility import create_df_feasibility_scoring
-from config import weights
+from config import weights, expected_tech_types
 
 
 # %%
@@ -80,7 +84,10 @@ weights
 
 # %%
 create_df_feasibility_scoring(
-    df=feasibility_scoring_data, weights=weights, features=features
+    df=feasibility_scoring_data,
+    weights=weights,
+    expected_tech_types=expected_tech_types,
+    features=features,
 )
 
 # %%

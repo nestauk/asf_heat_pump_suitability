@@ -108,7 +108,8 @@ def prepare_df_for_feasibility_scoring(
     df: pl.DataFrame,
     features: list = config.features,
     anchor_loads_threshold: float = 500,
-    city_centre_threshold: float = 500,
+    outdoor_space_threshold: float = 0,
+    city_centre_oas: set = config.city_centre_oas,
 ) -> pl.DataFrame:
     """
     Prepares the dataframe for feasibility scoring. This includes:
@@ -118,8 +119,11 @@ def prepare_df_for_feasibility_scoring(
 
     Args:
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
+        features (list, optional): List of features used in the feasibility scoring.
         anchor_loads_threshold (float, optional): threshold for distance to anchor loads in metres. Defaults to 500 m.
-        city_centre_threshold (float, optional): threshold for distance to city centre in metres. Defaults to 500 m.
+        outdoor_space_threshold (float, optional): Threshold for outdoor space in meters squared. Defaults to 0.
+            i.e. if garden_area_m2 > 0, then has_outdoor_space = True
+        city_centre_oas (set, optional): OAs that are considered part of the city center. Should be an oa21 format.
 
     Returns:
         pl.DataFrame: DataFrame ready for feasibility scoring.
@@ -149,7 +153,9 @@ def prepare_df_for_feasibility_scoring(
     )
 
     # Create has_outdoor_space from garden_area_m2
-    df = df.with_columns((pl.col("garden_area_m2") > 0).alias("has_outdoor_space"))
+    df = df.with_columns(
+        (pl.col("garden_area_m2") > outdoor_space_threshold).alias("has_outdoor_space")
+    )
 
     # Creating close_to_anchor_loads from distance_to_anchor_loads and anchor_loads_threhold
     df = df.with_columns(
@@ -159,9 +165,7 @@ def prepare_df_for_feasibility_scoring(
     )
     # Creating close_to_city_centre from distance_to_city_centre and city_centre_threshold
     df = df.with_columns(
-        (pl.col("distance_to_city_centre") <= city_centre_threshold).alias(
-            "close_to_city_centre"
-        )
+        pl.col("oa21").is_in(city_centre_oas).alias("close_to_city_centre")
     )
 
     # Aggregating data by cluster
@@ -278,7 +282,8 @@ if __name__ == "__main__":
         df=plymouth_data,
         features=config.features,
         anchor_loads_threshold=500,
-        city_centre_threshold=500,
+        outdoor_space_threshold=0,
+        city_centre_oas=config.city_centre_oas,
     )
 
     feasibility_scoring_data = create_df_feasibility_scoring(
