@@ -9,7 +9,10 @@ This file contains functions for:
 
 # package imports
 import polars as pl
+
+# local imports
 import config
+from asf_heat_pump_suitability.utils.save_utils import save_to_s3
 
 
 def prepare_df_for_suitability_categorisation(
@@ -264,3 +267,42 @@ def create_df_feasibility_scoring(
     df = df.with_columns(tech_feasibility_scores)
 
     return df
+
+
+if __name__ == "__main__":
+    plymouth_data = pl.read_parquet(
+        "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_uprn_with_features.parquet"
+    )
+
+    feasibility_scoring_data = prepare_df_for_feasibility_scoring(
+        df=plymouth_data,
+        features=config.features,
+        anchor_loads_threshold=500,
+        city_centre_threshold=500,
+    )
+
+    feasibility_scoring_data = create_df_feasibility_scoring(
+        df=feasibility_scoring_data,
+        features=config.features,
+        expected_tech_types=config.expected_tech_types,
+        weights=config.weights,
+    )
+
+    suitability_categorisation_data = prepare_df_for_suitability_categorisation(
+        df=plymouth_data,
+        city_centre_oas=config.city_centre_oas,
+        outdoor_space_threshold=0,
+    )
+    suitability_categorisation_data = create_df_suitability_categorisation(
+        df=suitability_categorisation_data
+    )
+
+    # Saving data
+    save_to_s3(
+        df=feasibility_scoring_data,
+        path="s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_feasibility_scoring.parquet",
+    )
+    save_to_s3(
+        df=suitability_categorisation_data,
+        path="s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_suitability_categorisation.parquet",
+    )
