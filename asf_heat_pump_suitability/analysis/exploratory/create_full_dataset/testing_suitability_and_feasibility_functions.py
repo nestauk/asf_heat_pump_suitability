@@ -17,85 +17,132 @@ plymouth_data = pl.read_parquet(
 random_clusters = np.random.randint(low=1, high=11, size=len(plymouth_data))
 plymouth_data = plymouth_data.with_columns(pl.Series("cluster", random_clusters))
 
-# Data transformations to enable computing feasibility
-# Once column names are fixed we can add this to the pipeline directly
-plymouth_data = plymouth_data.to_dummies("predicted_tenure")
-plymouth_data = plymouth_data.rename(
-    {
-        "predicted_tenure_owner-occupied": "owner_occupied",
-        "predicted_tenure_rental (social)": "social_housing",
-    }
-)
+# Dropping oa21 and renaming OA21CD to oa21 for now - final dataset will use oa21
+plymouth_data = plymouth_data.drop("oa21").rename({"OA21CD": "oa21"})
 
-plymouth_data = plymouth_data.with_columns((~pl.col("use_off_gas")).alias("on_gas"))
+# Renaming in_hn to in_heat_network_zone
+plymouth_data = plymouth_data.rename({"in_hn": "in_heat_network_zone"})
+
+# Renaming in_cons_area to in_conservation_area
+plymouth_data = plymouth_data.rename({"in_cons_area": "in_conservation_area"})
+
+# Create distance_to_anchor_loads column and distance_to_city_centre columns with random values in meters, as current data doesn't have those
+random_distance_to_anchor_loads = np.random.randint(
+    low=100, high=5000, size=len(plymouth_data)
+)
+random_distance_to_city_centre = np.random.randint(
+    low=100, high=5000, size=len(plymouth_data)
+)
 plymouth_data = plymouth_data.with_columns(
-    (~pl.col("in_listed_building")).alias("not_listed")
+    pl.Series("distance_to_anchor_loads", random_distance_to_anchor_loads),
+    pl.Series("distance_to_city_centre", random_distance_to_city_centre),
 )
+
+# Create flag in_high_income_decile with random boolean values, as current data doesn't have those
+random_in_high_income_decile = np.random.choice([True, False], size=len(plymouth_data))
 plymouth_data = plymouth_data.with_columns(
-    (~pl.col("in_cons_area")).alias("not_in_conservation_area")
+    pl.Series("in_high_income_decile", random_in_high_income_decile)
 )
 
-plymouth_data = plymouth_data.to_dummies("predicted_property_type")
-plymouth_data = plymouth_data.rename(
-    {"predicted_property_type_Flat, maisonette or apartment": "flats"}
-)
-
+# Create flag on_communal_heating with random boolean values, as current data doesn't have those
+random_on_communal_heating = np.random.choice([True, False], size=len(plymouth_data))
 plymouth_data = plymouth_data.with_columns(
-    (pl.col("garden_area_m2") > 0).alias("has_outdoor_space")
+    pl.Series("on_communal_heating", random_on_communal_heating)
 )
 
+# create a building ID column at random for now
+random_building_ids = np.random.randint(low=1, high=50000, size=len(plymouth_data))
+plymouth_data = plymouth_data.with_columns(
+    pl.Series("building_id", random_building_ids)
+)
+
+# %% [markdown]
+# ## Feasibility calculations
+
+# %%
+from assign_cluster_suitability_and_feasibility import (
+    prepare_df_for_feasibility_scoring,
+)
+from config import features
+
+# %%
+feasibility_scoring_data = prepare_df_for_feasibility_scoring(
+    df=plymouth_data, features=features
+)
 
 # %%
 from assign_cluster_suitability_and_feasibility import create_df_feasibility_scoring
+from config import weights
+
 
 # %%
-# Dictionary of weights for computing feasibility scores for each tech type
-weights = {
-    "individual_ashp_feasibility": {
-        "owner_occupied": 1,
-        # "in_high_income_decile": 1,
-        "on_gas": 1,
-        "not_listed": 1,
-        "not_in_conservation_area": 1,
-    },
-    "collective_ashp_feasibility": {
-        "owner_occupied": 1,
-        # "in_high_income_decile": 1,
-        "on_gas": 1,
-        "not_listed": 1,
-        "not_in_conservation_area": 1,
-        # "cluster_size": 1
-    },
-    "sgl_feasibility": {
-        "social_housing": 1,
-        "flats": 1,
-        # "on_communal_heating": 1,
-        "has_outdoor_space": 1,
-        "not_listed": 1,
-        "not_in_conservation_area": 1,
-        # "cluster_size": 1
-    },
-    "hn_feasibility": {
-        "in_hn": 1,
-        # "close_to_anchor_loads": 1,
-        # "close_to_city_center": 1
-    },
+weights
+
+# %%
+create_df_feasibility_scoring(
+    df=feasibility_scoring_data, weights=weights, features=features
+)
+
+# %%
+dummy_df = {
+    "cluster_size": [
+        20,
+        10,
+        100,
+        40,
+        5,
+    ],  # these should be values between 0 and 100, not the original cluster sizes
+    "perc_owner_occupied": [60, 5, 45, 20, 33],
+    "perc_social_housing": [30, 90, 40, 70, 50],
+    "perc_flats": [10, 80, 30, 60, 20],
+    "perc_in_high_income_decile": [55, 10, 20, 5, 40],
+    "perc_on_gas": [70, 20, 80, 10, 50],
+    "perc_not_in_listed_building": [100, 100, 90, 50, 30],
+    "perc_not_in_conservation_area": [100, 87, 95, 60, 20],
+    "perc_close_to_anchor_loads": [90, 10, 50, 76, 30],
+    "perc_close_to_city_centre": [80, 5, 60, 70, 25],
+    "perc_on_communal_heating": [5, 70, 20, 50, 30],
+    "perc_has_outdoor_space": [95, 20, 80, 60, 40],
+    "perc_in_heat_network_zone": [85, 15, 40, 70, 25],
 }
 
-# %%
-# Feature columns that will help with computing feasibility
-cols = [
-    "owner_occupied",
-    "social_housing",
-    "on_gas",
-    "not_listed",
-    "not_in_conservation_area",
-    "flats",
-    "has_outdoor_space",
-    "in_hn",
-]
+dummy_df = pl.DataFrame(dummy_df)
+
+create_df_feasibility_scoring(df=dummy_df)
+
+# %% [markdown]
+# ## Suitability calculations
 
 # %%
-create_df_feasibility_scoring(df=plymouth_data, weights=weights, features=cols)
+from assign_cluster_suitability_and_feasibility import (
+    prepare_df_for_suitability_categorisation,
+)
+from config import city_centre_oas
+
+# %%
+suitability_categorisation_data = prepare_df_for_suitability_categorisation(
+    df=plymouth_data, city_centre_oas=city_centre_oas, outdoor_space_threshold=30
+)
+
+# %%
+from assign_cluster_suitability_and_feasibility import (
+    create_df_suitability_categorisation,
+)
+
+# %%
+create_df_suitability_categorisation(df=suitability_categorisation_data)
+
+# %%
+dummy_df = {
+    "cluster_size": [1, 30, 50, 21, 100],
+    "in_heat_network_zone": [True, True, False, False, False],
+    "in_city_centre": [False, True, False, False, False],
+    "in_conservation_area": [False, True, False, True, False],
+    "has_outdoor_space": [True, True, False, True, True],
+}
+
+dummy_df = pl.DataFrame(dummy_df)
+
+create_df_suitability_categorisation(df=dummy_df)
 
 # %%
