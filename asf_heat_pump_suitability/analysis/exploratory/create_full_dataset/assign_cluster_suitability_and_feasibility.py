@@ -110,7 +110,6 @@ def prepare_df_for_feasibility_scoring(
     Prepares the dataframe for feasibility scoring. This includes:
     - Transforming categorical variables into dummy/indicator variables.
     - Creating new binary features based on existing columns and specified thresholds.
-    - Scaling the cluster size to be between 0 and 100.
     - Renaming columns for clarity.
 
     Args:
@@ -147,15 +146,6 @@ def prepare_df_for_feasibility_scoring(
 
     # Create has_outdoor_space from garden_area_m2
     df = df.with_columns((pl.col("garden_area_m2") > 0).alias("has_outdoor_space"))
-
-    # scale cluster size to be between 0 and 100
-    df = df.with_columns(
-        (
-            (pl.col("cluster_size") - pl.col("cluster_size").min())
-            / (pl.col("cluster_size").max() - pl.col("cluster_size").min())
-            * 100
-        ).alias("cluster_size")
-    )
 
     # Creating close_to_anchor_loads from distance_to_anchor_loads and anchor_loads_threhold
     df = df.with_columns(
@@ -250,6 +240,15 @@ def create_df_feasibility_scoring(
     cluster_stats = df.group_by("cluster").agg(
         ((pl.col(features).mean()).cast(pl.Float64) * 100).name.prefix("perc_"),
         pl.col("cluster").count().alias("cluster_size"),
+    )
+
+    # scale cluster size to be between 0 and 100
+    cluster_stats = cluster_stats.with_columns(
+        (
+            (pl.col("cluster_size") - pl.col("cluster_size").min())
+            / (pl.col("cluster_size").max() - pl.col("cluster_size").min())
+            * 100
+        ).alias("cluster_size")
     )
 
     # Create feasibility expressions for all tech types and store as list
