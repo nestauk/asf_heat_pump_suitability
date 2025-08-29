@@ -99,7 +99,12 @@ def generate_gdf_garden_size(
     """
     building_size = (
         intersections_gdf.groupby("NATIONALCADASTRALREFERENCE")[
-            ["building_id", "building_intersection_area_m2", "height"]
+            [
+                "building_id",
+                "building_intersection_area_m2",
+                # "height",
+                "source",
+            ]
         ]
         .agg(
             building_ids=(
@@ -110,10 +115,10 @@ def generate_gdf_garden_size(
                 "building_intersection_area_m2",
                 "sum",
             ),  # get total building area on land parcel
-            max_building_height=(
-                "height",
-                "max",
-            ),  # get max building height on land parcel
+            # max_building_height=(
+            #     "height",
+            #     "max",
+            # ),  # get max building height on land parcel
         )
         .reset_index()
     )
