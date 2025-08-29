@@ -330,7 +330,7 @@ def assign_no_cluster_unique_code(
     df: pl.DataFrame,
 ) -> pl.DataFrame:
     """
-    For any properties not assigned to a cluster, give them a unique negative cluster number.
+    For any properties not assigned to a cluster, give them a unique negative cluster number (use the UPRN).
     This will mean we can run them through the pipeline as normal, but also distinguish them later too.
 
     Args:
@@ -341,13 +341,9 @@ def assign_no_cluster_unique_code(
         have a unique negative cluster value rather than all being assigned '-1'.
     """
 
-    neg_count = (pl.col("cluster") == -1).cast(pl.Int32).cum_sum()
-
-    # Use the conditional expression to update the column.
-    # When 'cluster' is -1, use the negated cumulative count.
     df = df.with_columns(
         pl.when(pl.col("cluster") == -1)
-        .then(neg_count * -1)
+        .then(pl.col("UPRN") * -1)
         .otherwise(pl.col("cluster"))
         .alias("cluster")
     )
