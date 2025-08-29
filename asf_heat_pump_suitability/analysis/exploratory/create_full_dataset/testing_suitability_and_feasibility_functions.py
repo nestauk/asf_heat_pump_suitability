@@ -30,12 +30,8 @@ plymouth_data = plymouth_data.rename({"in_cons_area": "in_conservation_area"})
 random_distance_to_anchor_loads = np.random.randint(
     low=100, high=5000, size=len(plymouth_data)
 )
-random_distance_to_city_centre = np.random.randint(
-    low=100, high=5000, size=len(plymouth_data)
-)
 plymouth_data = plymouth_data.with_columns(
     pl.Series("distance_to_anchor_loads", random_distance_to_anchor_loads),
-    pl.Series("distance_to_city_centre", random_distance_to_city_centre),
 )
 
 # Create flag in_high_income_decile with random boolean values, as current data doesn't have those
