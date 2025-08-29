@@ -19,7 +19,7 @@ from asf_heat_pump_suitability.utils.save_utils import save_to_s3
 def prepare_df_for_suitability_categorisation(
     df: pl.DataFrame,
     city_centre_oas: set = config.city_centre_oas,
-    outdoor_space_threshold: float = 0,
+    outdoor_space_threshold: float = config.outdoor_space_threshold,
 ) -> pl.DataFrame:
     """
     Prepares the dataframe for suitability categorisation. This includes:
@@ -30,7 +30,7 @@ def prepare_df_for_suitability_categorisation(
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
         city_centre_oas (set, optional): OAs that are considered part of the city center. Should be an oa21 format.
             Defaults to config.city_centre_oas.
-        outdoor_space_threshold (float, optional): Threshold for outdoor space in meters squared. Defaults to 0.
+        outdoor_space_threshold (float, optional): Threshold for outdoor space in meters squared.
         i.e. if garden_area_m2 > 0, then has_outdoor_space = True
 
     Returns:
@@ -55,16 +55,44 @@ def prepare_df_for_suitability_categorisation(
         # Outdoor space logic:
         (
             # Properties other than flats: sum garden_area_m2 for all properties
-            pl.col("garden_area_m2").filter(pl.col("flats") != 1).sum().fill_null(0)
-            +
-            # For flats, we only want to count the garden_size once per building
-            pl.struct(["building_id", "garden_area_m2"])
-            .filter(pl.col("flats") == 1)
-            .gather(pl.col("building_id").filter(pl.col("flats") == 1).arg_unique())
-            .struct.field("garden_area_m2")
+            pl.col("garden_area_m2")
+            .filter(pl.col("flats") != 1)
             .sum()
             .fill_null(0)
         ).alias("total_outdoor_space"),
+    )
+
+    # Calculate garden sizes for flats
+    flats_garden_sizes = (
+        df.group_by("cluster")
+        .agg(
+            (
+                (
+                    pl.struct(["building_id", "garden_area_m2"])
+                    .filter(pl.col("flats") == 1)
+                    .gather(
+                        pl.col("building_id").filter(pl.col("flats") == 1).arg_unique()
+                    )
+                    .struct.field("garden_area_m2")
+                )
+            )
+        )
+        .with_columns(
+            pl.col("building_id").list.sum().alias("total_outdoor_space_flats")
+        )
+    )
+
+    # Join the aggregated data together, summing the flats and the not flats for each cluster
+
+    cluster_df = (
+        cluster_df.join(flats_garden_sizes, on="cluster", how="left")
+        .with_columns(
+            (
+                pl.col("total_outdoor_space")
+                + pl.col("total_outdoor_space_flats").fill_null(0)
+            ).alias("total_outdoor_space")
+        )
+        .drop(["building_id", "total_outdoor_space_flats"])
     )
 
     cluster_df = cluster_df.with_columns(
@@ -75,7 +103,9 @@ def prepare_df_for_suitability_categorisation(
     return cluster_df
 
 
-def create_df_suitability_categorisation(df: pl.DataFrame) -> pl.DataFrame:
+def create_df_suitability_categorisation(
+    df: pl.DataFrame, sgl_min_properties: int = config.sgl_min_properties
+) -> pl.DataFrame:
     """
     Adds a new column to cluster_df with most suitable low carbon heating technology for each cluster:
     - "individual_ashp": Individual air source heat pump (ASHP)
@@ -85,6 +115,7 @@ def create_df_suitability_categorisation(df: pl.DataFrame) -> pl.DataFrame:
 
     Args:
         df (pl.DataFrame): DataFrame containing information about each cluster of properties.
+        sgl_min_properties (int): The minimum number of properties in a cluster for a SGL to be considered.
 
     Returns:
         pl.DataFrame: cluster_df with an additional column for the suitability categorisation.
@@ -97,7 +128,9 @@ def create_df_suitability_categorisation(df: pl.DataFrame) -> pl.DataFrame:
         .then(pl.lit("heat_network"))
         .when(pl.col("in_city_centre"))
         .then(pl.lit("heat_network"))
-        .when((pl.col("cluster_size") > 20) & pl.col("has_outdoor_space"))
+        .when(
+            (pl.col("cluster_size") > sgl_min_properties) & pl.col("has_outdoor_space")
+        )
         .then(pl.lit("shared_ground_loop"))
         .otherwise(pl.lit("collective_ashp"))
     )
@@ -109,8 +142,8 @@ def prepare_df_for_feasibility_scoring(
     df: pl.DataFrame,
     anchor_dist_df: pl.DataFrame,
     features: list = config.features,
-    anchor_loads_threshold: float = 500,
-    outdoor_space_threshold: float = 0,
+    anchor_loads_threshold: float = config.anchor_loads_threshold,
+    outdoor_space_threshold: float = config.outdoor_space_threshold,
     city_centre_oas: set = config.city_centre_oas,
 ) -> pl.DataFrame:
     """
@@ -123,8 +156,8 @@ def prepare_df_for_feasibility_scoring(
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
         features (list, optional): List of features used in the feasibility scoring.
         anchor_dist_df (pl.DataFrame): DataFrame containing the distance (m) from the centre of each cluster to the nearest anchor load.
-        anchor_loads_threshold (float, optional): threshold for distance to anchor loads in metres. Defaults to 500 m.
-        outdoor_space_threshold (float, optional): Threshold for outdoor space in meters squared. Defaults to 0.
+        anchor_loads_threshold (float, optional): threshold for distance to anchor loads in metres.
+        outdoor_space_threshold (float, optional): Threshold for outdoor space in meters squared.
             i.e. if garden_area_m2 > 0, then has_outdoor_space = True
         city_centre_oas (set, optional): OAs that are considered part of the city center. Should be an oa21 format.
 
@@ -294,6 +327,7 @@ def create_df_feasibility_scoring(
 
 
 if __name__ == "__main__":
+
     plymouth_data = pl.read_parquet(
         "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/results/plymouth_features_selected_with_clusters.parquet"
     )
@@ -311,8 +345,8 @@ if __name__ == "__main__":
         df=plymouth_data,
         anchor_dist_df=anchor_dist_df,
         features=config.features,
-        anchor_loads_threshold=500,
-        outdoor_space_threshold=0,
+        anchor_loads_threshold=config.anchor_loads_threshold,
+        outdoor_space_threshold=config.outdoor_space_threshold,
         city_centre_oas=config.city_centre_oas,
     )
 
@@ -326,10 +360,10 @@ if __name__ == "__main__":
     suitability_categorisation_data = prepare_df_for_suitability_categorisation(
         df=plymouth_data,
         city_centre_oas=config.city_centre_oas,
-        outdoor_space_threshold=0,
+        outdoor_space_threshold=config.outdoor_space_threshold,
     )
     suitability_categorisation_data = create_df_suitability_categorisation(
-        df=suitability_categorisation_data
+        df=suitability_categorisation_data, sgl_min_properties=config.sgl_min_properties
     )
 
     # Saving data

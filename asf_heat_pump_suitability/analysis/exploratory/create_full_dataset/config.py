@@ -2,6 +2,17 @@
 Config file with defaults used for feasibility scoring and suitability categorisation.
 """
 
+# Thresholds
+
+# The space (m2) needed to dig for a cluster of homes to dig for a SGL. For SGL suitability and feasibility.
+outdoor_space_threshold = 50
+
+# The threshold for distance to anchor loads in metres. For HN feasibility.
+anchor_loads_threshold = 500
+
+# The minimum number of properties in a cluster for a SGL to be considered.
+sgl_min_properties = 20
+
 # Features needed for feasibility scoring
 features = [
     "owner_occupied",
