@@ -326,11 +326,41 @@ def create_df_feasibility_scoring(
     return df
 
 
+def assign_no_cluster_unique_code(
+    df: pl.DataFrame,
+) -> pl.DataFrame:
+    """
+    For any properties not assigned to a cluster, give them a unique negative cluster number.
+    This will mean we can run them through the pipeline as normal, but also distinguish them later too.
+
+    Args:
+        df (pl.DataFrame): DataFrame containing the dataset with cluster values for each UPRN.
+
+    Returns:
+        pl.DataFrame: DataFrame containing the dataset with cluster values for each UPRN, but where the not clustered properties
+        have a unique negative cluster value rather than all being assigned '-1'.
+    """
+
+    neg_count = (pl.col("cluster") == -1).cast(pl.Int32).cum_sum()
+
+    # Use the conditional expression to update the column.
+    # When 'cluster' is -1, use the negated cumulative count.
+    df = df.with_columns(
+        pl.when(pl.col("cluster") == -1)
+        .then(neg_count * -1)
+        .otherwise(pl.col("cluster"))
+        .alias("cluster")
+    )
+
+    return df
+
+
 if __name__ == "__main__":
 
     plymouth_data = pl.read_parquet(
         "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/results/plymouth_features_selected_with_clusters.parquet"
     )
+    plymouth_data = assign_no_cluster_unique_code(plymouth_data)
 
     # The building polygon data per cluster, and the distance to anchor loads from the centre of the cluster
     cluster_polygons = gpd.read_file(
