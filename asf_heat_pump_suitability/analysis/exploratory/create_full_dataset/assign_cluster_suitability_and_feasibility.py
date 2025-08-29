@@ -9,6 +9,7 @@ This file contains functions for:
 
 # package imports
 import polars as pl
+import geopandas as gpd
 
 # local imports
 import config
@@ -106,6 +107,7 @@ def create_df_suitability_categorisation(df: pl.DataFrame) -> pl.DataFrame:
 
 def prepare_df_for_feasibility_scoring(
     df: pl.DataFrame,
+    anchor_dist_df: pl.DataFrame,
     features: list = config.features,
     anchor_loads_threshold: float = 500,
     outdoor_space_threshold: float = 0,
@@ -120,6 +122,7 @@ def prepare_df_for_feasibility_scoring(
     Args:
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
         features (list, optional): List of features used in the feasibility scoring.
+        anchor_dist_df (pl.DataFrame): DataFrame containing the distance (m) from the centre of each cluster to the nearest anchor load.
         anchor_loads_threshold (float, optional): threshold for distance to anchor loads in metres. Defaults to 500 m.
         outdoor_space_threshold (float, optional): Threshold for outdoor space in meters squared. Defaults to 0.
             i.e. if garden_area_m2 > 0, then has_outdoor_space = True
@@ -157,12 +160,6 @@ def prepare_df_for_feasibility_scoring(
         (pl.col("garden_area_m2") > outdoor_space_threshold).alias("has_outdoor_space")
     )
 
-    # Creating close_to_anchor_loads from distance_to_anchor_loads and anchor_loads_threhold
-    df = df.with_columns(
-        (pl.col("distance_to_anchor_loads") <= anchor_loads_threshold).alias(
-            "close_to_anchor_loads"
-        )
-    )
     # Creating close_to_city_centre from distance_to_city_centre and city_centre_threshold
     df = df.with_columns(
         pl.col("oa21").is_in(city_centre_oas).alias("close_to_city_centre")
@@ -171,11 +168,31 @@ def prepare_df_for_feasibility_scoring(
     # Creating imd_decile_above_avg from imd_decile
     df = df.with_columns((pl.col("imd_decile") > 5).alias("imd_decile_above_avg"))
 
-    # Aggregating data by cluster
+    # Aggregating data by cluster, distance to anchor loads is calculated
+    # separately, so don't include this in this step
+
     df = df.group_by("cluster").agg(
-        ((pl.col(features).mean()).cast(pl.Float64) * 100).name.prefix("perc_"),
+        (
+            (pl.col([f for f in features if f != "close_to_anchor_loads"]).mean()).cast(
+                pl.Float64
+            )
+            * 100
+        ).name.prefix("perc_"),
         pl.col("UPRN").count().alias("cluster_size"),
     )
+
+    # Creating close_to_anchor_loads from distance_from_anchor_property_m and anchor_loads_threshold
+
+    anchor_dist_df = anchor_dist_df.with_columns(
+        (pl.col("distance_from_anchor_property_m") <= anchor_loads_threshold).alias(
+            "close_to_anchor_loads"
+        )
+    ).select(
+        pl.col("cluster").cast(pl.Int64),
+        (pl.col("close_to_anchor_loads").cast(pl.Float64) * 100).name.prefix("perc_"),
+    )
+
+    df = df.join(anchor_dist_df, on="cluster")
 
     # scale cluster size to be between 0 and 100
     df = df.with_columns(
@@ -281,8 +298,18 @@ if __name__ == "__main__":
         "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/results/plymouth_features_selected_with_clusters.parquet"
     )
 
+    # The building polygon data per cluster, and the distance to anchor loads from the centre of the cluster
+    cluster_polygons = gpd.read_file(
+        "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/merged_uprns/per_cluster_merged_polygons.geojson"
+    ).to_crs(epsg=4326)
+
+    anchor_dist_df = pl.from_pandas(
+        cluster_polygons[["cluster", "distance_from_anchor_property_m"]]
+    )
+
     feasibility_scoring_data = prepare_df_for_feasibility_scoring(
         df=plymouth_data,
+        anchor_dist_df=anchor_dist_df,
         features=config.features,
         anchor_loads_threshold=500,
         outdoor_space_threshold=0,
