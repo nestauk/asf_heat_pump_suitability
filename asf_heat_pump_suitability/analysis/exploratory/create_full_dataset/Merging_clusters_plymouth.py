@@ -43,6 +43,18 @@ UPRNs_clustered = gpd.read_file(
 ).to_crs(epsg=4326)
 
 # %%
+# Instead of all none clusters being assigned the -1 cluster, change this to a unique number - use the negative of the UPRN since this will be so much bigger, so won't overlap with genuine clusters
+UPRNs_clustered["cluster"] = UPRNs_clustered.apply(
+    lambda x: x["cluster"] if x["cluster"] >= 0 else -x["UPRN"], axis=1
+)
+
+# %%
+assert (
+    (UPRNs_clustered["cluster"] < 0).sum()
+    + UPRNs_clustered[UPRNs_clustered["cluster"] >= 0]["cluster"].nunique()
+) == UPRNs_clustered["cluster"].nunique()
+
+# %%
 print("\nLoading OS OpenMap Local - All buildings in SX region...")
 os_openmap_building_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/OS OpenMap Local (ESRI Shape File) SX/data/SX_Building.shp"
@@ -179,7 +191,7 @@ UPRNs_clustered_final["cluster_polygon_found"].value_counts()
 
 # %%
 def get_type(cluster, UPRN_joined_to_a_building_polygon, cluster_polygon_found):
-    if cluster == -1:
+    if cluster < 0:
         return "Not clustered"
     elif cluster_polygon_found:
         if UPRN_joined_to_a_building_polygon:
@@ -255,7 +267,7 @@ print(len(merged_polygons_per_cluster_27700))
 print(merged_polygons_per_cluster_27700["cluster"].nunique())
 
 # %%
-# I'm not sure why but the -1 cluster keeps getting duplicated in this sjoin, the results are the same though
+# I'm not sure why but a very small number of clusters keeps getting duplicated in this sjoin, the results seem to be the same though, so just deduplicate
 
 merged_polygons_per_cluster_27700.drop_duplicates(subset="cluster", inplace=True)
 print(len(merged_polygons_per_cluster_27700))
@@ -297,7 +309,7 @@ all_building_polygons = pd.concat(
 all_building_polygons["Type"] = all_building_polygons["cluster"].apply(
     lambda x: (
         "Has UPRNS but no cluster"
-        if x == -1
+        if x < 0
         else ("No UPRN" if pd.isnull(x) else "Has UPRN from a cluster")
     )
 )
