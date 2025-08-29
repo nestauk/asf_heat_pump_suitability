@@ -21,12 +21,17 @@ import pandas as pd
 import fiona
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import ticker
+
+from sklearn.cluster import HDBSCAN
 from sklearn.preprocessing import OneHotEncoder
 from sklearn import metrics
+
 from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 
+from asf_heat_pump_suitability.utils import geo_utils, save_utils
 from asf_heat_pump_suitability.getters import get_datasets
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     lat_lon,
@@ -35,9 +40,13 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
     off_gas,
     anchor_properties,
     output_areas,
+    building_footprint,
+    land_extent,
+    garden_size,
 )
 from asf_heat_pump_suitability.analysis.flats_on_fossils.features import fuel_type
 from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
+import folium
 
 # %% [markdown]
 # ## Load data
@@ -75,23 +84,18 @@ os_openmap_railway_gdf = gpd.read_file(
 print("\nLOADING PROPERTY-LEVEL FEATURE DATASETS...")
 print("\nLoading listed buildings...")
 listed_buildings_gdf = gpd.read_file(
-    "../spatial_clustering/data/National_Heritage_List_for_England_NHLE_v02_VIEW_-464524051049198649/Listed_Building_points.shp"
+    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/National_Heritage_List_for_England_NHLE_v02_VIEW_-464524051049198649/Listed_Building_points.shp"
 )
 
 print("\nLoading building conservation areas...")
 cons_areas_gdf = gpd.read_file(
-    "../spatial_clustering/data/conservation-area (1).geojson"
+    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/conservation-area (1).geojson"
 )
 
 print("\nLoading existing / planned HN zones...")
 hn_zones_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Plymouth.gpkg",
     layer="heat-network-zone-map-Plymouth",
-)
-
-print("\nLoading outdoor space...")
-outdoor_space_df = pl.read_parquet(
-    "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/20250224_2023_Q4_EPC_garden_size_estimates_EWS_deduplicated.parquet"
 )
 
 print("\nLoading off gas postcodes...")
@@ -248,11 +252,6 @@ cons_area_uprns = plymouth_residential_uprns_gdf.sjoin(
     cons_areas_gdf.to_crs(epsg=27700), how="inner", predicate="intersects"
 )["UPRN"].tolist()
 
-# Reformat UPRN for join
-outdoor_space_df = outdoor_space_df.with_columns(
-    pl.col("UPRN").str.replace(".0", "", literal=True).cast(pl.Int64).alias("UPRN")
-)
-
 # UPRNs in HNs
 uprns_in_hn = plymouth_residential_uprns_gdf.sjoin(
     hn_zones_gdf.drop(columns=["index_right"]), predicate="within"
@@ -301,7 +300,6 @@ features_df = (
         .otherwise(False)
         .alias("in_hn"),
     )
-    .join(outdoor_space_df, how="left", on="UPRN")
     .join(epc_df, how="left", on="UPRN")
 )
 
@@ -334,6 +332,7 @@ postcode_lookup_df = output_areas.load_transform_df_area_info(
         "oslaua",
         "oa21",
         "imd",
+        # "LSOA21NM"
     ]
 )
 
@@ -840,7 +839,7 @@ features_df = features_df.join(
 # ## Fill missing data - tenure type
 
 # %%
-# Load census data
+# LOAD CENSUS DATA
 print("Loading age band data...")
 age_bands_df = pl.read_csv(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/2021Census_age_bands_OA_plymouth.csv",
@@ -878,7 +877,7 @@ oa_tenure_df = pl.read_csv(
 )
 
 # %%
-# Preprocess census data to generate features for predictive model
+# PREPROCESS CENSUS DATA TO GENERATE FEATURES FOR PREDICTIVE MODEL
 # Process age band data
 age_bands_df = (
     age_bands_df.filter(
@@ -1011,9 +1010,10 @@ oa_tenure_df = (
 )
 
 # Join census datasets together
-census_df = oa_tenure_df
+# census_df = oa_tenure_df
+census_df = age_bands_df
 for df in [
-    age_bands_df,
+    # age_bands_df,
     disability_df,
     economic_status_df,
     hours_worked_df,
@@ -1022,17 +1022,116 @@ for df in [
     census_df = census_df.join(df, how="left", on="oa_code")
 
 # %%
+# Load output area geospatial boundaries
+oa_boundaries_gdf = gpd.read_file(
+    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Output_Areas_2021_EW_BFE_V9_6122634609897870819/OA_2021_EW_BFE_V9.shp"
+)
+
+# Assign UPRNs to their output areas
+uprns_with_oa_df = plymouth_residential_uprns_gdf.sjoin(
+    oa_boundaries_gdf[["OA21CD", "LSOA21CD", "geometry"]],
+    how="left",
+    predicate="intersects",
+).drop(columns="index_right")
+
+# Join output areas to features
+features_df = features_df.join(
+    pl.from_pandas(uprns_with_oa_df[["UPRN", "OA21CD", "LSOA21CD"]]),
+    how="left",
+    on="UPRN",
+).with_columns(pl.col("TENURE").replace("unknown", None))
+
+# %%
+# CALCULATE PROPORTIONS OF TENURE TYPES FOR NEIGHBOURS WITHIN 100m RADIUS FOR EACH UPRN
+nn_tenure_df = features_df.select(
+    [
+        "UPRN",
+        "TENURE",
+        "OA21CD",
+    ]
+).join(
+    os_uprn_df.select(["UPRN", "X_COORDINATE", "Y_COORDINATE"]), how="left", on="UPRN"
+)
+
+# Calculate distance from nearest neighbour for all UPRNs
+# Get coordinates of each UPRN
+nn_tenure_df = lat_lon.generate_gdf_uprn_coords(
+    nn_tenure_df, usecols=["UPRN", "TENURE", "X_COORDINATE", "Y_COORDINATE"]
+)
+
+# Convert coordinates to array
+coords = np.array(nn_tenure_df.geometry.map(lambda p: [p.x, p.y]).tolist())
+
+# Find all neighbours within 100m radius of each UPRN
+knn = NearestNeighbors(radius=100, algorithm="kd_tree").fit(coords)
+knn_dist, knn_idx = knn.radius_neighbors(coords)
+
+# Get the tenures of the neighbours within 100m
+nn_tenure_df["nearest_tenures"] = [
+    nn_tenure_df.TENURE.values[knn_idx[i]] for i in range(0, len(knn_idx))
+]
+
+# Get the UPRNs of the neighbours within 100m
+nn_tenure_df["nearest_UPRNs"] = [
+    nn_tenure_df.UPRN.values[knn_idx[i]] for i in range(0, len(knn_idx))
+]
+
+nn_tenure_df = pd.DataFrame(nn_tenure_df).explode(
+    column=["nearest_tenures", "nearest_UPRNs"]
+)
+nn_tenure_df = (
+    nn_tenure_df[
+        # Filter out neighbours which are 'self' and filter out any neighbours with no tenure
+        (nn_tenure_df["UPRN"] != nn_tenure_df["nearest_UPRNs"])
+        & (nn_tenure_df["nearest_tenures"].notnull())
+        # Get the counts of neighbours with each tenure type per UPRN
+    ]
+    .groupby(["UPRN", "nearest_tenures"])
+    .agg(
+        count=pd.NamedAgg(column="UPRN", aggfunc="count"),
+    )
+    .reset_index()
+)
+
+# Calculate the proportion of neighbours with each tenure type
+total_tenure_df = nn_tenure_df.groupby("UPRN").agg(
+    total=pd.NamedAgg(column="count", aggfunc="sum")
+)
+nn_tenure_df = nn_tenure_df.merge(total_tenure_df, how="left", on="UPRN")
+nn_tenure_df["prop_neighbours"] = nn_tenure_df["count"] / nn_tenure_df["total"]
+
+nn_tenure_df = pl.from_pandas(
+    nn_tenure_df.pivot(
+        index="UPRN", columns="nearest_tenures", values="prop_neighbours"
+    )
+    .fillna(0)
+    .reset_index()
+).rename(
+    {
+        "owner-occupied": "prop_nn_owner_occupied",
+        "rental (private)": "prop_nn_private_rental",
+        "rental (social)": "prop_nn_social_rental",
+    }
+)
+
+# ----------------------------------------------------------------------------------- #
 # CREATE DATAFRAME WITH FEATURES TO TRAIN AND TEST MODEL
 model_df = (
-    epc_df.select(
+    features_df.select(
         [
             "UPRN",
             "property_type",
             "TENURE",
-            "oa21",
+            "OA21CD",
         ]
     )
-    .join(census_df, how="left", left_on="oa21", right_on="oa_code")
+    .join(census_df, how="left", left_on="OA21CD", right_on="oa_code")
+    .join(
+        os_uprn_df.select(["UPRN", "X_COORDINATE", "Y_COORDINATE"]),
+        how="left",
+        on="UPRN",
+    )
+    .join(nn_tenure_df.drop("prop_nn_private_rental"), how="left", on="UPRN")
     .join(
         features_df.select(["UPRN", "in_cons_area", "in_listed_building"]),
         how="left",
@@ -1043,7 +1142,7 @@ model_df = (
         pl.col("property_type") != "Caravan or other mobile or temporary structure",
         pl.col("TENURE") != "unknown",
     )
-    .drop(["oa21", "prop_aged_35_to_64"])
+    .drop(["OA21CD", "prop_aged_35_to_64"])
     .to_pandas()
 )
 
@@ -1065,10 +1164,21 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.25, random_state=1
 )
 
+print(y_train["TENURE"].value_counts(normalize=True))
+print(y_test["TENURE"].value_counts(normalize=True))
+
 # Fit and predict with K-nearest neighbours classifier model
-classifier = KNeighborsClassifier(n_neighbors=10)
+# classifier = KNeighborsClassifier(n_neighbors=10)
+# classifier.fit(X_train, y_train)
+# print("K Nearest Neighbour classifier accuracy score:")
+# print(classifier.score(X_test, y_test))
+# y_pred = classifier.predict(X_test)
+# y_pred_prob = classifier.predict_proba(X_test)
+
+# Fit and predict with Random Forest classifier model
+classifier = RandomForestClassifier(class_weight="balanced")
 classifier.fit(X_train, y_train)
-print("K Nearest Neighbour classifier accuracy score:")
+print("\nRandom Forest classifier accuracy score:")
 print(classifier.score(X_test, y_test))
 y_pred = classifier.predict(X_test)
 y_pred_prob = classifier.predict_proba(X_test)
@@ -1093,14 +1203,8 @@ results_df = (
     )
 )
 
-# classifier = RandomForestClassifier()
-# classifier.fit(X_train, y_train)
-# print("\nRandom Forest classifier accuracy score:")
-# print(classifier.score(X_test, y_test))
-
 # ----------------------------------------------------------------------------------- #
 # PLOT RESULTS
-
 # Plot probability of predictions based on prediction outcome
 plot_df = results_df.group_by(["correct_prediction", "max_prob"]).agg(
     pl.col("predicted").count().alias("n_predictions")
@@ -1117,7 +1221,21 @@ plot_df = (
     .to_pandas()
 )
 
-plot_df.index = plot_df["max_prob"]
+bins = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+labels = [
+    "(0.3-0.4]",
+    "(0.4-0.5]",
+    "(0.5-0.6]",
+    "(0.6-0.7]",
+    "(0.7-0.8]",
+    "(0.8-0.9]",
+    "(0.9-1]",
+]
+plot_df["max_prob_group"] = pd.cut(
+    plot_df["max_prob"], bins=bins, labels=labels, right=True
+)
+
+plot_df = plot_df.groupby("max_prob_group").sum()
 plot_df = plot_df.drop("max_prob", axis=1)
 
 plot_df.plot(kind="bar")
@@ -1128,37 +1246,250 @@ plt.title("Prediction probability by prediction accuracy")
 plt.show()
 
 # %%
-# USE MODEL TO PREDICT TENURE TYPE
-# Load output area geospatial boundaries
-oa_boundaries_gdf = gpd.read_file(
-    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Output_Areas_2021_EW_BFE_V9_6122634609897870819/OA_2021_EW_BFE_V9.shp"
+# Plot stacked bar chart with proportions of prediction probability vs prediction accuracy
+plot_df = plot_df.div(plot_df.sum(axis=1), axis=0) * 100  # convert to 0‑100 %
+
+ax = plot_df.plot(
+    kind="bar", stacked=True, figsize=(10, 6), width=0.8, edgecolor="none"
 )
 
-# Assign UPRNs to their output areas
-uprns_with_oa_df = plymouth_residential_uprns_gdf.sjoin(
-    oa_boundaries_gdf[["OA21CD", "geometry"]], how="left", predicate="intersects"
-).drop(columns="index_right")
-features_df = features_df.join(
-    pl.from_pandas(uprns_with_oa_df[["UPRN", "OA21CD"]]), how="left", on="UPRN"
+ax.set_ylabel("Percentage of predictions")
+ax.set_xlabel("Probability of predictions")
+ax.set_title("Prediction probability by prediction accuracy")
+
+ax.legend(title="", bbox_to_anchor=(1.02, 1), loc="upper left")
+ax.grid(axis="y", linestyle=":", linewidth=0.5)
+plt.tight_layout()
+plt.show()
+
+# %%
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+
+tenure_mapping = {"owner-occupied": 0, "rental (private)": 1, "rental (social)": 2}
+y_true = np.array(y_test["TENURE"].map(tenure_mapping))
+
+y_pred_arr = np.copy(y_pred)
+for k, v in tenure_mapping.items():
+    y_pred_arr[y_pred == k] = v
+
+matrix = confusion_matrix(list(y_true), list(y_pred_arr), normalize="true")
+print(matrix.diagonal() / matrix.sum(axis=1))
+
+sns.heatmap(
+    matrix,
+    annot=True,
+    cmap="YlGnBu",
+    xticklabels=tenure_mapping.keys(),
+    yticklabels=tenure_mapping.keys(),
 )
-pd_features_df = features_df.to_pandas()
+plt.xlabel("Predicted", fontsize=12)
+plt.ylabel("Actual", fontsize=12)
+plt.title("Confusion Matrix", fontsize=16)
+plt.show()
+
+# %%
+# FEATURE ENGINEERING
+# PLOT CORRELATION HEATMAP
+import seaborn as sns
+
+corr = X.corr()
+plt.figure(figsize=(15, 8))
+ax = sns.heatmap(corr, annot=True)
+
+# %% [markdown]
+# ### ------- Test feature engineering for tenure prediction model --------
+#
+# All the code here is copied directly from an sklearn tutorial with some minor adjustments: https://scikit-learn.org/stable/auto_examples/inspection/plot_permutation_importance_multicollinear.html
+#
+# Ultimately, I decided not to proceed with feature engineering as the original feature importance looks consistent and good through permutation and engineering didn't improve the accuracy or confusion matrix for the model.
+
+# %%
+# RANDOM FOREST CLASSIFIER FEATURE IMPORTANCE WITH NO FEATURE ENGINEERING
+import matplotlib.pyplot as plt
+import matplotlib
+import numpy as np
+import pandas as pd
+from sklearn.inspection import permutation_importance
+from sklearn.utils.fixes import parse_version
+
+
+def plot_permutation_importance(clf, X, y, ax):
+    result = permutation_importance(clf, X, y, n_repeats=10, random_state=42, n_jobs=2)
+    perm_sorted_idx = result.importances_mean.argsort()
+
+    # `labels` argument in boxplot is deprecated in matplotlib 3.9 and has been
+    # renamed to `tick_labels`. The following code handles this, but as a
+    # scikit-learn user you probably can write simpler code by using `labels=...`
+    # (matplotlib < 3.9) or `tick_labels=...` (matplotlib >= 3.9).
+    tick_labels_parameter_name = (
+        "tick_labels"
+        if parse_version(matplotlib.__version__) >= parse_version("3.9")
+        else "labels"
+    )
+    tick_labels_dict = {tick_labels_parameter_name: X.columns[perm_sorted_idx]}
+    ax.boxplot(result.importances[perm_sorted_idx].T, vert=False, **tick_labels_dict)
+    ax.axvline(x=0, color="k", linestyle="--")
+    return ax
+
+
+mdi_importances = pd.Series(classifier.feature_importances_, index=X_train.columns)
+tree_importance_sorted_idx = np.argsort(classifier.feature_importances_)
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
+mdi_importances.sort_values().plot.barh(ax=ax1)
+ax1.set_xlabel("Gini importance")
+plot_permutation_importance(classifier, X_train, y_train, ax2)
+ax2.set_xlabel("Decrease in accuracy score")
+fig.suptitle(
+    "Impurity-based vs. permutation importances on multicollinear features (train set)"
+)
+_ = fig.tight_layout()
+
+# %%
+# PLOT CORRELATED FEATURES IN HEATMAP AND DENDROGRAM
+from scipy.cluster import hierarchy
+from scipy.spatial.distance import squareform
+from scipy.stats import spearmanr
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
+corr = spearmanr(X).correlation
+
+# Ensure the correlation matrix is symmetric
+corr = (corr + corr.T) / 2
+np.fill_diagonal(corr, 1)
+
+# We convert the correlation matrix to a distance matrix before performing
+# hierarchical clustering using Ward's linkage.
+distance_matrix = 1 - np.abs(corr)
+dist_linkage = hierarchy.ward(squareform(distance_matrix))
+dendro = hierarchy.dendrogram(
+    dist_linkage, labels=X.columns.to_list(), ax=ax1, leaf_rotation=90
+)
+dendro_idx = np.arange(0, len(dendro["ivl"]))
+
+ax2.imshow(corr[dendro["leaves"], :][:, dendro["leaves"]])
+ax2.set_xticks(dendro_idx)
+ax2.set_yticks(dendro_idx)
+ax2.set_xticklabels(dendro["ivl"], rotation="vertical")
+ax2.set_yticklabels(dendro["ivl"])
+_ = fig.tight_layout()
+
+# %%
+# PICK A THRESHOLD FROM DENDROGRAM AND PERFORM HEIRARCHICAL CLUSTERING - DETERMINE A FEATURE FROM EACH CLUSTER TO KEEP
+from collections import defaultdict
+
+# Threshold chosen from manual inspection of dendrogram
+threshold = 1
+
+cluster_ids = hierarchy.fcluster(dist_linkage, threshold, criterion="distance")
+cluster_id_to_feature_ids = defaultdict(list)
+for idx, cluster_id in enumerate(cluster_ids):
+    cluster_id_to_feature_ids[cluster_id].append(idx)
+selected_features = [v[0] for v in cluster_id_to_feature_ids.values()]
+selected_features_names = X.columns[selected_features]
+
+X_train_sel = X_train[selected_features_names]
+X_test_sel = X_test[selected_features_names]
+
+clf_selected_features = RandomForestClassifier(
+    n_estimators=100, random_state=42, class_weight="balanced"
+)
+clf_selected_features.fit(X_train_sel, y_train)
+print(
+    "Baseline accuracy on test data with features removed:"
+    f" {clf_selected_features.score(X_test_sel, y_test):.3}"
+)
+
+fig, ax = plt.subplots(figsize=(7, 6))
+plot_permutation_importance(clf_selected_features, X_test_sel, y_test, ax)
+ax.set_title("Permutation Importances on selected subset of features\n(test set)")
+ax.set_xlabel("Decrease in accuracy score")
+ax.figure.tight_layout()
+plt.show()
+
+# %%
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+
+tenure_mapping = {"owner-occupied": 0, "rental (private)": 1, "rental (social)": 2}
+y_true = np.array(y_test["TENURE"].map(tenure_mapping))
+y_pred = clf_selected_features.predict(X_test_sel)
+
+y_pred_arr = np.copy(y_pred)
+for k, v in tenure_mapping.items():
+    y_pred_arr[y_pred == k] = v
+
+matrix = confusion_matrix(list(y_true), list(y_pred_arr), normalize="true")
+print(matrix.diagonal() / matrix.sum(axis=1))
+
+sns.heatmap(
+    matrix,
+    annot=True,
+    cmap="YlGnBu",
+    xticklabels=tenure_mapping.keys(),
+    yticklabels=tenure_mapping.keys(),
+)
+plt.xlabel("Predicted", fontsize=12)
+plt.ylabel("Actual", fontsize=12)
+plt.title("Confusion Matrix", fontsize=16)
+plt.show()
+
+# %% [markdown]
+# ### -------- End of feature engineering test --------
+
+# %%
+# USE MODEL TO PREDICT TENURE TYPE
+features = [
+    "prop_aged_16_to_35",
+    "prop_aged_65_and_over",
+    "prop_disabled_residents",
+    "prop_economically_inactive_adults",
+    "prop_employed_adults_working_full_time",
+    "prop_students",
+    "X_COORDINATE",
+    "Y_COORDINATE",
+    "prop_nn_owner_occupied",
+    "prop_nn_social_rental",
+    "in_cons_area",
+    "in_listed_building",
+]
+
+# Join output areas to features
+pd_features_df = (
+    # features_df.join(
+    # pl.from_pandas(uprns_with_oa_df[["UPRN", "OA21CD", "LSOA21CD"]]), how="left", on="UPRN"
+    # )
+    features_df.join(
+        os_uprn_df.select(["UPRN", "X_COORDINATE", "Y_COORDINATE"]),
+        how="left",
+        on="UPRN",
+    )
+    .join(nn_tenure_df, how="left", on="UPRN")
+    .join(census_df, how="left", left_on="OA21CD", right_on="oa_code")
+    .with_columns(
+        pl.col("property_type")
+        .fill_null(pl.col("predicted_property_type"))
+        .alias("use_property_type")
+    )
+    .filter(
+        pl.col("use_property_type") != "Caravan or other mobile or temporary structure",
+        pl.all_horizontal(pl.col(features).is_not_null()),
+    )
+    .to_pandas()
+)
 
 # One hot encode property type data
 onehotenc_df = pd.DataFrame(
     enc.transform(
-        pd_features_df[["predicted_property_type"]].rename(
-            columns={"predicted_property_type": "property_type"}
+        pd_features_df[["use_property_type"]].rename(
+            columns={"use_property_type": "property_type"}
         )
     ).toarray()
 )
 onehotenc_df.columns = list(col.lower().replace(" ", "_") for col in enc.categories_[0])
-X = (
-    pd_features_df.join(onehotenc_df, how="left")
-    .drop(columns=["property_type", "detached"])
-    .merge(census_df.to_pandas(), how="left", left_on="OA21CD", right_on="oa_code")[
-        X.columns
-    ]
-)
+
+X = pd_features_df.join(onehotenc_df, how="left")[X.columns]
 
 # Run model and get results
 y_pred = classifier.predict(X)
@@ -1173,10 +1504,360 @@ results_df = pd.DataFrame(
     }
 ).rename(columns={k: v for k, v in zip(["0", "1", "2"], classifier.classes_)})
 
-# Join predicted tenure type to features dataset
-features_df = pl.from_pandas(pd_features_df.join(results_df, how="left"))
+# # Join predicted tenure type to features dataset
+predicted_tenure_df = (
+    pl.from_pandas(pd_features_df[["UPRN"]].join(results_df, how="left"))
+    .with_columns(
+        tenure_prob=pl.concat_list(
+            "owner-occupied", "rental (private)", "rental (social)"
+        ).list.max(),
+    )
+    .drop(["owner-occupied", "rental (private)", "rental (social)"])
+)
+
+features_df = features_df.join(predicted_tenure_df, how="left", on="UPRN")
+
+# %% [markdown]
+# ## Add data - IMD decile
+
+# %%
+# Load IMD deciles per LSOA and load LSOA names
+imd_df = pl.read_csv(
+    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/societal-wellbeing_imd2019_indices.csv",
+    skip_rows=7,
+)
+lsoa_names_df = pl.read_csv(
+    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Lower_Layer_Super_Output_Area_(2021)_to_LAD_(April_2023)_Lookup_in_England_and_Wales.csv"
+)
+
+# %%
+# Join IMD decile to UPRNs
+imd_df = (
+    imd_df.select(["Reference area", "2019"])
+    .rename({"Reference area": "lsoa_name", "2019": "imd_decile"})
+    .join(
+        lsoa_names_df.select(["LSOA21CD", "LSOA21NM"]),
+        how="left",
+        left_on="lsoa_name",
+        right_on="LSOA21NM",
+    )
+)
+
+features_df = features_df.join(
+    imd_df.select(["LSOA21CD", "imd_decile"]), how="left", on="LSOA21CD"
+)
+
+# %% [markdown]
+# ## Fill missing data - garden size
+#
+# - use average by property type (+ area)
+# - sum up the different garden sizes
+
+# %%
+# Load land registry polygons for Plymouth
+land_extent_gdf = gpd.read_file(
+    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Land_Registry_Cadastral_Parcels.gml",
+    columns=["NATIONALCADASTRALREFERENCE", "geometry"],
+)
+
+# Preprocess land polygons
+land_extent_gdf = geo_utils.transform_gdf_drop_duplicates(land_extent_gdf)
+land_extent_gdf["land_area_m2"] = land_extent_gdf["geometry"].area
+
+# Get Plymouth OS building footprints
+plymouth_building_footprints_gdf = (
+    plymouth_residential_buildings_gdf[["geometry", "ID", "building_area_m2"]]
+    .rename(columns={"ID": "building_id"})
+    .assign(source="os")
+    .copy()
+)
+
+# %%
+# Remove land extent geometries which are not polygons
+print(land_extent_gdf["geometry"].geom_type.value_counts())
+land_extent_gdf = land_extent_gdf[land_extent_gdf.geometry.geom_type == "Polygon"]
+
+# Get intersection of land polygons and building polygons
+intersection_gdf = garden_size.generate_gdf_land_building_overlay(
+    land_parcels_gdf=land_extent_gdf,
+    building_footprints_gdf=plymouth_building_footprints_gdf,
+)
+
+# Get garden size
+gardens_gdf = garden_size.generate_gdf_garden_size(intersection_gdf, land_extent_gdf)
+
+# Join garden size to UPRNs
+uprns_with_garden_gdf = pl.from_pandas(
+    gpd.sjoin(
+        os_uprn_gdf,
+        gardens_gdf,
+        how="inner",
+        predicate="intersects",
+    ).drop(columns=["geometry", "index_right"])
+)
+
+# Identify UPRNs with multiple garden sizes and find the range between min and max garden size calculated for them
+duplicated_gdf = (
+    uprns_with_garden_gdf.filter(pl.col("UPRN").is_duplicated())
+    .group_by("UPRN")
+    .agg(pl.min("garden_area_m2").alias("min"), pl.max("garden_area_m2").alias("max"))
+    .with_columns((pl.col("max") - pl.col("min")).alias("range"))
+)
+
+# Deduplicate UPRNs to the smallest garden size - the join allows us to retain the other columns in the df
+# TODO - use pl.over instead as it's more efficient
+uprns_with_garden_gdf = uprns_with_garden_gdf.join(
+    uprns_with_garden_gdf.group_by("UPRN").agg(pl.min("garden_area_m2")),
+    how="left",
+    on="UPRN",
+).filter(pl.col("garden_area_m2") == pl.col("garden_area_m2_right"))
+
+features_df = features_df.join(
+    uprns_with_garden_gdf.select(
+        ["UPRN", "NATIONALCADASTRALREFERENCE", "garden_area_m2"]
+    ),
+    how="left",
+    on="UPRN",
+)
+
+# %%
+# Plot the distribution of range in garden size for UPRNs joined to multiple gardens
+plt.boxplot(duplicated_gdf.filter(pl.col("range") <= 250000)["range"])
+plt.title("Range in garden size (under 250,000m2) for duplicate UPRNs")
+plt.ylabel("Range in garden area (m2)")
+plt.show()
+
+print(duplicated_gdf["range"].describe())
+
+# %%
+# Fill any remaining missing garden size with the median size per property type and OA
+fill_garden_df = features_df.group_by(["predicted_property_type", "OA21CD"]).agg(
+    pl.median("garden_area_m2").alias("fill_missing_garden_area_m2")
+)
+features_df = features_df.join(
+    fill_garden_df, how="left", on=["predicted_property_type", "OA21CD"]
+).with_columns(
+    pl.col("garden_area_m2")
+    .fill_null(pl.col("fill_missing_garden_area_m2"))
+    .alias("use_garden_area_m2")
+)
+
+# %% [markdown]
+# ## Communal heating
+# - if any other UPRNs in the building have communal label -> communal
+# - elif any other UPRNs in the building have individual -> individual
+# - else null
+
+# %%
+# Add communal heating column (uses same logic as flats analysis)
+features_df = fuel_type.extend_df_communal_heating(
+    features_df, epc_col="MAIN_FUEL", name="community_heating"
+)
+features_df = fuel_type.extend_df_communal_heating(
+    features_df, epc_col="MAINHEAT_DESCRIPTION", name="fill_community_heating"
+)
 features_df = features_df.with_columns(
-    tenure_prob=pl.concat_list(
-        "owner-occupied", "rental (private)", "rental (social)"
-    ).list.max(),
-).drop(["owner-occupied", "rental (private)", "rental (social)"])
+    (pl.col("community_heating").fill_null(pl.col("fill_community_heating"))).alias(
+        "community_heating"
+    )
+).drop("fill_community_heating")
+
+# Map building IDs to UPRNs and join to features df
+plymouth_uprn_to_building_mapping_df = os_openmap_buildings_plymouth_gdf.sjoin(
+    plymouth_residential_uprns_gdf, how="inner", predicate="contains"
+)
+features_df = features_df.join(
+    pl.from_pandas(plymouth_uprn_to_building_mapping_df[["ID", "UPRN"]]).rename(
+        {"ID": "building_id"}
+    ),
+    how="left",
+    on="UPRN",
+)
+
+# Identify buildings that contain UPRNs with communal heating and buildings that contain UPRNs with individual heating
+communal_heating_buildings = list(
+    features_df.filter(pl.col("community_heating"))["building_id"].unique()
+)
+individual_heating_buildings = list(
+    features_df.filter(
+        (~pl.col("community_heating")) & pl.col("community_heating").is_not_null()
+    )["building_id"].unique()
+)
+len(set(communal_heating_buildings).intersection(set(individual_heating_buildings)))
+
+# Apply communal heating rules outlined above
+features_df = features_df.with_columns(
+    pl.when(pl.col("building_id").is_in(communal_heating_buildings))
+    .then(True)
+    .when(pl.col("building_id").is_in(individual_heating_buildings))
+    .then(False)
+    .otherwise(None)
+    .alias("fill_community_heating")
+).with_columns(
+    pl.col("community_heating")
+    .fill_null(pl.col("fill_community_heating"))
+    .alias("use_community_heating")
+)
+
+# %% [markdown]
+# ## Final feature processing
+
+# %%
+# Fill nulls with predicted types
+features_df = features_df.with_columns(
+    pl.col("property_type")
+    .fill_null(pl.col("predicted_property_type"))
+    .alias("use_property_type"),
+    pl.col("TENURE").fill_null(pl.col("predicted_tenure")).alias("use_tenure"),
+)
+
+# %% [markdown]
+# ## Cluster UPRNs
+
+# %%
+# Cluster UPRNs on distance only
+model = HDBSCAN(
+    min_cluster_size=5,
+    cluster_selection_epsilon=20,
+    algorithm="balltree",
+    metric="euclidean",
+)
+plymouth_residential_uprns_gdf["cluster"] = model.fit_predict(
+    plymouth_residential_uprns_gdf[["X_COORDINATE", "Y_COORDINATE"]]
+)
+print(plymouth_residential_uprns_gdf["cluster"].nunique())
+
+# Join clusters to features df
+features_df = features_df.join(
+    pl.from_pandas(plymouth_residential_uprns_gdf[["UPRN", "cluster"]]),
+    how="left",
+    on="UPRN",
+)
+
+# Add cluster size
+features_df = features_df.with_columns(
+    cluster_size=pl.col("UPRN").n_unique().over("cluster")
+)
+
+# %%
+# PLOT CLUSTERS FOR STOKE WARD
+lsoa_boundaries = get_datasets.load_gdf_ons_lsoa_bounds()
+stoke_ward_lsoas = [
+    "E01015155",
+    "E01015153",
+    "E01015172",
+    "E01015047",
+    "E01015151",
+    "E01015173",
+    "E01015051",
+    "E01015169",  # used in example
+    "E01015171",
+    "E01015170",
+    "E01015099",
+    "E01015174",
+    "E01015167",
+    "E01015045",
+    "E01015044",
+    "E01015168",
+    "E01015072",
+    "E01015042",
+]
+stoke_ward = (
+    lsoa_boundaries[lsoa_boundaries["LSOA21CD"].isin(stoke_ward_lsoas)]
+    .dissolve()["geometry"]
+    .values[0]
+)
+
+wgs84_uprns_df = plymouth_residential_uprns_gdf[
+    plymouth_residential_uprns_gdf[
+        ["UPRN", "cluster", "LATITUDE", "LONGITUDE", "geometry"]
+    ].within(stoke_ward)
+].to_crs(epsg=4326)
+wgs84_buildings_df = plymouth_residential_buildings_gdf[
+    plymouth_residential_buildings_gdf.within(stoke_ward)
+].to_crs(epsg=4326)
+x, y = (
+    wgs84_uprns_df.dissolve().centroid.values[0].x,
+    wgs84_uprns_df.dissolve().centroid.values[0].y,
+)
+
+import random
+
+get_colors = lambda n: ["#%06x" % random.randint(0, 0xFFFFFF) for _ in range(n + 1)]
+colors = get_colors(wgs84_uprns_df["cluster"].max())
+
+sigma = 0.00001
+wgs84_uprns_df["jitter_lat"] = wgs84_uprns_df["LATITUDE"].apply(
+    lambda x: np.random.normal(x, sigma)
+)
+wgs84_uprns_df["jitter_long"] = wgs84_uprns_df["LONGITUDE"].apply(
+    lambda x: np.random.normal(x, sigma)
+)
+
+map = folium.Map(location=[y, x], tiles="OpenStreetMap", zoom_start=15)
+for _, r in wgs84_buildings_df.iterrows():
+    geo_j = gpd.GeoSeries(r["geometry"]).to_json()
+    geo_j = folium.GeoJson(
+        data=geo_j, style_function=lambda x: {"fillColor": "orange", "color": "orange"}
+    )
+    geo_j.add_to(map)
+
+for _, r in wgs84_uprns_df.iterrows():
+    if r.cluster == -1:
+        folium.Marker(
+            location=[r["jitter_lat"], r["jitter_long"]],
+            icon=folium.Icon(icon_color="grey", prefix="fa", icon="ban"),
+            popup="Noise",
+        ).add_to(map)
+    else:
+        folium.CircleMarker(
+            location=[r["jitter_lat"], r["jitter_long"]],
+            radius=5,
+            weight=5,
+            alpha=0.5,
+            color=colors[r.cluster],
+            popup=f"Cluster {r.cluster}",
+        ).add_to(map)
+map
+
+# %%
+# SAVE DATA
+select_features = [
+    "UPRN",
+    "cluster",
+    "OA21CD",
+    "LSOA21CD",
+    "in_listed_building",
+    "in_cons_area",
+    "in_hn",
+    "filled_off_gas",
+    "use_property_type",
+    "use_tenure",
+    #  'tenure_prob',
+    "imd_decile",
+    "NATIONALCADASTRALREFERENCE",
+    "use_garden_area_m2",
+    "building_id",
+    "use_community_heating",
+]
+
+rename_selected = {
+    "OA21CD": "oa21",
+    "in_cons_area": "in_conservation_area",
+    "in_hn": "in_heat_network_zone",
+    "use_garden_area_m2": "garden_area_m2",
+    "use_property_type": "predicted_property_type",
+    "use_tenure": "predicted_tenure",
+    "filled_off_gas": "use_off_gas",
+    "use_community_heating": "on_communal_heating",
+}
+
+save_utils.save_to_s3(
+    features_df,
+    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/results/plymouth_features_full_with_clusters.parquet",
+)
+save_utils.save_to_s3(
+    features_df.select(select_features).rename(rename_selected),
+    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/results/plymouth_features_selected_with_clusters.parquet",
+)
+plymouth_residential_uprns_gdf.to_file("plymouth_residential_uprns_with_clusters.shp")
