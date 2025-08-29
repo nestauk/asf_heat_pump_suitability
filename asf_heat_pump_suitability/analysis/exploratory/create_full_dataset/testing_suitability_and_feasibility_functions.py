@@ -9,47 +9,7 @@ import numpy as np
 # %%
 # Importing Plymouth data
 plymouth_data = pl.read_parquet(
-    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_uprn_with_features.parquet"
-)
-
-# %%
-# Generating random cluster numbers as current plymouth data doesn't have those
-random_clusters = np.random.randint(low=1, high=11, size=len(plymouth_data))
-plymouth_data = plymouth_data.with_columns(pl.Series("cluster", random_clusters))
-
-# Dropping oa21 and renaming OA21CD to oa21 for now - final dataset will use oa21
-plymouth_data = plymouth_data.drop("oa21").rename({"OA21CD": "oa21"})
-
-# Renaming in_hn to in_heat_network_zone
-plymouth_data = plymouth_data.rename({"in_hn": "in_heat_network_zone"})
-
-# Renaming in_cons_area to in_conservation_area
-plymouth_data = plymouth_data.rename({"in_cons_area": "in_conservation_area"})
-
-# Create distance_to_anchor_loads column and distance_to_city_centre columns with random values in meters, as current data doesn't have those
-random_distance_to_anchor_loads = np.random.randint(
-    low=100, high=5000, size=len(plymouth_data)
-)
-plymouth_data = plymouth_data.with_columns(
-    pl.Series("distance_to_anchor_loads", random_distance_to_anchor_loads),
-)
-
-# Create flag in_high_income_decile with random boolean values, as current data doesn't have those
-random_in_high_income_decile = np.random.choice([True, False], size=len(plymouth_data))
-plymouth_data = plymouth_data.with_columns(
-    pl.Series("in_high_income_decile", random_in_high_income_decile)
-)
-
-# Create flag on_communal_heating with random boolean values, as current data doesn't have those
-random_on_communal_heating = np.random.choice([True, False], size=len(plymouth_data))
-plymouth_data = plymouth_data.with_columns(
-    pl.Series("on_communal_heating", random_on_communal_heating)
-)
-
-# create a building ID column at random for now
-random_building_ids = np.random.randint(low=1, high=50000, size=len(plymouth_data))
-plymouth_data = plymouth_data.with_columns(
-    pl.Series("building_id", random_building_ids)
+    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/results/plymouth_features_selected_with_clusters.parquet"
 )
 
 # %% [markdown]

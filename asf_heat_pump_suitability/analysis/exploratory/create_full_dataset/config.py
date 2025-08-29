@@ -5,7 +5,7 @@ Config file with defaults used for feasibility scoring and suitability categoris
 # Features needed for feasibility scoring
 features = [
     "owner_occupied",
-    "in_high_income_decile",
+    "imd_decile_above_avg",
     "on_gas",
     "in_listed_building",
     "not_in_listed_building",
@@ -32,14 +32,14 @@ expected_tech_types = {
 weights = {
     "individual_ashp": {
         "owner_occupied": 1,
-        "in_high_income_decile": 1,
+        "imd_decile_above_avg": 1,
         "on_gas": 1,
         "not_in_listed_building": 1,
         "not_in_conservation_area": 1,
     },
     "collective_ashp": {
         "owner_occupied": 1,
-        "in_high_income_decile": 1,
+        "imd_decile_above_avg": 1,
         "on_gas": 1,
         "not_in_listed_building": 1,
         "not_in_conservation_area": 1,

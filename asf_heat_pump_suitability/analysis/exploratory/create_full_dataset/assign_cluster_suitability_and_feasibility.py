@@ -168,6 +168,9 @@ def prepare_df_for_feasibility_scoring(
         pl.col("oa21").is_in(city_centre_oas).alias("close_to_city_centre")
     )
 
+    # Creating imd_decile_above_avg from imd_decile
+    df = df.with_columns((pl.col("imd_decile") > 5).alias("imd_decile_above_avg"))
+
     # Aggregating data by cluster
     df = df.group_by("cluster").agg(
         ((pl.col(features).mean()).cast(pl.Float64) * 100).name.prefix("perc_"),
@@ -275,7 +278,7 @@ def create_df_feasibility_scoring(
 
 if __name__ == "__main__":
     plymouth_data = pl.read_parquet(
-        "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_uprn_with_features.parquet"
+        "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/results/plymouth_features_selected_with_clusters.parquet"
     )
 
     feasibility_scoring_data = prepare_df_for_feasibility_scoring(
