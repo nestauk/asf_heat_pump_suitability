@@ -5,11 +5,22 @@
 # Package imports
 import polars as pl
 import numpy as np
+import geopandas as gpd
 
 # %%
 # Importing Plymouth data
 plymouth_data = pl.read_parquet(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/results/plymouth_features_selected_with_clusters.parquet"
+)
+
+# %%
+# The building polygon data per cluster, and the distance to anchor loads from the centre of the cluster
+cluster_polygons = gpd.read_file(
+    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/merged_uprns/per_cluster_merged_polygons.geojson"
+).to_crs(epsg=4326)
+
+anchor_dist_df = pl.from_pandas(
+    cluster_polygons[["cluster", "distance_from_anchor_property_m"]]
 )
 
 # %% [markdown]
@@ -24,6 +35,7 @@ from config import features, city_centre_oas
 # %%
 feasibility_scoring_data = prepare_df_for_feasibility_scoring(
     df=plymouth_data,
+    anchor_dist_df=anchor_dist_df,
     features=features,
     anchor_loads_threshold=500,
     outdoor_space_threshold=30,
@@ -58,7 +70,7 @@ dummy_df = {
     "perc_owner_occupied": [60, 5, 45, 20, 33],
     "perc_social_housing": [30, 90, 40, 70, 50],
     "perc_flats": [10, 80, 30, 60, 20],
-    "perc_in_high_income_decile": [55, 10, 20, 5, 40],
+    "perc_imd_decile_above_avg": [55, 10, 20, 5, 40],
     "perc_on_gas": [70, 20, 80, 10, 50],
     "perc_not_in_listed_building": [100, 100, 90, 50, 30],
     "perc_not_in_conservation_area": [100, 87, 95, 60, 20],
