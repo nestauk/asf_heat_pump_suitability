@@ -7,7 +7,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.16.6
+#       jupytext_version: 1.17.3
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -15,9 +15,22 @@
 # ---
 
 # %% [markdown]
-# ## Merging the Plymouth UPRNs in a cluster into one polygon
+# ## Merging the Plymouth UPRNs into one polygon per cluster
 #
-# This will be better for the viz than keeping them as points coloured by cluster number.
+# This notebook creates polygons for each cluster of properties in Plymouth. This will help for visualisations where rather than plotting the lat/long per property we can group the building polygons for each cluster of properties.
+#
+# In this notebook we also calculate the distance per cluster to anchor properties.
+#
+# We:
+# - Read data for Plymouth including which cluster each UPRN belongs to, the building polygons and the anchor properties.
+# - Find which building polygon each UPRN sits within.
+# - Join all the building polygons for UPRNs within the same cluster.
+# - Output various stats about these joins - such as how many UPRNs are in a cluster, are in a building polygon, or aren't in a building polygon but others from the same cluster are.
+# - Calculate the distance to anchor property per cluster.
+# - At the end of the notebook there is some analysis to look at the clusters which overlap with the same building polygon as others as others.
+#
+#
+# The most important file this notebook saves out is `s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/merged_uprns/per_cluster_merged_polygons.geojson` which contains the polygon per cluster and the distance from the nearest anchor property.
 
 # %%
 import pandas as pd
@@ -28,7 +41,6 @@ import matplotlib.pyplot as plt
 import os
 import random
 
-from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.prepare_features import anchor_properties
 
 # %% [markdown]
@@ -150,7 +162,7 @@ plt.show()
 
 # %% [markdown]
 # - Merge polygons for clusters
-# - Merge the merged polygons to the UPRN data
+# - Join the merged polygons to the UPRN data
 
 # %%
 merged_polygons_per_cluster = (
@@ -335,28 +347,6 @@ all_building_polygons["Type"].value_counts()
 #
 # This section is just checking things about the data, no saving is done
 
-# %%
-cluster_number = 200
-joined_filtered = UPRNs_joined_buildings[
-    UPRNs_joined_buildings["cluster"] == cluster_number
-]
-
-fig, ax = plt.subplots(1, 1)
-gpd.GeoSeries(unary_union(joined_filtered["building_geom"])).plot(ax=ax)
-joined_filtered[["geometry"]].plot(ax=ax, color="red")
-plt.show()
-
-# %%
-cluster_number = 205
-joined_filtered = UPRNs_joined_buildings[
-    UPRNs_joined_buildings["cluster"] == cluster_number
-]
-
-fig, ax = plt.subplots(1, 1)
-gpd.GeoSeries(unary_union(joined_filtered["building_geom"])).plot(ax=ax)
-joined_filtered[["geometry"]].plot(ax=ax, color="red")
-plt.show()
-
 # %% [markdown]
 # How often does this happen?
 
@@ -379,6 +369,28 @@ duplicated_cluster_polygons = buildings_with_clusters[
 print(
     f"There are {len(duplicated_cluster_polygons)} clusters in the same {duplicated_cluster_polygons['building_geom'].nunique()} polygons"
 )
+
+# %%
+cluster_number = 200
+joined_filtered = UPRNs_joined_buildings[
+    UPRNs_joined_buildings["cluster"] == cluster_number
+]
+
+fig, ax = plt.subplots(1, 1)
+gpd.GeoSeries(unary_union(joined_filtered["building_geom"])).plot(ax=ax)
+joined_filtered[["geometry"]].plot(ax=ax, color="red")
+plt.show()
+
+# %%
+cluster_number = 205
+joined_filtered = UPRNs_joined_buildings[
+    UPRNs_joined_buildings["cluster"] == cluster_number
+]
+
+fig, ax = plt.subplots(1, 1)
+gpd.GeoSeries(unary_union(joined_filtered["building_geom"])).plot(ax=ax)
+joined_filtered[["geometry"]].plot(ax=ax, color="red")
+plt.show()
 
 # %%
 clusters_in_dupes = (
