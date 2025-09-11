@@ -2,6 +2,14 @@ import geopandas as gpd
 from asf_heat_pump_suitability import config
 
 
+stoke_ward_boundary = (
+    "s3://asf-heat-pump-suitability/source_data/stoke_ward_boundary.geojson"
+)
+SX_Greenspace = (
+    "s3://asf-heat-pump-suitability/source_data/SX_Greenspace/SX_GreenspaceSite.shp"
+)
+
+
 def load_stoke_bound(**kwargs) -> gpd.GeoDataFrame:
     """
     Load Stoke ward boundary from 2025-03-04 downloaded from https://www.planning.data.gov.uk/entity/800351#geojson
@@ -13,7 +21,7 @@ def load_stoke_bound(**kwargs) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: geography for Stoke ward
     """
-    gdf = gpd.read_file(config["data_source"]["stoke_ward_boundary"], **kwargs)
+    gdf = gpd.read_file(stoke_ward_boundary, **kwargs)
 
     return gdf
 
@@ -28,6 +36,6 @@ def load_SX_Greenspace(**kwargs) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: polygons of greenspaces in the Plymouth area and beyond
     """
-    gdf = gpd.read_file(config["data_source"]["SX_Greenspace"], **kwargs)
+    gdf = gpd.read_file(SX_Greenspace, **kwargs)
 
     return gdf
