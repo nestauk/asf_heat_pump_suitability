@@ -50,8 +50,10 @@ import folium
 
 # %% [markdown]
 # ## Load data
+# Some datasets are for Great Britain / England and some are for Plymouth only to increase download speed.
 
 # %%
+# View OpenMap Local dataset layers for GB
 fiona.listlayers("s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg")
 
 # %%
@@ -121,7 +123,7 @@ epc_df = prepare_sample.add_col_property_type(epc_df)
 # -------------------------------------------------------------------------#
 
 print("\nLOADING DATASETS TO FILL MISSING DATA")
-print("\nLoading OS Code-Point Open...")
+print("\nLoading OS Code-Point Open (all postcode units in GB)...")
 code_point_df = gpd.read_file(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/codepo_gb.gpkg",
     layers="codepoint",
@@ -241,7 +243,7 @@ plymouth_residential_uprns_gdf.shape
 # Identify UPRNs in listed buildings
 listed_building_uprns = (
     plymouth_residential_uprns_gdf.sjoin_nearest(
-        listed_buildings_gdf, how="inner", max_distance=10
+        listed_buildings_gdf, how="inner", max_distance=10  # 10 metres
     )["UPRN"]
     .unique()
     .tolist()
@@ -265,10 +267,9 @@ len(listed_building_uprns) / len(plymouth_residential_uprns_gdf) * 100
 epc_df = output_areas.standardise_col_postcode(epc_df, pcd_col="POSTCODE")
 epc_df = epc_df.with_columns(
     # Standardise UPRN
-    pl.col("UPRN")
-    .str.replace(".0", "", literal=True)
-    .cast(pl.Int64, strict=False)
-    .alias("UPRN"),
+    pl.col("UPRN").str.replace(".0", "", literal=True)
+    # This will cast filled UPRNs made up of Building Ref Number and Address back to null
+    .cast(pl.Int64, strict=False).alias("UPRN"),
     pl.col("MAIN_FUEL").cast(pl.String).alias("MAIN_FUEL"),
     pl.col("PROPERTY_TYPE").cast(pl.String).alias("PROPERTY_TYPE"),
 )
@@ -294,11 +295,11 @@ features_df = (
         pl.when(pl.col("UPRN").is_in(cons_area_uprns))
         .then(True)
         .otherwise(False)
-        .alias("in_cons_area"),
+        .alias("in_conservation_area"),
         pl.when(pl.col("UPRN").is_in(uprns_in_hn))
         .then(True)
         .otherwise(False)
-        .alias("in_hn"),
+        .alias("in_heat_network_zone"),
     )
     .join(epc_df, how="left", on="UPRN")
 )
@@ -407,13 +408,13 @@ print(len(features_df))
 # Remove space from postcode in code point data
 code_point_df["POSTCODE"] = code_point_df["postcode"].str.replace(" ", "")
 
-# Find nearest postcode point for all UPRNs within a 1km radius
+# Find nearest postcode point within a 1km radius for all UPRNs
 nearest_postcode_df = pl.from_pandas(
     plymouth_residential_uprns_gdf.sjoin_nearest(
         code_point_df[["POSTCODE", "geometry"]],
         how="left",
         max_distance=1000,
-        distance_col="distance_to_postcode_m",
+        distance_col="distance_to_postcode_m",  # distance in metres
     ).drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
 )
 
@@ -435,6 +436,7 @@ off_gas_df = (
         pl.col("POSTCODE").alias("postcodes"),
         pl.col("POSTCODE").len().alias("n_postcodes"),
         pl.col("off_gas").mode().alias("modal_off_gas"),
+        # All nearest postcodes will be the same distance so we just select the first to keep one
         pl.col("distance_to_postcode_m").first().alias("distance_to_postcode_m"),
     )
     .with_columns(
@@ -545,7 +547,7 @@ uprns_buildings_df = pl.from_pandas(
     .drop(columns=["index_right", "geometry"])
 ).join(features_df.select(["UPRN", "property_type"]), how="left", on="UPRN")
 
-# Identify building IDs which have UPRNs missing property type information
+# Identify building IDs which have one or more UPRNs missing property type information
 missing_property_type_buildings_list = (
     uprns_buildings_df.filter(pl.col("property_type").is_null())["building_id"]
     .unique()
@@ -574,7 +576,7 @@ property_type_df = (
 )
 
 print(
-    "UPRNs that are missing a property type and are in a building with multiple property type labels:"
+    "Proportion of UPRNs that are missing a property type and are in a building with multiple property type labels:"
 )
 print(
     property_type_df.filter(pl.col("nunique_property_types") > 2)["null_count"].sum()
@@ -582,7 +584,7 @@ print(
 )
 
 print(
-    "\nUPRNs that are missing a property type and are in a building with multiple MODAL property type labels:"
+    "\nProportion of UPRNs that are missing a property type and are in a building with multiple MODAL property type labels:"
 )
 print(
     property_type_df.filter(pl.col("n_modal_property_type") > 1)["null_count"].sum()
@@ -590,7 +592,7 @@ print(
 )
 
 print(
-    "\nUPRNs that are missing a property type and are in a multi-property building with NO property type labels:"
+    "\nProportion of UPRNs that are missing a property type and are in a multi-property building with NO property type labels:"
 )
 print(
     property_type_df.filter(
@@ -656,6 +658,7 @@ plt.legend()
 
 # %%
 # CALCULATE NEAREST NEIGHBOUR DISTANCE
+# Calculate NN distance for properties where property type is known and unique within a building
 
 # Calculate distance from nearest neighbour for UPRNs with property type label
 # Get coordinates of each UPRN
@@ -722,14 +725,16 @@ table_df = table_df.set_index("n_UPRNs").sort_index()[
         "Caravan or other mobile or temporary structure",
     ]
 ]
+# Percentage of properties with n_UPRNs, per property type
 table_df / table_df.sum() * 100
 
 # %%
+# Percentage of all properties which are X property type per n_UPRNs
 table_df.div(table_df.sum(axis=1), axis=0) * 100
 
 # %%
 # ----------------------------------------------------------------------------------- #
-# CALCULATE NEAREST NEIGHBOUR DISTANCE
+# APPLY MODEL - CALCULATE NEAREST NEIGHBOUR DISTANCE FOR ALL UPRNs
 
 # Calculate distance from nearest neighbour for all UPRNs
 # Get coordinates of each UPRN
@@ -1133,7 +1138,7 @@ model_df = (
     )
     .join(nn_tenure_df.drop("prop_nn_private_rental"), how="left", on="UPRN")
     .join(
-        features_df.select(["UPRN", "in_cons_area", "in_listed_building"]),
+        features_df.select(["UPRN", "in_conservation_area", "in_listed_building"]),
         how="left",
         on="UPRN",
     )
@@ -1194,9 +1199,10 @@ results_df = (
             "2": y_pred_prob[:, 2],
         }
     )
-    .rename({k: v for k, v in zip(["0", "1", "2"], classifier.classes_)})
-    .with_columns(
+    # Rename columns with class names
+    .rename({k: v for k, v in zip(["0", "1", "2"], classifier.classes_)}).with_columns(
         (pl.col("actual") == pl.col("predicted")).alias("correct_prediction"),
+        # Get maximum class prediction probability across all predictions for a given UPRN
         max_prob=pl.concat_list(
             "owner-occupied", "rental (private)", "rental (social)"
         ).list.max(),
@@ -1271,7 +1277,7 @@ y_true = np.array(y_test["TENURE"].map(tenure_mapping))
 
 y_pred_arr = np.copy(y_pred)
 for k, v in tenure_mapping.items():
-    y_pred_arr[y_pred == k] = v
+    y_pred_arr = [tenure_mapping.get(k) for k in y_pred]
 
 matrix = confusion_matrix(list(y_true), list(y_pred_arr), normalize="true")
 print(matrix.diagonal() / matrix.sum(axis=1))
@@ -1451,7 +1457,7 @@ features = [
     "Y_COORDINATE",
     "prop_nn_owner_occupied",
     "prop_nn_social_rental",
-    "in_cons_area",
+    "in_conservation_area",
     "in_listed_building",
 ]
 
@@ -1719,7 +1725,7 @@ features_df = features_df.with_columns(
 model = HDBSCAN(
     min_cluster_size=5,
     cluster_selection_epsilon=20,
-    algorithm="balltree",
+    algorithm="ball_tree",
     metric="euclidean",
 )
 plymouth_residential_uprns_gdf["cluster"] = model.fit_predict(
@@ -1828,8 +1834,8 @@ select_features = [
     "OA21CD",
     "LSOA21CD",
     "in_listed_building",
-    "in_cons_area",
-    "in_hn",
+    "in_conservation_area",
+    "in_heat_network_zone",
     "filled_off_gas",
     "use_property_type",
     "use_tenure",
@@ -1843,8 +1849,6 @@ select_features = [
 
 rename_selected = {
     "OA21CD": "oa21",
-    "in_cons_area": "in_conservation_area",
-    "in_hn": "in_heat_network_zone",
     "use_garden_area_m2": "garden_area_m2",
     "use_property_type": "predicted_property_type",
     "use_tenure": "predicted_tenure",
