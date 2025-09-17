@@ -145,9 +145,11 @@ def process_LA(
     logging.info(f"Loaded {la_name} with DESNZ heat network LSOA data.")
 
     # 2. Save & upload GPKG file
+    extracted_gpkg_dir = os.path.join(output_dir, "extracted_gpkg")
+    os.makedirs(extracted_gpkg_dir, exist_ok=True)
     save_gdf_to_gpkg(
         gdf=la_with_desnz_hn_lsoa,
-        output_dir=output_dir,
+        output_dir=extracted_gpkg_dir,
         filename_prefix=la_name,
         save_to_s3=save_to_s3,
         s3_bucket=s3_bucket,
@@ -219,7 +221,9 @@ def process_single_LA(
     lsoas_json_filename = (
         f"{la_name.lower().replace(' ', '_')}_hp_suitability_lsoas.json"
     )
-    lsoas_json_local_file_path = os.path.join(output_dir, lsoas_json_filename)
+    lsoas_output_dir = os.path.join(output_dir, "hp_suitability_lsoas")
+    os.makedirs(lsoas_output_dir, exist_ok=True)  # Create subfolder if it doesn't exist
+    lsoas_json_local_file_path = os.path.join(lsoas_output_dir, lsoas_json_filename)
     with open(lsoas_json_local_file_path, "w") as file:
         json.dump(la_hp_suitability_lsoas, file)
     if save_to_s3:
@@ -270,7 +274,11 @@ def process_single_LA(
     avg_score_parquet_filename = (
         f"{la_name.lower().replace(' ', '_')}_average_scores_by_threshold.parquet"
     )
-    avg_score_parquet_filepath = os.path.join(output_dir, avg_score_parquet_filename)
+    avg_scores_dir = os.path.join(output_dir, "avg_scores")
+    os.makedirs(avg_scores_dir, exist_ok=True)  # Create subfolder if needed
+    avg_score_parquet_filepath = os.path.join(
+        avg_scores_dir, avg_score_parquet_filename
+    )
     average_scores_df.write_parquet(avg_score_parquet_filepath)
     if save_to_s3:
         upload_file_to_s3(
@@ -333,7 +341,9 @@ def process_single_LA(
     mae_parquet_filename = (
         f"{la_name.lower().replace(' ', '_')}_hp_suitability_scores_with_desnz.parquet"
     )
-    mae_parquet_local_file_path = os.path.join(output_dir, mae_parquet_filename)
+    mae_scores_dir = os.path.join(output_dir, "hp_suitability_scores_with_desnz")
+    os.makedirs(mae_scores_dir, exist_ok=True)  # Create subfolder if needed
+    mae_parquet_local_file_path = os.path.join(mae_scores_dir, mae_parquet_filename)
     la_hp_scores_with_desnz.write_parquet(mae_parquet_local_file_path)
     if save_to_s3:
         upload_file_to_s3(
@@ -346,7 +356,7 @@ def process_single_LA(
     csv_output_filename = (
         f"{la_name.lower().replace(' ', '_')}_hp_suitability_scores_with_desnz.csv"
     )
-    la_hp_scores_with_desnz.write_csv(os.path.join(output_dir, csv_output_filename))
+    la_hp_scores_with_desnz.write_csv(os.path.join(mae_scores_dir, csv_output_filename))
 
     logging.info(f"[{la_name}] Finished processing. Results in {output_dir}")
 
@@ -424,8 +434,13 @@ if __name__ == "__main__":
 
     # 6. After all LAs are processed, save the combined MAE data as CSV
     mae_df = pl.DataFrame(la_mae_data)
+    # Define the subdirectory for MAE data
+    mae_output_dir = os.path.join(output_dir, "la_mae")
+    os.makedirs(mae_output_dir, exist_ok=True)  # Ensure the directory exists
+    # Define local file path within the subdirectory
     la_mae_filename = "la_mae_data.csv"
-    la_mae_csv_path = os.path.join(output_dir, la_mae_filename)
+    la_mae_csv_path = os.path.join(mae_output_dir, la_mae_filename)
+
     mae_df.write_csv(la_mae_csv_path)
     if save_to_s3:
         upload_file_to_s3(
