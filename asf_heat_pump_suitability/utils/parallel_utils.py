@@ -1,5 +1,20 @@
 from typing import List
+import pandas as pd
 import polars as pl
+
+
+def chunk_df(df: pd.DataFrame, size: int) -> List[pd.DataFrame]:
+    """
+    Split dataframe into chunks of specified size.
+
+    Args:
+        df (pl.DataFrame): dataframe
+        size (int): number of records per chunk
+
+    Returns
+        List[pd.DataFrame]: list of dataframe chunks
+    """
+    return [df.iloc[i : i + size] for i in range(0, len(df), size)]
 
 
 def chunk_df_by_group(df: pl.DataFrame, group_col: str, n: int) -> List[pl.DataFrame]:
@@ -11,7 +26,7 @@ def chunk_df_by_group(df: pl.DataFrame, group_col: str, n: int) -> List[pl.DataF
         group_col (str): column with group IDs
         n (int): number of group IDs in each chunk
 
-    Returns:
+    Returns
         List[pl.DataFrame]: list of dataframe chunks
     """
     # Get unique group IDs
