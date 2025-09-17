@@ -5,8 +5,7 @@ Add new features to EPC dataset:
 - property density per LSOA
 - off gas properties by postcode
 - listed building status per UPRN
-- England and Wales building conservation area flag per UPRN
-- Scotland World Heritage Site flag per UPRN
+- protected area flag per UPRN which includes properties in England and Wales building conservation areas & Scotland World Heritage Sites
 - grid capacity per LSOA (% of homes which could install a HP with current grid capacity)
 - presence of anchor properties per LSOA
 
@@ -16,7 +15,7 @@ python -i asf_heat_pump_suitability/pipeline/run_scripts/run_add_features_flow.p
 NB: this pipeline takes the preprocessed and deduplicated EPC dataset in parquet file format.
 """
 
-from metaflow import FlowSpec, step, batch, Parameter
+from metaflow import FlowSpec, step, Parameter
 
 
 class AddFeaturesFlow(FlowSpec):
@@ -73,7 +72,7 @@ class AddFeaturesFlow(FlowSpec):
     @step
     def clean_property_type(self):
         """
-        Clean property type column.
+        Clean property type column to create four categories of detached, semi-detached, terraced, and flats.
         """
         import logging
         from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
@@ -110,7 +109,10 @@ class AddFeaturesFlow(FlowSpec):
         Add lat/ lon data to EPC per property.
         """
         import logging
-        from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
+        from asf_heat_pump_suitability.pipeline.prepare_features import (
+            lat_lon,
+            output_areas,
+        )
 
         logging.info("Adding lat/lon data to EPC")
         uprn_latlon_df = lat_lon.transform_df_osopen_uprn_latlon()
@@ -121,10 +123,12 @@ class AddFeaturesFlow(FlowSpec):
 
         # TODO this is far too slow and is only used to correct some EPC records with incorrect postcodes which get joined to the wrong LSOA/MSOA
         # TODO can we filter the dataset somehow and only do the join with incorrect postcodes?
-        # # Replace `lad_code` from postcode with `lad_code` from geospatial join and postcode
-        # logging.info("Adding LAD code with geospatial join")
-        # uprn_lad_df = output_areas.sjoin_df_uprn_lad_code(self.epc_gdf)
-        # self.epc_df = self.epc_df.drop("lad_code").join(uprn_lad_df, how="left", on="UPRN")
+        # Replace `lad_code` from postcode with `lad_code` from geospatial join and postcode
+        logging.info("Adding LAD code with geospatial join")
+        uprn_lad_df = output_areas.sjoin_df_uprn_lad_code(self.epc_gdf)
+        self.epc_df = self.epc_df.drop("lad_code").join(
+            uprn_lad_df, how="left", on="UPRN"
+        )
 
         self.next(self.add_protected_area_flag)
 
@@ -237,6 +241,7 @@ class AddFeaturesFlow(FlowSpec):
         self.epc_df = self.epc_df.join(
             listed_buildings_df, how="left", on="UPRN"
         ).with_columns(
+            # Only fill nulls of valid UPRNs because invalid UPRNs have no coordinate data so we don't know if they're in a listed building or not
             pl.when(pl.col("valid_UPRN"))
             .then(pl.col("listed_building").fill_null(False))
             .otherwise(pl.col("listed_building"))
@@ -290,7 +295,7 @@ class AddFeaturesFlow(FlowSpec):
         """
         from asf_heat_pump_suitability.utils import save_utils
 
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/features/{self.year}_Q{self.quarter}_EPC_features_test.parquet"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/features/{self.year}_Q{self.quarter}_EPC_features.parquet"
         save_utils.save_to_s3(self.epc_df, save_as)
 
         self.next(self.end)
