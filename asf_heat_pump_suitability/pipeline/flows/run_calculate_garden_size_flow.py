@@ -3,7 +3,7 @@ Flow to calculate garden area (m2) where possible for properties in the domestic
 Microsoft Building Footprints data.
 
 To run:
-python asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size_flow.py run --epc [path/to/EPC/data] --year [YYYY] --quarter [Q] --nations ews
+python asf_heat_pump_suitability/pipeline/run_scripts/run_calculate_garden_size_flow.py --datastore=s3 run --epc [path/to/EPC/data] --year [YYYY] --quarter [Q] --nations ews
 
 [Set --nations flag to "ew" or "s" for generating garden size estimates for either England and Wales or Scotland INSPIRE
 files only.]
@@ -46,6 +46,14 @@ class CalculateGardenSizeFlow(FlowSpec):
         default="ews",
     )
 
+    sample = Parameter(
+        name="sample",
+        help="Run the script on a sample of 3 building footprint and land polygon file pairs",
+        type=bool,
+        required=False,
+        default=False,
+    )
+
     @step
     def start(self):
         """
@@ -81,12 +89,13 @@ class CalculateGardenSizeFlow(FlowSpec):
         file_matches = garden_size.match_series_files_land_building(
             land_files_gdf=land_file_bounds, building_files_gdf=microsoft_file_bounds
         )
-        # self.chunked_file_matches = parallel_utils.chunk_df(file_matches, size=30)
 
-        # # TODO remove before merge
-        self.chunked_file_matches = parallel_utils.chunk_df(
-            file_matches.sample(3), size=1
-        )
+        if self.sample:
+            self.chunked_file_matches = parallel_utils.chunk_df(
+                file_matches.sample(3, seed=1), size=1
+            )
+        else:
+            self.chunked_file_matches = parallel_utils.chunk_df(file_matches, size=30)
 
         logging.info(
             f"Estimating garden size for properties across {len(file_matches)} pairs of land extent and building footprint files."
@@ -102,9 +111,8 @@ class CalculateGardenSizeFlow(FlowSpec):
         """
         import os
 
-        # TODO update to dev before merge
         os.system(
-            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git@152_parallelise_garden_script"
+            "pip install git+https://github.com/nestauk/asf_heat_pump_suitability.git"
         )
 
         import shapely
@@ -202,8 +210,9 @@ class CalculateGardenSizeFlow(FlowSpec):
         from asf_heat_pump_suitability.utils import save_utils
         from asf_heat_pump_suitability.pipeline.prepare_features import garden_size
 
-        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}.parquet"
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_SAMPLE.parquet"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}.parquet"
+        if self.sample:
+            save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_SAMPLE.parquet"
         save_utils.save_to_s3(self.epc_gardens_df, save_as)
 
         self.epc_gardens_df = self.epc_gardens_df.with_columns(
@@ -213,8 +222,9 @@ class CalculateGardenSizeFlow(FlowSpec):
             self.epc_gardens_df
         )
 
-        # save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_deduplicated.parquet"
-        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_deduplicated_SAMPLE.parquet"
+        save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_deduplicated.parquet"
+        if self.sample:
+            save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}_deduplicated_SAMPLE.parquet"
         save_utils.save_to_s3(self.epc_gardens_df, save_as)
 
         self.next(self.end)
