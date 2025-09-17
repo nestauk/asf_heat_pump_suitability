@@ -128,8 +128,8 @@ print(
 )
 
 # %%
-a = set(UPRNs_joined_buildings["cluster"].unique())
-b = set(UPRNs_clustered["cluster"].unique())
+a = set(UPRNs_joined_buildings["cluster"])
+b = set(UPRNs_clustered["cluster"])
 print(
     f"{len(b.difference(a))} clusters out of {UPRNs_clustered['cluster'].nunique()} did not have at least one building polygon associated with it"
 )
@@ -180,7 +180,7 @@ UPRNs_clustered_final = UPRNs_clustered.merge(
 # #### Some stats
 
 # %%
-list_uprns_in_buildings = set(UPRNs_joined_buildings["UPRN"].tolist())
+list_uprns_in_buildings = set(UPRNs_joined_buildings["UPRN"])
 
 # %%
 # Set a label to show that a UPRN has a building polygon

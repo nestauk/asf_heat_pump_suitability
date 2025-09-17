@@ -10,17 +10,13 @@ jupytext --to notebook asf_heat_pump_suitability/analysis/exploratory/create_ful
 
 ```
 
-### Step 0
-
-Cluster the UPRNs?
-
 ### Step 1
 
 Run the notebook:
 
 `asf_heat_pump_suitability/analysis/exploratory/create_full_dataset/create_full_dataset_plymouth.py`
 
-to fill missing data.
+to fill missing data and cluster the UPRNs.
 
 ### Step 2
 
