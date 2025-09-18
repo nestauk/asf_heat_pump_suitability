@@ -100,7 +100,7 @@ if __name__ == "__main__":
 
     logging.info("Loading land registry file boundaries")
     land_file_bounds = gpd.read_file(
-        f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/inspire_file_bounds_{args.nations.upper()}.geojson"
+        f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/inspire_file_bounds_{args.nations.upper()}.geojson"
     )
     microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
 
@@ -186,7 +186,7 @@ if __name__ == "__main__":
             epc_gardens = []
             if _min == -1:
                 _min = 0
-            min += 100
+            _min += 100
 
         # Set prev
         prev = land_file
@@ -214,7 +214,7 @@ if __name__ == "__main__":
         epc_gardens_df = pl.concat([epc_gardens_df, df])
 
     if not args.save_as:
-        args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}.parquet"
+        args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}.parquet"
     save_utils.save_to_s3(epc_gardens_df, args.save_as)
 
     del epc_gardens_df
@@ -231,5 +231,5 @@ if __name__ == "__main__":
 
     # Final round of deduplication
     epc_gardens_df = garden_size.deduplicate_df_garden_size(epc_gardens_df)
-    args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_deduplicated.parquet"
+    args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_deduplicated.parquet"
     save_utils.save_to_s3(epc_gardens_df, args.save_as)

@@ -119,10 +119,11 @@ if __name__ == "__main__":
     open_df = property_df.group_by("lsoa").agg(
         median_garden_estimate_m2=pl.col("garden_area_m2").median(),
         property_density_km2=(
-            pl.col("Property density (households per KM2)") * pl.col("use_weight")
-        ).sum()
-        / pl.col("use_weight").sum(),
-        rural_urban_class=pl.col("ruc_two_fold").min(),
+            pl.col("Property density (households per KM2)").min()
+        ),  # Property density is the same for all rows in an LSOA/DZ
+        rural_urban_class=pl.col(
+            "ruc_two_fold"
+        ).min(),  # RUC is the same for all rows in an LSOA/DZ
         proportion_in_conservation_area=(
             pl.col("conservation_area") * pl.col("use_weight")
         ).sum()
@@ -137,7 +138,7 @@ if __name__ == "__main__":
         / pl.col("use_weight").sum(),
         proportion_epc_c_plus=(pl.col("epc_c_plus") * pl.col("use_weight")).sum()
         / pl.col("use_weight").sum(),
-        proportion_off_gas=(pl.col("OFF GAS") * pl.col("use_weight")).sum()
+        proportion_off_gas=(pl.col("off_gas") * pl.col("use_weight")).sum()
         / pl.col("use_weight").sum(),
     )
 

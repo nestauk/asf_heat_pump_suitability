@@ -98,6 +98,14 @@ def sjoin_df_epc_listed_buildings(
         pd.DataFrame: EPC UPRNs in listed buildings
     """
     epc_gdf = lat_lon.generate_gdf_uprn_coords(df=epc_df, usecols=["UPRN"])
+
+    # Some EPC rows have invalid geometry e.g. `POINT(NaN NaN)` because they have invalid UPRNs
+    valid_rows = epc_gdf["geometry"].is_valid.sum()
+    logging.warning(
+        f"{len(epc_gdf) - valid_rows} EPC rows with invalid point geometries cannot be matched to listed buildings."
+    )
+    epc_gdf = epc_gdf[epc_gdf["geometry"].is_valid]
+
     if any(
         [
             expr in listed_buildings_gdf.geom_type.unique()

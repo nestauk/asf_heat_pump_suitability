@@ -12,13 +12,19 @@ NB: this pipeline takes the outputs from the following scripts as inputs:
 """
 
 import polars as pl
-from datetime import datetime
 from tqdm import tqdm
 import argparse
 import logging
+from datetime import datetime
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
-from asf_heat_pump_suitability.pipeline.suitability import calculate_suitability
+from asf_heat_pump_suitability.pipeline.prepare_features import (
+    property_type,
+    output_areas,
+)
+from asf_heat_pump_suitability.pipeline.suitability import (
+    calculate_suitability,
+)
 
 
 def parse_arguments():
@@ -71,6 +77,8 @@ if __name__ == "__main__":
     args = parse_arguments()
     y = args.year
     q = args.quarter
+    features = config["features"]
+    tech_types = config["tech_types"]
 
     logging.info("Loading EPC data with features")
     epc_df = pl.read_parquet(args.features)
@@ -94,30 +102,7 @@ if __name__ == "__main__":
     ).drop("msoa_avg_outdoor_space_m2")
 
     logging.info("Filtering EPC data to rows with n_features >= minimum threshold")
-    features = [
-        "CURRENT_ENERGY_RATING",
-        "property_type",
-        "ruc_two_fold",
-        "off_gas",
-        "listed_building",
-        "in_protected_area",
-        "garden_area_m2",
-        "households_per_km2",
-        "has_anchor_property",
-        "heatpump_installation_percentage",
-    ]
     epc_df = calculate_suitability.filter_df_minimum_features(epc_df, features=features)
-
-    tech_types = [
-        "ASHP_S",
-        "ASHP_N",
-        "GSHP_S",
-        "GSHP_N",
-        "SGL_S",
-        "SGL_N",
-        "HN_S",
-        "HN_N",
-    ]
 
     scores = []
     for tech_type in tech_types:
@@ -135,31 +120,51 @@ if __name__ == "__main__":
     save_utils.save_to_s3(epc_df, save_as)
 
     logging.info("Weighting scores and aggregating per LSOA")
+    use_cols = (
+        ["lsoa", "proportional_weight"]
+        + [col for col in epc_df.columns if "score" in col]
+        + features
+    )
+    epc_df = epc_df.select(use_cols)
+
     weighted_scores = []
     for lsoa_code in tqdm(epc_df["lsoa"].drop_nulls().unique()):
-        lsoa_df = epc_df.filter(pl.col("lsoa") == lsoa_code)
-        lsoa_df = calculate_suitability.compute_df_weighted_score(lsoa_df)
         weighted_scores.append(
-            calculate_suitability.compute_dict_lsoa_suitability_scores(
-                lsoa_df, lsoa_code
+            calculate_suitability.aggregate_dict_lsoa_suitability_and_features(
+                epc_df, lsoa_code
             )
         )
 
-    # Must have at least 15 properties to be included in final dataset
+    logging.info(
+        "Filtering to LSOAs with data for at least 15 properties to be included in final dataset"
+    )
     suitability_df = pl.DataFrame(weighted_scores).filter(pl.col("n_properties") >= 15)
     suitability_df = suitability_df.with_columns(pl.col(pl.Float64).round(3))
 
-    # TODO add Data Zone names
-    logging.info("Get LSOA names and join to suitability dataset")
-    lsoa_names_df = pl.read_csv(
-        config["data_source"]["EW_ons_lsoa_lad_lookup"],
-        columns=["LSOA21CD", "LSOA21NM"],
+    logging.info("Getting proportion of flats in each LSOA from the census data")
+    proportion_flats_df = (
+        property_type.transform_df_proportion_census_property_types()
+        .filter(pl.col("property_type") == "Flat, maisonette or apartment")
+        .select(["lsoa", "census_proportion"])
+        .rename({"census_proportion": "census_proportion_flats"})
+    )
+
+    logging.info("Getting LSOA & DZ names")
+    lsoa_names_df = output_areas.load_df_lsoa_dz_codes_names()
+
+    logging.info(
+        "Joining proportion of flats and LSOA & DZ names to suitability dataset"
     )
     suitability_df = suitability_df.join(
-        lsoa_names_df, left_on="lsoa", right_on="LSOA21CD", how="left"
-    ).rename({"LSOA21NM": "lsoa_name"})
+        proportion_flats_df, how="left", on="lsoa"
+    ).join(lsoa_names_df, left_on="lsoa", right_on="lsoa_code", how="left")
 
     logging.info("Saving LSOA heat pump suitability scores")
     save_as = f"s3://asf-heat-pump-suitability/outputs/{y}Q{q}/suitability/{datetime.today().strftime('%Y%m%d')}_{y}_Q{q}_heat_pump_suitability_per_lsoa"
+    save_utils.save_to_s3(suitability_df, f"{save_as}.parquet")
+    save_utils.save_to_s3(suitability_df, f"{save_as}.csv")
+
+    logging.info("Saving open dataset to nesta-open-data S3 bucket")
+    save_as = f"s3://nesta-open-data/asf_heat_pump_suitability/{args.year}Q{args.quarter}/{datetime.today().strftime('%Y%m%d')}_{args.year}_Q{args.quarter}_EPC_heat_pump_suitability_per_lsoa"
     save_utils.save_to_s3(suitability_df, f"{save_as}.parquet")
     save_utils.save_to_s3(suitability_df, f"{save_as}.csv")

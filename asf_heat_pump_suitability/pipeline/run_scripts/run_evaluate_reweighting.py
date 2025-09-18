@@ -14,7 +14,6 @@ python -i asf_heat_pump_suitability/pipeline/run_scripts/run_evaluate_reweightin
 import polars as pl
 from tqdm import tqdm
 import argparse
-from datetime import datetime
 
 from asf_heat_pump_suitability.pipeline.evaluation import evaluate_reweighting
 from asf_heat_pump_suitability.pipeline.prepare_features import epc
@@ -122,5 +121,5 @@ if __name__ == "__main__":
 
     # Save to S3
     for country, results in {"S": full_results_s, "EW": full_results_ew}.items():
-        save_as = f"evaluation/reweighting/{year}Q{q}/{datetime.today().strftime('%Y%m%d')}_{year}_Q{q}_EPC_weights_evaluation_{country}.json"
+        save_as = f"evaluation/reweighting/{year}Q{q}/{year}_Q{q}_EPC_weights_evaluation_{country}.json"
         save_to_s3("asf-heat-pump-suitability", results, save_as)

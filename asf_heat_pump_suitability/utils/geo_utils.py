@@ -1,7 +1,8 @@
 import logging
-from typing import Union
+from typing import Union, List
 
 import geopandas as gpd
+import pandas as pd
 import shapely
 
 from shapely.geometry.base import BaseGeometry
@@ -51,7 +52,7 @@ def get_polygon_gdf_bounds(gdf: gpd.GeoDataFrame) -> shapely.Polygon:
 
 
 def parse_binary_geometry(
-    binary_data: Union[BaseGeometry, bytes, str]
+    binary_data: Union[BaseGeometry, bytes, str],
 ) -> Union[BaseGeometry, None]:
     """
     Parse binary geometry data into Shapely geometry object.

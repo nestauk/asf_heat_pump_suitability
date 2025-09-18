@@ -1,7 +1,7 @@
 # ASF Heat Pump Suitability
 
 The `asf_heat_pump_suitability` repo contains the code used to calculate heat pump suitability scores for lower-layer
-super output areas (LSOAs) in England and Wales using domestic EPC data and supplementary sources. Scores are
+super output areas (LSOAs) in England and Wales and Data Zones in Scotland using domestic EPC data and supplementary sources. Scores are
 weight-adjusted for LSOAs where possible to reduce bias.
 Read more about the project [here](https://www.nesta.org.uk/project/mapping-heat-pump-suitability-across-great-britain/).
 
@@ -25,7 +25,7 @@ See the general repository structure depicted below. Key files are also shown.
 ```
 asf_heat_pump_suitability
 ├───analysis/
-│    Scripts for ad-hoc analysis
+│    Scripts and notebooks for specific analyses
 ├───config/
 │    Respository config files and global variables
 │    ├─ base.yaml - data sources and mappings
@@ -34,17 +34,18 @@ asf_heat_pump_suitability
 │    Modules with functions to load data
 │    ├─ base_getters.py - generic getter functions
 │    ├─ get_datasets.py - specific getter functions to load raw datasets
+│    ├─ get_dno_datasets.py - specific getter functions to load and process DNO datasets
 │    ├─ get_target.py - specific getter functions to load and process target data for reweighting
 ├───notebooks/
 │    Notebooks with prototype code for pipeline
 ├───pipeline/
 │    Subdirs with modules to process data and produce outputs
-│    ├─ evaluation/
-│    ├─ prepare_features/
-│    ├─ reweight_epc/
-│    ├─ run_scripts/
-│    ├─ sampling/
-│    ├─ suitability/
+│    ├─ evaluation/ - modules for evaluation of outputs
+│    ├─ prepare_features/ - modules to prepare new features for EPC
+│    ├─ reweight_epc/ - modules for reweighting EPC
+│    ├─ run_scripts/ - main scripts of the pipeline
+│    ├─ sampling/ - modules to sample LSOAs
+│    ├─ suitability/ - modules to calculate heat pump suitability scores
 │    ├─ README.md - instructions to run pipeline
 ├───utils/
 │    Modules with generic utils
@@ -95,19 +96,23 @@ should therefore be interpreted with caution._
 
 A comprehensive table of citations for data used in this analysis can be found in [asf_heat_pump_suitability/config/README.md](https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme). See attributions below.
 
-- Contains OS data © Crown copyright and database right 2024.
-- Contains Royal Mail data © Royal Mail copyright and database right 2024.
+- Contains OS data © Crown copyright and database right 2025.
+- Contains Royal Mail data © Royal Mail copyright and database right 2025.
 - Contains Office for National Statistics information licensed under the Open Government Licence v.3.0.
-- Contains public sector information licensed under the Open Government Licence v3.0.
-- Contains GeoPlace data © Local Government Information House Limited copyright and database right 2024.
-- This work uses HM Land Registry's INSPIRE Index Polygons service. This information is subject to Crown copyright and database rights 2024 and is reproduced with the permission of HM Land Registry.
-  The polygons (including the associated geometry, namely x, y co-ordinates) are subject to Crown copyright and database rights 2024 Ordnance Survey 100026316.
-  INSPIRE Index Polygons service [Conditions of use](https://use-land-property-data.service.gov.uk/datasets/inspire#conditions).
-- Microsoft [GlobalMLBuildingFootprints](https://github.com/microsoft/GlobalMLBuildingFootprints) are made available under the [Open Database License](http://opendatacommons.org/licenses/odbl/1.0/). Any rights in individual contents of the database are licensed under the Database Contents License: http://opendatacommons.org/licenses/dbcl/1.0/\ .
-
-This work uses [Facebook Research's balance package](https://github.com/facebookresearch/balance) and [ipfn](https://github.com/Dirguis/ipfn) to conduct iterative proportional fitting.
-
-Sarig, T., Galili, T., & Eilat, R. (2023). balance – a Python package for balancing biased data samples. https://arxiv.org/abs/2307.06024
+- Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/)
+- This information is subject to Crown copyright and database rights 2025 and is reproduced with the permission of HM Land Registry. See INSPIRE index polygons [conditions of use](https://use-land-property-data.service.gov.uk/datasets/inspire#conditions).
+- This work uses HM Land Registry's INSPIRE Index Polygons service. This information is subject to Crown copyright and database rights 2024 and is reproduced with the permission of HM Land Registry. The polygons (including the associated geometry, namely x, y co-ordinates) are subject to Crown copyright and database rights 2025 Ordnance Survey 100026316.
+- Microsoft GlobalMLBuildingFootprints are made available under the [Open Database License](http://opendatacommons.org/licenses/odbl/1.0/). Any rights in individual contents of the database are licensed under the [Database Contents License](http://opendatacommons.org/licenses/dbcl/1.0/\).
+- This work uses designated Historic Asset GIS Data, The Welsh Historic Environment Service (Cadw), 2025, licensed under the Open Government Licence.
+- This work uses Historic England data © Historic England 2025. Contains Ordnance Survey data © Crown copyright and database right 2025. The Historic England GIS Data contained in this material was obtained on August 2024. The most publicly available up to date Historic England GIS Data can be obtained from HistoricEngland.org.uk.
+- This work uses data provided by the Consumer Data Research Centre, an ESRC Data Investment.
+- This work uses Registers of Scotland's land extent polygons. © Crown copyright. Reproduced with the permission of Registers of Scotland.
+- This work uses data from the Scottish Census © Crown copyright. Data supplied by National Records of Scotland.
+- This work uses data from Electricity North West Ltd, SP Energy Networks, SSEN Distribution, UK Power Networks. Creative Commons Attribution: https://creativecommons.org/licenses/by/4.0/
+- Supported by Northern Powergrid Open Data. [License](https://northernpowergrid.opendatasoft.com/p/opendatalicence/)
+- Supported by NGED Open Data. [License](https://www.nationalgrid.co.uk/open-data-licence)
+- This work uses [Facebook Research's balance package](https://github.com/facebookresearch/balance) and [ipfn](https://github.com/Dirguis/ipfn) to conduct iterative proportional fitting.
+  Sarig, T., Galili, T., & Eilat, R. (2023). balance – a Python package for balancing biased data samples. https://arxiv.org/abs/2307.06024
 
 ## Pipeline intermediate outputs
 
@@ -117,6 +122,12 @@ Intermediate outputs include:
 - EPC data enhanced with new features including: lat/lon; listed building status; building conservation zone status;
   off gas status; average garden size per MSOA; property density per LSOA
 - Individual garden size estimates for UPRNs in EPC
+
+See detailed instructions of how to run the full pipeline in the [asf_heat_pump_suitability/pipeline/README.md](https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/pipeline#readme).
+
+## License
+
+This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
 
 ## Contributor guidelines
 
