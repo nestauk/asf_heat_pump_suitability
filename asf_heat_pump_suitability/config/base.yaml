@@ -52,6 +52,16 @@ data_source:
   EW_inspire_url: "https://use-land-property-data.service.gov.uk/datasets/inspire/download"
   S_scottish_gov_DZ2011_boundaries: "s3://asf-heat-pump-suitability/source_data/2014_Scottish_Government_DataZoneBoundaries_2011_S/SG_DataZone_Bdry_2011.shp"
   S_NRScotland_households: "s3://asf-heat-pump-suitability/source_data/June2024_NRScotland_households_and_dwellings_S.xlsx"
+webmap_data_source:
+  EW_detailed_lsoa_geojson: "s3://asf-heat-pump-suitability/mapdata/Lower_layer_Super_Output_Areas_(December_2021)_Boundaries_EW_BFC_(V10).geojson"
+  S_detailed_datazone_geojson: "s3://asf-heat-pump-suitability/mapdata/SG_DataZoneBdry_2011.geojson"
+  EW_generalised_lsoa_geojson: "s3://asf-heat-pump-suitability/mapdata/Lower_layer_Super_Output_Areas_(December_2021)_Boundaries_EW_BGC_(V5).geojson"
+  S_generalised_datazone_geojson: "s3://asf-heat-pump-suitability/mapdata/SG_DataZoneBdry_2011_generalised.geojson"
+  EW_super_generalised_lsoa_geojson: "s3://asf-heat-pump-suitability/mapdata/Lower_layer_Super_Output_Areas_December_2021_Boundaries_EW_BSC_V4.geojson"
+  S_super_generalised_datazone_geojson: "s3://asf-heat-pump-suitability/mapdata/SG_DataZoneBdry_2011_supergeneralised.geojson"
+  EW_ultra_generalised_lsoa_geojson: "s3://asf-heat-pump-suitability/mapdata/Lower_layer_Super_Output_Areas_(December_2021)_Boundaries_EW_ultrageneralised.geojson"
+  S_ultra_generalised_datazone_geojson: "s3://asf-heat-pump-suitability/mapdata/SG_DataZoneBdry_2011_ultrageneralised.geojson"
+  out_key: "s3://asf-heat-pump-suitability/mapdata/tiling/"
 mapping:
   build_year_pre_cols:
     - BP_PRE_1900
