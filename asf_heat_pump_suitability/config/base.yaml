@@ -17,7 +17,7 @@ data_source:
   EW_inspire_land_extent_dir: "s3://asf-heat-pump-suitability/source_data/inspire_ew/"
   S_inspire_land_extent_dir: "s3://asf-heat-pump-suitability/source_data/inspire_scotland/"
   global_microsoft_building_footprint_links: "https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv"
-  E_historic_england_conservation_areas: "s3://asf-heat-pump-suitability/source_data/Aug2024_historic_england_conservation_areas_E.geojson"
+  E_historic_england_conservation_areas: "s3://asf-heat-pump-suitability/source_data/Feb2025_historic_england_conservation_areas_E.geojson"
   W_welsh_gov_conservation_areas: "s3://asf-heat-pump-suitability/source_data/2022_welsh_gov_building_conservation_areas_W.gpkg"
   UK_spa_offgasgrid: "s3://asf-heat-pump-suitability/source_data/2024_vMar2024_SPA_offgaspostcode_UK.xlsx"
   E_historicengland_listed_buildings: "s3://asf-heat-pump-suitability/source_data/Jun2024_vJul2024_HistoricEngland_listedbuilding_E.gpkg"

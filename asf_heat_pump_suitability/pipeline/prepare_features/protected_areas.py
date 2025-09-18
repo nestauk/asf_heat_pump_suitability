@@ -65,7 +65,7 @@ def transform_gdf_building_cons_areas() -> gpd.GeoDataFrame:
 
     w_gdf = get_datasets.load_gdf_welsh_gov_conservation_areas(columns=["geometry"])
 
-    gdf = pd.concat([e_gdf, w_gdf])
+    gdf = pd.concat([e_gdf, w_gdf]).drop_duplicates(subset=["geometry"])
     gdf["in_conservation_area_ew"] = True
 
     return gdf
