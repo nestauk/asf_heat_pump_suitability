@@ -118,7 +118,7 @@ def create_df_suitability_categorisation(
         sgl_min_properties (int): The minimum number of properties in a cluster for a SGL to be considered.
 
     Returns:
-        pl.DataFrame: cluster_df with an additional column for the suitability categorisation.
+        pl.DataFrame: dataframe with an additional column containing the assigned low carbon home heating tech type for each cluster.
     """
 
     most_suitable_tech = (
