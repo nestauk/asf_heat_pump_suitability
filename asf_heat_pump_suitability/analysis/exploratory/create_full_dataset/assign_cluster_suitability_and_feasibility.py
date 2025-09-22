@@ -166,40 +166,21 @@ def prepare_df_for_feasibility_scoring(
     """
 
     # Transform predicted_tenure and predicted_property_type into dummies
-    df = df.to_dummies("predicted_tenure")
-    df = df.rename(
-        {
-            "predicted_tenure_owner-occupied": "owner_occupied",
-            "predicted_tenure_rental (social)": "social_housing",
-        }
-    )
-
-    df = df.to_dummies("predicted_property_type")
-    df = df.rename({"predicted_property_type_Flat, maisonette or apartment": "flats"})
-
-    # Compute on_gas
-    df = df.with_columns((~pl.col("use_off_gas")).alias("on_gas"))
-
-    # Compute not_in_listed_building
-    df = df.with_columns(
-        (~pl.col("in_listed_building")).alias("not_in_listed_building")
-    )
-    df = df.with_columns(
-        (~pl.col("in_conservation_area")).alias("not_in_conservation_area")
-    )
-
-    # Create has_outdoor_space from garden_area_m2
-    df = df.with_columns(
-        (pl.col("garden_area_m2") > outdoor_space_threshold).alias("has_outdoor_space")
-    )
-
-    # Creating close_to_city_centre from distance_to_city_centre and city_centre_threshold
-    df = df.with_columns(
-        pl.col("oa21").is_in(city_centre_oas).alias("close_to_city_centre")
-    )
-
-    # Creating imd_decile_above_avg from imd_decile
-    df = df.with_columns((pl.col("imd_decile") > 5).alias("imd_decile_above_avg"))
+    df = df.to_dummies("predicted_tenure").to_dummies("predicted_property_type")
+        .rename(
+            {
+                "predicted_tenure_owner-occupied": "owner_occupied",
+                "predicted_tenure_rental (social)": "social_housing",
+                "predicted_property_type_Flat, maisonette or apartment": "flats"
+            }
+        ).with_columns(
+                (~pl.col("use_off_gas")).alias("on_gas"),
+                (~pl.col("in_listed_building")).alias("not_in_listed_building"),
+                (~pl.col("in_conservation_area")).alias("not_in_conservation_area"),
+                (pl.col("garden_area_m2") > outdoor_space_threshold).alias("has_outdoor_space"),
+                pl.col("oa21").is_in(city_centre_oas).alias("close_to_city_centre"),
+                (pl.col("imd_decile") > 5).alias("imd_decile_above_avg")
+        )
 
     # Aggregating data by cluster, distance to anchor loads is calculated
     # separately, so don't include this in this step
