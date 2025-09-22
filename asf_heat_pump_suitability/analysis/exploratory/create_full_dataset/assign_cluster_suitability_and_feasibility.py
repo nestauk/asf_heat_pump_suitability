@@ -92,10 +92,9 @@ def prepare_df_for_suitability_categorisation(
     cluster_df = (
         cluster_df.join(flats_garden_sizes, on="cluster", how="left")
         .with_columns(
-            (
-                pl.col("total_outdoor_space")
-                + pl.col("total_outdoor_space_flats").fill_null(0)
-            ).alias("total_outdoor_space")
+            (pl.col("total_outdoor_space") + pl.col("total_outdoor_space_flats")).alias(
+                "total_outdoor_space"
+            )
         )
         .drop(["building_id", "total_outdoor_space_flats"])
     ).with_columns(
@@ -382,11 +381,11 @@ if __name__ == "__main__":
     )
 
     # Saving data
-    save_to_s3(
-        df=feasibility_scoring_data,
-        path="s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_feasibility_scoring.parquet",
-    )
-    save_to_s3(
-        df=suitability_categorisation_data,
-        path="s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_suitability_categorisation.parquet",
-    )
+    # save_to_s3(
+    #     df=feasibility_scoring_data,
+    #     path="s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_feasibility_scoring.parquet",
+    # )
+    # save_to_s3(
+    #     df=suitability_categorisation_data,
+    #     path="s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_suitability_categorisation.parquet",
+    # )
