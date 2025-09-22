@@ -107,7 +107,7 @@ def create_df_suitability_categorisation(
     df: pl.DataFrame, sgl_min_properties: int = config.sgl_min_properties
 ) -> pl.DataFrame:
     """
-    Adds a new column to cluster_df with most suitable low carbon heating technology for each cluster:
+    Adds a new column to the dataframe with most suitable low carbon heating technology for each cluster:
     - "individual_ashp": Individual air source heat pump (ASHP)
     - "collective_ashp": Collective purchasing of ASHP
     - "shared_ground_loop": Shared Ground Loop (SGL)
