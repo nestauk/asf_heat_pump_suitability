@@ -37,11 +37,11 @@ def prepare_df_for_suitability_categorisation(
         pl.DataFrame: DataFrame ready for suitability categorisation.
     """
     # Create city_centre column based on whether the UPRN is in the set of city centre OAs
-    df = df.with_columns(pl.col("oa21").is_in(city_centre_oas).alias("in_city_centre"))
-
-    # Transform predicted_tenure and predicted_property_type into dummies
-    df = df.to_dummies("predicted_property_type")
-    df = df.rename({"predicted_property_type_Flat, maisonette or apartment": "flats"})
+    df = df.with_columns(
+        pl.col("oa21").is_in(city_centre_oas).alias("in_city_centre")
+        # Transform predicted_tenure and predicted_property_type into dummies
+        ).to_dummies("predicted_property_type")
+        .rename({"predicted_property_type_Flat, maisonette or apartment": "flats"})
 
     cluster_df = df.group_by("cluster").agg(
         # Cluster size
