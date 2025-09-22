@@ -284,7 +284,7 @@ def create_df_feasibility_scoring(
         )
 
     for tech in weights.keys():
-        tech_features = set(weights.get(tech).keys())
+        input_features = set(weights.get(tech).keys())
         if not tech_features.issubset(set(features + ["cluster_size"])):
             do_not_exist = [
                 f for f in tech_features if f not in set(features + ["cluster_size"])
