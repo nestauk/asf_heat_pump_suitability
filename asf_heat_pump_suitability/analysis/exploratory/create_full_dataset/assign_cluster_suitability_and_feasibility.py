@@ -37,11 +37,16 @@ def prepare_df_for_suitability_categorisation(
         pl.DataFrame: DataFrame ready for suitability categorisation.
     """
     # Create city_centre column based on whether the UPRN is in the set of city centre OAs
-    df = df.with_columns(
-        pl.col("oa21").is_in(city_centre_oas).alias("in_city_centre")
-        # Transform predicted_tenure and predicted_property_type into dummies
-        ).to_dummies("predicted_property_type")
+    df = (
+        df.with_columns(
+            pl.col("oa21")
+            .is_in(city_centre_oas)
+            .alias("in_city_centre")
+            # Transform predicted_tenure and predicted_property_type into dummies
+        )
+        .to_dummies("predicted_property_type")
         .rename({"predicted_property_type_Flat, maisonette or apartment": "flats"})
+    )
 
     cluster_df = df.group_by("cluster").agg(
         # Cluster size
@@ -166,21 +171,27 @@ def prepare_df_for_feasibility_scoring(
     """
 
     # Transform predicted_tenure and predicted_property_type into dummies
-    df = df.to_dummies("predicted_tenure").to_dummies("predicted_property_type")
+    df = (
+        df.to_dummies("predicted_tenure")
+        .to_dummies("predicted_property_type")
         .rename(
             {
                 "predicted_tenure_owner-occupied": "owner_occupied",
                 "predicted_tenure_rental (social)": "social_housing",
-                "predicted_property_type_Flat, maisonette or apartment": "flats"
+                "predicted_property_type_Flat, maisonette or apartment": "flats",
             }
-        ).with_columns(
-                (~pl.col("use_off_gas")).alias("on_gas"),
-                (~pl.col("in_listed_building")).alias("not_in_listed_building"),
-                (~pl.col("in_conservation_area")).alias("not_in_conservation_area"),
-                (pl.col("garden_area_m2") > outdoor_space_threshold).alias("has_outdoor_space"),
-                pl.col("oa21").is_in(city_centre_oas).alias("close_to_city_centre"),
-                (pl.col("imd_decile") > 5).alias("imd_decile_above_avg")
         )
+        .with_columns(
+            (~pl.col("use_off_gas")).alias("on_gas"),
+            (~pl.col("in_listed_building")).alias("not_in_listed_building"),
+            (~pl.col("in_conservation_area")).alias("not_in_conservation_area"),
+            (pl.col("garden_area_m2") > outdoor_space_threshold).alias(
+                "has_outdoor_space"
+            ),
+            pl.col("oa21").is_in(city_centre_oas).alias("close_to_city_centre"),
+            (pl.col("imd_decile") > 5).alias("imd_decile_above_avg"),
+        )
+    )
 
     # Aggregating data by cluster, distance to anchor loads is calculated
     # separately, so don't include this in this step
@@ -285,9 +296,9 @@ def create_df_feasibility_scoring(
 
     for tech in weights.keys():
         input_features = set(weights.get(tech).keys())
-        if not tech_features.issubset(set(features + ["cluster_size"])):
+        if not input_features.issubset(set(features + ["cluster_size"])):
             do_not_exist = [
-                f for f in tech_features if f not in set(features + ["cluster_size"])
+                f for f in input_features if f not in set(features + ["cluster_size"])
             ]
             raise ValueError(
                 f"{tech}: The features you're providing weights for do not exist:\n{do_not_exist}"
