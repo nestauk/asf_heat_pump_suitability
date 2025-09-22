@@ -31,7 +31,7 @@ def prepare_df_for_suitability_categorisation(
         city_centre_oas (set, optional): OAs that are considered part of the city center. Should be in OA21 codes format.
             Defaults to config.city_centre_oas.
         outdoor_space_threshold (float, optional): Threshold for outdoor space in meters squared.
-        i.e. if garden_area_m2 > 0, then has_outdoor_space = True
+        i.e. if garden_area_m2 >  `outdoor_space_threshold`, then has_outdoor_space = True
 
     Returns:
         pl.DataFrame: DataFrame ready for suitability categorisation.
