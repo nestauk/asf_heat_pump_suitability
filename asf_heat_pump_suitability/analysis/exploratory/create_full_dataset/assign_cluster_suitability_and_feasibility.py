@@ -213,15 +213,13 @@ def prepare_df_for_feasibility_scoring(
         (pl.col("close_to_anchor_loads").cast(pl.Float64) * 100).name.prefix("perc_"),
     )
 
-    df = df.join(anchor_dist_df, on="cluster")
-
-    # scale cluster size to be between 0 and 100
-    df = df.with_columns(
+    df = df.join(anchor_dist_df, on="cluster").with_columns(
+        # scale cluster size to be between 0 and 100
         (
             (pl.col("cluster_size") - pl.col("cluster_size").min())
             / (pl.col("cluster_size").max() - pl.col("cluster_size").min())
             * 100
-        ).alias("cluster_size")
+        ).alias("scaled_cluster_size")
     )
 
     return df
@@ -244,8 +242,9 @@ def calculate_feasibility_expression(weights_dict: dict) -> pl.Expr:
     weighted_cols_sum = pl.sum_horizontal(
         (
             pl.col(f"perc_{feature}") * weight
-            if feature != "cluster_size"  # most features will have a "perc_" prefix
-            else pl.col("cluster_size")
+            if feature
+            != "scaled_cluster_size"  # most features will have a "perc_" prefix
+            else pl.col("scaled_cluster_size")
             * weight  # cluster_size does not have a "perc_" prefix
         )
         for feature, weight in weights_dict.items()
@@ -292,9 +291,11 @@ def create_df_feasibility_scoring(
 
     for tech in weights.keys():
         input_features = set(weights.get(tech).keys())
-        if not input_features.issubset(set(features + ["cluster_size"])):
+        if not input_features.issubset(set(features + ["scaled_cluster_size"])):
             do_not_exist = [
-                f for f in input_features if f not in set(features + ["cluster_size"])
+                f
+                for f in input_features
+                if f not in set(features + ["scaled_cluster_size"])
             ]
             raise ValueError(
                 f"{tech}: The features you're providing weights for do not exist:\n{do_not_exist}"
@@ -381,11 +382,11 @@ if __name__ == "__main__":
     )
 
     # Saving data
-    # save_to_s3(
-    #     df=feasibility_scoring_data,
-    #     path="s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_feasibility_scoring.parquet",
-    # )
-    # save_to_s3(
-    #     df=suitability_categorisation_data,
-    #     path="s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_suitability_categorisation.parquet",
-    # )
+    save_to_s3(
+        df=feasibility_scoring_data,
+        path="s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_feasibility_scoring.parquet",
+    )
+    save_to_s3(
+        df=suitability_categorisation_data,
+        path="s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/plymouth_suitability_categorisation.parquet",
+    )

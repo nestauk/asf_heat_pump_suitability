@@ -54,14 +54,14 @@ weights = {
         "on_gas": 1,
         "not_in_listed_building": 1,
         "not_in_conservation_area": 1,
-        "cluster_size": 1,
+        "scaled_cluster_size": 1,
     },
     "sgl": {
         "social_housing": 1,
         "flats": 1,
         "on_communal_heating": 1,
         "has_outdoor_space": 1,
-        "cluster_size": 1,
+        "scaled_cluster_size": 1,
     },
     "hn": {
         "in_heat_network_zone": 1,
