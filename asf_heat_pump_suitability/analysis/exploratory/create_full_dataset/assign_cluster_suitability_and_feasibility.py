@@ -28,7 +28,7 @@ def prepare_df_for_suitability_categorisation(
 
     Args:
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
-        city_centre_oas (set, optional): OAs that are considered part of the city center. Should be an oa21 format.
+        city_centre_oas (set, optional): OAs that are considered part of the city center. Should be in OA21 codes format.
             Defaults to config.city_centre_oas.
         outdoor_space_threshold (float, optional): Threshold for outdoor space in meters squared.
         i.e. if garden_area_m2 > 0, then has_outdoor_space = True
