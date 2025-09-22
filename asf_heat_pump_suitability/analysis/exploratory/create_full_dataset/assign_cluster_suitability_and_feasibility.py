@@ -159,7 +159,7 @@ def prepare_df_for_feasibility_scoring(
         anchor_loads_threshold (float, optional): threshold for distance to anchor loads in metres.
         outdoor_space_threshold (float, optional): Threshold for outdoor space in meters squared.
             i.e. if garden_area_m2 > `outdoor_space_threshold`, then has_outdoor_space = True
-        city_centre_oas (set, optional): OAs that are considered part of the city center. Should be an oa21 format.
+        city_centre_oas (set, optional): OAs that are considered part of the city center. Should be in OA21 codes format.
 
     Returns:
         pl.DataFrame: DataFrame ready for feasibility scoring.
