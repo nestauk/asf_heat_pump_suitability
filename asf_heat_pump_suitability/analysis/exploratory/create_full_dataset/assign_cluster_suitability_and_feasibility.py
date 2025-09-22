@@ -248,9 +248,9 @@ def calculate_feasibility_expression(weights_dict: dict) -> pl.Expr:
             * weight  # cluster_size does not have a "perc_" prefix
         )
         for feature, weight in weights_dict.items()
-    )
+    ).truediv(total_weight)
 
-    return weighted_cols_sum / total_weight
+    return weighted_cols_sum
 
 
 def create_df_feasibility_scoring(
