@@ -303,7 +303,7 @@ def create_df_feasibility_scoring(
 
     # Create feasibility expressions for all tech types and store as list
     tech_feasibility_scores = [
-        calculate_feasibility_expression(tech_specific_weights=weights.get(tech)).alias(
+        calculate_feasibility_expression(weights_dict=weights.get(tech)).alias(
             tech + "_feasibility"
         )
         for tech in expected_tech_types
