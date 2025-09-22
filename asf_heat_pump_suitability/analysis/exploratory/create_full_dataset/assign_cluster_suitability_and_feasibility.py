@@ -121,7 +121,7 @@ def create_df_suitability_categorisation(
         pl.DataFrame: dataframe with an additional column containing the assigned low carbon home heating tech type for each cluster.
     """
 
-    most_suitable_tech = (
+    df = df.with_columns(
         pl.when(pl.col("cluster_size") == 1)
         .then(pl.lit("individual_ashp"))
         .when(pl.col("in_heat_network_zone"))
@@ -133,9 +133,9 @@ def create_df_suitability_categorisation(
         )
         .then(pl.lit("shared_ground_loop"))
         .otherwise(pl.lit("collective_ashp"))
+        .alias("most_suitabile_tech")
     )
-
-    return df.with_columns(most_suitable_tech=most_suitable_tech)
+    return df
 
 
 def prepare_df_for_feasibility_scoring(
