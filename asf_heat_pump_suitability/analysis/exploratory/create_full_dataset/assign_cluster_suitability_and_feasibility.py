@@ -318,7 +318,7 @@ def create_df_feasibility_scoring(
     return df
 
 
-def assign_no_cluster_unique_code(
+def assign_df_no_cluster_unique_code(
     df: pl.DataFrame,
 ) -> pl.DataFrame:
     """
@@ -348,7 +348,7 @@ if __name__ == "__main__":
     plymouth_data = pl.read_parquet(
         "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/results/plymouth_features_selected_with_clusters.parquet"
     )
-    plymouth_data = assign_no_cluster_unique_code(plymouth_data)
+    plymouth_data = assign_df_no_cluster_unique_code(plymouth_data)
 
     # The building polygon data per cluster, and the distance to anchor loads from the centre of the cluster
     cluster_polygons = gpd.read_file(
