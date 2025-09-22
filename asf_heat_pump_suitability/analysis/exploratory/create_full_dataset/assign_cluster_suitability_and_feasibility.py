@@ -230,7 +230,7 @@ def prepare_df_for_feasibility_scoring(
     return df
 
 
-def calculate_feasibility_expression(tech_specific_weights: dict) -> pl.Expr:
+def calculate_feasibility_expression(weights_dict: dict) -> pl.Expr:
     """
     Generates a Polars expression to calculate a weighted feasibility score.
 
@@ -241,7 +241,7 @@ def calculate_feasibility_expression(tech_specific_weights: dict) -> pl.Expr:
         pl.Expr: A Polars expression for the calculated score.
     """
     # Sum of all weights to normalize the score
-    total_weight = sum(tech_specific_weights.values())
+    total_weight = sum(weights_dict.values())
 
     # Compute weighted sum i.e. sum(feature_value * weight)
     weighted_cols_sum = pl.sum_horizontal(
@@ -251,7 +251,7 @@ def calculate_feasibility_expression(tech_specific_weights: dict) -> pl.Expr:
             else pl.col("cluster_size")
             * weight  # cluster_size does not have a "perc_" prefix
         )
-        for feature, weight in tech_specific_weights.items()
+        for feature, weight in weights_dict.items()
     )
 
     return weighted_cols_sum / total_weight
