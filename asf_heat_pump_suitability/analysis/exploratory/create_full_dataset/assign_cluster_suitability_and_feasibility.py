@@ -98,9 +98,7 @@ def prepare_df_for_suitability_categorisation(
             ).alias("total_outdoor_space")
         )
         .drop(["building_id", "total_outdoor_space_flats"])
-    )
-
-    cluster_df = cluster_df.with_columns(
+    ).with_columns(
         (pl.col("total_outdoor_space") > outdoor_space_threshold).alias(
             "has_outdoor_space"
         )
