@@ -155,7 +155,6 @@ def prepare_df_for_feasibility_scoring(
     Prepares the dataframe for feasibility scoring. This includes:
     - Transforming categorical variables into dummy/indicator variables.
     - Creating new binary features based on existing columns and specified thresholds.
-    - Renaming columns for clarity.
 
     Args:
         df (pl.DataFrame): DataFrame containing the dataset with feature values for each UPRN.
