@@ -340,10 +340,10 @@ def load_desnz_geodata(
     lsoa_gdf = gpd.read_file(shp_path)
     return hn_gdf, lsoa_gdf
 
+
 def load_df_scot_gov_data_zone_LA() -> pd.DataFrame:
     """
     Load Scottish Gov data zones with the local authority they are part of.
-    From https://statistics.gov.scot/data/data-zone-lookup-2022.
     """
     df = pd.read_csv(
         config["data_source"]["S_data_zone_LA"],
@@ -369,8 +369,9 @@ def load_df_gov_LSOA_region() -> pd.DataFrame:
     """
     df = pd.read_csv(
         config["data_source"]["EW_LSOA_region"], usecols=["LSOA21CD", "RGN22NM"]
+    )
 
-      
+
 def load_df_lsoa_lad_lookup(**kwargs) -> pl.DataFrame:
     """
     Load LSOA to LAD lookup table from ONS.

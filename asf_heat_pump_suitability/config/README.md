@@ -95,6 +95,7 @@ This table contains information about other datasets used in the pipeline.
 | :--------------------------: | :--------------------------------------------------------------------------------------------------------------------------------------------------: | :--------------: | :------------------------------------------------------------------------------------------------------: |
 |      `["S_dz_lookup"]`       |                     [Scottish Government](https://opendata.scot/datasets/scottish+government-2011+data+zone+lookup/)<sup>4</sup>                     |   17 Mar 2025    | Scottish geography lookup tables used for aggregation, from 2011 data zones to higher level geographies. |
 | `["EW_ons_lsoa_lad_lookup"]` | [ONS](https://geoportal.statistics.gov.uk/datasets/ons::lsoa-2021-to-local-authority-districts-april-2023-best-fit-lookup-in-ew/explore)<sup>3</sup> | 6 September 2024 |                       2021 LSOA to LAD lookup (April 2023) for England and Wales.                        |
+|     `["S_data_zone_LA"]`     |                              [Scottish Government](https://statistics.gov.scot/data/data-zone-lookup-2022)<sup>3</sup>                               | 28 February 2025 |                       2022 Scottish data zone to higher level geographies lookup.                        |
 
 _Attributions:_
 

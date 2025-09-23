@@ -88,15 +88,32 @@ def get_region_data():
     return region_look_up
 
 
-def get_prop_urban(gd):
-    return sum(gd == "Urban") / len(gd)
+def get_prop_urban(ruc_column_values):
+    """
+    Find the proportion of times a value from a column of a dataframe has a value == "Urban"
+    """
+    return sum(ruc_column_values == "Urban") / len(ruc_column_values)
 
 
-def get_prop_anchor(gd):
-    return sum(gd == True) / len(gd)
+def get_prop_anchor(has_anchor_property_column_values):
+    """
+    Find the proportion of times a value from a column of a dataframe has a value == True
+    """
+    return sum(has_anchor_property_column_values == True) / len(
+        has_anchor_property_column_values
+    )
 
 
-def get_aggregated_info_per_group(suitability_data, groupby_col):
+def get_aggregated_info_per_group(
+    suitability_data: pd.DataFrame,
+    groupby_col: str,
+) -> pd.DataFrame:
+    """
+    Function to group the suitability dataset by a particular column, and
+    find aggregated values for each group.
+    For example, returning the average suitability scores, the proportion of flats etc,
+    for each LA.
+    """
 
     urban_prop_by_group = (
         suitability_data.groupby(groupby_col)["ruc_two_fold"]
