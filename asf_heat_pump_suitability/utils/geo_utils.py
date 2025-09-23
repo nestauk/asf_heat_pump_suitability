@@ -1,7 +1,8 @@
 import logging
-from typing import Union
+from typing import Union, List
 
 import geopandas as gpd
+import pandas as pd
 import shapely
 
 from shapely.geometry.base import BaseGeometry
@@ -51,7 +52,7 @@ def get_polygon_gdf_bounds(gdf: gpd.GeoDataFrame) -> shapely.Polygon:
 
 
 def parse_binary_geometry(
-    binary_data: Union[BaseGeometry, bytes, str]
+    binary_data: Union[BaseGeometry, bytes, str],
 ) -> Union[BaseGeometry, None]:
     """
     Parse binary geometry data into Shapely geometry object.
@@ -70,21 +71,3 @@ def parse_binary_geometry(
         return wkb.loads(binary_data, hex=True)
     else:
         return None
-
-
-def ensure_crs_match(
-    gdf_1: gpd.GeoDataFrame, gdf_2: gpd.GeoDataFrame
-) -> gpd.GeoDataFrame:
-    """ "
-    Ensure that the CRS of both GeoDataFrames match.
-
-    Args:
-        gdf_1 (gpd.GeoDataFrame)
-        gdf_2 (gpd.GeoDataFrame)
-
-    Returns:
-        gpd.GeoDataFrame: GeoDataFrame 2 reprojected to match GeoDataFrame 1 if necessary.
-    """
-    if gdf_1.crs != gdf_2.crs:
-        gdf_2 = gdf_2.to_crs(gdf_1.crs)
-    return gdf_2

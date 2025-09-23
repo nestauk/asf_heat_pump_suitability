@@ -7,8 +7,6 @@ from asf_heat_pump_suitability.getters import base_getters, schemas
 from io import StringIO
 from tenacity import retry, stop_after_attempt
 import warnings
-import pyogrio
-from typing import Tuple
 
 # Ignore RunTimeWarning when loading Microsoft building footprint files
 # as reading from gzipped stream should be faster than unzipping and loading data
@@ -371,7 +369,7 @@ def load_df_gov_LSOA_region() -> pd.DataFrame:
         config["data_source"]["EW_LSOA_region"], usecols=["LSOA21CD", "RGN22NM"]
     )
 
-
+    
 def load_df_lsoa_lad_lookup(**kwargs) -> pl.DataFrame:
     """
     Load LSOA to LAD lookup table from ONS.
