@@ -318,6 +318,58 @@ def load_df_nrs_dwellings() -> pl.DataFrame:
     return df
 
 
+def load_desnz_geodata(
+    gpkg_path: str, shp_path: str, layer_name: str
+) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """
+    Load DESNZ heat network polygons from a GeoPackage and LSOA shapefile.
+
+    Args:
+        desnz_hn_gpkg_path (str): Path to the DESNZ Heat Network GeoPackage.
+        lsoa_shp_path (str): Path to the LSOA shapefile.
+        layer_name (str): Layer name in the GeoPackage.
+
+    Returns:
+        Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+            - DESNZ heat network zones as a GeoDataFrame.
+            - LSOA polygons as a GeoDataFrame.
+    """
+    hn_gdf = pyogrio.read_dataframe(gpkg_path, layer=layer_name)
+    lsoa_gdf = gpd.read_file(shp_path)
+    return hn_gdf, lsoa_gdf
+
+
+def load_df_scot_gov_data_zone_LA() -> pd.DataFrame:
+    """
+    Load Scottish Gov data zones with the local authority they are part of.
+    """
+    df = pd.read_csv(
+        config["data_source"]["S_data_zone_LA"],
+        usecols=["DZ22_Code", "DZ22_Name", "LA_Name", "LA_Code", "SPD_Name"],
+        encoding="iso-8859-1",
+    )
+    return df
+
+
+def load_df_gov_LSOA_LA() -> pd.DataFrame:
+    """
+    Load data.gov data of LSOA and the local authority they are part of.
+    """
+    df = pd.read_csv(
+        config["data_source"]["EW_LSOA_LA"], usecols=["LSOA21CD", "LAD23NM", "LAD23CD"]
+    )
+    return df
+
+
+def load_df_gov_LSOA_region() -> pd.DataFrame:
+    """
+    Load data.gov data of LSOA and the region they are part of.
+    """
+    df = pd.read_csv(
+        config["data_source"]["EW_LSOA_region"], usecols=["LSOA21CD", "RGN22NM"]
+    )
+
+    
 def load_df_lsoa_lad_lookup(**kwargs) -> pl.DataFrame:
     """
     Load LSOA to LAD lookup table from ONS.

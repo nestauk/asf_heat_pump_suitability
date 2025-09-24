@@ -52,6 +52,9 @@ data_source:
   EW_inspire_url: "https://use-land-property-data.service.gov.uk/datasets/inspire/download"
   S_scottish_gov_DZ2011_boundaries: "s3://asf-heat-pump-suitability/source_data/2014_Scottish_Government_DataZoneBoundaries_2011_S/SG_DataZone_Bdry_2011.shp"
   S_NRScotland_households: "s3://asf-heat-pump-suitability/source_data/June2024_NRScotland_households_and_dwellings_S.xlsx"
+  S_data_zone_LA: "s3://asf-heat-pump-suitability/source_data/location_lookups/DataZone2022lookup_2024-12-16.csv"
+  EW_LSOA_LA: "s3://asf-heat-pump-suitability/source_data/location_lookups/Lower_Layer_Super_Output_Area_(2021)_to_LAD_(April_2023)_Lookup_in_England_and_Wales.csv"
+  EW_LSOA_region: "s3://asf-heat-pump-suitability/source_data/location_lookups/LSOA_(2021)_to_Built_Up_Area_to_Local_Authority_District_to_Region_(December_2022)_Lookup_in_England_and_Wales_v2.csv"
 webmap_data_source:
   EW_detailed_lsoa_geojson: "s3://asf-heat-pump-suitability/mapdata/Lower_layer_Super_Output_Areas_(December_2021)_Boundaries_EW_BFC_(V10).geojson"
   S_detailed_datazone_geojson: "s3://asf-heat-pump-suitability/mapdata/SG_DataZoneBdry_2011.geojson"
