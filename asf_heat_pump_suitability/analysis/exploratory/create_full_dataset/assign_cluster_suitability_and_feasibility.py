@@ -5,6 +5,9 @@ This file contains functions for:
 - preparing the dataframe for feasibility scoring and suitability categorisation;
 - categorising/assigning each cluster with the most suitable technology.
 - computing the feasibility scores for different tech types and clusters;
+
+To run this for Plymouth data, run this file as a script:
+    python asf_heat_pump_suitability/analysis/exploratory/create_full_dataset/assign_cluster_suitability_and_feasibility.py
 """
 
 # package imports
