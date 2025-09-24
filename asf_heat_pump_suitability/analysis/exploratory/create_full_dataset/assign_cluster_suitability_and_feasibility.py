@@ -350,7 +350,7 @@ if __name__ == "__main__":
     # The building polygon data per cluster, and the distance to anchor loads from the centre of the cluster
     cluster_polygons = gpd.read_file(
         "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/merged_uprns/per_cluster_merged_polygons.geojson"
-    ).to_crs(epsg=4326)
+    )
 
     anchor_dist_df = pl.from_pandas(
         cluster_polygons[["cluster", "distance_from_anchor_property_m"]]
