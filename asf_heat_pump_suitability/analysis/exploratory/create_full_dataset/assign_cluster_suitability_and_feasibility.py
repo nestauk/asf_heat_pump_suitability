@@ -138,7 +138,7 @@ def create_df_suitability_categorisation(
         )
         .then(pl.lit("shared_ground_loop"))
         .otherwise(pl.lit("collective_ashp"))
-        .alias("most_suitabile_tech")
+        .alias("most_suitable_tech")
     )
     return df
 
