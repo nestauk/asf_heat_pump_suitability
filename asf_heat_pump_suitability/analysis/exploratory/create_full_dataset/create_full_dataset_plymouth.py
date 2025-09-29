@@ -59,24 +59,29 @@ fiona.listlayers("s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg")
 # %%
 print("LOADING DATASETS TO GET RESIDENTIAL UPRNS FOR PLYMOUTH...")
 print("Loading OS UPRN...")
+# Source: https://www.ordnancesurvey.co.uk/products/os-open-uprn
 os_uprn_df = get_datasets.get_df_osopen_uprn_latlon()
 
 print("\nLoading LA boundaries...")
+# Source: https://www.data.gov.uk/dataset/288458f7-7789-47d0-80d4-ffdf746c6b75/local-authority-districts-december-2023-boundaries-uk-bfe
 la_boundaries_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/source_data/Local_Authority_Districts_December_2023_Boundaries_UK_BFE_-2600600853110041429/LAD_DEC_2023_UK_BFE.shp"
 )
 
 print("\nLoading OS OpenMap Local - Buildings...")
+# Source: https://www.ordnancesurvey.co.uk/products/os-open-map-local
 os_openmap_building_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/OS OpenMap Local (ESRI Shape File) SX/data/SX_Building.shp"
 )
 
 print("\nLoading OS OpenMap Local - Important Buildings...")
+# Source: https://www.ordnancesurvey.co.uk/products/os-open-map-local
 os_openmap_importantbuilding_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/OS OpenMap Local (ESRI Shape File) SX/data/SX_ImportantBuilding.shp"
 )
 
 print("\nLoading OS OpenMap Local - Railways...")
+# Source: https://www.ordnancesurvey.co.uk/products/os-open-map-local
 os_openmap_railway_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/OS OpenMap Local (ESRI Shape File) SX/data/SX_RailwayStation.shp"
 )
@@ -85,22 +90,26 @@ os_openmap_railway_gdf = gpd.read_file(
 
 print("\nLOADING PROPERTY-LEVEL FEATURE DATASETS...")
 print("\nLoading listed buildings...")
+# Source: https://opendata-historicengland.hub.arcgis.com/datasets/historicengland::national-heritage-list-for-england-nhle/explore?layer=0&location=50.370395%2C-4.182394%2C16.14
 listed_buildings_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/National_Heritage_List_for_England_NHLE_v02_VIEW_-464524051049198649/Listed_Building_points.shp"
 )
 
 print("\nLoading building conservation areas...")
+# Source: https://www.planning.data.gov.uk/dataset/conservation-area#
 cons_areas_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/conservation-area (1).geojson"
 )
 
 print("\nLoading existing / planned HN zones...")
+# Source: HNZ analysis pipeline
 hn_zones_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Plymouth.gpkg",
     layer="heat-network-zone-map-Plymouth",
 )
 
 print("\nLoading off gas postcodes...")
+# Source: https://www.xoserve.com/help-centre/supply-points-metering/supply-point-administration-spa/
 off_gas_list = off_gas.process_off_gas_data()
 
 print("\nLoading EPC...")
@@ -124,6 +133,7 @@ epc_df = prepare_sample.add_col_property_type(epc_df)
 
 print("\nLOADING DATASETS TO FILL MISSING DATA")
 print("\nLoading OS Code-Point Open (all postcode units in GB)...")
+# Source: https://www.ordnancesurvey.co.uk/products/code-point-open
 code_point_df = gpd.read_file(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/codepo_gb.gpkg",
     layers="codepoint",
@@ -846,36 +856,42 @@ features_df = features_df.join(
 # %%
 # LOAD CENSUS DATA
 print("Loading age band data...")
+# Source: https://www.nomisweb.co.uk/datasets/c2021pp012
 age_bands_df = pl.read_csv(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/2021Census_age_bands_OA_plymouth.csv",
     skip_rows=4,
 )
 
 print("\nLoading disability data...")
+# Source: https://www.nomisweb.co.uk/datasets/c2021ts038
 disability_df = pl.read_csv(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/2021Census_disability_OA_plymouth.csv",
     skip_rows=6,
 )
 
 print("\nLoading economic status data...")
+# Source: https://www.nomisweb.co.uk/datasets/c2021ts066
 economic_status_df = pl.read_csv(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/2021Census_economic_status_OA_plymouth.csv",
     skip_rows=6,
 )
 
 print("\nLoading hours worked data...")
+# Source: https://www.nomisweb.co.uk/datasets/c2021ts059
 hours_worked_df = pl.read_csv(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/2021Census_hours_worked_OA_plymouth.csv",
     skip_rows=6,
 )
 
 print("\nLoading student binary data...")
+# Source: https://www.nomisweb.co.uk/datasets/c2021ts068
 student_binary_df = pl.read_csv(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/2021Census_student_binary_OA_plymouth.csv",
     skip_rows=6,
 )
 
 print("\nLoading tenure data...")
+# Source: https://www.nomisweb.co.uk/datasets/c2021ts054
 oa_tenure_df = pl.read_csv(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/2021Census_tenure_OA_plymouth.csv",
     skip_rows=6,
@@ -1028,6 +1044,7 @@ for df in [
 
 # %%
 # Load output area geospatial boundaries
+# Source: https://geoportal.statistics.gov.uk/datasets/ons::output-areas-december-2021-boundaries-ew-bfe-v9/about
 oa_boundaries_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Output_Areas_2021_EW_BFE_V9_6122634609897870819/OA_2021_EW_BFE_V9.shp"
 )
@@ -1181,7 +1198,9 @@ print(y_test["TENURE"].value_counts(normalize=True))
 # y_pred_prob = classifier.predict_proba(X_test)
 
 # Fit and predict with Random Forest classifier model
-classifier = RandomForestClassifier(class_weight="balanced")
+classifier = RandomForestClassifier(
+    class_weight="balanced"
+)  # balance class weights due to imbalanced target
 classifier.fit(X_train, y_train)
 print("\nRandom Forest classifier accuracy score:")
 print(classifier.score(X_test, y_test))
@@ -1528,10 +1547,12 @@ features_df = features_df.join(predicted_tenure_df, how="left", on="UPRN")
 
 # %%
 # Load IMD deciles per LSOA and load LSOA names
+# Source: https://opendatacommunities.org/data/societal-wellbeing/imd2019/indices
 imd_df = pl.read_csv(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/societal-wellbeing_imd2019_indices.csv",
     skip_rows=7,
 )
+# Source: https://geoportal.statistics.gov.uk/datasets/9dd1fe173d894b6a838b5ee016d3037e_0/about
 lsoa_names_df = pl.read_csv(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Lower_Layer_Super_Output_Area_(2021)_to_LAD_(April_2023)_Lookup_in_England_and_Wales.csv"
 )
@@ -1561,6 +1582,7 @@ features_df = features_df.join(
 
 # %%
 # Load land registry polygons for Plymouth
+# Source: https://use-land-property-data.service.gov.uk/datasets/inspire/download#local-authorities-for-P
 land_extent_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Land_Registry_Cadastral_Parcels.gml",
     columns=["NATIONALCADASTRALREFERENCE", "geometry"],
@@ -1627,7 +1649,7 @@ features_df = features_df.join(
 )
 
 # %%
-# Plot the distribution of range in garden size for UPRNs joined to multiple gardens
+# Plot the distribution of range in garden size for UPRNs joined to multiple garden sizes
 plt.boxplot(duplicated_gdf.filter(pl.col("range") <= 250000)["range"])
 plt.title("Range in garden size (under 250,000m2) for duplicate UPRNs")
 plt.ylabel("Range in garden area (m2)")
@@ -1768,20 +1790,27 @@ stoke_ward_lsoas = [
     "E01015072",
     "E01015042",
 ]
+
+# Get boundary for Stoke ward
 stoke_ward = (
     lsoa_boundaries[lsoa_boundaries["LSOA21CD"].isin(stoke_ward_lsoas)]
     .dissolve()["geometry"]
     .values[0]
 )
 
+# Convert UPRN CRS to 4326 (WGS 84) for plotting and filter to Stoke ward only
 wgs84_uprns_df = plymouth_residential_uprns_gdf[
     plymouth_residential_uprns_gdf[
         ["UPRN", "cluster", "LATITUDE", "LONGITUDE", "geometry"]
     ].within(stoke_ward)
 ].to_crs(epsg=4326)
+
+# Convert building footprint CRS to 4326 (WGS 84) for plotting and filter to Stoke ward only
 wgs84_buildings_df = plymouth_residential_buildings_gdf[
     plymouth_residential_buildings_gdf.within(stoke_ward)
 ].to_crs(epsg=4326)
+
+# Get centroid of all UPRNs to locate the centre of the map
 x, y = (
     wgs84_uprns_df.dissolve().centroid.values[0].x,
     wgs84_uprns_df.dissolve().centroid.values[0].y,
@@ -1789,9 +1818,11 @@ x, y = (
 
 import random
 
+# Get list of colours for plotting clusters
 get_colors = lambda n: ["#%06x" % random.randint(0, 0xFFFFFF) for _ in range(n + 1)]
 colors = get_colors(wgs84_uprns_df["cluster"].max())
 
+# Jitter latitude and longitude so we can see overlapping points when plotting
 sigma = 0.00001
 wgs84_uprns_df["jitter_lat"] = wgs84_uprns_df["LATITUDE"].apply(
     lambda x: np.random.normal(x, sigma)
@@ -1800,6 +1831,7 @@ wgs84_uprns_df["jitter_long"] = wgs84_uprns_df["LONGITUDE"].apply(
     lambda x: np.random.normal(x, sigma)
 )
 
+# Plot building footprints
 map = folium.Map(location=[y, x], tiles="OpenStreetMap", zoom_start=15)
 for _, r in wgs84_buildings_df.iterrows():
     geo_j = gpd.GeoSeries(r["geometry"]).to_json()
@@ -1808,14 +1840,17 @@ for _, r in wgs84_buildings_df.iterrows():
     )
     geo_j.add_to(map)
 
+# Plot jittered UPRN points and colour by cluster
 for _, r in wgs84_uprns_df.iterrows():
     if r.cluster == -1:
+        # Set noise points as grey and label as noise
         folium.Marker(
             location=[r["jitter_lat"], r["jitter_long"]],
             icon=folium.Icon(icon_color="grey", prefix="fa", icon="ban"),
             popup="Noise",
         ).add_to(map)
     else:
+        # Create coloured circle markers for clustered UPRNs
         folium.CircleMarker(
             location=[r["jitter_lat"], r["jitter_long"]],
             radius=5,
