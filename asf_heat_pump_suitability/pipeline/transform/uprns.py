@@ -1,3 +1,19 @@
+"""
+Functions to transform UPRN data.
+
+Contains script to filter OS UPRNs to residential UPRNs only. UPRNs that meet any of the following criteria are assumed to be
+residential:
+- UPRNs geolocated inside a building footprint but not in a 'non-residential' building type (see non_residential_entities.py) or in the non-domestic EPC register
+- UPRNs found in the domestic EPC register
+
+To run the script:
+python asf_heat_pump_suitability/pipeline/transform/uprns.py
+
+Set the optional `scale` parameter to `plymouth` to run for Plymouth Local Authority; `plymouth_similar` to run for
+Plymouth plus four other similar Local Authorities (Liverpool, Portsmouth, Southampton, Swansea); or leave blank to run
+for all of Great Britain
+"""
+
 import geopandas as gpd
 import logging
 import argparse
