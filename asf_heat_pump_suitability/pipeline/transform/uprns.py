@@ -1,0 +1,178 @@
+import geopandas as gpd
+import logging
+import argparse
+from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.getters import base_getters
+
+
+def load_set_valid_epc_uprns(epc_type: str) -> set:
+    """
+    Load set of valid EPC UPRNs from either commercial or domestic EPC registers.
+
+    Args:
+        epc_type (str): {"commercial", "domestic"} the type of EPC to load valid UPRNs from
+
+    Returns:
+        set: valid UPRNs from specified EPC dataset
+    """
+    print(f"Loading UPRNs from {epc_type} EPC register...")
+    df = base_getters.load_df_from_s3(config["data"]["epc"][epc_type], columns="UPRN")
+    before = len(df)
+    df = df.with_columns(
+        pl.col("UPRN").cast(pl.Float64, strict=False).cast(pl.Int64).alias("UPRN")
+    ).drop_nulls()
+    logging.info(
+        f"{before - len(df)} invalid UPRNs dropped from {epc_type} EPC register. {len(df)} valid UPRNs remaining"
+    )
+
+    return set(df["UPRN"])
+
+
+def filter_gdf_residential_uprns(
+    uprn_gdf: gpd.GeoDataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
+    non_residential_buildings_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """
+    Filter UPRNs to residential UPRNs only by retaining UPRNs which appear in domestic EPC register, OR are located within
+    a building footprint AND are not in the commercial EPC register and / or a building type that is unlikely to contain
+    residential properties, e.g. hospital, train station, museum etc.
+
+    Args:
+        uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be filtered
+        building_gdf (gpd.GeoDataFrame): all building footprints in area of interest
+        non_residential_buildings_gdf (gpd.GeoDataFrame): polygons of buildings which are unlikely to contain residential
+        properties
+
+    Returns:
+        gpd.GeoDataFrame: UPRNs which are assumed to represent residential properties with their point geometries
+    """
+    print("Filtering to residential UPRNs...")
+    # Find UPRNs which are in the non-residential buildings
+    non_residential_uprns = set(
+        uprn_gdf.sjoin(non_residential_buildings_gdf, how="inner", predicate="within")[
+            "UPRN"
+        ]
+    )
+
+    # Get valid non-residential UPRNs
+    non_residential_uprns.update(load_set_valid_epc_uprns(epc_type="commercial"))
+
+    # Find UPRNs which are in any building (i.e. remove UPRNs which represent outdoor addressable locations)
+    uprns_in_buildings = set(
+        uprn_gdf.sjoin(buildings_gdf, how="inner", predicate="intersects")["UPRN"]
+    )
+
+    # Get valid residential UPRNs
+    epc_residential_uprns = load_set_valid_epc_uprns(epc_type="domestic")
+
+    return uprn_gdf[
+        (
+            # Filter to UPRNs which are in buildings AND not in non-residential UPRNs list
+            (~uprn_gdf["UPRN"].isin(non_residential_uprns))
+            & (uprn_gdf["UPRN"].isin(uprns_in_buildings))
+        )
+        # Or UPRNs which are in domestic EPC register
+        | (uprn_gdf["UPRN"].isin(epc_residential_uprns))
+    ]
+
+
+def parse_arguments() -> argparse.Namespace:
+    """
+    Create ArgumentParser and parse.
+
+    Returns:
+        argparse.Namespace: populated `Namespace`
+    """
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--scale",
+        help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar}. Default to all of GB",
+        type=str,
+        default="GB",
+        required=False,
+    )
+
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    import polars as pl
+
+    from asf_heat_pump_suitability.getters import (
+        get_datasets,
+        load_tree_input,
+        load_boundaries,
+    )
+    from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
+    from asf_heat_pump_suitability.pipeline.transform import non_residential_entities
+    from asf_heat_pump_suitability.utils import save_utils
+
+    args = parse_arguments()
+
+    uprns_df = get_datasets.get_df_osopen_uprn_latlon()
+    uprns_gdf = lat_lon.generate_gdf_uprn_coords(uprns_df)
+
+    if args.scale.lower() == "plymouth":
+        print("Creating residential UPRN dataset for Plymouth Local Authority...")
+        grid_squares = config["constant"]["grid_squares"]["plymouth"]
+        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+            select_las="Plymouth"
+        )
+        uprns_gdf = uprns_gdf.sjoin(
+            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
+            how="inner",
+            predicate="within",
+        ).drop(columns="index_right")
+
+    if args.scale.lower() == "plymouth_similar":
+        print(
+            "Creating residential UPRN dataset for Plymouth, Portsmouth, Southampton, Swansea, and Liverpool Local Authorities..."
+        )
+        grid_squares = config["constant"]["grid_squares"]["plymouth_similar_cities"]
+        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+            select_las=config["constant"]["plymouth_similar_cities"]
+        )
+        uprns_gdf = uprns_gdf.sjoin(
+            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
+            how="inner",
+            predicate="within",
+        ).drop(columns="index_right")
+
+    else:  # All of GB
+        # TODO this may not work due to scaling and may require chunking of datasets.
+        # TODO Adding here as placeholder to assist scaling later
+        print("Creating residential UPRN dataset for all of GB...")
+        grid_squares = None
+
+    # Get layers required for identifying residential UPRNs
+    layers = {
+        f"{layer}_gdf": load_tree_input.load_gdf_os_openmap_local_layer(
+            layer=layer, grid_squares=grid_squares
+        )
+        for layer in ["important_building", "railway_station", "building"]
+    }
+
+    # Identify assumed non-residential buildings
+    non_residential_buildings_gdf = (
+        non_residential_entities.transform_gdf_non_residential_buildings(**layers)
+    )
+
+    # Filter UPRNs to assumed residential only
+    residential_uprns_gdf = filter_gdf_residential_uprns(
+        uprn_gdf=uprns_gdf,
+        buildings_gdf=layers["building_gdf"],
+        non_residential_buildings_gdf=non_residential_buildings_gdf,
+    )
+
+    # Save residential UPRNs to S3
+    df = pl.from_pandas(
+        residential_uprns_gdf[
+            ["UPRN", "X_COORDINATE", "Y_COORDINATE", "LATITUDE", "LONGITUDE"]
+        ]
+    )
+    save_utils.save_to_s3(
+        df,
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.scale}_residential_uprns.parquet",
+    )
