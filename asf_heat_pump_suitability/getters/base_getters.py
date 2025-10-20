@@ -1,11 +1,29 @@
 import requests
-import polars as pl
 from zipfile import ZipFile
 from io import BytesIO
 import logging
 import s3fs
 import geojson
 import geopandas as gpd
+from fnmatch import fnmatch
+import polars as pl
+
+
+def load_df_from_s3(uri: str, **kwargs) -> pl.DataFrame:
+    """
+    Load polars dataframe from S3.
+
+    Args:
+        uri (str): S3 URI
+        **kwargs for polars file reader.
+
+    Returns:
+        pl.DataFrame
+    """
+    if fnmatch(uri, "*.parquet"):
+        return pl.read_parquet(uri, **kwargs)
+    elif fnmatch(uri, "*.csv"):
+        return pl.read_csv(uri, **kwargs)
 
 
 def get_df_from_excel_url(url: str, **kwargs) -> pl.DataFrame:
