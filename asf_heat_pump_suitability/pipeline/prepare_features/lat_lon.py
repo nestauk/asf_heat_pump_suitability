@@ -36,6 +36,7 @@ def generate_gdf_uprn_coords(
     Returns:
         gpd.GeoDataFrame: UPRNs with BNG coordinate point geometries
     """
+    print("Generating point geometries from coordinates...")
     if not usecols:
         usecols = ["*"]
     else:
