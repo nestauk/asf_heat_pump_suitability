@@ -7,6 +7,7 @@ from asf_heat_pump_suitability.getters import base_getters, schemas
 from io import StringIO
 from tenacity import retry, stop_after_attempt
 import warnings
+from typing import Tuple
 
 # Ignore RunTimeWarning when loading Microsoft building footprint files
 # as reading from gzipped stream should be faster than unzipping and loading data
@@ -134,6 +135,7 @@ def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
     Returns:
         pl.DataFrame: raw OS Open UPRN dataset with lat/lon and x/y coordinates for every UPRN
     """
+    print("Loading OS OpenMap UPRN dataset...")
     df = base_getters.get_df_from_zip_csv_s3(
         config["data_source"]["GB_osopen_uprn_latlon"],
         extract_file="osopenuprn_202405.csv",
@@ -369,7 +371,7 @@ def load_df_gov_LSOA_region() -> pd.DataFrame:
         config["data_source"]["EW_LSOA_region"], usecols=["LSOA21CD", "RGN22NM"]
     )
 
-    
+
 def load_df_lsoa_lad_lookup(**kwargs) -> pl.DataFrame:
     """
     Load LSOA to LAD lookup table from ONS.
