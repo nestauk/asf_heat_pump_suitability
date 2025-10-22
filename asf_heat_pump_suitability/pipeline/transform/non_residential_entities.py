@@ -10,7 +10,6 @@ NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
     "Secondary Education",
     "Higher or University Education",
     "Primary Education",
-    "Post Office",
     "Place Of Worship",
     "Medical Care Accommodation",
     "Museum",
@@ -23,6 +22,8 @@ NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
     "Vehicular Ferry Terminal",
     "Hospice",
     "Bus Station",
+    "Road User Services",
+    "Passenger Ferry Terminal",
 ]
 
 
