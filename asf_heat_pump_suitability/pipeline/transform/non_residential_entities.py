@@ -50,9 +50,20 @@ def transform_gdf_non_residential_buildings(
         == 1
     )
 
+    # Find important building classification column name
+    col = None
+    for name in ["CLASSIFICA", "classification"]:
+        if name in important_building_gdf.columns:
+            col = name
+            break
+    if not col:
+        raise ValueError(
+            "Important Building GeoDataFrame does not have a recognised building classification column (required)."
+        )
+
     # Get buildings which are unlikely to have residential overlap
     exclude_buildings_gdf = important_building_gdf[
-        important_building_gdf["CLASSIFICA"].isin(NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES)
+        important_building_gdf[col].isin(NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES)
     ]
 
     # Get buildings which are railway stations (railway stations are only given as point geometries)
