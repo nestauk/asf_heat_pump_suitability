@@ -168,7 +168,7 @@ if __name__ == "__main__":
     poi_gdf = load_tree_input.load_gdf_poi()
     poi_gdf = poi.transform_gdf_poi(
         poi_gdf,
-        filter_categories=config["data"]["processed"]["non_domestic_poi_categories"],
+        filter_categories=poi.load_set_non_domestic_poi_categories(),
     )
 
     # Get layers required for identifying residential UPRNs

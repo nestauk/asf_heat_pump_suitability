@@ -1,12 +1,13 @@
 import geopandas as gpd
-from typing import List
+from typing import Iterable
+import csv
 
 from asf_heat_pump_suitability import config
 
 
 def transform_gdf_poi(
     poi: gpd.GeoDataFrame,
-    filter_categories: List[str] = None,
+    filter_categories: Iterable[str] = None,
     target_crs: str | int = config["constant"]["target_crs"],
 ) -> gpd.GeoDataFrame:
     """
@@ -31,3 +32,17 @@ def transform_gdf_poi(
     print(f"Found {len(poi)} points of interest")
     print(f'POI CRS converted to: {config["constant"]["target_crs"]}')
     return poi
+
+
+def load_set_non_domestic_poi_categories() -> set:
+    """
+    Load set of Points of Interest categories which are unlikely to be located in buildings with domestic properties.
+
+    Returns:
+        set: non-domestic POI categories
+    """
+    with open(
+        config["data"]["processed"]["non_domestic_poi_categories"], newline=""
+    ) as f:
+        categories = csv.reader(f)
+        return set(categories)
