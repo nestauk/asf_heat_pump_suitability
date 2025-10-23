@@ -122,7 +122,10 @@ if __name__ == "__main__":
         load_boundaries,
     )
     from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
-    from asf_heat_pump_suitability.pipeline.transform import non_residential_entities
+    from asf_heat_pump_suitability.pipeline.transform import (
+        non_residential_entities,
+        poi,
+    )
     from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
@@ -162,6 +165,12 @@ if __name__ == "__main__":
         print("Creating residential UPRN dataset for all of GB...")
         grid_squares = None
 
+    poi_gdf = load_tree_input.load_gdf_poi()
+    poi_gdf = poi.transform_gdf_poi(
+        poi_gdf,
+        filter_categories=config["data"]["processed"]["non_domestic_poi_categories"],
+    )
+
     # Get layers required for identifying residential UPRNs
     layers = {
         f"{layer}_gdf": load_tree_input.load_gdf_os_openmap_local_layer(
@@ -172,7 +181,9 @@ if __name__ == "__main__":
 
     # Identify assumed non-residential buildings
     non_residential_buildings_gdf = (
-        non_residential_entities.transform_gdf_non_residential_buildings(**layers)
+        non_residential_entities.transform_gdf_non_residential_buildings(
+            **layers, poi_gdf=poi_gdf
+        )
     )
 
     # Filter UPRNs to assumed residential only
