@@ -30,15 +30,18 @@ NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
 def transform_gdf_non_residential_buildings(
     important_building_gdf: gpd.GeoDataFrame,
     railway_station_gdf: gpd.GeoDataFrame,
+    poi_gdf: gpd.GeoDataFrame,
     building_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """
-    Transform important buildings and railway data to create a dataframe of polygons representing buildings
-    which are unlikely to contain residential properties, e.g. hospitals, train stations, museums etc.
+    Transform important buildings, railway station, and points of interest data to create a dataframe of polygons representing buildings
+    which are unlikely to contain residential properties, e.g. hospitals, train stations, museums etc. Important buildings
+    and POI geopoints should include only types which are unlikely to be in mixed-use (residential and commercial) buildings.
 
     Args:
         important_building_gdf (gpd.GeoDataFrame): OS OpenMap Local important building footprints in area of interest
         railway_station_gdf (gpd.GeoDataFrame): OS OpenMap Local railway station point geometries in area of interest
+        poi_gdf (gpd.GeoDataFrame): non-domestic Points of Interest geopoints in area of interest
         building_gdf (gpd.GeoDataFrame): all building footprints in area of interest
 
     Returns:
@@ -47,7 +50,14 @@ def transform_gdf_non_residential_buildings(
     print("Creating non-residential buildings dataset...")
     # Assert all gdfs have the same CRS
     assert (
-        len({important_building_gdf.crs, railway_station_gdf.crs, building_gdf.crs})
+        len(
+            {
+                important_building_gdf.crs,
+                railway_station_gdf.crs,
+                poi_gdf.crs,
+                building_gdf.crs,
+            }
+        )
         == 1
     )
 
@@ -66,6 +76,7 @@ def transform_gdf_non_residential_buildings(
     exclude_buildings_gdf = important_building_gdf[
         important_building_gdf[col].isin(NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES)
     ]
+    poi_buildings_gdf = building_gdf.sjoin(poi_gdf, how="inner", predicate="contains")
 
     # Get buildings which are railway stations (railway stations are only given as point geometries)
     railway_station_gdf = building_gdf.sjoin(
@@ -73,5 +84,9 @@ def transform_gdf_non_residential_buildings(
     )
 
     return pd.concat(
-        [exclude_buildings_gdf[["geometry"]], railway_station_gdf[["geometry"]]]
+        [
+            exclude_buildings_gdf[["geometry"]],
+            railway_station_gdf[["geometry"]],
+            poi_buildings_gdf[["geometry"]],
+        ]
     )
