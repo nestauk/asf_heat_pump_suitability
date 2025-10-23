@@ -12,6 +12,10 @@ data:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
     commercial: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v092025_EPC_NonDomestic_EW.csv"
 
+  # Preprocessed data
+  processed:
+    non_domestic_poi_categories: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/non_residential_poi_categories.csv"
+
 constant:
   grid_squares:
     plymouth: "SX"
@@ -29,6 +33,7 @@ constant:
     - "Portsmouth"
     - "Southampton"
     - "Swansea"
+  target_crs: 27700 # British National Grid
 
 data_source:
   gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
