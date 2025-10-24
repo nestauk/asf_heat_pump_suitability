@@ -71,7 +71,7 @@ def filter_gdf_residential_uprns(
         ]
     )
 
-    # Get valid non-residential UPRNs
+    # Get valid non-residential EPC UPRNs
     non_residential_uprns.update(load_set_valid_epc_uprns(epc_type="commercial"))
 
     # Find UPRNs which are in any building (i.e. remove UPRNs which represent outdoor addressable locations)
@@ -142,7 +142,7 @@ if __name__ == "__main__":
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
             how="inner",
-            predicate="within",
+            predicate="intersects",
         ).drop(columns="index_right")
 
     if args.scale.lower() == "plymouth_similar":
@@ -156,7 +156,7 @@ if __name__ == "__main__":
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
             how="inner",
-            predicate="within",
+            predicate="intersects",
         ).drop(columns="index_right")
 
     else:  # All of GB
@@ -181,8 +181,8 @@ if __name__ == "__main__":
 
     # Identify assumed non-residential buildings
     non_residential_buildings_gdf = (
-        non_residential_entities.transform_gdf_non_residential_buildings(
-            **layers, poi_gdf=poi_gdf
+        non_residential_entities.generate_gdf_non_residential_buildings(
+            **layers, poi_gdf=poi_gdf, uprns_gdf=uprns_gdf
         )
     )
 

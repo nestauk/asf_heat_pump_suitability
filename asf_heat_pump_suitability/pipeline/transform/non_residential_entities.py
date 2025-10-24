@@ -1,6 +1,8 @@
 import geopandas as gpd
 import pandas as pd
 
+from asf_heat_pump_suitability.pipeline.transform import uprns
+
 # TODO these may need refinement for large cities where overlap with residential is possible
 NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
     "Port Consisting of Docks and Nautical Berthing",
@@ -27,14 +29,15 @@ NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
 ]
 
 
-def transform_gdf_non_residential_buildings(
+def generate_gdf_non_residential_buildings(
     important_building_gdf: gpd.GeoDataFrame,
     railway_station_gdf: gpd.GeoDataFrame,
     poi_gdf: gpd.GeoDataFrame,
     building_gdf: gpd.GeoDataFrame,
+    uprns_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """
-    Transform important buildings, railway station, and points of interest data to create a dataframe of polygons representing buildings
+    Use important buildings, railway station, and points of interest data to create a dataframe of polygons representing buildings
     which are unlikely to contain residential properties, e.g. hospitals, train stations, museums etc. Important buildings
     and POI geopoints should include only types which are unlikely to be in mixed-use (residential and commercial) buildings.
 
@@ -43,6 +46,7 @@ def transform_gdf_non_residential_buildings(
         railway_station_gdf (gpd.GeoDataFrame): OS OpenMap Local railway station point geometries in area of interest
         poi_gdf (gpd.GeoDataFrame): non-domestic Points of Interest geopoints in area of interest
         building_gdf (gpd.GeoDataFrame): all building footprints in area of interest
+        uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries in area of interest
 
     Returns:
         gpd.GeoDataFrame: geometries of buildings which are unlikely to contain residential properties
@@ -56,6 +60,7 @@ def transform_gdf_non_residential_buildings(
                 railway_station_gdf.crs,
                 poi_gdf.crs,
                 building_gdf.crs,
+                uprns_gdf.crs,
             }
         )
         == 1
@@ -83,10 +88,28 @@ def transform_gdf_non_residential_buildings(
         railway_station_gdf, how="inner", predicate="contains"
     )
 
-    return pd.concat(
+    exclude_buildings_gdf = pd.concat(
         [
             exclude_buildings_gdf[["geometry"]],
             railway_station_gdf[["geometry"]],
             poi_buildings_gdf[["geometry"]],
         ]
     )
+
+    # Get locations of UPRNs in domestic EPC
+    include_uprns = uprns.load_set_valid_epc_uprns(epc_type="domestic")
+    uprns_gdf = uprns_gdf[uprns_gdf["UPRN"].isin(include_uprns)].copy()
+
+    # Find buildings that contain a domestic UPRN
+    exclude_buildings_gdf = exclude_buildings_gdf.sjoin(
+        uprns_gdf[["UPRN", "geometry"]], how="left", predicate="contains"
+    )
+
+    # Filter to buildings that don't contain a domestic UPRN
+    exclude_buildings_gdf = exclude_buildings_gdf[
+        exclude_buildings_gdf["UPRN"].isnull()
+    ].drop(columns=["UPRN", "index_right"])
+
+    # Normalize to drop duplicate building footprints
+    exclude_buildings_gdf["geometry"] = exclude_buildings_gdf.normalize()
+    return exclude_buildings_gdf.drop_duplicates()
