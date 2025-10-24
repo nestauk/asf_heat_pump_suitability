@@ -64,7 +64,7 @@ def generate_gdf_non_residential_buildings(
             }
         )
         == 1
-    )
+    ), "All GeoDataFrame inputs must have the same CRS"
 
     # Find important building classification column name
     col = None
