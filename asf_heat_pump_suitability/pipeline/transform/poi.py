@@ -1,6 +1,7 @@
 import geopandas as gpd
 from typing import Iterable
 import csv
+import smart_open
 
 from asf_heat_pump_suitability import config
 
@@ -41,8 +42,8 @@ def load_set_non_domestic_poi_categories() -> set:
     Returns:
         set: non-domestic POI categories
     """
-    with open(
-        config["data"]["processed"]["non_domestic_poi_categories"], newline=""
+    with smart_open.open(
+        config["data"]["processed"]["non_domestic_poi_categories"], "r"
     ) as f:
-        categories = csv.reader(f)
-        return set(categories)
+        categories = [line.strip() for line in f]
+    return set(categories)
