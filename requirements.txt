@@ -28,4 +28,4 @@ fiona
 seaborn
 scipy
 pyarrow
-smart_open~=7.4
+smart-open~=7.4
