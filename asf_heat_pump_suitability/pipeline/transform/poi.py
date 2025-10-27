@@ -28,7 +28,7 @@ def transform_gdf_poi(
     # Filter anchor properties and reproject
     if filter_categories:
         poi = poi[poi.main_category.isin(filter_categories)]
-    poi = poi.drop_duplicates(subset="geometry", keep="first").to_crs(target_crs)
+    poi = poi.to_crs(target_crs)
 
     print(f"Found {len(poi)} points of interest")
     print(f'POI CRS converted to: {config["constant"]["target_crs"]}')
