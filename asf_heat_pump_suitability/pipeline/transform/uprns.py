@@ -15,6 +15,7 @@ for all of Great Britain
 """
 
 import geopandas as gpd
+import polars as pl
 import logging
 import argparse
 from asf_heat_pump_suitability import config
