@@ -1,3 +1,6 @@
+data:
+  geodata:
+    uk_osopen_uprn: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/osopenuprn_202510_csv.zip"
 data_source:
   gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
   gb_ons_postcode_dir_file_path: "Data/ONSPD_AUG_2023_UK.csv" # Aug 2023 data
