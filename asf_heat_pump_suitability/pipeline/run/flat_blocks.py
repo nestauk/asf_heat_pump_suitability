@@ -2,7 +2,7 @@
 Script to label UPRNs with flat / apartment property type boolean flag.
 
 Run:
-python asf_heat_pump_suitability/pipeline/run/flat_blocks.py
+python asf_heat_pump_suitability/pipeline/run/flat_blocks.py --uprns path/to/domestic/UPRNs
 """
 
 import argparse
