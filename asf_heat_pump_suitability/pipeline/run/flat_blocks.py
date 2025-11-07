@@ -2,7 +2,7 @@
 Script to label UPRNs with flat / apartment property type boolean flag.
 
 Run:
-python asf_heat_pump_suitability/pipeline/run/impute.py
+python asf_heat_pump_suitability/pipeline/run/flat_blocks.py
 """
 
 import argparse
@@ -29,12 +29,12 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    import polars as pl
     import os
+    import polars as pl
 
-    from asf_heat_pump_suitability.pipeline.transform import uprns
-    from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.utils import save_utils
+    from asf_heat_pump_suitability.pipeline.impute import property_type
+    from asf_heat_pump_suitability.pipeline.transform import uprns
 
     args = parse_arguments()
 
@@ -55,5 +55,5 @@ if __name__ == "__main__":
 
     save_utils.save_to_s3(
         uprns_df,
-        path=f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{os.path.basename(args.uprns)}_with_flats.parquet",
+        path=f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{os.path.basename(args.uprns).split('.')[0]}_with_flats.parquet",
     )
