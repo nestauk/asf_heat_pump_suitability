@@ -10,8 +10,9 @@ To run the script:
 python asf_heat_pump_suitability/pipeline/transform/uprns.py
 
 Set the optional `scale` parameter to `plymouth` to run for Plymouth Local Authority; `plymouth_similar` to run for
-Plymouth plus four other similar Local Authorities (Liverpool, Portsmouth, Southampton, Swansea); or leave blank to run
-for all of Great Britain
+Plymouth plus four other similar Local Authorities (Liverpool, Portsmouth, Southampton, Swansea); 'sampling_areas' to run for
+Plymouth plus five other Local Authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham); or leave blank to run
+for all of Great Britain.
 """
 
 import geopandas as gpd
@@ -105,7 +106,9 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--scale",
-        help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar}. Default to all of GB",
+        help="Run script for either all of Great Britain; Plymouth only {plymouth}; Plymouth and 4 similar local "
+        "authorities {plymouth_similar}; or Plymouth and 5 different local authorities {sampling_areas}. "
+        "Default to all of GB",
         type=str,
         default="GB",
         required=False,
@@ -134,6 +137,7 @@ if __name__ == "__main__":
     uprns_df = get_datasets.get_df_osopen_uprn_latlon()
     uprns_gdf = lat_lon.generate_gdf_uprn_coords(uprns_df)
 
+    # TODO I expect this to be simplified at some point but the if/else block allows us to sample from certain areas for now
     if args.scale.lower() == "plymouth":
         print("Creating residential UPRN dataset for Plymouth Local Authority...")
         grid_squares = config["constant"]["grid_squares"]["plymouth"]
@@ -146,13 +150,27 @@ if __name__ == "__main__":
             predicate="intersects",
         ).drop(columns="index_right")
 
-    if args.scale.lower() == "plymouth_similar":
+    elif args.scale.lower() == "plymouth_similar":
         print(
             "Creating residential UPRN dataset for Plymouth, Portsmouth, Southampton, Swansea, and Liverpool Local Authorities..."
         )
         grid_squares = config["constant"]["grid_squares"]["plymouth_similar_cities"]
         la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
             select_las=config["constant"]["plymouth_similar_cities"]
+        )
+        uprns_gdf = uprns_gdf.sjoin(
+            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
+            how="inner",
+            predicate="intersects",
+        ).drop(columns="index_right")
+
+    elif args.scale.lower() == "sampling_areas":
+        print(
+            "Creating residential UPRN dataset for Bath, Bradford, Glasgow, Manchester, Nottingham, and Plymouth Local Authorities..."
+        )
+        grid_squares = config["constant"]["grid_squares"]["sampling_areas"]
+        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+            select_las=config["constant"]["sampling_areas"]
         )
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
