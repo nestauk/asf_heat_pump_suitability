@@ -215,7 +215,15 @@ if __name__ == "__main__":
     # Save residential UPRNs to S3
     df = pl.from_pandas(
         residential_uprns_gdf[
-            ["UPRN", "X_COORDINATE", "Y_COORDINATE", "LATITUDE", "LONGITUDE"]
+            [
+                "UPRN",
+                "X_COORDINATE",
+                "Y_COORDINATE",
+                "LATITUDE",
+                "LONGITUDE",
+                "LAD23CD",
+                "LAD23NM",
+            ]
         ]
     )
     save_utils.save_to_s3(
