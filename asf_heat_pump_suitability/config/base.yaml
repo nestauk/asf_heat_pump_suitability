@@ -3,7 +3,7 @@ data:
     # OpenMap Local Geopackage
     gb_os_openmap_local: "s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares
-    grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v042025_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+    grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
 
     boundaries:
       # UK LA boundaries
@@ -27,12 +27,27 @@ constant:
       - "SU"
       - "SX"
       - "SZ"
+    sampling_areas: # Plymouth, Nottingham, Bradford, Glasgow, Manchester, Bath
+      - "NS"
+      - "SD"
+      - "SE"
+      - "SJ"
+      - "SK"
+      - "ST"
+      - "SX"
   plymouth_similar_cities:
     - "Liverpool"
     - "Plymouth"
     - "Portsmouth"
     - "Southampton"
     - "Swansea"
+  sampling_areas:
+    - "Bath and North East Somerset"
+    - "Bradford"
+    - "Glasgow City"
+    - "Manchester"
+    - "Nottingham"
+    - "Plymouth"
   target_crs: 27700 # British National Grid
 
 data_source:
