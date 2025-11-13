@@ -1,3 +1,17 @@
+# %% [markdown]
+# ## Sampling buildings for manual labelling
+# Here we take a random sample of ~1000 OS OpenMap Local building footprints from Plymouth and a number of other areas (listed below). The samples are taken from a subset of building footprints which contain more than one UPRN which is labelled as a flat. The building footprints will be manually labelled with participating labellers in Google MyMaps with codes representing their different flat archetypes. Ultimately, this labelled data will be used to train a model to classify buildings into blocks of flats and not.
+#
+# We started with a sample of 200 buildings in Plymouth, then added an additional 100. Finally, we are taking a sample of 700 from a mixture of Plymouth and the other towns/cities listed below.
+# - (South) Plymouth (He) - x700. 300 samples already. 400 left to sample.
+# - (North) Nottingham (He) - x60
+# - (North) Bradford (Ho - terraces) - x60
+# - (Scotland) Glasgow (Ho - tenements) - x60
+# - (North) Manchester (Ho - blocks) x60
+# - (South) Bath (Ho - terraced) x60
+#
+
+
 # %%
 import geopandas as gpd
 import polars as pl
@@ -62,6 +76,7 @@ sample_df = (
         pl.col("property_type_flat").sum().alias("n_flats"),
         pl.col("UPRN").count().alias("n_total"),
         # Take a random sample from any building with >4 flats
+        # This is based on an initial assumption that a block of flats should contain >4 flats
     )
     .filter(pl.col("n_flats") > 4)
     .sort(by="building_id")
@@ -228,6 +243,7 @@ already_labelled_df = pl.concat([sample_df, small_building_sample_df])
 
 # Prepare already labelled dataframe with same columns for later sampling
 already_labelled_df = already_labelled_df.with_columns(
+    # Setting LA name to Plymouth for all lines of already labelled data
     pl.Series("la_name", ["Plymouth"] * already_labelled_df.height),
     # Group number of flats
     pl.when(pl.col("n_flats").is_between(2, 6, closed="both"))
@@ -238,7 +254,7 @@ already_labelled_df = already_labelled_df.with_columns(
     .then(pl.lit("16+_flats"))
     .otherwise(None)
     .alias("n_flats_grouped"),
-    # Add labeller
+    # Set labeller name to "reindeer" for all lines of labelled data
     pl.Series("labeller", ["reindeer"] * already_labelled_df.height),
 )
 
@@ -247,7 +263,9 @@ buildings_containing_flats = sampling_areas_df.filter(pl.col("property_type_flat
     "building_id"
 ].unique(maintain_order=True)
 
-# Sample buildings containing flats but only if they haven't been labelled
+# Create a dataframe of potential buildings data for labelling by
+# 1) Removing buildings that have already been sampled & labelled
+# 2) Enhancing dataframe with info such as: local authority where building is located, number of flats in the building and additional variables
 sample_from_df = (
     sampling_areas_df.filter(
         pl.col("building_id").is_in(buildings_containing_flats),
@@ -286,6 +304,7 @@ for la, df in sample_from_df.sort(by="la_name").group_by(
     n = n_samples[la[0]]
     # Take one third of samples from each group of flat counts
     for n_flats in n_flats_groups:
+        # proportion of samples from each group of flat counts, in this case it's one third because there are 3 groups
         _n = np.ceil(n / len(n_flats_groups))
         samples.append(
             df.filter(pl.col("n_flats_grouped") == n_flats)
@@ -307,6 +326,7 @@ random.seed(seed)
 random.shuffle(labeller_assignments)
 
 # Assign a labeller to each row
+# Take only the required number of labellers (the labeller_assignments list can be slightly too long due to rounding)
 labeller_assignments = labeller_assignments[: sample_3_df.height]
 sample_3_df = sample_3_df.with_columns(pl.Series("labeller", labeller_assignments))
 
@@ -325,7 +345,7 @@ for labeller in labellers:
     # Get the second sample
     if labeller != "reindeer":
         print(
-            f"Labeller: {labeller}, adding already labelled sample for second sampling..."
+            f"Labeller: {labeller}, adding reindeer's original sample for additional sampling/ double labelling..."
         )
         second_sample_from = pl.concat([sample_3_df, already_labelled_df])
         second_sample = (
