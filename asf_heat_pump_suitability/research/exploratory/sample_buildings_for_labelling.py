@@ -11,7 +11,6 @@
 # - (South) Bath (Ho - terraced) x60
 #
 
-
 # %%
 import geopandas as gpd
 import polars as pl
@@ -19,17 +18,21 @@ import numpy as np
 import random
 
 import simplekml
+import boto3
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import load_boundaries, load_tree_input
 from asf_heat_pump_suitability.pipeline.transform import uprns
 
 from datetime import date
+import os
 
 today = date.today().strftime("%Y%m%d")
 
 # %%
 seed = 10
+s3 = boto3.resource("s3")
+BUCKET = "asf-heat-pump-suitability"
 
 # %%
 labellers = ["reindeer", "springbok", "anteater", "emu"]
@@ -115,7 +118,14 @@ for idx, r in sample_4326_gdf.iterrows():
     pol.style.polystyle.color = "9939FF14"
     pol.style.polystyle.outline = 1
 
-# kml.save(f"{today}_UNLABELLED_plymouth_buildings_containing_flats_sample_n{n}_seed{seed}.kml")
+fname = (
+    f"{today}_UNLABELLED_plymouth_buildings_containing_flats_sample_n{n}_seed{seed}.kml"
+)
+kml.save(fname)
+file = os.path.join(os.getcwd(), fname)
+s3.Bucket(BUCKET).upload_file(
+    file, os.path.join("local_heat_planning", "labelling", fname)
+)
 
 # %%
 # Sample 2 - take additional sample
@@ -177,7 +187,12 @@ for idx, r in small_building_sample_4326_gdf.iterrows():
     pol.style.polystyle.color = "9939FF14"
     pol.style.polystyle.outline = 1
 
-# kml.save(f"{today}_UNLABELLED_small_plymouth_buildings_containing_flats_sample_n{n}_seed{seed}.kml")
+fname = f"{today}_UNLABELLED_small_plymouth_buildings_containing_flats_sample_n{n}_seed{seed}.kml"
+kml.save(fname)
+file = os.path.join(os.getcwd(), fname)
+s3.Bucket(BUCKET).upload_file(
+    file, os.path.join("local_heat_planning", "labelling", fname)
+)
 
 # %% [markdown]
 # # Additional samples from Plymouth and other areas
@@ -227,9 +242,16 @@ sampling_areas_gdf = sampling_areas_gdf.sjoin(
     how="left",
     predicate="within",
 ).drop(columns="index_right")
+
 sampling_areas_df = pl.from_pandas(sampling_areas_gdf.drop(columns="geometry")).rename(
     {"ID": "building_id"}
 )
+
+# %%
+sampling_areas_gdf
+
+# %%
+sampling_areas_df["LAD23NM"].value_counts()
 
 # %%
 # CREATE SAMPLE OF BUILDINGS TO LABEL
@@ -347,7 +369,20 @@ for labeller in labellers:
         print(
             f"Labeller: {labeller}, adding reindeer's original sample for additional sampling/ double labelling..."
         )
-        second_sample_from = pl.concat([sample_3_df, already_labelled_df])
+        # The original sample was from an older version of the OS OpenMap Local building dataset
+        # There are some buildings which aren't present in the newer version
+        # We need to filter these out
+        print(
+            f"Filtering out {already_labelled_df.filter(~pl.col('building_id').is_in(buildings_gdf['ID'].unique())).height} buildings from the already labelled sample, which are not present in the latest data..."
+        )
+        second_sample_from = pl.concat(
+            [
+                sample_3_df,
+                already_labelled_df.filter(
+                    pl.col("building_id").is_in(buildings_gdf["ID"].unique())
+                ),
+            ]
+        )
         second_sample = (
             second_sample_from.filter(
                 pl.col("labeller") != labeller,
@@ -418,4 +453,14 @@ for labeller, df in final_samples.items():
 
     kml.save(
         f"{today}_{labeller}_UNLABELLED_small_plymouth_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
+    )
+
+files_to_upload = [
+    f"{today}_{labeller}_UNLABELLED_small_plymouth_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
+    for labeller in labellers
+]
+for file in files_to_upload:
+    s3.Bucket(BUCKET).upload_file(
+        os.path.join(os.getcwd(), file),
+        os.path.join("local_heat_planning", "labelling", file),
     )
