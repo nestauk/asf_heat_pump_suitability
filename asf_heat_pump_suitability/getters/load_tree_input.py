@@ -14,6 +14,7 @@ def load_gdf_os_openmap_local_layer(
         layer (str): name of layer to load.
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
         Default None to load whole GB.
+        **kwargs for geopandas.read_file()
 
     Layer options:
         'building',
