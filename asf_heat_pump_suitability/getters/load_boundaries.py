@@ -27,9 +27,16 @@ def load_gdf_local_authority_boundaries(
         return la_boundaries_gdf
     elif isinstance(select_las, str):
         print(f"Loading Local Authority boundaries for {select_las}...")
-        return la_boundaries_gdf[
+        la_boundaries_gdf = la_boundaries_gdf[
             la_boundaries_gdf["LAD23NM"].str.contains(select_las.title())
         ]
+        # Raise exception if boundaries are not found for LA specified by select_las
+        if len(la_boundaries_gdf) == 0:
+            raise Exception(
+                f"Could not find boundaries for the following Local Authority: {select_las}"
+            )
+        else:
+            return la_boundaries_gdf
     else:
         print(f"Loading Local Authority boundaries for {select_las}...")
         select_las = [la.title() for la in select_las]
