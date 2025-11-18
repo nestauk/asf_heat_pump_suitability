@@ -29,7 +29,7 @@ def generate_gdf_uprn_coords(
 
     Args:
         df (pl.DataFrame): dataframe with x, y coordinates in BNG (CRS: EPSG:27700) and UPRNs
-        usecols (list): columns of dataframe to use. Default None.
+        usecols (list): columns of dataframe to use. Default None to use all columns in dataframe.
         x_col (str): name of BNG x coordinate column
         y_col (str): name of BNG y coordinate column
 
