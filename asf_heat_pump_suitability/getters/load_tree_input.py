@@ -48,6 +48,8 @@ def load_gdf_os_openmap_local_layer(
         )
 
     else:
+        if not isinstance(grid_squares, List):
+            grid_squares = [grid_squares]
         layer = layer.replace("_", " ").title().replace(" ", "")
         file_path = config["data"]["geodata"]["grid_square_os_openmap_local"]
         files = [file_path.format(square=code, layer=layer) for code in grid_squares]

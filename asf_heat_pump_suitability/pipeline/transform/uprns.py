@@ -142,7 +142,7 @@ if __name__ == "__main__":
             predicate="within",
         ).drop(columns="index_right")
 
-    if args.scale.lower() == "plymouth_similar":
+    elif args.scale.lower() == "plymouth_similar":
         print(
             "Creating residential UPRN dataset for Plymouth, Portsmouth, Southampton, Swansea, and Liverpool Local Authorities..."
         )
