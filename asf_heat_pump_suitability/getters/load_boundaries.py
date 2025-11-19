@@ -1,3 +1,7 @@
+"""
+Functions to load raw census geography boundaries, like Local Authority; ward; output areas, etc. No/minimal preprocessing occurs in these functions.
+"""
+
 import geopandas as gpd
 import shapely
 from typing import List
@@ -50,9 +54,10 @@ def load_gdf_local_authority_boundaries(
         ]
 
         # Raise exception if any boundaries are not found for LAs in select_las
-        if len(set(select_las).difference(matches)) > 0:
+        missing_las = set(select_las).difference(matches)
+        if len(missing_las) > 0:
             raise Exception(
-                f"Could not find boundaries for the following Local Authorities: {set(select_las).difference(matches)}"
+                f"Could not find boundaries for the following Local Authorities: {missing_las}"
             )
         else:
             return la_boundaries_gdf

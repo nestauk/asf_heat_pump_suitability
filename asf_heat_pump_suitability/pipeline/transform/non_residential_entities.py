@@ -1,3 +1,7 @@
+"""
+Functions to transform data related to identifying non-domestic buildings.
+"""
+
 import geopandas as gpd
 import pandas as pd
 
@@ -33,7 +37,7 @@ def transform_gdf_non_residential_buildings(
     building_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """
-    Transform important buildings and railway data to create a dataframe of polygons representing buildings
+    Combine important buildings and railway data to create a dataframe of polygons representing buildings
     which are unlikely to contain residential properties, e.g. hospitals, train stations, museums etc.
 
     Args:
@@ -68,8 +72,8 @@ def transform_gdf_non_residential_buildings(
     ]
 
     # Get buildings which are railway stations (railway stations are only given as point geometries)
-    railway_station_gdf = building_gdf.sjoin(
-        railway_station_gdf, how="inner", predicate="contains"
+    railway_station_gdf = railway_station_gdf.sjoin(
+        building_gdf, how="inner", predicate="within"
     )
 
     return pd.concat(

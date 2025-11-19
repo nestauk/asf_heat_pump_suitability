@@ -3,15 +3,15 @@ Functions to transform UPRN data.
 
 Contains script to filter OS UPRNs to residential UPRNs only. UPRNs that meet any of the following criteria are assumed to be
 residential:
-- UPRNs geolocated inside a building footprint but not in a 'non-residential' building type (see non_residential_entities.py) or in the non-domestic EPC register
+- UPRNs geolocated inside a building footprint but not in a 'non-residential' building type (see non_residential_entities.py) and not in the non-domestic EPC register
 - UPRNs found in the domestic EPC register
 
 To run the script:
 python asf_heat_pump_suitability/pipeline/transform/uprns.py
 
-Set the optional `scale` parameter to `plymouth` to run for Plymouth Local Authority; `plymouth_similar` to run for
-Plymouth plus four other similar Local Authorities (Liverpool, Portsmouth, Southampton, Swansea); or leave blank to run
-for all of Great Britain
+Set the optional `local_authorities` parameter to `plymouth`, `plymouth_similar`.
+Set to `plymouth` to run for Plymouth Local Authority; `plymouth_similar` to run for Plymouth plus four other similar
+Local Authorities (Liverpool, Portsmouth, Southampton, Swansea); or do not use to run for all of Great Britain.
 """
 
 import geopandas as gpd
@@ -35,7 +35,12 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
     df = base_getters.load_df_from_s3(config["data"]["epc"][epc_type], columns="UPRN")
     before = len(df)
     df = df.with_columns(
-        pl.col("UPRN").cast(pl.Float64, strict=False).cast(pl.Int64).alias("UPRN")
+        # Remove any invalid UPRNs (i.e. those IDs which are generated in EPC preprocessing generated from concatenating building ref number and address)
+        # These are not true UPRNs that can be used in joins across other datasets
+        pl.col("UPRN")
+        .cast(pl.Float64, strict=False)
+        .cast(pl.Int64)
+        .alias("UPRN")
     ).drop_nulls()
     logging.info(
         f"{before - len(df)} invalid UPRNs dropped from {epc_type} EPC register. {len(df)} valid UPRNs remaining"
@@ -103,7 +108,7 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--scale",
+        "--local_authorities",
         help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar}. Default to all of GB",
         type=str,
         default="GB",
@@ -130,7 +135,7 @@ if __name__ == "__main__":
     uprns_df = get_datasets.get_df_osopen_uprn_latlon()
     uprns_gdf = lat_lon.generate_gdf_uprn_coords(uprns_df)
 
-    if args.scale.lower() == "plymouth":
+    if args.local_authorities.lower() == "plymouth":
         print("Creating residential UPRN dataset for Plymouth Local Authority...")
         grid_squares = config["constant"]["grid_squares"]["plymouth"]
         la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
@@ -142,7 +147,7 @@ if __name__ == "__main__":
             predicate="within",
         ).drop(columns="index_right")
 
-    elif args.scale.lower() == "plymouth_similar":
+    elif args.local_authorities.lower() == "plymouth_similar":
         print(
             "Creating residential UPRN dataset for Plymouth, Portsmouth, Southampton, Swansea, and Liverpool Local Authorities..."
         )
@@ -190,5 +195,5 @@ if __name__ == "__main__":
     )
     save_utils.save_to_s3(
         df,
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.scale}_residential_uprns.parquet",
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns.parquet",
     )

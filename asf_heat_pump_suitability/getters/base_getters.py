@@ -1,3 +1,7 @@
+"""
+Generic loaders of specific file types. These functions shouldn’t load specific datasets and can be used in multiple specific getters.
+"""
+
 import requests
 from zipfile import ZipFile
 from io import BytesIO

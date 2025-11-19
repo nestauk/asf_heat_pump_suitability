@@ -1,3 +1,7 @@
+"""
+Functions to load specific raw datasets used in decision tree pipeline using base getters and sources in config. No/minimal preprocessing occurs in these functions.
+"""
+
 import geopandas as gpd
 import pandas as pd
 from typing import Optional, List
@@ -8,12 +12,13 @@ def load_gdf_os_openmap_local_layer(
     layer: str, grid_squares: Optional[List[str]] = None, **kwargs
 ) -> gpd.GeoDataFrame:
     """
-    Load specified OS OpenMap Local layer. CRS British National Grid (27700).
+    Load specified OS OpenMap Local layer for Great Britain or optionally for a specific grid square. CRS British National Grid (27700).
+
+    Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
 
     Args:
-        layer (str): name of layer to load.
-        grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
-        Default None to load whole GB.
+        layer (str): name of layer to load. See layer options below.
+        grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded. Default None to load whole GB.
         **kwargs for geopandas.read_file()
 
     Layer options:
@@ -50,6 +55,7 @@ def load_gdf_os_openmap_local_layer(
     else:
         if not isinstance(grid_squares, List):
             grid_squares = [grid_squares]
+        # Reformat layer name to how it appears in file name
         layer = layer.replace("_", " ").title().replace(" ", "")
         file_path = config["data"]["geodata"]["grid_square_os_openmap_local"]
         files = [file_path.format(square=code, layer=layer) for code in grid_squares]
