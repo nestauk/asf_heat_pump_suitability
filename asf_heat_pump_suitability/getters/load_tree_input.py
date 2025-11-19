@@ -43,7 +43,9 @@ def load_gdf_os_openmap_local_layer(
     if not grid_squares:
         print(f"Loading OS OpenMap Local - {layer.title()}...")
         return gpd.read_file(
-            config["data"]["geodata"]["gb_os_openmap_local"], layer=layer, **kwargs
+            filename=config["data"]["geodata"]["gb_os_openmap_local"],
+            layer=layer,
+            **kwargs,
         )
 
     else:
@@ -80,7 +82,7 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
         "geometry",
     ]
     poi = gpd.read_file(
-        config["data_source"]["UK_poi_locations"],
+        filename=config["data_source"]["UK_poi_locations"],
         columns=required_columns,
         layer="poi_uk",
     ).to_crs("EPSG:4326")

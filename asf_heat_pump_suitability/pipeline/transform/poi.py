@@ -1,3 +1,7 @@
+"""
+Functions to preprocess Points of Interest (POI) data for Great Britain.
+"""
+
 import geopandas as gpd
 from typing import Iterable
 import csv
