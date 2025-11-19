@@ -1,3 +1,35 @@
+data:
+  geodata:
+    # OpenMap Local Geopackage
+    gb_os_openmap_local: "s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg"
+    # OpenMap Local layers for certain grid squares
+    grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v042025_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+
+    boundaries:
+      # UK LA boundaries
+      UK_ons_lad_bounds: "s3://asf-heat-pump-suitability/source_data/Local_Authority_Districts_December_2023_Boundaries_UK_BFE_-2600600853110041429/LAD_DEC_2023_UK_BFE.shp"
+  epc:
+    domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
+    commercial: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v092025_EPC_NonDomestic_EW.csv"
+
+constant:
+  grid_squares:
+    plymouth: "SX"
+    plymouth_similar_cities: # Liverpool, Plymouth, Portsmouth, Southampton, Swansea
+      - "SD"
+      - "SJ"
+      - "SN"
+      - "SS"
+      - "SU"
+      - "SX"
+      - "SZ"
+  plymouth_similar_cities:
+    - "Liverpool"
+    - "Plymouth"
+    - "Portsmouth"
+    - "Southampton"
+    - "Swansea"
+
 data_source:
   gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
   gb_ons_postcode_dir_file_path: "Data/ONSPD_AUG_2023_UK.csv" # Aug 2023 data

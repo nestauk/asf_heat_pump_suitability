@@ -136,6 +136,7 @@ def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
     Returns:
         pl.DataFrame: raw OS Open UPRN dataset with lat/lon and x/y coordinates for every UPRN
     """
+    print("Loading OS OpenMap UPRN dataset...")
     df = base_getters.get_df_from_zip_csv_s3(
         config["data_source"]["GB_osopen_uprn_latlon"],
         extract_file="osopenuprn_202405.csv",
