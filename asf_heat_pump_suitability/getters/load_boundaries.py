@@ -1,3 +1,7 @@
+"""
+Functions to load raw census geography boundaries, like Local Authority; ward; output areas, etc. No/minimal preprocessing occurs in these functions.
+"""
+
 import geopandas as gpd
 import shapely
 from typing import List
@@ -27,9 +31,16 @@ def load_gdf_local_authority_boundaries(
         return la_boundaries_gdf
     elif isinstance(select_las, str):
         print(f"Loading Local Authority boundaries for {select_las}...")
-        return la_boundaries_gdf[
-            la_boundaries_gdf["LAD23NM"].str.lower() == select_las.lower()
+        la_boundaries_gdf = la_boundaries_gdf[
+            la_boundaries_gdf["LAD23NM"].str.contains(select_las.title())
         ]
+        # Raise exception if boundaries are not found for LA specified by select_las
+        if len(la_boundaries_gdf) == 0:
+            raise Exception(
+                f"Could not find boundaries for the following Local Authority: {select_las}"
+            )
+        else:
+            return la_boundaries_gdf
     else:
         print(f"Loading Local Authority boundaries for {select_las}...")
         la_boundaries_gdf = la_boundaries_gdf[
@@ -39,9 +50,10 @@ def load_gdf_local_authority_boundaries(
         matches = set(la_boundaries_gdf["LAD23NM"].unique())
 
         # Raise exception if any boundaries are not found for LAs in select_las
-        if len(set(select_las).difference(matches)) > 0:
+        missing_las = set(select_las).difference(matches)
+        if len(missing_las) > 0:
             raise Exception(
-                f"Could not find boundaries for the following Local Authorities: {set(select_las).difference(matches)}"
+                f"Could not find boundaries for the following Local Authorities: {missing_las}"
             )
         else:
             return la_boundaries_gdf

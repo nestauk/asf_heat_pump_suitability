@@ -1,3 +1,7 @@
+"""
+Functions to transform data related to identifying non-domestic buildings.
+"""
+
 import geopandas as gpd
 import pandas as pd
 
@@ -84,8 +88,8 @@ def generate_gdf_non_residential_buildings(
     poi_buildings_gdf = building_gdf.sjoin(poi_gdf, how="inner", predicate="contains")
 
     # Get buildings which are railway stations (railway stations are only given as point geometries)
-    railway_station_gdf = building_gdf.sjoin(
-        railway_station_gdf, how="inner", predicate="contains"
+    railway_station_gdf = railway_station_gdf.sjoin(
+        building_gdf, how="inner", predicate="within"
     )
 
     exclude_buildings_gdf = pd.concat(

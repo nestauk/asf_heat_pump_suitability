@@ -7,6 +7,7 @@ from asf_heat_pump_suitability.getters import base_getters, schemas
 from io import StringIO
 from tenacity import retry, stop_after_attempt
 import warnings
+import pyogrio
 from typing import Tuple
 
 # Ignore RunTimeWarning when loading Microsoft building footprint files
@@ -327,8 +328,8 @@ def load_desnz_geodata(
     Load DESNZ heat network polygons from a GeoPackage and LSOA shapefile.
 
     Args:
-        desnz_hn_gpkg_path (str): Path to the DESNZ Heat Network GeoPackage.
-        lsoa_shp_path (str): Path to the LSOA shapefile.
+        gpkg_path (str): Path to the DESNZ Heat Network GeoPackage.
+        shp_path (str): Path to the LSOA shapefile.
         layer_name (str): Layer name in the GeoPackage.
 
     Returns:
@@ -367,7 +368,7 @@ def load_df_gov_LSOA_region() -> pd.DataFrame:
     """
     Load data.gov data of LSOA and the region they are part of.
     """
-    df = pd.read_csv(
+    return pd.read_csv(
         config["data_source"]["EW_LSOA_region"], usecols=["LSOA21CD", "RGN22NM"]
     )
 
