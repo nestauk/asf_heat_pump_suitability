@@ -21,9 +21,11 @@ def generate_gdf_uprn_coords(
     Returns:
         gpd.GeoDataFrame: UPRNs with BNG coordinate point geometries
     """
+    # If usecols is not specified, use all columns in the dataframe
     if not usecols:
         usecols = ["*"]
     else:
+        # If usecols is specified, check that X and Y coordinate columns are included, otherwise add them
         for col in [x_col, y_col]:
             if col not in usecols:
                 usecols.append(col)
