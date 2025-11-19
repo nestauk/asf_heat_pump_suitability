@@ -46,7 +46,7 @@ def load_gdf_os_openmap_local_layer(
             filename=config["data"]["geodata"]["gb_os_openmap_local"],
             layer=layer,
             **kwargs,
-        )
+        ).drop_duplicates(subset="ID")
 
     else:
         layer = layer.replace("_", " ").title().replace(" ", "")
@@ -59,7 +59,7 @@ def load_gdf_os_openmap_local_layer(
             print(f"\nLoading OS OpenMap Local - {layer.title()} file: {file}")
             gdfs.append(gpd.read_file(file, **kwargs))
 
-        return pd.concat(gdfs)
+        return pd.concat(gdfs).drop_duplicates(subset="ID")
 
 
 def load_gdf_poi() -> gpd.GeoDataFrame:
