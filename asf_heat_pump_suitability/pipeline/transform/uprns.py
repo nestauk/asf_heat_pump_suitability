@@ -9,12 +9,15 @@ residential:
 To run the script:
 python asf_heat_pump_suitability/pipeline/transform/uprns.py
 
-Set the optional `local_authorities` parameter to `plymouth`, `plymouth_similar`.
+Set the optional `local_authorities` parameter to `plymouth`, `plymouth_similar`, or `sampling_areas`.
 Set to `plymouth` to run for Plymouth Local Authority; `plymouth_similar` to run for Plymouth plus four other similar
-Local Authorities (Liverpool, Portsmouth, Southampton, Swansea); or do not use to run for all of Great Britain.
+Local Authorities (Liverpool, Portsmouth, Southampton, Swansea); 'sampling_areas' to run for Plymouth plus five other
+Local Authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham); or do not use to run for all
+of Great Britain.
 """
 
 import geopandas as gpd
+import polars as pl
 import logging
 import argparse
 from asf_heat_pump_suitability import config
@@ -76,7 +79,7 @@ def filter_gdf_residential_uprns(
         ]
     )
 
-    # Get valid non-residential UPRNs
+    # Get valid non-residential EPC UPRNs
     non_residential_uprns.update(load_set_valid_epc_uprns(epc_type="commercial"))
 
     # Find UPRNs which are in any building (i.e. remove UPRNs which represent outdoor addressable locations)
@@ -109,7 +112,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar}. Default to all of GB",
+        help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar}; or Plymouth and 5 different local authorities {sampling_areas}. Default to all of GB",
         type=str,
         default="GB",
         required=False,
@@ -127,7 +130,10 @@ if __name__ == "__main__":
         load_boundaries,
     )
     from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
-    from asf_heat_pump_suitability.pipeline.transform import non_residential_entities
+    from asf_heat_pump_suitability.pipeline.transform import (
+        non_residential_entities,
+        poi,
+    )
     from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
@@ -135,6 +141,7 @@ if __name__ == "__main__":
     uprns_df = get_datasets.get_df_osopen_uprn_latlon()
     uprns_gdf = lat_lon.generate_gdf_uprn_coords(uprns_df)
 
+    # TODO I expect this to be simplified at some point but the if/else block allows us to sample from certain areas for now
     if args.local_authorities.lower() == "plymouth":
         print("Creating residential UPRN dataset for Plymouth Local Authority...")
         grid_squares = config["constant"]["grid_squares"]["plymouth"]
@@ -144,7 +151,7 @@ if __name__ == "__main__":
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
             how="inner",
-            predicate="within",
+            predicate="intersects",
         ).drop(columns="index_right")
 
     elif args.local_authorities.lower() == "plymouth_similar":
@@ -158,7 +165,21 @@ if __name__ == "__main__":
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
             how="inner",
-            predicate="within",
+            predicate="intersects",
+        ).drop(columns="index_right")
+
+    elif args.local_authorities.lower() == "sampling_areas":
+        print(
+            "Creating residential UPRN dataset for Bath, Bradford, Glasgow, Manchester, Nottingham, and Plymouth Local Authorities..."
+        )
+        grid_squares = config["constant"]["grid_squares"]["sampling_areas"]
+        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+            select_las=config["constant"]["sampling_areas"]
+        )
+        uprns_gdf = uprns_gdf.sjoin(
+            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
+            how="inner",
+            predicate="intersects",
         ).drop(columns="index_right")
 
     else:  # All of GB
@@ -166,6 +187,12 @@ if __name__ == "__main__":
         # TODO Adding here as placeholder to assist scaling later
         print("Creating residential UPRN dataset for all of GB...")
         grid_squares = None
+
+    poi_gdf = load_tree_input.load_gdf_poi()
+    poi_gdf = poi.transform_gdf_poi(
+        poi_gdf,
+        filter_categories=poi.load_set_non_domestic_poi_categories(),
+    )
 
     # Get layers required for identifying residential UPRNs
     layers = {
@@ -177,7 +204,9 @@ if __name__ == "__main__":
 
     # Identify assumed non-residential buildings
     non_residential_buildings_gdf = (
-        non_residential_entities.transform_gdf_non_residential_buildings(**layers)
+        non_residential_entities.generate_gdf_non_residential_buildings(
+            **layers, poi_gdf=poi_gdf, uprns_gdf=uprns_gdf
+        )
     )
 
     # Filter UPRNs to assumed residential only
@@ -190,7 +219,15 @@ if __name__ == "__main__":
     # Save residential UPRNs to S3
     df = pl.from_pandas(
         residential_uprns_gdf[
-            ["UPRN", "X_COORDINATE", "Y_COORDINATE", "LATITUDE", "LONGITUDE"]
+            [
+                "UPRN",
+                "X_COORDINATE",
+                "Y_COORDINATE",
+                "LATITUDE",
+                "LONGITUDE",
+                "LAD23CD",
+                "LAD23NM",
+            ]
         ]
     )
     save_utils.save_to_s3(

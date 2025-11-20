@@ -3,7 +3,7 @@ data:
     # OpenMap Local Geopackage
     gb_os_openmap_local: "s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares
-    grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v042025_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+    grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
 
     boundaries:
       # UK LA boundaries
@@ -11,6 +11,10 @@ data:
   epc:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
     commercial: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v092025_EPC_NonDomestic_EW.csv"
+
+  # Preprocessed data
+  processed:
+    non_domestic_poi_categories: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/non_residential_poi_categories.csv"
 
 constant:
   grid_squares:
@@ -23,12 +27,28 @@ constant:
       - "SU"
       - "SX"
       - "SZ"
+    sampling_areas: # Plymouth, Nottingham, Bradford, Glasgow, Manchester, Bath
+      - "NS"
+      - "SD"
+      - "SE"
+      - "SJ"
+      - "SK"
+      - "ST"
+      - "SX"
   plymouth_similar_cities:
     - "Liverpool"
     - "Plymouth"
     - "Portsmouth"
     - "Southampton"
     - "Swansea"
+  sampling_areas:
+    - "Bath and North East Somerset"
+    - "Bradford"
+    - "Glasgow City"
+    - "Manchester"
+    - "Nottingham"
+    - "Plymouth"
+  target_crs: 27700 # British National Grid
 
 data_source:
   gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data

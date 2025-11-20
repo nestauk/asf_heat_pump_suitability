@@ -47,10 +47,12 @@ def load_gdf_os_openmap_local_layer(
         gpd.GeoDataFrame: OS OpenMap Local geometries for specified layer
     """
     if not grid_squares:
-        print(f"\nLoading OS OpenMap Local - {layer.title()}...")
+        print(f"Loading OS OpenMap Local - {layer.title()}...")
         return gpd.read_file(
-            config["data"]["geodata"]["gb_os_openmap_local"], layer=layer, **kwargs
-        )
+            filename=config["data"]["geodata"]["gb_os_openmap_local"],
+            layer=layer,
+            **kwargs,
+        ).drop_duplicates(subset="ID")
 
     else:
         if not isinstance(grid_squares, List):
@@ -66,4 +68,32 @@ def load_gdf_os_openmap_local_layer(
             print(f"\nLoading OS OpenMap Local - {layer.title()} file: {file}")
             gdfs.append(gpd.read_file(file, **kwargs))
 
-        return pd.concat(gdfs)
+        return pd.concat(gdfs).drop_duplicates(subset="ID")
+
+
+def load_gdf_poi() -> gpd.GeoDataFrame:
+    """
+    Load and process Points of Interest data. CRS EPSG 4326.
+
+    Returns:
+        gpd.GeoDataFrame: Processed POI data containing types of POI specified
+
+    Raises:
+        ValueError: If required columns are missing
+    """
+    print("Loading POI data...")
+
+    required_columns = [
+        "id",
+        "country",
+        "main_category",
+        "alternate_category",
+        "geometry",
+    ]
+    poi = gpd.read_file(
+        filename=config["data_source"]["UK_poi_locations"],
+        columns=required_columns,
+        layer="poi_uk",
+    ).to_crs("EPSG:4326")
+    print(f"POI CRS: {poi.crs}")
+    return poi

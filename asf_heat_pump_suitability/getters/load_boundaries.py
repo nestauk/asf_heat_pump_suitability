@@ -43,15 +43,11 @@ def load_gdf_local_authority_boundaries(
             return la_boundaries_gdf
     else:
         print(f"Loading Local Authority boundaries for {select_las}...")
-        select_las = [la.title() for la in select_las]
         la_boundaries_gdf = la_boundaries_gdf[
-            la_boundaries_gdf["LAD23NM"].str.contains("|".join(select_las))
+            # Filter to exact LA name matches, case insensitive
+            la_boundaries_gdf["LAD23NM"].str.fullmatch("|".join(select_las), case=False)
         ]
-        matches = [
-            la
-            for la in select_las
-            if any(la_boundaries_gdf["LAD23NM"].str.contains(la))
-        ]
+        matches = set(la_boundaries_gdf["LAD23NM"].unique())
 
         # Raise exception if any boundaries are not found for LAs in select_las
         missing_las = set(select_las).difference(matches)
