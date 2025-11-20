@@ -35,7 +35,7 @@ s3 = boto3.resource("s3")
 BUCKET = "asf-heat-pump-suitability"
 
 # %%
-labellers = ["reindeer", "springbok", "anteater", "raccoon", "salamander"]
+labellers = ["reindeer", "springbok", "anteater", "raccoon", "salamander", "leopard"]
 
 # %% [markdown]
 # ## Compare April and October buildings files
