@@ -77,6 +77,7 @@ def get_df_from_zip_csv_s3(path: str, extract_file: str, **kwargs) -> pl.DataFra
     Returns:
         pl.DataFrame: dataset from ZIP file
     """
+    print(f"Loading file from path: {path}")
     content = BytesIO(get_content_from_s3_path(path))
     df = pl.read_csv(ZipFile(content).open(name=extract_file), **kwargs)
 

@@ -1,5 +1,6 @@
 data:
   geodata:
+    uk_osopen_uprn: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/osopenuprn_202510_csv.zip"
     # OpenMap Local Geopackage
     gb_os_openmap_local: "s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares

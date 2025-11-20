@@ -24,6 +24,45 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 
 
+def generate_gdf_uprn_coords(
+    df: pl.DataFrame,
+    usecols: list = None,
+    x_col: str = "X_COORDINATE",
+    y_col: str = "Y_COORDINATE",
+) -> gpd.GeoDataFrame:
+    """
+    Generate GeoDataFrame of British National Grid (BNG) coordinate point geometries for UPRNs from BNG x and y
+    coordinates.
+
+    Args:
+        df (pl.DataFrame): dataframe with x, y coordinates in BNG (CRS: EPSG:27700) and UPRNs
+        usecols (list): columns of dataframe to use. Default None.
+        x_col (str): name of BNG x coordinate column
+        y_col (str): name of BNG y coordinate column
+
+    Returns:
+        gpd.GeoDataFrame: UPRNs with BNG coordinate point geometries
+    """
+    # If usecols is not specified, use all columns in the dataframe
+    if not usecols:
+        usecols = ["*"]
+    else:
+        # If usecols is specified, check that X and Y coordinate columns are included, otherwise add them
+        for col in [x_col, y_col]:
+            if col not in usecols:
+                usecols.append(col)
+    df = df.select(usecols)
+    df = df.to_pandas()
+
+    gdf = gpd.GeoDataFrame(
+        df,
+        geometry=gpd.points_from_xy(df[x_col], df[y_col]),
+        crs="EPSG:27700",
+    )
+
+    return gdf
+
+
 def load_set_valid_epc_uprns(epc_type: str) -> set:
     """
     Load set of valid EPC UPRNs from either commercial or domestic EPC registers.
@@ -139,7 +178,7 @@ if __name__ == "__main__":
     args = parse_arguments()
 
     uprns_df = get_datasets.get_df_osopen_uprn_latlon()
-    uprns_gdf = lat_lon.generate_gdf_uprn_coords(uprns_df)
+    uprns_gdf = generate_gdf_uprn_coords(uprns_df)
 
     # TODO I expect this to be simplified at some point but the if/else block allows us to sample from certain areas for now
     if args.local_authorities.lower() == "plymouth":
