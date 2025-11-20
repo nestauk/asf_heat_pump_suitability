@@ -29,3 +29,4 @@ seaborn
 scipy
 pyarrow
 simplekml
+smart-open~=7.3
