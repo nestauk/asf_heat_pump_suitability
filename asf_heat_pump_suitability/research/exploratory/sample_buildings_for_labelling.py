@@ -35,7 +35,56 @@ s3 = boto3.resource("s3")
 BUCKET = "asf-heat-pump-suitability"
 
 # %%
-labellers = ["reindeer", "springbok", "anteater", "emu"]
+labellers = ["reindeer", "springbok", "anteater", "raccoon", "salamander"]
+
+# %% [markdown]
+# ## Compare April and October buildings files
+
+# %%
+# Load April 2025 building footprints
+apr_buildings_gdf = gpd.read_file(
+    "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v042025_OSOpenMapLocal_geometries_selected/SX/SX_Building.shp"
+)
+
+# Load October 2025 building footprints
+oct_buildings_gdf = gpd.read_file(
+    "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/SX/SX_Building.shp"
+)
+
+# Print diffs
+print("N building footprints in April 2025 dataset:")
+print(len(apr_buildings_gdf))
+
+print("\nN building footprints in October 2025 dataset:")
+print(len(oct_buildings_gdf))
+
+print("\nN extra building footprints in October 2025 dataset:")
+print(len(oct_buildings_gdf) - len(apr_buildings_gdf))
+
+# Normalize geometry columns to make sure the coordinates are in the same order
+apr_buildings_gdf["geometry"] = apr_buildings_gdf.normalize()
+oct_buildings_gdf["geometry"] = oct_buildings_gdf.normalize()
+
+# Merge April and October on geometry
+joined_buildings_gdf = apr_buildings_gdf.merge(
+    oct_buildings_gdf, how="outer", on="geometry", suffixes=("_apr", "_oct")
+)
+
+# Get proportion of building footprints which persist across April and October 2025
+persistent_buildings_gdf = joined_buildings_gdf[
+    (~joined_buildings_gdf["ID_apr"].isna()) & (~joined_buildings_gdf["ID_oct"].isna())
+]
+
+print("\nCount of building footprints which persist:")
+print(len(persistent_buildings_gdf))
+
+print("\nProportion of building footprints which persist:")
+print(len(persistent_buildings_gdf) / len(apr_buildings_gdf))
+
+# %% [markdown]
+# ## Original random samples of buildings containing flats from Plymouth
+#
+# See instructions to save polygons to kml with simplekml here: https://simplekml.readthedocs.io/en/latest/gettingstarted.html#creating-a-polygon
 
 # %%
 # Load Plymouth buildings and residential UPRNs with property type label
@@ -56,8 +105,9 @@ uprns_df = pl.from_pandas(uprns_gdf.drop(columns="geometry")).rename(
     {"ID": "building_id"}
 )
 
-# %% [markdown]
-# ## Original random samples of buildings containing flats from Plymouth
+# %%
+# We need to assert there are only Polygons in the building footprints, otherwise taking the outerboundary is not sufficient
+assert (buildings_gdf["geometry"].geom_type == "Polygon").all()
 
 # %%
 # Sample 1
@@ -113,9 +163,11 @@ for idx, r in sample_4326_gdf.iterrows():
     pol = kml.newpolygon(
         name="unlabelled",
         description=f"Location: https://www.google.com/maps/search/?api=1&query={r['y']},{r['x']}\nN flats: {r['n_flats']}\nN total: {r['n_total']}",
+        # Convert the exterior boundary of the polygon to a linear ring and get the coordinates
         outerboundaryis=list(r["geometry"].exterior.coords),
     )
     pol.style.polystyle.color = "9939FF14"
+    # Set outline to True
     pol.style.polystyle.outline = 1
 
 fname = (
@@ -127,8 +179,17 @@ s3.Bucket(BUCKET).upload_file(
     file, os.path.join("local_heat_planning", "labelling", fname)
 )
 
+shp_file = f'{fname.split(".")[0]}.shp'
+sample_gdf.to_file(shp_file)
+s3.Bucket(BUCKET).upload_file(
+    os.path.join(os.getcwd(), shp_file),
+    os.path.join("local_heat_planning", "labelling", shp_file),
+)
+
 # %%
 # Sample 2 - take additional sample
+# This sample selects from a different subset of buildings as sample 1
+# The purpose is to try to capture a larger number of ambiguous buildings from the data
 n = 100
 pl.set_random_seed(seed)
 
@@ -194,6 +255,13 @@ s3.Bucket(BUCKET).upload_file(
     file, os.path.join("local_heat_planning", "labelling", fname)
 )
 
+shp_file = f'{fname.split(".")[0]}.shp'
+sample_gdf.to_file(shp_file)
+s3.Bucket(BUCKET).upload_file(
+    os.path.join(os.getcwd(), shp_file),
+    os.path.join("local_heat_planning", "labelling", shp_file),
+)
+
 # %% [markdown]
 # # Additional samples from Plymouth and other areas
 #
@@ -225,10 +293,10 @@ sampling_areas_df = pl.read_parquet(
 
 # Join buildings to UPRNs
 sampling_areas_gdf = (
-    uprns.generate_gdf_uprn_coords(df=sampling_areas_df)
+    uprns.generate_gdf_uprn_coords(sampling_areas_df)
     .sjoin(buildings_gdf, how="inner", predicate="within")
     .drop(columns=["index_right", "FEATCODE"])
-)
+).drop_duplicates(subset="UPRN")
 sampling_areas_df = pl.from_pandas(sampling_areas_gdf.drop(columns="geometry")).rename(
     {"ID": "building_id"}
 )
@@ -248,20 +316,37 @@ sampling_areas_df = pl.from_pandas(sampling_areas_gdf.drop(columns="geometry")).
 )
 
 # %%
-sampling_areas_gdf
-
-# %%
-sampling_areas_df["LAD23NM"].value_counts()
+# We need to assert there are only Polygons in the building footprints, otherwise taking the outerboundary is not sufficient
+assert (buildings_gdf["geometry"].geom_type == "Polygon").all()
 
 # %%
 # CREATE SAMPLE OF BUILDINGS TO LABEL
 pl.set_random_seed(seed)
 
 # Identify already labelled buildings
-already_labelled = set(sample_df["building_id"].unique()) | set(
+already_labelled_apr_id = set(sample_df["building_id"].unique()) | set(
     small_building_sample_df["building_id"].unique()
 )
-already_labelled_df = pl.concat([sample_df, small_building_sample_df])
+apr_sample_gdf = apr_buildings_gdf[
+    apr_buildings_gdf["ID"].isin(already_labelled_apr_id)
+]
+joined_sample_gdf = apr_sample_gdf.merge(
+    oct_buildings_gdf, how="left", on="geometry", suffixes=["_apr", "_oct"]
+)
+
+print("N samples from April missing from October:")
+print(joined_sample_gdf["ID_oct"].isna().sum())
+
+already_labelled_apr_id = joined_sample_gdf["ID_apr"].tolist()
+already_labelled_oct_id = joined_sample_gdf["ID_oct"].tolist()
+
+apr_to_oct_id = dict(zip(already_labelled_apr_id, already_labelled_oct_id))
+already_labelled_df = (
+    pl.concat([sample_df, small_building_sample_df])
+    .rename({"building_id": "building_id_apr"})
+    .with_columns(pl.col("building_id_apr").replace(apr_to_oct_id).alias("building_id"))
+    .select(["building_id", "n_flats", "n_total"])
+)
 
 # Prepare already labelled dataframe with same columns for later sampling
 already_labelled_df = already_labelled_df.with_columns(
@@ -291,7 +376,7 @@ buildings_containing_flats = sampling_areas_df.filter(pl.col("property_type_flat
 sample_from_df = (
     sampling_areas_df.filter(
         pl.col("building_id").is_in(buildings_containing_flats),
-        ~pl.col("building_id").is_in(already_labelled),
+        ~pl.col("building_id").is_in(already_labelled_oct_id),
     )
     .group_by("building_id")
     .agg(
@@ -369,20 +454,7 @@ for labeller in labellers:
         print(
             f"Labeller: {labeller}, adding reindeer's original sample for additional sampling/ double labelling..."
         )
-        # The original sample was from an older version of the OS OpenMap Local building dataset
-        # There are some buildings which aren't present in the newer version
-        # We need to filter these out
-        print(
-            f"Filtering out {already_labelled_df.filter(~pl.col('building_id').is_in(buildings_gdf['ID'].unique())).height} buildings from the already labelled sample, which are not present in the latest data..."
-        )
-        second_sample_from = pl.concat(
-            [
-                sample_3_df,
-                already_labelled_df.filter(
-                    pl.col("building_id").is_in(buildings_gdf["ID"].unique())
-                ),
-            ]
-        )
+        second_sample_from = pl.concat([sample_3_df, already_labelled_df])
         second_sample = (
             second_sample_from.filter(
                 pl.col("labeller") != labeller,
@@ -413,6 +485,7 @@ for labeller in labellers:
     print(f"Labeller: {labeller}, N samples: {final_sample.height}")
 
 # %%
+# For each labeller, show the number of samples in your set for labelling that is being labelled by each other labeller
 for l, sample in final_samples.items():
     print(l)
     print(sample["labeller"].value_counts())
