@@ -448,6 +448,7 @@ for labeller in labellers:
 
     # Calculate number of additional samples so that some buildings get 2 labels from different people
     total_sample = n_samples_per_labeller + 30
+    # At this point, labellers have uneven numbers of samples. This computation makes it even and is an opportunity to get an extra couple of labels.
     additional_sample = total_sample - n_samples
 
     # Get the second sample
