@@ -3,6 +3,7 @@
 # Here we take a random sample of ~1000 OS OpenMap Local building footprints from Plymouth and a number of other areas (listed below). The samples are taken from a subset of building footprints which contain more than one UPRN which is labelled as a flat. The building footprints will be manually labelled with participating labellers in Google MyMaps with codes representing their different flat archetypes. Ultimately, this labelled data will be used to train a model to classify buildings into blocks of flats and not.
 #
 # We started with a sample of 200 buildings in Plymouth, then added an additional 100. Finally, we are taking a sample of 700 from a mixture of Plymouth and the other towns/cities listed below.
+# He = town/city with heterogeneous buildings; Ho = homoegeneous buildings
 # - (South) Plymouth (He) - x700. 300 samples already. 400 left to sample.
 # - (North) Nottingham (He) - x60
 # - (North) Bradford (Ho - terraces) - x60
@@ -35,7 +36,7 @@ s3 = boto3.resource("s3")
 BUCKET = "asf-heat-pump-suitability"
 
 # %%
-labellers = ["reindeer", "springbok", "anteater", "raccoon", "salamander", "leopard"]
+labellers = ["reindeer", "springbok", "anteater", "raccoon", "yak", "leopard"]
 
 # %% [markdown]
 # ## Compare April and October buildings files
