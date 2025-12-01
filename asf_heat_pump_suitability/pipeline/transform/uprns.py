@@ -164,11 +164,10 @@ if __name__ == "__main__":
     import polars as pl
 
     from asf_heat_pump_suitability.getters import (
-        get_datasets,
+        load_geodata,
         load_tree_input,
         load_boundaries,
     )
-    from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
     from asf_heat_pump_suitability.pipeline.transform import (
         non_residential_entities,
         poi,
@@ -177,7 +176,7 @@ if __name__ == "__main__":
 
     args = parse_arguments()
 
-    uprns_df = get_datasets.get_df_osopen_uprn_latlon()
+    uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
 
     # TODO I expect this to be simplified at some point but the if/else block allows us to sample from certain areas for now
