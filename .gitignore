@@ -116,6 +116,18 @@ target/
 /outputs/models/*
 !/outputs/models/*.md
 
+# exclude file types
+*.kml
+*.csv
+*.parquet
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.geojson
+*.gml
+
 # Mac OS-specific storage files
 .DS_Store
 
