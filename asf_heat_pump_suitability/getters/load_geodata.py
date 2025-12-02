@@ -1,6 +1,8 @@
 import polars as pl
-import regex as re
+import geopandas as gpd
 import os
+
+from osbng import grids
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
@@ -27,3 +29,13 @@ def load_df_osopen_uprn(**kwargs) -> pl.DataFrame:
     )
 
     return df
+
+
+def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
+    """
+    Load British National Grid squares at 100km resolution, CRS 27700.
+
+    Returns:
+        gpd.GeoDataFrame: British National Grid square codes and their corresponding polygons
+    """
+    return gpd.GeoDataFrame.from_features(grids.bng_grid_100km, crs=27700)
