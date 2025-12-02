@@ -26,8 +26,8 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
     lat_lon,
     land_extent,
     building_footprint,
-    garden_size,
 )
+from asf_heat_pump_suitability.pipeline.transform import outdoor_space
 
 
 def parse_arguments() -> argparse.Namespace:

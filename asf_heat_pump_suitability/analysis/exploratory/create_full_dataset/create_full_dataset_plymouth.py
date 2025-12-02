@@ -21,13 +21,11 @@ import pandas as pd
 import fiona
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import ticker
 
 from sklearn.cluster import HDBSCAN
 from sklearn.preprocessing import OneHotEncoder
-from sklearn import metrics
 
-from sklearn.neighbors import NearestNeighbors, KNeighborsClassifier
+from sklearn.neighbors import NearestNeighbors
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 
@@ -35,15 +33,10 @@ from asf_heat_pump_suitability.utils import geo_utils, save_utils
 from asf_heat_pump_suitability.getters import get_datasets
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     lat_lon,
-    listed_buildings,
-    protected_areas,
     off_gas,
-    anchor_properties,
     output_areas,
-    building_footprint,
-    land_extent,
-    garden_size,
 )
+from asf_heat_pump_suitability.pipeline.transform import outdoor_space
 from asf_heat_pump_suitability.analysis.flats_on_fossils.features import fuel_type
 from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
 import folium

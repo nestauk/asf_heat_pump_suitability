@@ -65,9 +65,9 @@ class CalculateGardenSizeFlow(FlowSpec):
         from asf_heat_pump_suitability.utils import parallel_utils
         from asf_heat_pump_suitability.pipeline.prepare_features import (
             building_footprint,
-            garden_size,
             lat_lon,
         )
+        from asf_heat_pump_suitability.pipeline.transform import outdoor_space
 
         logging.info("Load EPC UPRNs")
         epc_df = pl.read_parquet(self.epc, columns=["UPRN"])
@@ -120,9 +120,9 @@ class CalculateGardenSizeFlow(FlowSpec):
         import polars as pl
         from asf_heat_pump_suitability.pipeline.prepare_features import (
             building_footprint,
-            garden_size,
             land_extent,
         )
+        from asf_heat_pump_suitability.pipeline.transform import outdoor_space
 
         prev = None
         self.epc_gardens = []
@@ -208,7 +208,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         """
         import polars as pl
         from asf_heat_pump_suitability.utils import save_utils
-        from asf_heat_pump_suitability.pipeline.prepare_features import garden_size
+        from asf_heat_pump_suitability.pipeline.transform import outdoor_space
 
         save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}.parquet"
         if self.sample:

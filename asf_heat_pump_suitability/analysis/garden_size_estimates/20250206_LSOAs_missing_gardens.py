@@ -12,16 +12,15 @@
 import polars as pl
 import pandas as pd
 import geopandas as gpd
-import numpy as np
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     building_footprint,
-    garden_size,
     garden_space_avg,
     land_extent,
     lat_lon,
 )
+from asf_heat_pump_suitability.pipeline.transform import outdoor_space
 
 # %%
 # Load EPC data in final suitability dataset with garden size estimates
