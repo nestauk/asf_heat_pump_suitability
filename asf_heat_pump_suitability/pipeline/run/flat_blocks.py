@@ -47,11 +47,16 @@ if __name__ == "__main__":
     # Get geopoints of UPRNs
     uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
 
+    # ------------------------ #
+    # IMPUTE PROPERTY TYPE FLAT
     # Create boolean column called `property_type_flat` to identify flats
     flat_uprns = property_type.impute_set_flat_properties(uprns_gdf=uprns_gdf)
     uprns_df = uprns_df.with_columns(
         pl.col("UPRN").is_in(flat_uprns).alias("property_type_flat")
     )
+
+    # ------------------------ #
+    # ESTIMATE OUTDOOR SPACE
 
     save_utils.save_to_s3(
         uprns_df,
