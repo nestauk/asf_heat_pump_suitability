@@ -38,8 +38,6 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    import polars as pl
-
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.getters import base_getters, load_geodata
     from asf_heat_pump_suitability.pipeline.transform import uprns
@@ -65,22 +63,19 @@ if __name__ == "__main__":
         print(
             "Identifying residential UPRNs in heat network zones for Plymouth Local Authority..."
         )
-        hn_zone_uprn_gdf = heat_network_zones.filter_gdf_heat_network_zone_uprns(
+        hn_zone_uprn_df = heat_network_zones.filter_gdf_heat_network_zone_uprns(
             uprn_gdf=uprn_gdf,
             hn_zone_gdf=plymouth_hn_zones_gdf,
-            hn_zone_usecols=[  # unique to Plymouth heat network zone dataset
+            usecols=[
                 "ZoneID",  # zone unique identifier
-                "geometry",  # polygons
             ],
         )
 
-        # Add boolean flag for whether UPRN is in hn zone in original uprn_gdf
-        uprn_gdf["in_hn_zone"] = uprn_gdf["UPRN"].isin(hn_zone_uprn_gdf["UPRN"])
-
-        # Merge ZoneID into original uprn_gdf
-        uprn_gdf = uprn_gdf.merge(
-            hn_zone_uprn_gdf[["UPRN", "ZoneID"]], on="UPRN", how="left"
-        )
+        # Clean up columns
+        hn_zone_uprn_df = hn_zone_uprn_df[
+            ["UPRN", "LAD23NM", "X_COORDINATE", "Y_COORDINATE", "in_hn_zone", "ZoneID"]
+        ]
+        hn_zone_uprn_df = hn_zone_uprn_df.rename({"ZoneID": "HNZoneID"})
 
         # TODO filter and add label for UPRNs in city centres
 
@@ -94,13 +89,8 @@ if __name__ == "__main__":
         # Placeholder for future implementation
         raise NotImplementedError("Processing for all of GB is not yet supported.")
 
-    # Save residential UPRNs with heat network zone flags to S3
-    df_with_flags = pl.from_pandas(
-        uprn_gdf[
-            ["UPRN", "LAD23NM", "X_COORDINATE", "Y_COORDINATE", "in_hn_zone", "ZoneID"]
-        ]
-    )
+    # Save residential UPRNs with labels to S3
     save_utils.save_to_s3(
-        df_with_flags,
+        hn_zone_uprn_df,
         f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns_with_hn_zones.parquet",
     )
