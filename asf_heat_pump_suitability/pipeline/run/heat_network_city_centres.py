@@ -41,8 +41,8 @@ if __name__ == "__main__":
     import polars as pl
 
     from asf_heat_pump_suitability import config
-    from asf_heat_pump_suitability.getters import base_getters, get_datasets
-    from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
+    from asf_heat_pump_suitability.getters import base_getters, load_geodata
+    from asf_heat_pump_suitability.pipeline.transform import uprns
     from asf_heat_pump_suitability.pipeline.transform import heat_network_zones
     from asf_heat_pump_suitability.utils import save_utils
 
@@ -55,11 +55,11 @@ if __name__ == "__main__":
         uprn_df = base_getters.load_df_from_s3(
             config["data"]["processed"]["plymouth_residential_uprns"]
         )
-        uprn_gdf = lat_lon.generate_gdf_uprn_coords(uprn_df)
+        uprn_gdf = uprns.generate_gdf_uprn_coords(uprn_df)
 
         # Load Plymouth existing heat network zone polygons
         print("Loading heat network zone data for Plymouth Local Authority...")
-        plymouth_hn_zones_gdf = get_datasets.load_gdf_plymouth_heat_network_zone_areas()
+        plymouth_hn_zones_gdf = load_geodata.load_gdf_plymouth_heat_network_zones()
 
         # Filter for UPRNs in existing heat network zones
         print(
