@@ -30,7 +30,7 @@ def load_df_osopen_uprn(**kwargs) -> pl.DataFrame:
     return df
 
 
-def load_gdf_plymouth_heat_network_zone_areas(**kwargs) -> gpd.GeoDataFrame:
+def load_gdf_plymouth_heat_network_zones(**kwargs) -> gpd.GeoDataFrame:
     """
     Load GeoDataFrame with Plymouth heat network zone polygons from Plymouth City Council (CRS: EPSG:27700).
 
