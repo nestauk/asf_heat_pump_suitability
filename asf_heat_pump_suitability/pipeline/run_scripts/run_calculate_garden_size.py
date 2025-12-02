@@ -105,7 +105,7 @@ if __name__ == "__main__":
     microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
 
     # Match land extent files with overlapping building footprint files
-    file_matches = garden_size.match_series_files_land_building(
+    file_matches = outdoor_space.match_series_files_land_building(
         land_files_gdf=land_file_bounds, building_files_gdf=microsoft_file_bounds
     )
 
@@ -139,13 +139,13 @@ if __name__ == "__main__":
             continue
 
         # Get intersection of building footprint polygons and land polygons
-        intersection_gdf = garden_size.generate_gdf_land_building_overlay(
+        intersection_gdf = outdoor_space.generate_gdf_building_intersections(
             land_parcels_gdf=land_parcels_gdf,
             building_footprints_gdf=building_footprints_gdf,
         )
 
         # Get garden size
-        gardens_gdf = garden_size.generate_gdf_garden_size(
+        gardens_gdf = outdoor_space.generate_gdf_outdoor_space(
             intersection_gdf, land_parcels_gdf
         )
         gardens_gdf = gardens_gdf.assign(
@@ -226,10 +226,10 @@ if __name__ == "__main__":
         logging.info(f"Loading file: {file}")
         df = pl.read_parquet(f"s3://{file}")
         df = df.with_columns(pl.col(pl.Float64).round(2))
-        df = garden_size.deduplicate_df_garden_size(df)
+        df = outdoor_space.deduplicate_df_outdoor_space(df)
         epc_gardens_df = pl.concat([epc_gardens_df, df])
 
     # Final round of deduplication
-    epc_gardens_df = garden_size.deduplicate_df_garden_size(epc_gardens_df)
+    epc_gardens_df = outdoor_space.deduplicate_df_outdoor_space(epc_gardens_df)
     args.save_as = f"s3://asf-heat-pump-suitability/outputs/{year}Q{q}/gardens/{year}_Q{q}_EPC_garden_size_estimates_{args.nations.upper()}_deduplicated.parquet"
     save_utils.save_to_s3(epc_gardens_df, args.save_as)
