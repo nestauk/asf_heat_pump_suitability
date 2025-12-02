@@ -49,8 +49,10 @@ def generate_gdf_building_intersections(
         min_intersection (float): minimum area of intersection of buildings larger than outbuilding_size (metres squared). Default 15m2.
 
     Returns:
-        gpd.GeoDataFrame: intersections of land parcel polygons and building footprint polygons
+        gpd.GeoDataFrame: polygon intersections of land parcel polygons and building footprint polygons
     """
+    building_footprints_gdf["building_area_m2"] = building_footprints_gdf.area
+
     gdf = gpd.overlay(
         land_parcels_gdf,
         building_footprints_gdf,
@@ -74,6 +76,10 @@ def generate_gdf_building_intersections(
         )
     ]
 
+    # Drop intersecting geometries which are Points or LineStrings
+    gdf = gdf.explode(index_parts=False)
+    gdf = gdf[gdf.geom_type == "Polygon"]
+
     return gdf
 
 
@@ -88,7 +94,7 @@ def generate_gdf_outdoor_space(
         land_parcels_gdf (gpd.GeoDataFrame): land parcel polygons
 
     Returns:
-        gpd.GeoDataFrame: land parcels with total and max contiguous outdoor space area (m2)
+        gpd.GeoDataFrame: original land parcel polygons with calculated total and max contiguous outdoor space area (m2)
     """
     # Get land minus buildings - MultiPolygons will be created for land parcels which get split into multi-parts
     land_minus_buildings = gpd.overlay(
@@ -118,8 +124,12 @@ def generate_gdf_outdoor_space(
     )
 
     # Merge full land extent geometry back on
-    outdoor_space_gdf = outdoor_space_df.merge(
-        land_parcels_gdf, how="left", on="NATIONALCADASTRALREFERENCE"
+    outdoor_space_gdf = gpd.GeoDataFrame(
+        outdoor_space_df.merge(
+            land_parcels_gdf[["NATIONALCADASTRALREFERENCE", "geometry"]],
+            how="left",
+            on="NATIONALCADASTRALREFERENCE",
+        )
     )
 
     return outdoor_space_gdf
@@ -156,4 +166,25 @@ def deduplicate_df_outdoor_space(df: pl.DataFrame) -> pl.DataFrame:
 
     return pl.concat([df.filter(~pl.col("UPRN_duplicated")), _deduplicated_df]).drop(
         "UPRN_duplicated"
+    )
+
+
+def sjoin_df_uprn_to_outdoor_space(
+    uprns_gdf: gpd.GeoDataFrame, outdoor_space_gdf: gpd.GeoDataFrame
+) -> pl.DataFrame:
+    """
+    Join outdoor space estimates to UPRNs. UPRNs will be assigned the outdoor space calculated for the land extent parcel
+    that they are contained within.
+
+    Args:
+        uprns_gdf (gpd.GeoDataFrame): UPRNs and their point geometries
+        outdoor_space_gdf (gpd.GeoDataFrame): original land parcel polygons with calculated total and max contiguous outdoor space area (m2)
+
+    Returns:
+        pl.DataFrame: UPRNs with estimated outdoor space (m2)
+    """
+    return pl.from_pandas(
+        uprns_gdf.sjoin(outdoor_space_gdf, how="left", predicate="within").drop(
+            columns=["geometry", "index_right"]
+        )
     )
