@@ -19,7 +19,7 @@ def filter_gdf_heat_network_zone_uprns(
     Args:
         uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be filtered
         hn_zone_gdf (gpd.GeoDataFrame): polygons of heat network zones
-        use_cols: names of descriptive columns in hn_zone_gdf (excluding "geometry") to be joined with uprn_gdf. Default is None to use all columns.
+        usecols: names of descriptive columns in hn_zone_gdf (excluding "geometry") to be joined with uprn_gdf. Default is None to use all columns.
 
     Returns:
         pl.DataFrame: input UPRNs labelled with heat network zone identifiers
@@ -51,8 +51,9 @@ def filter_gdf_heat_network_zone_uprns(
     uprn_gdf["in_hn_zone"] = uprn_gdf["UPRN"].isin(filtered_uprn_gdf["UPRN"])
 
     # Add description labels from hn_zone_gdf to original uprn_gdf
+    label_cols = [col for col in hn_zone_gdf.columns if col != "geometry"]
     uprn_gdf = uprn_gdf.merge(
-        filtered_uprn_gdf[["UPRN"] + usecols], on="UPRN", how="left"
+        filtered_uprn_gdf[["UPRN"] + label_cols], on="UPRN", how="left"
     )
 
     # Return as polars df without geometry
