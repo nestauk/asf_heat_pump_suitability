@@ -19,7 +19,7 @@ def filter_gdf_heat_network_zone_uprns(
     Args:
         uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be filtered
         hn_zone_gdf (gpd.GeoDataFrame): polygons of heat network zones
-        usecols: names of descriptive columns in hn_zone_gdf (excluding "geometry") to be joined with uprn_gdf. Default is None to use all columns.
+        usecols (list, optional): names of descriptive columns in hn_zone_gdf (excluding "geometry") to be joined with uprn_gdf. Default is None to use all columns.
 
     Returns:
         pl.DataFrame: input UPRNs labelled with heat network zone identifiers
