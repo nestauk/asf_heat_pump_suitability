@@ -57,7 +57,9 @@ if __name__ == "__main__":
 
         # Load Plymouth existing heat network zone polygons
         print("Loading heat network zone data for Plymouth Local Authority...")
-        plymouth_hn_zones_gdf = load_geodata.load_gdf_plymouth_heat_network_zones()
+        plymouth_hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
+            local_authority="plymouth"
+        )
 
         # Filter for UPRNs in existing heat network zones
         print(

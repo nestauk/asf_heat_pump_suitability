@@ -30,18 +30,26 @@ def load_df_osopen_uprn(**kwargs) -> pl.DataFrame:
     return df
 
 
-def load_gdf_plymouth_heat_network_zones(**kwargs) -> gpd.GeoDataFrame:
+def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFrame:
     """
-    Load GeoDataFrame with Plymouth heat network zone polygons from Plymouth City Council (CRS: EPSG:27700).
+    Load GeoDataFrame with heat network zone polygons in given Local Authority.
 
     Args:
         **kwargs for `gpd.read_file()`
 
     Returns:
-        gpd.GeoDataFrame: polygons of heat network zones in Plymouth.
+        gpd.GeoDataFrame: polygons of heat network zones in given Local Authority.
     """
+
+    local_authority = local_authority.lower()
+
+    if local_authority not in config["data"]["geodata"]["heat_network_zones"].keys():
+        raise ValueError(
+            f"No path found for heat network zone geodata in Local Authority: {local_authority}"
+        )
+
     gdf = base_getters.get_gdf_from_gpkg_s3_path(
-        path=config["data"]["geodata"]["heat_network_zones"]["plymouth"],
+        path=config["data"]["geodata"]["heat_network_zones"][local_authority],
         **kwargs,
     )
     return gdf
