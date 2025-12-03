@@ -65,7 +65,7 @@ if __name__ == "__main__":
         print(
             "Identifying residential UPRNs in heat network zones for Plymouth Local Authority..."
         )
-        hn_zone_uprn_df = heat_network_zones.filter_gdf_heat_network_zone_uprns(
+        hn_zone_uprn_df = heat_network_zones.label_gdf_heat_network_zone_uprns(
             uprn_gdf=uprn_gdf,
             hn_zone_gdf=plymouth_hn_zones_gdf,
             usecols=[

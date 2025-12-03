@@ -1,5 +1,5 @@
 """
-Functions to filter UPRNs to those located within heat network zones.
+Functions to label UPRNs within existing or potential heat network zones.
 """
 
 import geopandas as gpd
@@ -8,16 +8,16 @@ import polars as pl
 from asf_heat_pump_suitability import config
 
 
-def filter_gdf_heat_network_zone_uprns(
+def label_gdf_heat_network_zone_uprns(
     uprn_gdf: gpd.GeoDataFrame,
     hn_zone_gdf: gpd.GeoDataFrame,
     usecols: list = None,
 ) -> pl.DataFrame:
     """
-    Filter UPRNs to UPRNs that are located within a heat network zone.
+    Labels UPRNs that are located within a heat network zone.
 
     Args:
-        uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be filtered
+        uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be labelled
         hn_zone_gdf (gpd.GeoDataFrame): polygons of heat network zones
         usecols (list, optional): names of descriptive columns in hn_zone_gdf (excluding "geometry") to be joined with uprn_gdf. Default is None to use all columns.
 
@@ -40,23 +40,17 @@ def filter_gdf_heat_network_zone_uprns(
     if usecols:
         hn_zone_gdf = hn_zone_gdf[["geometry"] + usecols]
 
-    # Spatial join for filtering
-    filtered_uprn_gdf = uprn_gdf.sjoin(
+    # Spatial join for labelling UPRNs
+    labelled_uprn_gdf = uprn_gdf.sjoin(
         hn_zone_gdf,
-        how="inner",
+        how="left",
         predicate="intersects",  # include properties intersecting heat network zone boundary
     ).drop(columns="index_right")
 
-    # Add heat network zone boolean label to original uprn_gdf
-    uprn_gdf["in_hn_zone"] = uprn_gdf["UPRN"].isin(filtered_uprn_gdf["UPRN"])
-
-    # Add description labels from hn_zone_gdf to original uprn_gdf
-    label_cols = [col for col in hn_zone_gdf.columns if col != "geometry"]
-    uprn_gdf = uprn_gdf.merge(
-        filtered_uprn_gdf[["UPRN"] + label_cols], on="UPRN", how="left"
-    )
+    # Add heat network zone boolean label
+    labelled_uprn_gdf["in_hn_zone"] = labelled_uprn_gdf["ZoneID"].notna()
 
     # Return as polars df without geometry
-    uprn_df = pl.from_pandas(uprn_gdf.drop(columns="geometry"))
+    labelled_uprn_df = pl.from_pandas(labelled_uprn_gdf.drop(columns="geometry"))
 
-    return uprn_df
+    return labelled_uprn_df
