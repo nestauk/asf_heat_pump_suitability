@@ -14,7 +14,7 @@ def label_gdf_heat_network_zone_uprns(
     usecols: list = None,
 ) -> pl.DataFrame:
     """
-    Labels UPRNs that are located within a heat network zone.
+    Label UPRNs that are located within a heat network zone.
 
     Args:
         uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be labelled
