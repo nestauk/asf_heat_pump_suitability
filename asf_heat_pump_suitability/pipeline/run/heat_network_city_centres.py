@@ -74,10 +74,9 @@ if __name__ == "__main__":
         )
 
         # Clean up columns
-        hn_zone_uprn_df = hn_zone_uprn_df[
+        hn_zone_uprn_df = hn_zone_uprn_df.select(
             ["UPRN", "LAD23NM", "X_COORDINATE", "Y_COORDINATE", "in_hn_zone", "ZoneID"]
-        ]
-        hn_zone_uprn_df = hn_zone_uprn_df.rename({"ZoneID": "HNZoneID"})
+        ).rename({"ZoneID": "HNZoneID"})
 
         # TODO filter and add label for UPRNs in city centres
 
