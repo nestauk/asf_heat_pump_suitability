@@ -52,4 +52,8 @@ def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFr
         path=config["data"]["geodata"]["heat_network_zones"][local_authority],
         **kwargs,
     )
+
+    print(
+        f"Heat network zone geodataframe successfully loaded for {local_authority} with CRS {gdf.crs}."
+    )
     return gdf
