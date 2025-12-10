@@ -150,9 +150,7 @@ def deduplicate_df_outdoor_space(df: pl.DataFrame) -> pl.DataFrame:
     _deduplicated_df = (
         df.filter(pl.col("UPRN_duplicated"))
         .with_columns(
-            min_total=pl.col("total_outdoor_space_area_m2")
-            .min()
-            .over("NATIONALCADASTRALREFERENCE")
+            min_total=pl.col("total_outdoor_space_area_m2").min().over("UPRN")
         )
         .filter(
             # Get smallest outdoor space
@@ -160,7 +158,7 @@ def deduplicate_df_outdoor_space(df: pl.DataFrame) -> pl.DataFrame:
             == pl.col("min_total")
             # Deduplicate - any duplicates will now (most likely) have the same total outdoor space
         )
-        .unique(subset="NATIONALCADASTRALREFERENCE")
+        .unique(subset="UPRN")
         .drop("min_total")
     )
 
