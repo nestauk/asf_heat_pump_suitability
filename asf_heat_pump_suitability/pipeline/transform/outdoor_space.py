@@ -37,9 +37,16 @@ def generate_gdf_building_intersections(
     """
     Generate intersections between land parcel polygons and building footprint polygons, with rules applied to remove
     suspected erroneous building intersections (i.e. small corners or slivers of buildings) but retain outbuildings.
-    Building intersections are kept if they meet the following conditions:
-    1. building intersection area <= outbuilding_size and >= s_building_prop * outbuilding_size
-    2. building intersection area > outbuilding_size and building intersection area >= min_intersection
+    Building intersections are kept if they meet one of the following conditions:
+    1. total building area <= outbuilding_size and building intersection area >= s_building_prop * outbuilding_size
+    2. total building area > outbuilding_size and building intersection area >= min_intersection
+
+    Together these conditions aim:
+    - handle buildings which are equal to or smaller than the outbuilding size to retain true small
+    segments of buildings that could represent garages, sheds, or other outbuildings.
+    - handle buildings that are larger than the outbuilding size, keeping building intersections that
+    are large enough to represent a meaningful portion of a main building
+    - remove intersections that likely represent small corners or boundary-touching errors
 
     Args:
         land_parcels_gdf (gpd.GeoDataFrame): land parcel polygons
@@ -137,7 +144,7 @@ def generate_gdf_outdoor_space(
 
 def deduplicate_df_outdoor_space(df: pl.DataFrame) -> pl.DataFrame:
     """
-    Deduplicate UPRNs matched to multiple land extents by keeping the one with the smallest total area.
+    Deduplicate UPRNs matched to multiple land extents by keeping the one with the smallest total outdoor space area.
 
     Args:
         df (pl.DataFrame): UPRNs with outdoor space estimates
