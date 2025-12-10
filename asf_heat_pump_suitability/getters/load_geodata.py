@@ -39,3 +39,32 @@ def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: British National Grid square codes and their corresponding polygons
     """
     return gpd.GeoDataFrame.from_features(grids.bng_grid_100km, crs=27700)
+
+
+def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFrame:
+    """
+    Load GeoDataFrame with heat network zone polygons in given Local Authority.
+
+    Args:
+        **kwargs for `gpd.read_file()`
+
+    Returns:
+        gpd.GeoDataFrame: polygons of heat network zones in given Local Authority.
+    """
+
+    local_authority = local_authority.lower()
+
+    if local_authority not in config["data"]["geodata"]["heat_network_zones"].keys():
+        raise ValueError(
+            f"No path found for heat network zone geodata in Local Authority: {local_authority}"
+        )
+
+    gdf = base_getters.get_gdf_from_gpkg_s3_path(
+        path=config["data"]["geodata"]["heat_network_zones"][local_authority],
+        **kwargs,
+    )
+
+    print(
+        f"Heat network zone geodataframe successfully loaded for {local_authority} with CRS {gdf.crs}."
+    )
+    return gdf
