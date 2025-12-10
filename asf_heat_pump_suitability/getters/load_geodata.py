@@ -67,8 +67,10 @@ def load_gdf_spatial_signatures_gb(
     Spatial Signature type. (Source: https://doi.org/10.6084/m9.figshare.16691575).
 
     The dataset can be loaded at two levels of detail:
-    - "simplified": geometries provided with only fields "id" and "type"
-    - "full": geometries provided with all fields
+    - "simplified": polygon geometries provided with descriptive columns "id" [int64] and "type" [str]
+    - "full": polygon geometries provided with descriptive columns "id" [str], "code" [str] and "type" [str]
+
+    The dataset at both levels of detail contain 96,704 polygons.
 
     Args:
         detail_level (str, optional): Which level of descriptive detail to load.
