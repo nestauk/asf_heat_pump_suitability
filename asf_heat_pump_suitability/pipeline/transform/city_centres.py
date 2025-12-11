@@ -59,19 +59,23 @@ def label_gdf_city_centre_spatial_signatures_uprns(
         predicate="intersects",  # include properties intersecting spatial signature cell boundary
     ).drop(columns="index_right")
 
+    # Add city centre boolean label
+    labelled_uprn_gdf["in_city_centre"] = labelled_uprn_gdf["type"].isin(types)
+
     # Combine multiple matches into a single row per UPRN
     uprn_columns = [col for col in uprn_gdf.columns if col != "geometry"]
-    labelled_uprn_gdf = labelled_uprn_gdf.groupby("UPRN", group_keys=False).agg(
-        {
-            **{col: "first" for col in uprn_columns},  # keep original UPRN columns
-            "geometry": "first",  # keep the point geometry
-            "type": list,  # combine types into a list
-        }
-    )
-
-    # Add city centre boolean label
-    labelled_uprn_gdf["in_city_centre"] = labelled_uprn_gdf["type"].apply(
-        lambda x: any(t in types for t in x)
+    labelled_uprn_gdf = (
+        labelled_uprn_gdf.groupby("UPRN", as_index=False)
+        .agg(
+            {
+                **{col: "first" for col in uprn_columns},  # keep original UPRN columns
+                "geometry": "first",  # keep the point geometry
+                "type": list,  # combine types into a list
+                "in_city_centre": sum,  # sums >0 indicate UPRN in a city centre signature
+            }
+            # Convert city centre to boolean label
+        )
+        .astype({"in_city_centre": bool})
     )
 
     # UPRNs with no spatial signature match are ultimately classified as not in city centre
