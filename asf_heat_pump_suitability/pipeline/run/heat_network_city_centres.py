@@ -41,7 +41,10 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.getters import base_getters, load_geodata
     from asf_heat_pump_suitability.pipeline.transform import uprns
-    from asf_heat_pump_suitability.pipeline.transform import heat_network_zones
+    from asf_heat_pump_suitability.pipeline.transform import (
+        heat_network_zones,
+        city_centres,
+    )
     from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
@@ -63,7 +66,7 @@ if __name__ == "__main__":
             local_authority="plymouth"
         )
 
-        # Label UPRNs in existing heat network zones
+        # Label UPRNs in existing, potential and planned heat network zones
         print(
             "Identifying residential UPRNs in heat network zones for Plymouth Local Authority..."
         )
@@ -89,36 +92,28 @@ if __name__ == "__main__":
         )
 
         # Label UPRNs in city centres
-        city_centre_types = [  # TODO confirm types
-            "Hyper concentrated urbanity",
-            "Concentrated urbanity",
-            "Metropolitan urbanity",
-            "Regional urbanity",
-            "Local urbanity",
-            "Dense urban neighbourhoods",
-        ]
         print(
             "Identifying residential UPRNs in city centre areas for Plymouth Local Authority..."
         )
-        city_centre_uprn_df = (
-            heat_network_zones.label_gdf_heat_network_spatial_signatures_uprns(
-                uprn_gdf=uprn_gdf,
-                spatial_signatures_gdf=spatial_signatures_gb_simplified_gdf,
-                types=city_centre_types,
-            )
+        hn_zone_uprn_gdf = uprns.generate_gdf_uprn_coords(hn_zone_uprn_df)
+        hn_zone_city_centre_uprn_df = city_centres.label_gdf_city_centre_spatial_signatures_uprns(
+            uprn_gdf=hn_zone_uprn_gdf,  # add city centre labels to gdf with hnz labels
+            spatial_signatures_gdf=spatial_signatures_gb_simplified_gdf,
         )
 
         # Clean up columns
-        city_centre_uprn_df = city_centre_uprn_df.select(
+        hn_zone_city_centre_uprn_df = hn_zone_city_centre_uprn_df.select(
             [
                 "UPRN",
                 "LAD23NM",
                 "X_COORDINATE",
                 "Y_COORDINATE",
-                "spatial_signature_type",
-                "in_potential_hn_zone",
+                "HNZoneID",
+                "in_hn_zone",
+                "spatial_signature_types",
+                "in_city_centre",
             ]
-        ).rename({"in_potential_hn_zone": "in_city_centre"})
+        )
 
     elif args.local_authorities.lower() in ["plymouth_similar", "sampling_areas"]:
         # Placeholder for future implementation (subject to heat network zone data availability)
@@ -130,14 +125,8 @@ if __name__ == "__main__":
         # Placeholder for future implementation
         raise NotImplementedError("Processing for all of GB is not yet supported.")
 
-    # Save residential UPRNs with existing hn zone labels to S3
+    # Save residential UPRNs with existing heat network zone and city centre labels to S3
     save_utils.save_to_s3(
-        hn_zone_uprn_df,
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns_with_hn_zones.parquet",
-    )
-
-    # Save residential UPRNs with city centre labels to S3
-    save_utils.save_to_s3(
-        city_centre_uprn_df,
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns_with_city_centres.parquet",
+        hn_zone_city_centre_uprn_df,
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet",
     )
