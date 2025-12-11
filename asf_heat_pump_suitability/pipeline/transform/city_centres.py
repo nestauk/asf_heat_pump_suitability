@@ -61,9 +61,7 @@ def label_gdf_city_centre_spatial_signatures_uprns(
 
     # Combine multiple matches into a single row per UPRN
     uprn_columns = [col for col in uprn_gdf.columns if col != "geometry"]
-    labelled_uprn_gdf = labelled_uprn_gdf.groupby(
-        labelled_uprn_gdf.index, group_keys=False
-    ).agg(
+    labelled_uprn_gdf = labelled_uprn_gdf.groupby("UPRN", group_keys=False).agg(
         {
             **{col: "first" for col in uprn_columns},  # keep original UPRN columns
             "geometry": "first",  # keep the point geometry
