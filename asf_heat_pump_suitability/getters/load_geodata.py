@@ -60,17 +60,26 @@ def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFr
 
 
 def load_gdf_spatial_signatures_gb(
-    detail_level: str = "simplified", **kwargs
+    detail_level: str = "full", **kwargs
 ) -> gpd.GeoDataFrame:
     """
     Load GeoDataFrame with polygons in GB from the Spatial Signatures Framework  classified by their
-    Spatial Signature type. (Source: https://doi.org/10.6084/m9.figshare.16691575).
+    Spatial Signature type. CRS British National Grid (27700). (Source: https://doi.org/10.6084/m9.figshare.16691575).
 
-    The dataset can be loaded at two levels of detail:
-    - "simplified": polygon geometries provided with descriptive columns "id" [int64] and "type" [str]
-    - "full": polygon geometries provided with descriptive columns "id" [str], "code" [str] and "type" [str]
+    Two versions of the dataset are available, differing in the geometric detail of the
+    polygon geometries:
 
-    The dataset at both levels of detail contain 96,704 polygons.
+    - "simplified":
+        Polygon geometries have been geometrically simplified, containing fewer coordinate
+        vertices than the full-resolution version.
+        Attribute fields include: "id" (int64) and "type" (str).
+
+    - "full":
+        Polygon geometries are provided at full resolution, retaining the complete set of
+        coordinate vertices.
+        Attribute fields include: "id" (str), "code" (str), and "type" (str).
+
+    Both versions contain 96,704 polygons.
 
     Args:
         detail_level (str, optional): Which level of descriptive detail to load.
