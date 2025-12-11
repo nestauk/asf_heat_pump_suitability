@@ -1,5 +1,11 @@
 # %% [markdown]
-# ### **Investigating areas in Plymouth LA with existing heat network zones or potential for a heat network**
+# ### **Investigating areas in Plymouth LA with existing/planned heat network zones or areas which are city areas**
+
+# %% [markdown]
+# This is an exploratory notebook where:
+# 1. Existing/planned heat network zones in Plymouth are inspected visually and the % of UPRNs in a zone is calculated.
+# 2. Which spatial signature types from the Spatial Signatures Framework are in existing/planned heat network zones. Within each existing/planned heat network zone in Plymouth, each type is identified.
+# 3. A subset of spatial signature types selected to represent city centre areas are examined and their spatial and UPRN coverage is compared with that of existing/planned heat network zones.
 
 # %%
 import pandas as pd
@@ -16,7 +22,11 @@ from asf_heat_pump_suitability.getters import (
     load_geodata,
     load_boundaries,
 )
-from asf_heat_pump_suitability.pipeline.transform import uprns, heat_network_zones
+from asf_heat_pump_suitability.pipeline.transform import (
+    uprns,
+    heat_network_zones,
+    city_centres,
+)
 
 # %% [markdown]
 # Loading data
@@ -44,7 +54,7 @@ plymouth_la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries
 )
 
 # %%
-# Existing heat network zones in plymouth
+# Existing/planned heat network zones in plymouth
 plymouth_hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
     local_authority="plymouth"
 )
@@ -75,7 +85,7 @@ gdfs = [
 len({gdf.crs for gdf in gdfs}) == 1
 
 # %% [markdown]
-# #### **Inspecting existing heat network zones**
+# #### **Inspecting existing/planned heat network zones**
 
 # %%
 # Inspecting each HNZ
@@ -153,9 +163,7 @@ plt.show()
 
 # %%
 # What % of residential UPRNs are in existing HNZ?
-prop_in_hn_zone = plymouth_uprns_hnz_labelled_df.select(
-    pl.col("in_hn_zone").mean()
-).item()
+prop_in_hn_zone = plymouth_uprns_hnz_labelled_df["in_hn_zone"].mean()
 
 print(f"Proportion in HN zone: {prop_in_hn_zone:.3f}")
 
@@ -232,6 +240,7 @@ plymouth_hn_zones_with_labels_agg_gdf = (
 def inspect_spatial_signatures_in_hn_zone(zone_id: str):
     zone_gdf = plymouth_hn_zones_gdf[plymouth_hn_zones_gdf["ZoneID"] == zone_id]
 
+    # Add HN zone notes
     just_text_raw = str(zone_gdf.Just.values[0])
     just_text = "\n".join(textwrap.wrap(just_text_raw, width=90))
 
@@ -262,7 +271,7 @@ for zone_id in plymouth_hn_zones_with_labels_agg_gdf["ZoneID"].unique():
     inspect_spatial_signatures_in_hn_zone(zone_id)
 
 # %% [markdown]
-# #### **Testing urban spatial signatures to indicate "city centre" areas - i.e. areas potentially suitable for a heat network**
+# #### **Testing urban spatial signatures to indicate city centre areas**
 
 # %% [markdown]
 # Labelling original residential UPRNs
@@ -278,8 +287,9 @@ city_centre_types = [
     "Dense urban neighbourhoods",
 ]
 
+# %%
 plymouth_uprns_spatial_signature_labelled_df = (
-    heat_network_zones.label_gdf_heat_network_spatial_signatures_uprns(
+    city_centres.label_gdf_city_centre_spatial_signatures_uprns(
         uprn_gdf=plymouth_residential_uprns_gdf,
         spatial_signatures_gdf=spatial_signatures_gb_simplified_gdf,
         types=city_centre_types,
@@ -290,7 +300,7 @@ plymouth_uprns_spatial_signature_labelled_df = (
 # Process filtered UPRNs for plotting
 plymouth_uprns_spatial_signature_df = (
     plymouth_uprns_spatial_signature_labelled_df.filter(
-        pl.col("in_potential_hn_zone") == True
+        pl.col("in_city_centre") == True
     )
 )
 plymouth_uprns_spatial_signature_gdf = uprns.generate_gdf_uprn_coords(
@@ -304,7 +314,7 @@ selected_spatial_signatures_plymouth_gdf = spatial_signatures_plymouth_gdf[
 ]
 
 # %%
-# Inspect selected spatial signatures in relation to existing HNZ
+# Inspect selected spatial signatures in relation to existing/planned HNZ
 
 # colour for spatial signature types
 unique_types = selected_spatial_signatures_plymouth_gdf["type"].unique()
@@ -368,17 +378,17 @@ summary_df = pd.DataFrame(
     {
         "Area (m²)": [area_hnz, area_selected, overlap_area],
         "% of HNZ covered by selected signatures": [
-            "100%",
-            f"{percent_selected_covered_by_hnz:.1f}%",
-            f"{(overlap_area / area_hnz) * 100:.1f}%",
+            f"{percent_hnz_covered_by_selected:.1f}%",
+            "",
+            "",
         ],
         "% of selected signatures covered by HNZ": [
-            f"{(area_hnz / area_selected) * 100:.1f}%",
-            "100%",
-            f"{(overlap_area / area_selected) * 100:.1f}%",
+            "",
+            f"{percent_selected_covered_by_hnz:.1f}%",
+            "",
         ],
     },
-    index=["Existing HNZ", "Selected signatures", "Actual overlap"],
+    index=["Existing HNZ", "Selected signatures", "Overlap"],
 )
 
 summary_df
@@ -386,7 +396,7 @@ summary_df
 # %% [markdown]
 # 05/12/25: Computing the spatial overlap, the **city centre types cover 35% of the area covered by existing heat network zones**. Conversely, the **existing heat network zones cover 83% of the area covered by city centre types**.
 # - 35% metric -> The selected signature types only partially align with the existing heat network coverage; most of the current HNZ lie outside "city centre" areas. This indicates that using "city centre" areas is not able to capture all areas that have been deemed suitable for a heat network in reality.
-# - 83% metric -> Most of the areas identified as city centre/potentially suitable for a heat network are already part of the existing heat network.
+# - 83% metric -> Most of the areas identified as city centre are already part of the existing heat network.
 # - Using city centre areas as proxies for heat network suitability: most areas selected are part of an existing HNZ (high precision) - but many existing HNZ areas outside these urban centres are missed, since HNZ are not chosen based on urban location alone.
 
 # %%
@@ -406,7 +416,7 @@ plymouth_hn_zones_gdf.plot(
     edgecolor="#1f77b4",
     linewidth=2,
     alpha=0.8,
-    label="HNZ Zones",
+    label="HN Zones",
 )
 
 plymouth_hn_zone_uprns_gdf.plot(
@@ -484,7 +494,7 @@ city_centre_types = [
 ]
 
 plymouth_uprns_hnz_spatial_signature_labelled_df = (
-    heat_network_zones.label_gdf_heat_network_spatial_signatures_uprns(
+    city_centres.label_gdf_city_centre_spatial_signatures_uprns(
         uprn_gdf=plymouth_uprns_hnz_labelled_gdf,
         spatial_signatures_gdf=spatial_signatures_gb_simplified_gdf,
         types=city_centre_types,
@@ -496,7 +506,7 @@ plymouth_uprns_hnz_spatial_signature_labelled_df = (
 
 # %%
 plymouth_uprns_hnz_spatial_signature_labelled_df.group_by(
-    ["in_hn_zone", "in_potential_hn_zone"]
+    ["in_hn_zone", "in_city_centre"]
 ).len().with_columns((pl.col("len") / pl.col("len").sum()).alias("percent"))
 
 # %%
@@ -504,25 +514,25 @@ plymouth_uprns_hnz_spatial_signature_labelled_df.group_by(
 hnz_true_df = plymouth_uprns_hnz_spatial_signature_labelled_df.filter(
     (pl.col("in_hn_zone") == True)
 )
-prop_true = hnz_true_df.select(pl.col("in_potential_hn_zone").mean()).item()
+prop_true = hnz_true_df["in_city_centre"].mean()
 
 print(
-    f"Proportion of UPRNs in an existing heat network zone which are classified to be in a potential heat network zone (by the set of spatial signature types) [recall]: {prop_true:.3f}"
+    f"Proportion of UPRNs in an existing heat network zone which are classified to be in a city centre (by the set of spatial signature types) [recall]: {prop_true:.3f}"
 )
 
 # %%
-potential_hnz_true_df = plymouth_uprns_hnz_spatial_signature_labelled_df.filter(
-    pl.col("in_potential_hn_zone") == True
+city_centre_true_df = plymouth_uprns_hnz_spatial_signature_labelled_df.filter(
+    pl.col("in_city_centre") == True
 )
 
-prop_true = potential_hnz_true_df.select(pl.col("in_hn_zone").mean()).item()
+prop_true = city_centre_true_df["in_hn_zone"].mean()
 
 print(
-    f"Proportion of UPRNs in a potential heat network zone (as classified by the set of spatial signature types) which are already in an existing heat network zone [precision]: {prop_true:.3f}"
+    f"Proportion of UPRNs in a city centre area (as classified by the set of spatial signature types) which are already in an existing heat network zone [precision]: {prop_true:.3f}"
 )
 
 # %% [markdown]
-# 05/12/25: City centres as a proxy performs better at capturing properties in existing HNZ, compared to land area. Mainly because of the higher density of properties in the selected urban area types.
+# 05/12/25: City centres as a potential proxy performs better at capturing properties in existing HNZ (i.e. UPRN coverage), compared to spatial coverage. Mainly because of the higher density of properties in the selected urban area types.
 # - 84% of UPRNs in existing HNZ are in city centre spatial signature types -> most properties already served are captured, showing our proxy effectively targets relevant properties
 # - 82% of UPRNs in city centre types are in existing HNZ -> few properties outside existing HNZ are incorrectly flagged, indicating the proxy is precise
 #
