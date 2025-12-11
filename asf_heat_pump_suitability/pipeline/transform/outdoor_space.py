@@ -1,3 +1,7 @@
+"""
+Functions to calculate outdoor space estimates from building footprints and land extents.
+"""
+
 import geopandas as gpd
 import logging
 import pandas as pd
@@ -51,9 +55,9 @@ def generate_gdf_building_intersections(
     Args:
         land_parcels_gdf (gpd.GeoDataFrame): land parcel polygons
         building_footprints_gdf (gpd.GeoDataFrame): building footprint polygons
-        outbuilding_size (int): max area (m2) of building footprints assumed to be outbuildings. Default 30m2.
+        outbuilding_size (int): max area (m2) of building footprints assumed to be outbuildings. Default 30m2 - the average size of a double garage.
         s_building_prop (float): minimum proportion of buildings smaller than outbuilding_size. Default 45%.
-        min_intersection (float): minimum area of intersection of buildings larger than outbuilding_size (metres squared). Default 15m2.
+        min_intersection (float): minimum area (m2) of intersection of buildings larger than outbuilding_size (metres squared). Default 15m2 - the minimum size for a building intersection to be considered a genuine building.
 
     Returns:
         gpd.GeoDataFrame: polygon intersections of land parcel polygons and building footprint polygons
@@ -119,6 +123,7 @@ def generate_gdf_outdoor_space(
 
     # Keep max size and total outdoor area
     outdoor_space_df = (
+        # Group land extent intersections by their ID to get the largest part per parcel
         land_minus_buildings_parts.groupby("NATIONALCADASTRALREFERENCE")
         .agg(
             max_contiguous_outdoor_space_area_m2=("outdoor_space_area_m2", max),

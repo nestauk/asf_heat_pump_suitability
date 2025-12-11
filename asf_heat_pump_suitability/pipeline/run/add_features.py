@@ -78,10 +78,10 @@ if __name__ == "__main__":
 
     # Get outdoor space
     outdoor_space_gdf = outdoor_space.generate_gdf_outdoor_space(
-        intersection_gdf, land_parcels_gdf
+        building_intersections_gdf=intersection_gdf, land_parcels_gdf=land_parcels_gdf
     )
     uprns_space_df = outdoor_space.sjoin_df_uprn_to_outdoor_space(
-        uprns_gdf, outdoor_space_gdf
+        uprns_gdf=uprns_gdf, outdoor_space_gdf=outdoor_space_gdf
     )
     uprns_space_df = outdoor_space.deduplicate_df_outdoor_space(uprns_space_df)
 
