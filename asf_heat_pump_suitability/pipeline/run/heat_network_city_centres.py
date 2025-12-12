@@ -88,7 +88,7 @@ if __name__ == "__main__":
         # Load spatial signature polygons
         print("Loading spatial signatures dataset...")
         spatial_signatures_gb_simplified_gdf = (
-            load_geodata.load_gdf_spatial_signatures_gb(detail_level="simplified")
+            load_geodata.load_gdf_spatial_signatures_gb(detail_level="full")
         )
 
         # Label UPRNs in city centres
