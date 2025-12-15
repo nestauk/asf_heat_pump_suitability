@@ -11,16 +11,11 @@
 # %%
 import geopandas as gpd
 import pandas as pd
-
-import simplekml
-
 import polars as pl
 import numpy as np
 import math
 
 import matplotlib.pyplot as plt
-
-import itertools
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.experimental import enable_halving_search_cv  # noqa
@@ -41,6 +36,7 @@ from sklearn.metrics import (
 )
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.pipeline.transform import uprns
 from asf_heat_pump_suitability.getters import load_tree_input
 
@@ -69,7 +65,7 @@ apr_buildings_plymouth_gdf["geometry"] = apr_buildings_plymouth_gdf.normalize()
 oct_buildings_plymouth_gdf["geometry"] = oct_buildings_plymouth_gdf.normalize()
 
 apr_oct_buildings_gdf = apr_buildings_plymouth_gdf.merge(
-    oct_buildings_plymouth_gdf, how="left", on="geometry", suffixes=["_apr", "_oct"]
+    oct_buildings_plymouth_gdf, how="outer", on="geometry", suffixes=["_apr", "_oct"]
 )
 
 # Create mapping of April and October IDs
@@ -80,23 +76,26 @@ apr_buildings_plymouth_gdf["oct25_building_id"] = apr_buildings_plymouth_gdf["ID
     apr_to_oct_id.get
 )
 
-apr_buildings_plymouth_gdf = apr_buildings_plymouth_gdf.rename(
-    columns={"ID": "apr25_building_id"}
+apr_oct_buildings_gdf = apr_oct_buildings_gdf.rename(
+    columns={
+        "ID_apr": "apr25_building_id",
+        "ID_oct": "oct25_building_id",
+    }
 )
 
 # Join buildings to UPRNs
 plymouth_uprns_gdf = (
     uprns.generate_gdf_uprn_coords(df=plymouth_uprns_df)
-    .sjoin(apr_buildings_plymouth_gdf, how="inner", predicate="within")
-    .drop(columns=["index_right", "FEATCODE"])
+    .sjoin(apr_oct_buildings_gdf, how="inner", predicate="within")
+    .drop(columns=["index_right", "FEATCODE_apr", "FEATCODE_oct"])
 )
 
 # Join UPRNs to buildings
-buildings_w_uprns_gdf = apr_buildings_plymouth_gdf.sjoin(
+plymouth_buildings_w_uprns_gdf = apr_oct_buildings_gdf.sjoin(
     uprns.generate_gdf_uprn_coords(df=plymouth_uprns_df),
     how="left",
     predicate="contains",
-).drop(columns=["index_right"])
+).drop(columns=["index_right", "FEATCODE_apr", "FEATCODE_oct"])
 
 # %% [markdown]
 # ### Load UPRN and building data for other sampling areas (Nottingham, Bradford, Glasgow, Manchester, Bath)
@@ -136,15 +135,15 @@ sampling_areas_buildings_w_uprns_gdf = sampling_areas_buildings_w_uprns_gdf.rena
     columns={"ID": "oct25_building_id"}
 )
 sampling_areas_buildings_w_uprns_gdf = sampling_areas_buildings_w_uprns_gdf[
-    buildings_w_uprns_gdf.columns
+    plymouth_buildings_w_uprns_gdf.columns
 ]
 
 # Concatenate buildings with UPRNs data
 buildings_w_uprns_gdf = pd.concat(
-    [buildings_w_uprns_gdf, sampling_areas_buildings_w_uprns_gdf]
+    [plymouth_buildings_w_uprns_gdf, sampling_areas_buildings_w_uprns_gdf]
 )
 
-# Create features from building data
+# # Create features from building data
 buildings_w_uprns_gdf = buildings_w_uprns_gdf[~buildings_w_uprns_gdf["UPRN"].isna()]
 buildings_w_uprns_gdf["building_area_m2"] = buildings_w_uprns_gdf.area
 buildings_w_uprns_gdf["building_perimeter_m"] = buildings_w_uprns_gdf.length
@@ -608,7 +607,7 @@ plt.grid(False)
 plt.show()
 
 # %%
-# Run model on buildings which weren't manually labelled
+# Run model on buildings which weren't manually labelled - model run only on buildings containing any flats
 manually_labelled_ids = model_df["oct25_building_id"].unique()
 to_label_df = features_df.filter(
     ~pl.col("oct25_building_id").is_in(manually_labelled_ids)
@@ -617,6 +616,70 @@ to_label_df["block_of_flats"] = final_model.predict(
     to_label_df.set_index("oct25_building_id")[features]
 )
 print(f'\n{to_label_df["block_of_flats"].value_counts(normalize=True)}\n')
+
+# Prepare to concatenate all buildings that don't contain flats
+residential_building_ids = all_uprns_df["oct25_building_id"].unique()
+not_flats_df = (
+    buildings_w_uprns_df.filter(
+        ~pl.col("oct25_building_id").is_null(),
+        pl.col("oct25_building_id").is_in(residential_building_ids),
+    )
+    .group_by("oct25_building_id")
+    .agg(
+        pl.col("apr25_building_id").first().name.keep(),
+        pl.col("property_type_flat").sum().alias("n_flats"),
+    )
+    .filter(pl.col("n_flats") == 0)
+    .with_columns(pl.lit(False).alias("block_of_flats"))
+)
+
+# Concat all datasets together
+cols = ["oct25_building_id", "apr25_building_id", "block_of_flats"] + features
+labelled_buildings_contains_flats_df = pl.concat(
+    [model_df.select(cols), pl.from_pandas(to_label_df).select(cols)]
+)
+save_utils.save_to_s3(
+    labelled_buildings_contains_flats_df,
+    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/sampling_areas_residential_buildings_containing_flats_with_block_of_flats_label.parquet",
+)
+
+# Get binary classification per UPRN
+cols = ["oct25_building_id", "block_of_flats"]
+labelled_buildings_df = pl.concat(
+    [
+        labelled_buildings_contains_flats_df.select(cols).with_columns(
+            pl.lit(True).alias("building_contains_flats")
+        ),
+        not_flats_df.select(cols).with_columns(
+            pl.lit(False).alias("building_contains_flats")
+        ),
+    ]
+)
+
+uprn_blocks_df = (
+    all_uprns_df.drop_nulls(subset="oct25_building_id")
+    .select(["UPRN", "oct25_building_id"])
+    .join(
+        labelled_buildings_df.select(
+            ["oct25_building_id", "block_of_flats", "building_contains_flats"]
+        ),
+        how="left",
+        on="oct25_building_id",
+    )
+    .with_columns(
+        pl.when(~pl.col("building_contains_flats"))
+        .then(pl.lit("No flats"))
+        .when(pl.col("block_of_flats"))
+        .then(pl.lit("Block of flats"))
+        .when(~pl.col("block_of_flats"))
+        .then(pl.lit("Not block"))
+        .alias("building_type")
+    )
+)
+save_utils.save_to_s3(
+    uprn_blocks_df,
+    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/sampling_areas_residential_uprns_with_block_of_flats.parquet",
+)
 
 # %% [markdown]
 # ### Run additional model evaluation on final model
