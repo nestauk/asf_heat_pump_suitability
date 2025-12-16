@@ -1,5 +1,5 @@
 """
-Functions to label UPRNs within existing or potential heat network zones.
+Functions to label UPRNs within official existing, potential or planned heat network zones.
 """
 
 import geopandas as gpd
@@ -19,7 +19,8 @@ def label_gdf_heat_network_zone_uprns(
     Args:
         uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be labelled
         hn_zone_gdf (gpd.GeoDataFrame): polygons of heat network zones
-        usecols (list, optional): names of descriptive columns in hn_zone_gdf (excluding "geometry") to be joined with uprn_gdf. Default is None to use all columns.
+        usecols (list, optional): names of descriptive columns in hn_zone_gdf to be joined with uprn_gdf (in addition to "geometry").
+            Default is None to only use "geometry".
 
     Returns:
         pl.DataFrame: input UPRNs labelled with heat network zone identifiers
@@ -39,6 +40,8 @@ def label_gdf_heat_network_zone_uprns(
     # If usecols specified, filter columns in hn_zone_gdf
     if usecols:
         hn_zone_gdf = hn_zone_gdf[["geometry"] + usecols]
+    else:
+        hn_zone_gdf = hn_zone_gdf[["geometry"]]
 
     # Spatial join for labelling UPRNs
     labelled_uprn_gdf = uprn_gdf.sjoin(

@@ -14,6 +14,13 @@ data:
     heat_network_zones:
       # Plymouth Heat Network zones
       plymouth: "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/NMR3 Heat Network Zones (Post-Ref).gpkg"
+
+    gb_spatial_signatures:
+      # UrbanGrammarAI Spatial Signatures GB simplified
+      simplified: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB_simplified.gpkg"
+      # UrbanGrammarAI Spatial Signatures GB detailed
+      full: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB.gpkg"
+
   epc:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
     commercial: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v092025_EPC_NonDomestic_EW.csv"
