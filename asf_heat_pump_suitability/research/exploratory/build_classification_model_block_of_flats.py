@@ -615,6 +615,25 @@ to_label_df = features_df.filter(
 to_label_df["block_of_flats"] = final_model.predict(
     to_label_df.set_index("oct25_building_id")[features]
 )
+
+# Add probability of predictions
+to_label_df[f"block_of_flats_proba_{final_model.classes_[0]}"] = (
+    final_model.predict_proba(to_label_df.set_index("oct25_building_id")[features])[
+        :, 0
+    ]
+)
+to_label_df[f"block_of_flats_proba_{final_model.classes_[1]}"] = (
+    final_model.predict_proba(to_label_df.set_index("oct25_building_id")[features])[
+        :, 1
+    ]
+)
+to_label_df = pl.from_pandas(to_label_df).with_columns(
+    pl.when(pl.col("block_of_flats"))
+    .then(pl.col("block_of_flats_proba_True"))
+    .when(~pl.col("block_of_flats"))
+    .then(pl.col("block_of_flats_proba_False"))
+    .alias("block_of_flats_label_proba")
+)
 print(f'\n{to_label_df["block_of_flats"].value_counts(normalize=True)}\n')
 
 # Prepare to concatenate all buildings that don't contain flats
@@ -630,21 +649,35 @@ not_flats_df = (
         pl.col("property_type_flat").sum().alias("n_flats"),
     )
     .filter(pl.col("n_flats") == 0)
-    .with_columns(pl.lit(False).alias("block_of_flats"))
+    .with_columns(
+        # Add required columns
+        pl.lit(False).alias("block_of_flats"),
+        pl.lit(None).alias("block_of_flats_label_proba"),
+    )
 )
 
 # Concat all datasets together
-cols = ["oct25_building_id", "apr25_building_id", "block_of_flats"] + features
+cols = [
+    "oct25_building_id",
+    "apr25_building_id",
+    "block_of_flats",
+    "block_of_flats_label_proba",
+] + features
+model_df = model_df.with_columns(
+    pl.lit(1.0).alias(
+        "block_of_flats_label_proba"
+    )  # Set manually labelled block probability to 1
+)
 labelled_buildings_contains_flats_df = pl.concat(
-    [model_df.select(cols), pl.from_pandas(to_label_df).select(cols)]
+    [model_df.select(cols), to_label_df.select(cols)]
 )
 save_utils.save_to_s3(
     labelled_buildings_contains_flats_df,
     "s3://asf-heat-pump-suitability/local_heat_planning/outputs/sampling_areas_residential_buildings_containing_flats_with_block_of_flats_label.parquet",
 )
 
-# Get binary classification per UPRN
-cols = ["oct25_building_id", "block_of_flats"]
+# Join binary classification to UPRNs
+cols = ["oct25_building_id", "block_of_flats", "block_of_flats_label_proba"]
 labelled_buildings_df = pl.concat(
     [
         labelled_buildings_contains_flats_df.select(cols).with_columns(
@@ -661,7 +694,12 @@ uprn_blocks_df = (
     .select(["UPRN", "oct25_building_id"])
     .join(
         labelled_buildings_df.select(
-            ["oct25_building_id", "block_of_flats", "building_contains_flats"]
+            [
+                "oct25_building_id",
+                "block_of_flats",
+                "building_contains_flats",
+                "block_of_flats_label_proba",
+            ]
         ),
         how="left",
         on="oct25_building_id",
