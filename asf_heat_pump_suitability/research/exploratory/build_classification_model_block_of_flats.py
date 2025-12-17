@@ -266,16 +266,16 @@ def extract_gdf_labelled_data(gdf, id_str):
 
     Args:
         gdf (gpd.GeoDataFrame): manually labelled sample data
-        id_str (str): name of building ID substring to search for in 'description' column of gdf
+        id_str (str): name of building ID substring to search for in 'Description' column of gdf
 
     Returns:
         gpd.GeoDataFrame: extracted information for manually labelled sample data
     """
-    gdf[id_str] = gdf.description.str.extract(r"building_id: (.+) labeller")
+    gdf[id_str] = gdf.Description.str.extract(r"building_id: (.+) labeller")
     gdf["label"] = gdf.Name.str[:2]
     gdf["confidence"] = gdf["Name"].str[-1:]
-    gdf["url"] = gdf.description.str.extract(r"Location: (.+) N")
-    gdf["labeller"] = gdf.description.str.extract(r"labeller: (\w+)")
+    gdf["url"] = gdf.Description.str.extract(r"Location: (.+) N")
+    gdf["labeller"] = gdf.Description.str.extract(r"labeller: (\w+)")
     return gdf
 
 
