@@ -14,6 +14,7 @@ from shapely.geometry import MultiPoint, LineString, Point, box
 from shapely.ops import voronoi_diagram, unary_union
 
 import folium
+import momepy as mm
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -360,3 +361,66 @@ dissolve_techs_and_plot_folium(
     buildings_gdf=tech_gdf,
     boundary_gdf=plymouth_boundaries,
 )
+
+# %% [markdown]
+# ## Add boundaries to polygons
+
+# %%
+# Linestrings
+roads_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+    layer="road", grid_squares="SX"
+)
+railways_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+    layer="railway_track", grid_squares="SX"
+)
+tidal_boundary_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+    layer="tidal_boundary", grid_squares="SX"
+)
+
+# Polygons
+forest_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+    layer="woodland", grid_squares="SX"
+)
+greenspace_gdf = gpd.read_file(
+    "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/SX/SX_GreenspaceSite.shp"
+)
+surface_water_gdf = gpd.read_file(
+    "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/SX/SX_SurfaceWater_Area.shp"
+)
+tidal_water_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+    layer="tidal_water", grid_squares="SX"
+)
+
+# %%
+line_overlays = [roads_gdf, railways_gdf]
+polygon_overlays = [forest_gdf, greenspace_gdf, tidal_water_gdf, surface_water_gdf]
+
+line_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in line_overlays])
+line_overlay_gdf["geometry"] = line_overlay_gdf.geometry.buffer(1.75)
+polygon_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in polygon_overlays])
+
+tessellation_gdf = (
+    edge_extend_gdf.overlay(polygon_overlay_gdf, how="difference")
+    .overlay(line_overlay_gdf, how="difference")
+    .drop(columns="index_right")
+    .explode()
+)
+tessellation_gdf = (
+    tessellation_gdf.sjoin(tech_gdf, how="inner", predicate="intersects")
+    .drop(columns=["index_right", "tech_right"])
+    .rename(columns={"tech_left": "tech"})
+)
+
+# %%
+tessellation_gdf.plot()
+
+# %%
+map = dissolve_techs_and_plot_folium(
+    voronoi_gdf=tessellation_gdf,
+    buildings_gdf=tech_gdf,
+    boundary_gdf=plymouth_boundaries,
+)
+map
+
+# %%
+map.save("20251222_plymouth_folium_map.html")
