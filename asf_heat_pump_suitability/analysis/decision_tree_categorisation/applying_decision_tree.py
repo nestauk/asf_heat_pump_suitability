@@ -98,7 +98,7 @@ labelled_tech["Name"] = labelled_tech["Name"].map(
 labelled_tech.crs
 
 # %%
-# Update CRS to EPSG:27700 for consistency
+# Update CRS to EPSG:27700
 labelled_tech = labelled_tech.to_crs(epsg=27700)
 
 # %% [markdown]
@@ -193,6 +193,7 @@ specific_ward_gdf = gpd.read_file(
 specific_ward_gdf.crs
 
 # %%
+# Update CRS to EPSG:27700
 specific_ward_gdf.to_crs(epsg=27700, inplace=True)
 
 # %%
@@ -276,7 +277,7 @@ plymouth_gdf.head()
 # %% [markdown]
 # ### 2.2. [temporary] Identifying properties in blocks of flats
 #
-# Code has now been commented out - this was prior to having the blocks of flats flag data.
+# Code has now been commented out - this was prior to having the blocks of flats flag data. Doesn't need to be reviewed.
 
 # %%
 # counts of properties per building
@@ -302,6 +303,7 @@ plymouth_gdf.head()
 # Adding geometries of building footprints in Plymouth to the main geodf.
 
 # %%
+# we create a copy of the (building) geometry column so that we can keep it after the spatial join
 plymouth_gdf["property_geometry"] = plymouth_gdf.geometry
 building_footprints["building_geometry"] = building_footprints["geometry"]
 plymouth_gdf = plymouth_gdf.sjoin(
@@ -329,24 +331,16 @@ plymouth_gdf = plymouth_gdf.sjoin(
 # %%
 # Adding a column to indicate if the property is within a DESNZ heat network zone
 plymouth_hn_zones_gdf["desnz_hn_zone"] = True
+
+# Creating a copy of the geometry column to keep after the spatial join
 plymouth_hn_zones_gdf["desnz_hn_zone_geometry"] = plymouth_hn_zones_gdf["geometry"]
 
 # %%
-# plymouth_gdf.drop(columns=["index_right"], inplace=True)
-
-# %%
 plymouth_gdf = plymouth_gdf.sjoin(
-    plymouth_hn_zones_gdf[
-        [
-            # "desnz_hn_zone",
-            "geometry",
-            "desnz_hn_zone_geometry",
-        ]
-    ],
+    plymouth_hn_zones_gdf[["geometry", "desnz_hn_zone_geometry"]],
     how="left",
     predicate="within",
 )
-# plymouth_gdf["desnz_hn_zone"].fillna(False, inplace=True)
 
 # %% [markdown]
 # ### 2.6. Replacing any labelled data in HN zones (as one of the other solutions) as district HN
@@ -504,11 +498,11 @@ for path in garden_sizes_decision_tree_path.index:
 
 
 # %% [markdown]
-# ## 5. Number of solutions per land parcel
+# ## 5. Number of solutions per land parcel and building footprint
 #
-# In this section we check wether there are multiple solutions for properties located in the same land parcel. Ideally, all properties in the same land parcel should have the same solution.
+# In this section we check wether there are multiple solutions for properties located in the same land parcel and building footprint. Ideally, all properties in the same land parcel & footprint should have the same solution.
 #
-# Most land parcels have one solution for all properties, but there are some buildings with multiple solutions.
+# As we can observe below, most land parcels and building footprints have one solution for all properties, but there are some buildings with multiple solutions.
 
 # %%
 # Distribution of unique 1st most suitable solutions per land parcel (in counts)
@@ -536,6 +530,7 @@ plymouth_gdf["NATIONALCADASTRALREFERENCE"].nunique(), plymouth_gdf[
 ].nunique()
 
 # %%
+# Identifying pairs of different 1st most suitable solutions per land parcel
 solutions_per_land_parcel = plymouth_gdf.groupby("NATIONALCADASTRALREFERENCE")[
     "1st_most_suitable_solution"
 ].apply(set)
@@ -556,6 +551,7 @@ solutions_per_land_parcel.groupby("1st_most_suitable_solution_str")[
 
 
 # %%
+# Identifying pairs of different 1st most suitable solutions per building footprint
 solutions_per_footprint = plymouth_gdf.groupby("building_geometry")[
     "1st_most_suitable_solution"
 ].apply(set)
@@ -586,6 +582,7 @@ land_parcel_to_footprint["n_footprints"] = land_parcel_to_footprint[
 ].apply(len)
 
 # %%
+# It doesn't seem to be the case
 land_parcel_to_footprint["n_footprints"].value_counts()
 
 # %%
@@ -598,7 +595,8 @@ land_parcel_to_footprint["n_footprints"].value_counts(normalize=True) * 100
 # - properties in the same building footprint should have the same most suitable solution
 
 # %%
-# This is currently based on Plymouth only, but needs to be generalised
+# This is currently based on Plymouth only (both pairs found in land parcels and building footprints)
+# but needs to be generalised to all possible cases
 
 
 def assign_unique_sol(solution_set: set) -> str:
@@ -643,7 +641,8 @@ mapping_set_to_final_solution = solutions_per_footprint.set_index("building_geom
 ].to_dict()
 
 # %%
-ig, ax = plt.subplots(figsize=(15, 8))
+# Mapping properties in the same land parcel with different 1st most suitable solutions (for one ward)
+fig, ax = plt.subplots(figsize=(15, 8))
 
 plot_mult_solutions_ = plymouth_gdf[
     plymouth_gdf["NATIONALCADASTRALREFERENCE"].isin(
@@ -682,7 +681,8 @@ handles = [
 ax.legend(handles=handles, loc="upper right")
 
 # %%
-ig, ax = plt.subplots(figsize=(15, 8))
+# Mapping properties in the same building footprint with different 1st most suitable solutions (for one ward)
+fig, ax = plt.subplots(figsize=(15, 8))
 
 plot_mult_solutions_ = plymouth_gdf[
     plymouth_gdf["building_geometry"].isin(solutions_per_footprint["building_geometry"])
@@ -824,7 +824,7 @@ def map_blocks_of_flats_prob(
     threshold=None,
 ):
     """
-    Maps properties suitable for a specific technology where the colour indicates the probability of being a block of flats.
+    Maps properties suitable for a specific technology where the colour indicates the confidence in the block of flats label.
 
     Args:
         tech (str): a low carbon heating solution in the set {"Individual solution", "Networked GSHP", "Communal solutions", "District heat network"}
@@ -912,6 +912,7 @@ map_blocks_of_flats_prob(
 )
 
 # %%
+# Mapping properties most suitable for individual solutions vs labelled data
 map_suitable_tech_vs_labelled_tech(
     tech="Individual solution",
     ward_df=ward_gdf,
@@ -1001,6 +1002,8 @@ map_blocks_of_flats_prob(
 
 # %% [markdown]
 # ## 7. Assessing the results of the decision tree for the labelled data in one ward
+#
+# We shouldn't expect a perfect match between the decision tree outputs and the manually labelled data.
 
 # %%
 # For each UPRN, we have its geometry, the most suitable solution and the label
@@ -1152,25 +1155,20 @@ map_building_techs_in_ward(
 # ## 8. Visualising results per building in Plymouth
 
 # %%
-# Distribution of UPRNs per decision tree path (in counts)
-plymouth_gdf["decision_tree_path"].value_counts()
-
-# %%
-# Distribution of UPRNs per decision tree path (in proportions)
-plymouth_gdf["decision_tree_path"].value_counts(normalize=True) * 100
-
-# %%
-# Distribution of specific ward UPRNs per decision tree path (in proportions)
-ward_gdf["decision_tree_path"].value_counts(normalize=True) * 100
-
-# %%
-plymouth_gdf["in_block_of_flats"].value_counts(normalize=True)
-
-# %%
 # Estimated most suitable
 plymouth_building_most_suitable_tech = (
-    plymouth_gdf[["building_geometry", "1st_most_suitable_solution", "in_hn_zone"]]
-    .drop_duplicates(["building_geometry", "1st_most_suitable_solution"])
+    plymouth_gdf[
+        [
+            "building_geometry",
+            "1st_most_suitable_solution",
+            # keeping the in_hn_zone column for pipeline changes afterwards
+            "in_hn_zone",
+        ]
+    ]
+    .drop_duplicates(
+        # we drop duplicates based on building geometry and most suitable solution, as we're assuming one solution per building
+        ["building_geometry", "1st_most_suitable_solution"]
+    )
     .rename(columns={"building_geometry": "geometry"})
 )
 
@@ -1179,15 +1177,10 @@ plymouth_building_most_suitable_tech = (
 plymouth_building_most_suitable_tech
 
 # %%
+# These numbers should be the same, not sure why they are not
 plymouth_building_most_suitable_tech["geometry"].nunique(), len(
     plymouth_building_most_suitable_tech
 )
-
-# %%
-# Checking distribution for properties within the specific ward
-plymouth_gdf[~pd.isnull(plymouth_gdf["ward"])].groupby("NATIONALCADASTRALREFERENCE")[
-    ["1st_most_suitable_solution"]
-].nunique()["1st_most_suitable_solution"].value_counts()
 
 # %%
 map_building_techs_in_ward(
@@ -1294,6 +1287,8 @@ map_plymouth_cc.save("plymouthcc_most_suitable_tech_per_building.html")
 
 # %% [markdown]
 # ## 9. Share of homes per technology
+#
+# These stats are up to date (after reassigning some solutions based on other properties in the same building footprint).
 
 # %%
 # Distribution of properties for the 1st most suitable solutions (in %)
