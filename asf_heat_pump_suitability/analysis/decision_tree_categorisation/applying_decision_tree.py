@@ -1296,20 +1296,30 @@ map_plymouth_cc.save("plymouthcc_most_suitable_tech_per_building.html")
 # ## 9. Share of homes per technology
 
 # %%
-# Distribution of 1st most suitable solutions per building (in %)
+# Distribution of properties for the 1st most suitable solutions (in %)
 plymouth_gdf["1st_most_suitable_solution"].value_counts(normalize=True) * 100
 
 # %%
-# Distribution of 1st most suitable solutions per building (in counts)
+# Distribution of properties for the 1st most suitable solutions  (in counts)
 plymouth_gdf["1st_most_suitable_solution"].value_counts()
 
 # %%
-# # Distribution of 1st most suitable solutions per building (in %) - with HN zones as district heat network
-# gdf_plymouth_cc["1st_most_suitable_solution"].value_counts(normalize=True)*100
+# Creating a version of the gdf where all properties within HNZ are labelled as district heat network, even where that's not the output of our decision tree
+plymouth_gdf_cc = plymouth_gdf.copy()
+plymouth_gdf_cc["1st_most_suitable_solution"] = plymouth_gdf_cc.apply(
+    lambda x: (
+        "District heat network" if x["in_hn_zone"] else x["1st_most_suitable_solution"]
+    ),
+    axis=1,
+)
 
 # %%
-# # Distribution of 1st most suitable solutions per building (in counts) - with HN zones as district heat network
-# gdf_plymouth_cc["1st_most_suitable_solution"].value_counts()
+# Distribution of properties for the 1st most suitable solutions (in %) - with HN zones as district heat network
+plymouth_gdf_cc["1st_most_suitable_solution"].value_counts(normalize=True) * 100
+
+# %%
+# Distribution of properties for the 1st most suitable solutions (in counts) - with HN zones as district heat network
+gdf_plymouth_cc["1st_most_suitable_solution"].value_counts()
 
 # %% [markdown]
 # ## 10. Saving data
