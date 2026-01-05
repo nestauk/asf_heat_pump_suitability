@@ -47,15 +47,21 @@ plt.style.use("tableau-colorblind10")
 
 # %% [markdown]
 # ### Load Plymouth UPRN and building data
+#
+# The original sample of buildings for labelling used the April 2025 OS OpenMap Local building footprint data, the new sample used the October 2025 data. For the modelling later in this notebook, we use the October 2025 building footprints so here we load the April 2025 footprints and relabel them with October 2025 building IDs.
+#
+# Building IDs are unique for each version of the building footprint file - i.e. the same building footprint will have different unique IDs across versions.
 
 # %%
-# Load Plymouth buildings and residential UPRNs with property type label
+# Load OS OpenMap Local Plymouth building footprints
 apr_buildings_plymouth_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v042025_OSOpenMapLocal_geometries_selected/SX/SX_Building.shp"
 )
 oct_buildings_plymouth_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/SX/SX_Building.shp"
 )
+
+# Load residential UPRNs with flats boolean label
 plymouth_uprns_df = pl.read_parquet(
     "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns_with_flats.parquet"
 )
@@ -83,14 +89,14 @@ apr_oct_buildings_gdf = apr_oct_buildings_gdf.rename(
     }
 )
 
-# Join buildings to UPRNs
+# Join buildings to UPRNs - retains residential UPRNs located within April building footprints
 plymouth_uprns_gdf = (
     uprns.generate_gdf_uprn_coords(df=plymouth_uprns_df)
     .sjoin(apr_oct_buildings_gdf, how="inner", predicate="within")
     .drop(columns=["index_right", "FEATCODE_apr", "FEATCODE_oct"])
 )
 
-# Join UPRNs to buildings
+# Join UPRNs to buildings - retains April building footprints containing residential UPRNs
 plymouth_buildings_w_uprns_gdf = apr_oct_buildings_gdf.sjoin(
     uprns.generate_gdf_uprn_coords(df=plymouth_uprns_df),
     how="left",
@@ -101,7 +107,7 @@ plymouth_buildings_w_uprns_gdf = apr_oct_buildings_gdf.sjoin(
 # ### Load UPRN and building data for other sampling areas (Nottingham, Bradford, Glasgow, Manchester, Bath)
 
 # %%
-# Load OS OpenMap Local Buildings layer for sampling areas
+# Load OS OpenMap Local Buildings layer for sampling areas - uses October 2025 building footprint data
 sampling_areas_buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
     layer="building", grid_squares=["NS", "SD", "SE", "SJ", "SK", "ST"]
 )
@@ -149,6 +155,7 @@ buildings_w_uprns_gdf["building_area_m2"] = buildings_w_uprns_gdf.area
 buildings_w_uprns_gdf["building_perimeter_m"] = buildings_w_uprns_gdf.length
 buildings_w_uprns_df = pl.from_pandas(buildings_w_uprns_gdf.drop(columns=["geometry"]))
 
+# Aggregate data per building
 agg_building_df = (
     buildings_w_uprns_df.group_by("oct25_building_id")
     .agg(
@@ -158,6 +165,7 @@ agg_building_df = (
         pl.col("building_area_m2").first().name.keep(),
         pl.col("building_perimeter_m").first().name.keep(),
     )
+    # Only retain buildings which contain flats - these are the ones we need to predict as blocks of flats or not
     .filter(pl.col("n_flats") > 0)
     .with_columns(
         (pl.col("n_flats") / pl.col("n_UPRNs")).alias("proportion_flats"),
@@ -214,7 +222,33 @@ agg_building_df = agg_building_df.with_columns(
 # Get count of UPRNs at each X and Y coordinates to get the count of UPRNs which share an exact location
 all_uprns_df = pl.from_pandas(all_uprns_gdf.drop(columns="geometry"))
 all_uprns_df = all_uprns_df.with_columns(
-    n_stacked_uprns=pl.col("UPRN").count().over(["X_COORDINATE", "Y_COORDINATE"])
+    # Count of stacked UPRNs per coordinate
+    n_stacked_uprns=pl.col("UPRN")
+    .count()
+    .over(["X_COORDINATE", "Y_COORDINATE"])
+)
+
+# Get proportion of UPRNs per building which are stacked
+# For now, proportion_stacked_uprns == proportion_flats because
+# we identify flats based on whether they share the same coordinates with another UPRN
+prop_stacked_df = (
+    all_uprns_df.with_columns(
+        pl.when(pl.col("n_stacked_uprns") > 1)
+        .then(True)
+        .otherwise(False)
+        .alias("stacked")
+    )
+    .group_by("oct25_building_id")
+    .agg(
+        pl.col("UPRN").count().alias("n_UPRNs"),
+        # Count of stacked UPRNs per building
+        pl.col("stacked").sum().alias("n_stacked_uprns"),
+    )
+    .with_columns(
+        (pl.col("n_stacked_uprns") / pl.col("n_UPRNs")).alias(
+            "proportion_stacked_uprns"
+        )
+    )
 )
 
 # Group by building and get the average and STD of UPRNs sharing the same coordinates
@@ -226,6 +260,8 @@ agg_uprns_df = all_uprns_df.group_by("oct25_building_id").agg(
 
 # Join all the calculated features together
 features_df = agg_building_df.join(
+    prop_stacked_df.drop("n_UPRNs"), how="left", on="oct25_building_id"
+).join(
     agg_uprns_df.select(
         ["oct25_building_id", "avg_n_stacked_uprns", "std_n_stacked_uprns"]
     ),
@@ -260,7 +296,7 @@ labelled_datasets["oct25"] = {
 
 
 # %%
-def extract_gdf_labelled_data(gdf, id_str):
+def extract_gdf_labelled_data(gdf: gpd.GeoDataFrame, id_str: str) -> gpd.GeoDataFrame:
     """
     Extract label, confidence, URL, and labeller from manually labelled sample data
 
@@ -271,11 +307,11 @@ def extract_gdf_labelled_data(gdf, id_str):
     Returns:
         gpd.GeoDataFrame: extracted information for manually labelled sample data
     """
-    gdf[id_str] = gdf.Description.str.extract(r"building_id: (.+) labeller")
+    gdf[id_str] = gdf.description.str.extract(r"building_id: (.+) labeller")
     gdf["label"] = gdf.Name.str[:2]
     gdf["confidence"] = gdf["Name"].str[-1:]
-    gdf["url"] = gdf.Description.str.extract(r"Location: (.+) N")
-    gdf["labeller"] = gdf.Description.str.extract(r"labeller: (\w+)")
+    gdf["url"] = gdf.description.str.extract(r"Location: (.+) N")
+    gdf["labeller"] = gdf.description.str.extract(r"labeller: (\w+)")
     return gdf
 
 
@@ -380,6 +416,8 @@ final_labels_df = (
         .alias("block_of_flats")
     )
 )
+
+final_labels_df["block_of_flats"].value_counts()
 
 # %% [markdown]
 # ## Plot model feature distributions
@@ -526,6 +564,8 @@ fig.tight_layout()
 
 # %% [markdown]
 # ## Train and evaluate model and tune hyperparameters
+#
+# We use a combination of random state integers and random state instances. Random state integers are better to use in cross validation because splits of data are the same after repeated calls to the random state - this is what we want when training different models and comparing the results. Random state instances will yield different results every time they are called. They are better to use in random forest classifiers because during cross-validation, they will call `fit` from a different random number so the random subset of features is different for each fold. This increases the robustness of the classifier. See more on sklearn docs: https://scikit-learn.org/stable/common_pitfalls.html#controlling-randomness
 
 # %%
 # Set random state int and RandomState instance
@@ -551,12 +591,12 @@ features = [
 # %%
 # Create param distributions for hyperparameter search
 param_distributions = {
-    "n_estimators": list(range(100, 1000, 10)),
-    "max_depth": list(range(10, 100, 5)),
-    "min_samples_split": list(range(2, 20, 1)),
-    "min_samples_leaf": list(range(1, 10, 1)),
+    "n_estimators": list(range(100, 1001, 10)),
+    "max_depth": list(range(10, 101, 5)),
+    "min_samples_split": list(range(2, 21, 1)),
+    "min_samples_leaf": list(range(1, 11, 1)),
     "max_features": ["sqrt", "log2"],
-    "criterion": ["gini", "entropy"],
+    "criterion": ["gini"],
 }
 
 # Sort model dataframe so that results are replicable
@@ -566,7 +606,7 @@ pd_model_df = (
 X = pd_model_df[features]
 y = pd_model_df["block_of_flats"]
 
-# Keep a final validation set aside
+# Keep a final hold out validation set aside
 X_train, X_val, y_train, y_val = train_test_split(
     X, y, test_size=0.2, random_state=random_state, stratify=y
 )
@@ -584,6 +624,7 @@ search = HalvingRandomSearchCV(
     cv=cv,  # Defaults to use StratifiedKFold splitter with 5 folds because model is binary classifier
     scoring="f1",  # Use F1 scoring metric for optimisation
     n_jobs=-1,  # Use all available cores
+    min_resources="exhaust",
 ).fit(X_train, y_train)
 
 print(f"Best F1 score: {search.best_score_}")
