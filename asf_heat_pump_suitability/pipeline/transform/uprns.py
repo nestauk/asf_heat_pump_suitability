@@ -179,52 +179,22 @@ if __name__ == "__main__":
     uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
 
-    # TODO I expect this to be simplified at some point but the if/else block allows us to sample from certain areas for now
-    if args.local_authorities.lower() == "plymouth":
-        print("Creating residential UPRN dataset for Plymouth Local Authority...")
-        grid_squares = config["constant"]["grid_squares"]["plymouth"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las="Plymouth"
-        )
-        uprns_gdf = uprns_gdf.sjoin(
-            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
-            how="inner",
-            predicate="intersects",
-        ).drop(columns="index_right")
-
-    elif args.local_authorities.lower() == "plymouth_similar":
-        print(
-            "Creating residential UPRN dataset for Plymouth, Portsmouth, Southampton, Swansea, and Liverpool Local Authorities..."
-        )
-        grid_squares = config["constant"]["grid_squares"]["plymouth_similar_cities"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=config["constant"]["plymouth_similar_cities"]
-        )
-        uprns_gdf = uprns_gdf.sjoin(
-            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
-            how="inner",
-            predicate="intersects",
-        ).drop(columns="index_right")
-
-    elif args.local_authorities.lower() == "sampling_areas":
-        print(
-            "Creating residential UPRN dataset for Bath, Bradford, Glasgow, Manchester, Nottingham, and Plymouth Local Authorities..."
-        )
-        grid_squares = config["constant"]["grid_squares"]["sampling_areas"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=config["constant"]["sampling_areas"]
-        )
-        uprns_gdf = uprns_gdf.sjoin(
-            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
-            how="inner",
-            predicate="intersects",
-        ).drop(columns="index_right")
-
-    else:  # All of GB
+    if args.local_authorities.lower() == "gb":  # All of GB
         # TODO this may not work due to scaling and may require chunking of datasets.
         # TODO Adding here as placeholder to assist scaling later
         print("Creating residential UPRN dataset for all of GB...")
         grid_squares = None
+    else:  # Specific local authorities (any number of LAs can be specified in config file)
+        print(f"Creating residential UPRN dataset for {args.local_authorities}...")
+        grid_squares = config["constant"][args.local_authorities]["grid_squares"]
+        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+            select_las=config["constant"][args.local_authorities]["la_names"]
+        )
+        uprns_gdf = uprns_gdf.sjoin(
+            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
+            how="inner",
+            predicate="intersects",
+        ).drop(columns="index_right")
 
     poi_gdf = load_tree_input.load_gdf_poi()
     poi_gdf = poi.transform_gdf_poi(

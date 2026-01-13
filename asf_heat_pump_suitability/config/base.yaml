@@ -31,9 +31,17 @@ data:
     plymouth_residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet"
 
 constant:
-  grid_squares:
-    plymouth: "SX"
-    plymouth_similar_cities: # Liverpool, Plymouth, Portsmouth, Southampton, Swansea
+  plymouth:
+    la_names: "Plymouth"
+    grid_square: "SX"
+  plymouth_similar_cities:
+    la_names:
+      - "Liverpool"
+      - "Plymouth"
+      - "Portsmouth"
+      - "Southampton"
+      - "Swansea"
+    grid_squares:
       - "SD"
       - "SJ"
       - "SN"
@@ -41,7 +49,15 @@ constant:
       - "SU"
       - "SX"
       - "SZ"
-    sampling_areas: # Plymouth, Nottingham, Bradford, Glasgow, Manchester, Bath
+  sampling_areas:
+    la_names:
+      - "Bath and North East Somerset"
+      - "Bradford"
+      - "Glasgow City"
+      - "Manchester"
+      - "Nottingham"
+      - "Plymouth"
+    grid_squares:
       - "NS"
       - "SD"
       - "SE"
@@ -49,21 +65,24 @@ constant:
       - "SK"
       - "ST"
       - "SX"
-  plymouth_similar_cities:
-    - "Liverpool"
-    - "Plymouth"
-    - "Portsmouth"
-    - "Southampton"
-    - "Swansea"
-  sampling_areas:
-    - "Bath and North East Somerset"
-    - "Bradford"
-    - "Glasgow City"
-    - "Manchester"
-    - "Nottingham"
-    - "Plymouth"
+  greater_manchester_las:
+    la_names:
+      - "Bolton"
+      - "Bury"
+      - "Manchester"
+      - "Oldham"
+      - "Rochdale"
+      - "Salford"
+      - "Stockport"
+      - "Tameside"
+      - "Trafford"
+      - "Wigan"
+    grid_squares:
+      - "SD"
+      - "SE"
+      - "SJ"
+      - "SK"
   target_crs: 27700 # British National Grid
-
 data_source:
   gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
   gb_ons_postcode_dir_file_path: "Data/ONSPD_AUG_2023_UK.csv" # Aug 2023 data
