@@ -34,6 +34,13 @@ def parse_arguments() -> argparse.Namespace:
         required=False,
     )
 
+    parser.add_argument(
+        "--uprns_path",
+        help="Path to residential UPRN dataset with X and Y coordinates in parquet.",
+        type=str,
+        required=True,
+    )
+
     return parser.parse_args()
 
 
@@ -49,39 +56,47 @@ if __name__ == "__main__":
 
     args = parse_arguments()
 
-    if args.local_authorities.lower() == "plymouth":
+    las = args.local_authorities.lower()
+    uprns_path = args.uprns_path
 
+    if las == "gb":  # all GB
+        # Placeholder for future implementation
+        raise NotImplementedError("Processing for all of GB is not yet supported.")
+    else:
         # Load residential OS UPRNs in Plymouth
-        print("Loading residential UPRN dataset for Plymouth Local Authority...")
-        uprn_df = base_getters.load_df_from_s3(
-            config["data"]["processed"]["plymouth_residential_uprns"]
-        )
+        print(f"Loading residential UPRN dataset for {las}...")
+        uprn_df = base_getters.load_df_from_s3(uprns_path)
         uprn_gdf = uprns.generate_gdf_uprn_coords(uprn_df)
 
         """ Existing heat network zones """
 
         # Load Plymouth existing heat network zone polygons
-        print("Loading heat network zone data for Plymouth Local Authority...")
-        plymouth_hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
-            local_authority="plymouth"
-        )
+        la_names = config["constant"][las]["la_names"]
+        print(f"Loading heat network zone data for {las} Local Authority...")
+        hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=las)
+
+        print(hn_zones_gdf.head())
 
         # Label UPRNs in existing, potential and planned heat network zones
-        print(
-            "Identifying residential UPRNs in heat network zones for Plymouth Local Authority..."
-        )
+        print(f"Identifying residential UPRNs in heat network zones for {las}...")
         hn_zone_uprn_df = heat_network_zones.label_gdf_heat_network_zone_uprns(
             uprn_gdf=uprn_gdf,
-            hn_zone_gdf=plymouth_hn_zones_gdf,
-            usecols=[
-                "ZoneID",  # zone unique identifier
-            ],
+            hn_zone_gdf=hn_zones_gdf,
+            # usecols=[
+            #     "ZoneID",  # zone unique identifier
+            # ],
         )
 
         # Clean up columns
         hn_zone_uprn_df = hn_zone_uprn_df.select(
-            ["UPRN", "LAD23NM", "X_COORDINATE", "Y_COORDINATE", "in_hn_zone", "ZoneID"]
-        ).rename({"ZoneID": "HNZoneID"})
+            [
+                "UPRN",
+                "LAD23NM",
+                "X_COORDINATE",
+                "Y_COORDINATE",
+                "in_hn_zone",  # "ZoneID"
+            ]
+        )  # .rename({"ZoneID": "HNZoneID"})
 
         """ City centre areas """
 
@@ -92,9 +107,7 @@ if __name__ == "__main__":
         )
 
         # Label UPRNs in city centres
-        print(
-            "Identifying residential UPRNs in city centre areas for Plymouth Local Authority..."
-        )
+        print(f"Identifying residential UPRNs in city centre areas for {las}...")
         hn_zone_uprn_gdf = uprns.generate_gdf_uprn_coords(hn_zone_uprn_df)
         hn_zone_city_centre_uprn_df = city_centres.label_gdf_city_centre_spatial_signatures_uprns(
             uprn_gdf=hn_zone_uprn_gdf,  # add city centre labels to gdf with hnz labels
@@ -108,22 +121,12 @@ if __name__ == "__main__":
                 "LAD23NM",
                 "X_COORDINATE",
                 "Y_COORDINATE",
-                "HNZoneID",
+                # "HNZoneID",
                 "in_hn_zone",
                 "spatial_signature_types",
                 "in_city_centre",
             ]
         )
-
-    elif args.local_authorities.lower() in ["plymouth_similar", "sampling_areas"]:
-        # Placeholder for future implementation (subject to heat network zone data availability)
-        raise NotImplementedError(
-            f"Processing for {args.local_authorities} is not yet supported."
-        )
-
-    else:  # all GB
-        # Placeholder for future implementation
-        raise NotImplementedError("Processing for all of GB is not yet supported.")
 
     # Save residential UPRNs with existing heat network zone and city centre labels to S3
     save_utils.save_to_s3(

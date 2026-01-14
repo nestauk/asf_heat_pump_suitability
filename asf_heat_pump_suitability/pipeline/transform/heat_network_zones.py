@@ -51,7 +51,7 @@ def label_gdf_heat_network_zone_uprns(
     ).drop(columns="index_right")
 
     # Add heat network zone boolean label
-    labelled_uprn_gdf["in_hn_zone"] = labelled_uprn_gdf["ZoneID"].notna()
+    labelled_uprn_gdf["in_hn_zone"] = labelled_uprn_gdf["geometry"].notna()
 
     # Return as polars df without geometry
     labelled_uprn_df = pl.from_pandas(labelled_uprn_gdf.drop(columns="geometry"))
