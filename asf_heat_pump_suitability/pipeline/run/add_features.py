@@ -8,6 +8,7 @@ python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/do
 """
 
 import argparse
+from asf_heat_pump_suitability import config
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -27,6 +28,13 @@ def parse_arguments() -> argparse.Namespace:
         required=True,
     )
 
+    parser.add_argument(
+        "--local_authorities",
+        help="",
+        type=str,
+        required=True,
+    )
+
     return parser.parse_args()
 
 
@@ -41,6 +49,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.pipeline.transform import uprns, outdoor_space
 
     args = parse_arguments()
+    las = args.local_authorities.lower()
 
     # Load UPRN data
     print(f"Loading domestic UPRNs from: {args.uprns}")
@@ -63,11 +72,37 @@ if __name__ == "__main__":
     # ESTIMATE OUTDOOR SPACE
     # TODO scale beyond Plymouth
     print("Loading land registry data...")
-    land_parcels_gdf = gpd.read_file(
-        "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
+
+    # from asf_heat_pump_suitability.getters import load_boundaries
+    # boundaries = load_boundaries.load_gdf_local_authority_boundaries(select_las=config["constant"][las]["la_names"])
+    # print(boundaries.head())
+    import pandas as pd
+    import geopandas as gpd
+    from asf_heat_pump_suitability.getters.get_datasets import (
+        load_gdf_inspire_land_parcels,
     )
+
+    inspire_file_names = load_gdf_inspire_land_parcels(
+        path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EW.geojson"
+    )
+    inspire_file_names = inspire_file_names[
+        inspire_file_names["LAD23NM"].isin(config["constant"][las]["la_names"])
+    ]
+    inspire_file_names = inspire_file_names["inspire_file_name"].unique()
+    land_parcels_gdf = gpd.GeoDataFrame()
+    for file_name in inspire_file_names:
+        print(f"Loading land parcels from {file_name}...")
+        temp_gdf = load_gdf_inspire_land_parcels(path=f"s3://{file_name}")
+        land_parcels_gdf = pd.concat([land_parcels_gdf, temp_gdf], ignore_index=True)
+
+    print(land_parcels_gdf.head())
+
+    # land_parcels_gdf = gpd.read_file(
+    #     "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
+    # )
+
     building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-        layer="building", grid_squares="SX"
+        layer="building", grid_squares=config["constant"][las]["grid_squares"]
     )
 
     # Get intersection of building footprint polygons and land polygons
