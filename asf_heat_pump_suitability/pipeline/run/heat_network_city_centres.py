@@ -79,24 +79,20 @@ if __name__ == "__main__":
 
         # Label UPRNs in existing, potential and planned heat network zones
         print(f"Identifying residential UPRNs in heat network zones for {las}...")
+        id_col = [col for col in hn_zones_gdf.columns if "ID" in col][0]
+
         hn_zone_uprn_df = heat_network_zones.label_gdf_heat_network_zone_uprns(
             uprn_gdf=uprn_gdf,
             hn_zone_gdf=hn_zones_gdf,
-            # usecols=[
-            #     "ZoneID",  # zone unique identifier
-            # ],
+            usecols=[
+                id_col,  # zone unique identifier
+            ],
         )
 
         # Clean up columns
         hn_zone_uprn_df = hn_zone_uprn_df.select(
-            [
-                "UPRN",
-                "LAD23NM",
-                "X_COORDINATE",
-                "Y_COORDINATE",
-                "in_hn_zone",  # "ZoneID"
-            ]
-        )  # .rename({"ZoneID": "HNZoneID"})
+            ["UPRN", "LAD23NM", "X_COORDINATE", "Y_COORDINATE", "in_hn_zone", id_col]
+        ).rename({id_col: "HNZoneID"})
 
         """ City centre areas """
 
