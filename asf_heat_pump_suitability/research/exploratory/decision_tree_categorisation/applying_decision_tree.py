@@ -31,10 +31,10 @@ from asf_heat_pump_suitability.getters import (
 
 # %%
 colours = {
-    "Individual solution": "orange",
-    "Networked GSHP": "green",
-    "Communal solutions": "hotpink",
-    "District heat network": "blue",
+    "Individual solution": "#18A48C",
+    "Networked GSHP": "#0000FF",
+    "Communal solutions": "#FF6E47",
+    "District heat network": "#EA2541",
 }
 
 # %% [markdown]
@@ -1256,7 +1256,7 @@ gdf_plymouth_cc["1st_most_suitable_solution"] = gdf_plymouth_cc.apply(
     axis=1,
 )
 gdf_plymouth_cc["color"] = gdf_plymouth_cc.apply(
-    lambda x: "blue" if x["in_hn_zone"] else x["color"], axis=1
+    lambda x: "#EA2541" if x["in_hn_zone"] else x["color"], axis=1
 )
 
 # %%
