@@ -17,6 +17,9 @@ import math
 
 import matplotlib.pyplot as plt
 
+import s3fs
+import pickle
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.experimental import enable_halving_search_cv  # noqa
 from sklearn.model_selection import (
@@ -607,7 +610,7 @@ X = pd_model_df[features]
 y = pd_model_df["block_of_flats"]
 
 # Keep a final hold out validation set aside
-X_train, X_val, y_train, y_val = train_test_split(
+X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=random_state, stratify=y
 )
 
@@ -624,7 +627,6 @@ search = HalvingRandomSearchCV(
     cv=cv,  # Defaults to use StratifiedKFold splitter with 5 folds because model is binary classifier
     scoring="f1",  # Use F1 scoring metric for optimisation
     n_jobs=-1,  # Use all available cores
-    min_resources="exhaust",
 ).fit(X_train, y_train)
 
 print(f"Best F1 score: {search.best_score_}")
@@ -636,19 +638,24 @@ final_model = RandomForestClassifier(**search.best_params_, random_state=rng)
 final_model.fit(X_train, y_train)
 
 # Evaluate final model on hold out validation set
-y_pred = final_model.predict(X_val)
-val_f1 = f1_score(y_val, y_pred)
+y_pred = final_model.predict(X_test)
+val_f1 = f1_score(y_test, y_pred)
 print(f"F1 score on hold out validation set: {val_f1}")
 
-# Plot confusion matrix results for hold out validation set
-cmx = confusion_matrix(y_val, y_pred, normalize="true")
+save_utils.save_model_to_pkl_s3(
+    final_model,
+    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl",
+)
+
+# Plot confusion matrix results for hold out test set
+cmx = confusion_matrix(y_test, y_pred, normalize="true")
 ConfusionMatrixDisplay(cmx).plot()
 plt.title("Labels: 1=Block of flats, 0=Not")
 plt.grid(False)
 plt.show()
 
 # %%
-# Run model on buildings which weren't manually labelled - model run only on buildings containing any flats
+# Predict 'block of flats' label for buildings which weren't manually labelled - predicting only on buildings containing at least one flat
 manually_labelled_ids = model_df["oct25_building_id"].unique()
 to_label_df = features_df.filter(
     ~pl.col("oct25_building_id").is_in(manually_labelled_ids)
@@ -730,7 +737,7 @@ labelled_buildings_df = pl.concat(
     ]
 )
 
-uprn_blocks_df = (
+uprns_df = (
     all_uprns_df.drop_nulls(subset="oct25_building_id")
     .select(["UPRN", "oct25_building_id"])
     .join(
@@ -756,8 +763,8 @@ uprn_blocks_df = (
     )
 )
 save_utils.save_to_s3(
-    uprn_blocks_df,
-    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/sampling_areas_residential_uprns_with_block_of_flats.parquet",
+    uprns_df,
+    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/sampling_areas_residential_uprns_with_block_of_flats_label.parquet",
 )
 
 # %% [markdown]
@@ -837,3 +844,5 @@ display = PrecisionRecallDisplay.from_predictions(
     _y_test, y_pred_proba, name="RF Classifier", plot_chance_level=True, despine=True
 )
 _ = display.ax_.set_title("2-class Precision-Recall curve")
+
+# %%
