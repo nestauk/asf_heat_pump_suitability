@@ -1,3 +1,4 @@
+# %%
 # %% [markdown]
 # # Visualising the results of the decision tree
 #
@@ -631,13 +632,13 @@ def assign_unique_sol(solution_set: set) -> str:
         return "Networked GSHP"
 
 
-solutions_per_footprint["final_solution"] = solutions_per_footprint[
+solutions_per_footprint["assigned_tech"] = solutions_per_footprint[
     "1st_most_suitable_solution"
 ].apply(lambda x: assign_unique_sol(x))
 
 # %%
-mapping_set_to_final_solution = solutions_per_footprint.set_index("building_geometry")[
-    "final_solution"
+mapping_set_to_assigned_tech = solutions_per_footprint.set_index("building_geometry")[
+    "assigned_tech"
 ].to_dict()
 
 # %%
@@ -721,8 +722,8 @@ ax.legend(handles=handles, loc="upper right")
 # %%
 plymouth_gdf["1st_most_suitable_solution"] = plymouth_gdf.apply(
     lambda x: (
-        mapping_set_to_final_solution[x["building_geometry"]]
-        if x["building_geometry"] in mapping_set_to_final_solution
+        mapping_set_to_assigned_tech[x["building_geometry"]]
+        if x["building_geometry"] in mapping_set_to_assigned_tech
         else x["1st_most_suitable_solution"]
     ),
     axis=1,
@@ -1328,5 +1329,15 @@ plymouth_building_most_suitable_tech.to_parquet(
 # This is how data can be loaded, for future reference
 # import geopandas as gpd
 # f = gpd.read_parquet("s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.parquet")
+
+# %%
+gdf_plymouth_cc
+
+# %%
+# Save to GeoJSON
+gdf_plymouth_cc.to_file(
+    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.geojson",
+    driver="GeoJSON",
+)
 
 # %%
