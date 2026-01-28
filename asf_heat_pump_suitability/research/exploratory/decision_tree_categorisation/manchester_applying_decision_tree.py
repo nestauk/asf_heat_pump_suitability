@@ -1,3 +1,4 @@
+# %%
 # %% [markdown]
 # # Visualising the results of the decision tree for Greater Manchester
 #
@@ -966,5 +967,31 @@ gm_building_most_suitable_tech.to_parquet(
 # This is how data can be loaded, for future reference
 # import geopandas as gpd
 # f = gpd.read_parquet("s3://asf-heat-pump-suitability/local_heat_planning/outputs/greater_manchester_las_building_most_suitable_tech.parquet")
+
+# %%
+gm_building_most_suitable_tech
+
+# %%
+for lad in gm_building_most_suitable_tech["LAD23NM"].unique():
+    lad_gdf = gm_building_most_suitable_tech[
+        gm_building_most_suitable_tech["LAD23NM"] == lad
+    ]
+    lad_gdf.to_file(
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{lad.lower()}_building_most_suitable_tech.geojson",
+        driver="GeoJSON",
+    )
+
+# %%
+# Names of geojson files saved in the S3 bucket
+import boto3
+
+s3 = boto3.resource("s3")
+bucket = s3.Bucket("asf-heat-pump-suitability")
+
+objects = [obj for obj in bucket.objects.filter(Prefix="local_heat_planning/outputs/")]
+object_keys = [obj.key for obj in objects if obj.key.endswith(".geojson")]
+
+# %%
+
 
 # %%
