@@ -15,6 +15,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import folium
+import os
 
 # %%
 # local imports
@@ -35,7 +36,10 @@ colours = {
     "Networked GSHP": "#0000FF",
     "Communal solutions": "#FF6E47",
     "District heat network": "#EA2541",
+    "Individual solution or Networked GSHP": "grey",
+    "Individual solution or District heat network": "gray",
 }
+
 
 # %% [markdown]
 # ## 1. Loading data
@@ -227,7 +231,7 @@ block_of_flats_model = pickle.loads(body)
 
 
 # %%
-# Create features
+# Create features to apply blocks of flats model
 
 # %%
 
@@ -344,6 +348,7 @@ features_df = agg_building_df.join(
 
 
 # %%
+# These are the model features
 features = [
     "n_UPRNs",
     "n_flats",
@@ -447,7 +452,13 @@ def define_decision_tree(
             }
     else:
         if city_centre_or_hnz:
-            if garden_size > 70:
+            if pd.isnull(garden_size):
+                return {
+                    1: "Individual solution or District heat network",
+                    2: "Individual solution or District heat network",
+                    "path": "Unknown garden size in city centre",
+                }
+            elif garden_size > 70:
                 return {
                     1: "Individual solution",
                     2: "District heat network",
@@ -460,7 +471,13 @@ def define_decision_tree(
                     "path": "4. not blocks of flats, city centre, small or no garden",
                 }
         else:
-            if garden_size > 30:
+            if pd.isnull(garden_size):
+                return {
+                    1: "Individual solution or Networked GSHP",
+                    2: "Networked GSHP or Communal solutions",
+                    "path": "Unknown garden size not in city centre",
+                }
+            elif garden_size > 30:
                 return {
                     1: "Individual solution",
                     2: "Networked GSHP",
@@ -618,8 +635,12 @@ def assign_unique_sol(solution_set: set) -> str:
         return "Networked GSHP"
     elif "Communal solutions" in solution_set:
         return "Communal solutions"
+    elif "Individual solution or Networked GSHP" in solution_set:
+        return "Individual solution or Networked GSHP"
+    elif "Individual solution or District heat network" in solution_set:
+        return "Individual solution or District heat network"
     else:
-        print("this shouldn't happen!")
+        print("This shouldn't happen!")
 
 
 solutions_per_footprint["final_solution"] = solutions_per_footprint[
@@ -789,17 +810,46 @@ gm_building_most_suitable_tech = (
             "building_geometry",
             "1st_most_suitable_solution",
             "LAD23NM",
+            "max_contiguous_outdoor_space_area_m2",
+            "property_type_flat",
+            "in_block_of_flats",
+            "in_city_centre",
             # keeping the in_hn_zone column for pipeline changes afterwards
             "in_hn_zone",
+            "UPRN",
         ]
     ]
+    .groupby(["building_geometry", "1st_most_suitable_solution"])
+    .agg(
+        {
+            "LAD23NM": "first",
+            "property_type_flat": "sum",
+            "UPRN": "count",
+            "max_contiguous_outdoor_space_area_m2": "mean",
+            "in_block_of_flats": "first",
+            "in_city_centre": "first",
+            "in_hn_zone": "first",
+        }
+    )
+    .reset_index()
     .drop_duplicates(
         # we drop duplicates based on building geometry and most suitable solution, as we're assuming one solution per building
         ["building_geometry", "1st_most_suitable_solution"]
     )
     .rename(columns={"building_geometry": "geometry"})
 )
+gm_building_most_suitable_tech["max_contiguous_outdoor_space_area_m2"] = (
+    gm_building_most_suitable_tech["max_contiguous_outdoor_space_area_m2"].round()
+)
+gm_building_most_suitable_tech["percent_flats"] = (
+    gm_building_most_suitable_tech["property_type_flat"]
+    / gm_building_most_suitable_tech["UPRN"]
+) * 100
 
+# Convert back to a GeoDataFrame
+gm_building_most_suitable_tech = gpd.GeoDataFrame(
+    gm_building_most_suitable_tech, geometry="geometry", crs=gm_gdf.crs
+)
 
 # %%
 gm_building_most_suitable_tech
@@ -865,6 +915,33 @@ for lad in gm_building_most_suitable_tech["LAD23NM"].unique():
         zoom_start=12,
     )
 
+    # 3. Create the Popup object
+    popup = folium.GeoJsonPopup(
+        fields=[
+            "property_type_flat",
+            "UPRN",
+            "percent_flats",
+            "in_block_of_flats",
+            "max_contiguous_outdoor_space_area_m2",
+            "in_city_centre",
+            "in_hn_zone",
+            "1st_most_suitable_solution",
+        ],
+        aliases=[
+            "Number of flats:",
+            "Number of properties in building:",
+            "Percent of flats (%):",
+            "Property in block of flats:",
+            "Avg max outdoor space area (m2):",
+            "In city centre:",
+            "In HN zone:",
+            "Most suitable solution:",
+        ],
+        localize=True,
+        labels=True,
+        style="background-color: white;",
+    )
+
     # 3. Add polygons using the color col
     folium.GeoJson(
         lad_gdf,
@@ -875,9 +952,16 @@ for lad in gm_building_most_suitable_tech["LAD23NM"].unique():
             ],  # Outline color (otherwise it is blue for all polygons)
             "fillOpacity": 1,  # Opacity
         },
+        popup=popup,
     ).add_to(map)
 
-    map.save(f"greater_manchester_lad_{lad}_most_suitable_tech_per_building.html")
+    map.save(
+        os.path.join(
+            "asf_heat_pump_suitability",
+            "outputs",
+            f"greater_manchester_lad_{lad}_most_suitable_tech_per_building.html",
+        )
+    )
 
 # %%
 # Creating a version of the map where all properties within HNZ are labelled as district heat network, even where that's not the output of our decision tree
@@ -910,6 +994,33 @@ for lad in gdf_gm_default_hn["LAD23NM"].unique():
         zoom_start=12,
     )
 
+    # 3. Create the Popup object
+    popup = folium.GeoJsonPopup(
+        fields=[
+            "property_type_flat",
+            "UPRN",
+            "percent_flats",
+            "in_block_of_flats",
+            "max_contiguous_outdoor_space_area_m2",
+            "in_city_centre",
+            "in_hn_zone",
+            "1st_most_suitable_solution",
+        ],
+        aliases=[
+            "Number of flats:",
+            "Number of properties in building:",
+            "Percent of flats (%):",
+            "Property in block of flats:",
+            "Avg max outdoor space area (m2):",
+            "In city centre:",
+            "In HN zone:",
+            "Most suitable solution:",
+        ],
+        localize=True,
+        labels=True,
+        style="background-color: white;",
+    )
+
     # 3. Add polygons using the color col
     folium.GeoJson(
         lad_gdf,
@@ -918,10 +1029,15 @@ for lad in gdf_gm_default_hn["LAD23NM"].unique():
             "color": feature["properties"]["color"],
             "fillOpacity": 1,  # Opacity
         },
+        popup=popup,
     ).add_to(map_gm_default_hn)
 
     map_gm_default_hn.save(
-        f"greater_manchester_lad_{lad}_default_hnz_most_suitable_tech_per_building.html"
+        os.path.join(
+            "asf_heat_pump_suitability",
+            "outputs",
+            f"greater_manchester_lad_{lad}_default_hnz_most_suitable_tech_per_building.html",
+        )
     )
 
 # %% [markdown]
