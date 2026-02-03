@@ -15,6 +15,8 @@ Set the `local_authorities` parameter to:
 - `greater_manchester_las` for all Greater Manchester local authorities (Bolton, Bury, Manchester, Oldham, Rochdale, Salford, Stockport, Tameside, Trafford, Wigan)
 Defaults to `GB` (all of Great Britain), but this is not yet implemented.
 
+Temporary (before we scale): Set up a new local authority or group of local authorities by adding an entry to the `constant` section of the config.yaml file.
+
 Set --test_mode flag to run in test mode without saving outputs.
 """
 
@@ -33,7 +35,7 @@ def parse_arguments() -> argparse.Namespace:
     # Placeholder - this arg is to look up correct paths for residential UPRNs and heat network dataset
     parser.add_argument(
         "--local_authorities",
-        help="Run script for either all of Great Britain; Plymouth",
+        help="Run script for specific local authority or group of local authorities. Defaults to GB (all of Great Britain).",
         type=str,
         default="GB",
         required=False,
