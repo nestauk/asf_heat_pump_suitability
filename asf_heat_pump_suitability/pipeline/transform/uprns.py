@@ -9,11 +9,17 @@ residential:
 To run the script:
 python asf_heat_pump_suitability/pipeline/transform/uprns.py
 
-Set the optional `local_authorities` parameter to `plymouth`, `plymouth_similar`, or `sampling_areas`.
-Set to `plymouth` to run for Plymouth Local Authority; `plymouth_similar` to run for Plymouth plus four other similar
-Local Authorities (Liverpool, Portsmouth, Southampton, Swansea); 'sampling_areas' to run for Plymouth plus five other
-Local Authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham); or do not use to run for all
-of Great Britain.
+Set the `local_authorities` parameter to:
+- `plymouth` for Plymouth only
+- `plymouth_similar` for Plymouth and 4 similar local authorities (Liverpool, Portsmouth, Southampton, Swansea)
+- `sampling_areas` for Plymouth and 5 different local authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham)
+- `greater_manchester_las` for all Greater Manchester local authorities (Bolton, Bury, Manchester, Oldham, Rochdale, Salford, Stockport, Tameside, Trafford, Wigan)
+
+Defaults to `GB` (all of Great Britain), but this is not yet implemented.
+
+Temporary (before we scale): Set up a new local authority or group of local authorities by adding an entry to the `constant` section of the config.yaml file.
+
+Set --test_mode flag to run in test mode without saving outputs.
 """
 
 import geopandas as gpd
@@ -151,10 +157,16 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar}; or Plymouth and 5 different local authorities {sampling_areas}. Default to all of GB",
+        help="Run script for specific local authority or group of local authorities. Defaults to GB (all of Great Britain).",
         type=str,
         default="GB",
         required=False,
+    )
+
+    parser.add_argument(
+        "--test_mode",
+        help="If set, runs in test mode without saving outputs.",
+        action="store_true",
     )
 
     return parser.parse_args()
@@ -238,7 +250,9 @@ if __name__ == "__main__":
             ]
         ]
     )
-    save_utils.save_to_s3(
-        df,
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns.parquet",
-    )
+
+    if not args.test_mode:
+        save_utils.save_to_s3(
+            df,
+            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns.parquet",
+        )
