@@ -16,9 +16,11 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import folium
+import os
 
 # %%
 # local imports
+from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.transform.uprns import generate_gdf_uprn_coords
 from asf_heat_pump_suitability.getters.load_tree_input import (
     load_gdf_os_openmap_local_layer,
@@ -36,6 +38,8 @@ colours = {
     "Networked GSHP": "#0000FF",
     "Communal solutions": "#FF6E47",
     "District heat network": "#EA2541",
+    "Individual solution or Networked GSHP": "grey",
+    "Individual solution or District heat network": "gray",
 }
 
 # %% [markdown]
@@ -399,7 +403,13 @@ def define_decision_tree(
             }
     else:
         if city_centre_or_hnz:
-            if garden_size > 70:
+            if pd.isnull(garden_size):
+                return {
+                    1: "Individual solution or District heat network",
+                    2: "Individual solution or District heat network",
+                    "path": "Unknown garden size in city centre",
+                }
+            elif garden_size > 70:
                 return {
                     1: "Individual solution",
                     2: "District heat network",
@@ -412,7 +422,13 @@ def define_decision_tree(
                     "path": "4. not blocks of flats, city centre, small or no garden",
                 }
         else:
-            if garden_size > 30:
+            if pd.isnull(garden_size):
+                return {
+                    1: "Individual solution or Networked GSHP",
+                    2: "Networked GSHP or Communal solutions",
+                    "path": "Unknown garden size not in city centre",
+                }
+            elif garden_size > 30:
                 return {
                     1: "Individual solution",
                     2: "Networked GSHP",
@@ -455,6 +471,12 @@ plymouth_gdf["decision_tree_path"] = plymouth_gdf["most_suitable_solutions"].app
 # ## 4. Distribution of garden sizes for each path of the decision tree
 #
 # Gardens sizes above 500m2 are removed from the analysis as we're mostly focused on seeing the distribution of garden sizes around 30 and 70m2.
+
+# %%
+plymouth_gdf["1st_most_suitable_solution"].unique()
+
+# %%
+plymouth_gdf[pd.isnull(plymouth_gdf["max_contiguous_outdoor_space_area_m2"])]
 
 # %%
 len(plymouth_gdf[plymouth_gdf["max_contiguous_outdoor_space_area_m2"] > 500]) / len(
@@ -610,26 +632,20 @@ def assign_unique_sol(solution_set: set) -> str:
     Returns:
         str: A unique solution assigned based on the combination.
     """
-    if solution_set == {"District heat network", "Individual solution"}:
-        return "District heat network"
-    elif solution_set == {"Networked GSHP", "Individual solution"}:
-        return "Networked GSHP"
-    elif solution_set == {
-        "District heat network",
-        "Individual solution",
-        "Communal solutions",
-    }:
-        return "District heat network"
-    elif solution_set == {
-        "District heat network",
-        "Individual solution",
-        "Networked GSHP",
-    }:
-        return "District heat network"
-    elif solution_set == {"Individual solution", "Communal solutions"}:
+    if "District heat network" in solution_set and "Networked GSHP" in solution_set:
         return "Communal solutions"
-    elif solution_set == {"Networked GSHP", "Communal solutions"}:
+    elif "District heat network" in solution_set:
+        return "District heat network"
+    elif "Networked GSHP" in solution_set:
         return "Networked GSHP"
+    elif "Communal solutions" in solution_set:
+        return "Communal solutions"
+    elif "Individual solution or Networked GSHP" in solution_set:
+        return "Individual solution or Networked GSHP"
+    elif "Individual solution or District heat network" in solution_set:
+        return "Individual solution or District heat network"
+    else:
+        print("This shouldn't happen!")
 
 
 solutions_per_footprint["assigned_tech"] = solutions_per_footprint[
@@ -1156,32 +1172,66 @@ map_building_techs_in_ward(
 # ## 8. Visualising results per building in Plymouth
 
 # %%
+plymouth_gdf.columns
+
+# %%
 # Estimated most suitable
 plymouth_building_most_suitable_tech = (
     plymouth_gdf[
         [
             "building_geometry",
             "1st_most_suitable_solution",
+            "max_contiguous_outdoor_space_area_m2",
+            "property_type_flat",
+            "in_block_of_flats",
+            "in_city_centre",
             # keeping the in_hn_zone column for pipeline changes afterwards
             "in_hn_zone",
+            "UPRN",
         ]
     ]
+    .groupby(["building_geometry", "1st_most_suitable_solution"])
+    .agg(
+        {
+            "property_type_flat": "sum",
+            "UPRN": "count",
+            "max_contiguous_outdoor_space_area_m2": "mean",
+            "in_block_of_flats": "first",
+            "in_city_centre": "first",
+            "in_hn_zone": "first",
+        }
+    )
+    .reset_index()
     .drop_duplicates(
         # we drop duplicates based on building geometry and most suitable solution, as we're assuming one solution per building
         ["building_geometry", "1st_most_suitable_solution"]
     )
     .rename(columns={"building_geometry": "geometry"})
 )
+plymouth_building_most_suitable_tech["max_contiguous_outdoor_space_area_m2"] = (
+    plymouth_building_most_suitable_tech["max_contiguous_outdoor_space_area_m2"].round()
+)
+plymouth_building_most_suitable_tech["percent_flats"] = (
+    plymouth_building_most_suitable_tech["property_type_flat"]
+    / plymouth_building_most_suitable_tech["UPRN"]
+) * 100
 
+# Convert back to a GeoDataFrame
+plymouth_building_most_suitable_tech = gpd.GeoDataFrame(
+    plymouth_building_most_suitable_tech, geometry="geometry", crs=plymouth_gdf.crs
+)
 
 # %%
-plymouth_building_most_suitable_tech
+type(plymouth_building_most_suitable_tech)
 
 # %%
 # These numbers should be the same, not sure why they are not
 plymouth_building_most_suitable_tech["geometry"].nunique(), len(
     plymouth_building_most_suitable_tech
 )
+
+# %%
+plymouth_building_most_suitable_tech
 
 # %%
 map_building_techs_in_ward(
@@ -1218,6 +1268,9 @@ plymouth_building_most_suitable_tech["color"] = plymouth_building_most_suitable_
 ].map(colours)
 
 # %%
+plymouth_building_most_suitable_tech.columns
+
+# %%
 # 1. Ensure the CRS is correct for Folium
 plymouth_building_most_suitable_tech = plymouth_building_most_suitable_tech.to_crs(
     epsg=4326
@@ -1233,19 +1286,53 @@ map = folium.Map(
     zoom_start=12,
 )
 
-# 3. Add polygons using the color col
+# 3. Create the Popup object
+popup = folium.GeoJsonPopup(
+    fields=[
+        "property_type_flat",
+        "UPRN",
+        "percent_flats",
+        "in_block_of_flats",
+        "max_contiguous_outdoor_space_area_m2",
+        "in_city_centre",
+        "in_hn_zone",
+        "1st_most_suitable_solution",
+    ],
+    aliases=[
+        "Number of flats:",
+        "Number of properties in building:",
+        "Percent of flats (%):",
+        "Property in block of flats:",
+        "Avg max outdoor space area (m2):",
+        "In city centre:",
+        "In HN zone:",
+        "Most suitable solution:",
+    ],
+    localize=True,
+    labels=True,
+    style="background-color: white;",
+)
+
+# 4. Add polygons using the color col
 folium.GeoJson(
     plymouth_building_most_suitable_tech,
     style_function=lambda feature: {
         "fillColor": feature["properties"]["color"],
-        "color": feature["properties"][
-            "color"
-        ],  # Outline color (otherwise it is blue for all polygons)
+        "color": feature["properties"]["color"],
+        "weight": 0.5,
         "fillOpacity": 1,  # Opacity
     },
+    popup=popup,
 ).add_to(map)
 
-map.save("plymouth_most_suitable_tech_per_building.html")
+map.save(
+    os.path.join(
+        PROJECT_DIR,
+        "outputs",
+        "figures",
+        "plymouth_most_suitable_tech_per_building.html",
+    )
+)
 
 # %%
 # Creating a version of the map where all properties within HNZ are labelled as district heat network, even where that's not the output of our decision tree
@@ -1274,17 +1361,53 @@ map_plymouth_cc = folium.Map(
     zoom_start=12,
 )
 
-# 3. Add polygons using the color col
+# 3. Create the Popup object
+popup = folium.GeoJsonPopup(
+    fields=[
+        "property_type_flat",
+        "UPRN",
+        "percent_flats",
+        "in_block_of_flats",
+        "max_contiguous_outdoor_space_area_m2",
+        "in_city_centre",
+        "in_hn_zone",
+        "1st_most_suitable_solution",
+    ],
+    aliases=[
+        "Number of flats:",
+        "Number of properties in building:",
+        "Percent of flats (%):",
+        "Property in block of flats:",
+        "Avg max outdoor space area (m2):",
+        "In city centre:",
+        "In HN zone:",
+        "Most suitable solution:",
+    ],
+    localize=True,
+    labels=True,
+    style="background-color: white;",
+)
+
+# 4. Add polygons using the color col
 folium.GeoJson(
     gdf_plymouth_cc,
     style_function=lambda feature: {
         "fillColor": feature["properties"]["color"],
         "color": feature["properties"]["color"],
+        "weight": 0.5,
         "fillOpacity": 1,  # Opacity
     },
+    popup=popup,
 ).add_to(map_plymouth_cc)
 
-map_plymouth_cc.save("plymouthcc_most_suitable_tech_per_building.html")
+map_plymouth_cc.save(
+    os.path.join(
+        PROJECT_DIR,
+        "outputs",
+        "figures",
+        "plymouthcc_most_suitable_tech_per_building.html",
+    )
+)
 
 # %% [markdown]
 # ## 9. Share of homes per technology
@@ -1321,9 +1444,9 @@ gdf_plymouth_cc["1st_most_suitable_solution"].value_counts()
 # ## 10. Saving data
 
 # %%
-plymouth_building_most_suitable_tech.to_parquet(
-    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.parquet"
-)
+# plymouth_building_most_suitable_tech.to_parquet(
+#     "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.parquet"
+# )
 
 # %%
 # This is how data can be loaded, for future reference
@@ -1331,13 +1454,114 @@ plymouth_building_most_suitable_tech.to_parquet(
 # f = gpd.read_parquet("s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.parquet")
 
 # %%
-gdf_plymouth_cc
+# # Save to GeoJSON
+# gdf_plymouth_cc.to_file("s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.geojson", driver='GeoJSON')
 
 # %%
-# Save to GeoJSON
-gdf_plymouth_cc.to_file(
-    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.geojson",
-    driver="GeoJSON",
+plymouth_garden_sizes_data = plymouth_building_most_suitable_tech.copy()
+plymouth_garden_sizes_data["max_contiguous_outdoor_space_area_m2"].fillna(
+    -100, inplace=True
+)
+
+import branca.colormap as cm
+
+# 2. Initialize the map
+# Centering based on the average coordinates of the polygons
+map_garden_sizes = folium.Map(
+    location=[
+        plymouth_garden_sizes_data.geometry.centroid.y.mean(),
+        plymouth_garden_sizes_data.geometry.centroid.x.mean(),
+    ],
+    zoom_start=12,
+)
+
+# 3. Create the Popup object
+popup = folium.GeoJsonPopup(
+    fields=[
+        "property_type_flat",
+        "UPRN",
+        "percent_flats",
+        "in_block_of_flats",
+        "max_contiguous_outdoor_space_area_m2",
+        "in_city_centre",
+        "in_hn_zone",
+        "1st_most_suitable_solution",
+    ],
+    aliases=[
+        "Number of flats:",
+        "Number of properties in building:",
+        "Percent of flats (%):",
+        "Property in block of flats:",
+        "Avg max outdoor space area (m2):",
+        "In city centre:",
+        "In HN zone:",
+        "Most suitable solution:",
+    ],
+    localize=True,
+    labels=True,
+    style="background-color: white;",
+)
+
+# Create a linear colormap
+# Note: You can change 'YlGn' to 'Viridis', 'RdYlGn', etc.
+bins = [-100, 0, 30, 100, 1000, 10000, 100000]
+
+#
+colors = [
+    "#636363",  # -100 to 0 (Dark Grey - stands out from map)
+    "#ffeda0",  # 0 to 30 (Pale Yellow)
+    "#feb24c",  # 30 to 100 (Orange)
+    "#fc4e2a",  # 100 to 1000 (Bright Red)
+    "#bd0026",  # 1000 to 10000 (Deep Crimson)
+    "#800026",  # Above 10000 (Dark Maroon)
+]
+
+colormap = cm.StepColormap(
+    colors=colors, index=bins, vmin=-100, vmax=bins[-1], caption="Garden Size (m2)"
+)
+
+# Add the colormap legend to the map
+colormap.add_to(map_garden_sizes)
+
+# 4. Add polygons using the color col
+folium.GeoJson(
+    plymouth_garden_sizes_data,
+    style_function=lambda feature: {
+        "fillColor": colormap(
+            feature["properties"]["max_contiguous_outdoor_space_area_m2"]
+        ),
+        "color": colormap(
+            feature["properties"]["max_contiguous_outdoor_space_area_m2"]
+        ),
+        "weight": 0.5,
+        "fillOpacity": 1,  # Opacity
+    },
+    popup=popup,
+).add_to(map_garden_sizes)
+
+
+map_garden_sizes.save(
+    os.path.join(PROJECT_DIR, "outputs", "figures", "plymouth_garden_sizes.html")
+)
+
+# %%
+plymouth_garden_sizes_data = plymouth_building_most_suitable_tech.copy()
+plymouth_garden_sizes_data["max_contiguous_outdoor_space_area_m2"].fillna(
+    -100, inplace=True
+)
+plymouth_garden_sizes_data = plymouth_garden_sizes_data[
+    plymouth_garden_sizes_data["max_contiguous_outdoor_space_area_m2"] == -100
+]
+
+
+# 4. Add polygons using the color col
+folium.GeoJson(
+    plymouth_garden_sizes_data,
+).add_to(map_garden_sizes)
+
+
+map_garden_sizes.save(
+    os.path.join(PROJECT_DIR, "outputs", "figures", "plymouth_garden_sizes_2.html")
 )
 
 # %%
