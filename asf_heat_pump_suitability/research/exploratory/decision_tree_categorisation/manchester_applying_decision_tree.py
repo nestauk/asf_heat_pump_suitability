@@ -19,6 +19,7 @@ import os
 
 # %%
 # local imports
+from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.transform.uprns import generate_gdf_uprn_coords
 from asf_heat_pump_suitability.getters.load_tree_input import (
     load_gdf_os_openmap_local_layer,
@@ -957,7 +958,7 @@ for lad in gm_building_most_suitable_tech["LAD23NM"].unique():
 
     map.save(
         os.path.join(
-            "asf_heat_pump_suitability",
+            PROJECT_DIR,
             "outputs",
             f"greater_manchester_lad_{lad}_most_suitable_tech_per_building.html",
         )
@@ -1034,7 +1035,7 @@ for lad in gdf_gm_default_hn["LAD23NM"].unique():
 
     map_gm_default_hn.save(
         os.path.join(
-            "asf_heat_pump_suitability",
+            PROJECT_DIR,
             "outputs",
             f"greater_manchester_lad_{lad}_default_hnz_most_suitable_tech_per_building.html",
         )
@@ -1106,8 +1107,5 @@ bucket = s3.Bucket("asf-heat-pump-suitability")
 
 objects = [obj for obj in bucket.objects.filter(Prefix="local_heat_planning/outputs/")]
 object_keys = [obj.key for obj in objects if obj.key.endswith(".geojson")]
-
-# %%
-
 
 # %%
