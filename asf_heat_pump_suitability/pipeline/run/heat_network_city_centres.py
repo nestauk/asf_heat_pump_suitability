@@ -1,16 +1,21 @@
 """
 Contains script to add boolean flags to label residential UPRNs indicating whether they are:
 - located within a heat network zone
-- located within a city centre
+- located within a city centre (according to Spatial Signatures Framework)
 
 To run the script:
-python asf_heat_pump_suitability/pipeline/run/heat_network_city_centres.py
+python asf_heat_pump_suitability/pipeline/run/heat_network_city_centres.py --uprns_path path/to/residential/uprns.parquet
 
-Set the optional `local_authorities` parameter to `plymouth`, `plymouth_similar`, or `sampling_areas`.
-Set to `plymouth` to run for Plymouth Local Authority; `plymouth_similar` to run for Plymouth plus four other similar
-Local Authorities (Liverpool, Portsmouth, Southampton, Swansea); 'sampling_areas' to run for Plymouth plus five other
-Local Authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham); or do not use to run for all
-of Great Britain.
+where you should replace `path/to/residential/uprns.parquet` with the path to the parquet file containing residential UPRNs with X and Y coordinates.
+
+Set the `local_authorities` parameter to:
+- `plymouth` for Plymouth only
+- `plymouth_similar` for Plymouth and 4 similar local authorities (Liverpool, Portsmouth, Southampton, Swansea)
+- `sampling_areas` for Plymouth and 5 different local authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham)
+- `greater_manchester_las` for all Greater Manchester local authorities (Bolton, Bury, Manchester, Oldham, Rochdale, Salford, Stockport, Tameside, Trafford, Wigan)
+Defaults to `GB` (all of Great Britain), but this is not yet implemented.
+
+Set --test_mode flag to run in test mode without saving outputs.
 """
 
 import argparse
@@ -28,7 +33,7 @@ def parse_arguments() -> argparse.Namespace:
     # Placeholder - this arg is to look up correct paths for residential UPRNs and heat network dataset
     parser.add_argument(
         "--local_authorities",
-        help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar}; or Plymouth and 5 different local authorities {sampling_areas}. Default to all of GB",
+        help="Run script for either all of Great Britain; Plymouth",
         type=str,
         default="GB",
         required=False,
@@ -39,6 +44,12 @@ def parse_arguments() -> argparse.Namespace:
         help="Path to residential UPRN dataset with X and Y coordinates in parquet.",
         type=str,
         required=True,
+    )
+
+    parser.add_argument(
+        "--test_mode",
+        help="If set, runs in test mode without saving outputs.",
+        action="store_true",
     )
 
     return parser.parse_args()
@@ -59,6 +70,7 @@ if __name__ == "__main__":
     las = args.local_authorities.lower()
     uprns_path = args.uprns_path
 
+    # TODO scale to GB
     if las == "gb":  # all GB
         # Placeholder for future implementation
         raise NotImplementedError("Processing for all of GB is not yet supported.")
@@ -68,14 +80,12 @@ if __name__ == "__main__":
         uprn_df = base_getters.load_df_from_s3(uprns_path)
         uprn_gdf = uprns.generate_gdf_uprn_coords(uprn_df)
 
-        """ Existing heat network zones """
+        ### Existing heat network zones
 
         # Load Plymouth existing heat network zone polygons
         la_names = config["constant"][las]["la_names"]
         print(f"Loading heat network zone data for {las} Local Authority...")
         hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=las)
-
-        print(hn_zones_gdf.head())
 
         # Label UPRNs in existing, potential and planned heat network zones
         print(f"Identifying residential UPRNs in heat network zones for {las}...")
@@ -94,7 +104,7 @@ if __name__ == "__main__":
             ["UPRN", "LAD23NM", "X_COORDINATE", "Y_COORDINATE", "in_hn_zone", id_col]
         ).rename({id_col: "HNZoneID"})
 
-        """ City centre areas """
+        ### City centre areas
 
         # Load spatial signature polygons
         print("Loading spatial signatures dataset...")
@@ -117,7 +127,6 @@ if __name__ == "__main__":
                 "LAD23NM",
                 "X_COORDINATE",
                 "Y_COORDINATE",
-                # "HNZoneID",
                 "in_hn_zone",
                 "spatial_signature_types",
                 "in_city_centre",
@@ -125,7 +134,8 @@ if __name__ == "__main__":
         )
 
     # Save residential UPRNs with existing heat network zone and city centre labels to S3
-    save_utils.save_to_s3(
-        hn_zone_city_centre_uprn_df,
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet",
-    )
+    if not args.test_mode:
+        save_utils.save_to_s3(
+            hn_zone_city_centre_uprn_df,
+            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet",
+        )
