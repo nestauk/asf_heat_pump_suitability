@@ -29,5 +29,5 @@ seaborn
 scipy
 pyarrow
 simplekml
-smart-open~=7.3
+smart-open~=7.3.0
 osbng
