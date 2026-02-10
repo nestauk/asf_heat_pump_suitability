@@ -1,6 +1,21 @@
+"""
+Functions to train a random forest binary classifier model.
+
+Contains script to train a random forest classifier to identify buildings as blocks of flats or not, given features derived
+from building footprint and UPRN geospatial information.
+
+To run the script:
+asf_heat_pump_suitability/pipeline/model/block_of_flats/train_model.py
+
+Set the required parameters:
+`uprns` takes a path to a parquet file containing domestic UPRNs with their X and Y coordinates.
+`labelled_data` takes a path to a parquet file containing labelled data. Requires a boolean 'block_of_flats' column and a building
+ID column with one row per building.
+`uprns` must contain all domestic UPRNs within the area(s) that `labelled_data` samples from.
+"""
+
 import numpy as np
 import polars as pl
-import pandas as pd
 from typing import Iterable, Type
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.experimental import enable_halving_search_cv  # noqa
