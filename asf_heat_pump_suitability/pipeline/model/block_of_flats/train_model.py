@@ -85,12 +85,11 @@ def train_block_of_flats_classifier(
 
     # Create cross-validation splitter and classifier
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
-    if "estimator" in locals() or "random_state" in locals():
-        print(
-            f"Training Random Forest Classifier model with random state: {RANDOM_STATE}..."
-        )
     estimator = RandomForestClassifier(random_state=RNG)
     random_state = RANDOM_STATE
+    print(
+        f"Training Random Forest binary classifier model with random state: {RANDOM_STATE}..."
+    )
 
     if param_search == "default":
         # Conduct halving random search for hyperparameters and cross-validation
@@ -175,16 +174,17 @@ if __name__ == "__main__":
     uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
 
     # Load building footprint data
-    # TODO scale beyond Plymouth
+    # TODO scale beyond sampling areas
     building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-        layer="building", grid_squares="SX"
+        layer="building",
+        grid_squares=config["constant"]["grid_squares"]["sampling_areas"],
     )
 
     # ------------------------ #
     # IMPUTE PROPERTY TYPE FLAT
     # Create boolean column called `property_type_flat` to identify flats
     flat_uprns = property_type.impute_set_flat_properties(uprns_gdf=uprns_gdf)
-    uprns_gdf["property_type_flat"] = uprns_gdf[uprns_gdf["UPRN"].isin(flat_uprns)]
+    uprns_gdf["property_type_flat"] = uprns_gdf["UPRN"].isin(flat_uprns)
 
     # ------------------------ #
     # FEATURE ENGINEERING
