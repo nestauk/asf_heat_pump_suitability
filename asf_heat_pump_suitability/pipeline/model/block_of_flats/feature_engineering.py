@@ -7,14 +7,21 @@ def generate_df_features(
 ) -> pl.DataFrame:
     """
     Args:
-        buildings_gdf (gpd.GeoDataFrame): building footprints with UPRNs joined to them. UPRNs must have `property_type_flat` boolean data.
-        uprns_gdf (gpd.GeoDataFrame): UPRNs and geometries with building footprints joined to them
+        buildings_gdf (gpd.GeoDataFrame): building footprints.
+        uprns_gdf (gpd.GeoDataFrame): UPRNs  with `property_type_flat` boolean data.
         id_col (str): name of building ID column
     """
+    buildings_w_uprns_gdf = buildings_gdf.sjoin(
+        uprns_gdf, how="left", predicate="contains"
+    )
+    uprns_w_buildings_gdf = uprns_gdf.sjoin(
+        buildings_gdf, how="left", predicate="within"
+    )
+
     features_dfs = [
-        generate_gdf_building_features(buildings_gdf, id_col),
-        generate_df_stacked_uprn_features(uprns_gdf, id_col),
-        generate_df_concave_hull_features(uprns_gdf, id_col),
+        generate_df_building_features(buildings_w_uprns_gdf, id_col),
+        generate_df_stacked_uprn_features(uprns_w_buildings_gdf, id_col),
+        generate_df_concave_hull_features(uprns_w_buildings_gdf, id_col),
     ]
 
     features_dfs = pl.align_frames(features_dfs, on=id_col, how="left")
@@ -22,7 +29,7 @@ def generate_df_features(
     return pl.concat(features_dfs, how="align_left")
 
 
-def generate_gdf_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.DataFrame:
+def generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.DataFrame:
     """
     Args:
         gdf (gpd.GeoDataFrame): building footprints with UPRNs joined to them. UPRNs must have `property_type_flat` boolean data.
