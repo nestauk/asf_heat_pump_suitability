@@ -12,10 +12,10 @@ def generate_df_features(
         id_col (str): name of building ID column
     """
     buildings_w_uprns_gdf = buildings_gdf.sjoin(
-        uprns_gdf, how="left", predicate="contains"
+        uprns_gdf, how="inner", predicate="contains"
     )
     uprns_w_buildings_gdf = uprns_gdf.sjoin(
-        buildings_gdf, how="left", predicate="within"
+        buildings_gdf, how="inner", predicate="within"
     )
 
     features_dfs = [
@@ -24,9 +24,9 @@ def generate_df_features(
         generate_df_concave_hull_features(uprns_w_buildings_gdf, id_col),
     ]
 
-    features_dfs = pl.align_frames(features_dfs, on=id_col, how="left")
+    features_dfs = pl.align_frames(*features_dfs, on=id_col, how="left")
 
-    return pl.concat(features_dfs, how="align_left")
+    return pl.concat(features_dfs, how="align")
 
 
 def generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.DataFrame:
@@ -36,7 +36,7 @@ def generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.Data
         id_col (str): name of building ID column
     """
     gdf["building_area_m2"] = gdf.area
-    gdf["building_perimeter"] = gdf.length
+    gdf["building_perimeter_m"] = gdf.length
 
     df = pl.from_pandas(gdf.drop(columns=["geometry"]))
 
