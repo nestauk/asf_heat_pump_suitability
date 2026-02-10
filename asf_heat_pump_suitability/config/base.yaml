@@ -63,6 +63,9 @@ constant:
     - "Nottingham"
     - "Plymouth"
   target_crs: 27700 # British National Grid
+output:
+  save_as:
+    block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"
 
 data_source:
   gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
