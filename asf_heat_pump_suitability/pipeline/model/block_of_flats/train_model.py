@@ -11,6 +11,7 @@ from sklearn.model_selection import (
 )
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.metrics import f1_score
+import argparse
 
 # Set random state int and RandomState instance
 RANDOM_STATE = 8
@@ -25,6 +26,21 @@ PARAM_DISTRIBUTIONS = {
     "max_features": ["sqrt", "log2"],
     "criterion": ["gini"],
 }
+
+# Model features
+FEATURES = [
+    "n_UPRNs",
+    "n_flats",
+    "building_area_m2",
+    "building_perimeter_m",
+    "proportion_flats",
+    "UPRNs_per_building_m2",
+    "concave_hull_area_m2",
+    "uprns_per_hull_area_m2",
+    "flats_per_hull_area_m2",
+    "avg_n_stacked_uprns",
+    "std_n_stacked_uprns",
+]
 
 
 def train_block_of_flats_classifier(
@@ -43,7 +59,7 @@ def train_block_of_flats_classifier(
     hyperparameters identified, and the model is tested on the 20% hold-out test set.
 
     Args:
-        df (pl.DataFrame): engineered features with target variable
+        df (pl.DataFrame): engineered features with labelled target variable
         id_col (str): name of ID column
         features (Iterable[str]): features used to train the model
         target (str): name of target variable,
@@ -108,3 +124,88 @@ def train_block_of_flats_classifier(
     print(f"{scoring} score on hold out validation set: {score}")
 
     return final_model
+
+
+def parse_arguments() -> argparse.Namespace:
+    """
+    Create ArgumentParser and parse.
+
+    Returns:
+        argparse.Namespace: populated `Namespace`
+    """
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--uprns",
+        help="Path to domestic UPRN dataset with X and Y coordinates in parquet.",
+        type=str,
+        required=True,
+    )
+
+    parser.add_argument(
+        "--labelled_data",
+        help="Labelled data to train binary classification model on in parquet file format. Building ID required.",
+        type=str,
+        required=True,
+    )
+
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    from asf_heat_pump_suitability import config
+    from asf_heat_pump_suitability.getters import load_tree_input
+    from asf_heat_pump_suitability.pipeline.transform import uprns
+    from asf_heat_pump_suitability.pipeline.impute import property_type
+    from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
+        feature_engineering,
+    )
+    from asf_heat_pump_suitability.utils import save_utils
+
+    args = parse_arguments()
+
+    # ------------------------ #
+    # LOAD DATA
+    # Load UPRN data
+    print(f"Loading domestic UPRNs from: {args.uprns}")
+    uprns_df = pl.read_parquet(
+        args.uprns, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
+    )
+    # Get geopoints of UPRNs
+    uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
+
+    # Load building footprint data
+    # TODO scale beyond Plymouth
+    building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+        layer="building", grid_squares="SX"
+    )
+
+    # ------------------------ #
+    # IMPUTE PROPERTY TYPE FLAT
+    # Create boolean column called `property_type_flat` to identify flats
+    flat_uprns = property_type.impute_set_flat_properties(uprns_gdf=uprns_gdf)
+    uprns_gdf["property_type_flat"] = uprns_gdf[uprns_gdf["UPRN"].isin(flat_uprns)]
+
+    # ------------------------ #
+    # FEATURE ENGINEERING
+    building_features_df = feature_engineering.generate_df_features(
+        buildings_gdf=building_footprints_gdf,
+        uprns_gdf=uprns_gdf,
+        id_col="ID",
+    )
+
+    # ------------------------ #
+    # TRAIN MODEL
+    labelled_df = pl.read_parquet(args.labelled_data)
+    model_df = labelled_df.join(building_features_df, how="left", on="ID")
+
+    model = train_block_of_flats_classifier(
+        df=model_df,
+        id_col="ID",
+        features=FEATURES,
+        target="block_of_flats",
+        param_search="default",
+    )
+
+    save_as = config["output"]["save_as"]["block_of_flats_model"]
+    save_utils.save_model_to_pkl_s3(model, save_as)
