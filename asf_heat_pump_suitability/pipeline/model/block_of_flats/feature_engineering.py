@@ -1,3 +1,8 @@
+"""
+Functions to generate features from building footprint and UPRN geodata per building for the random forest binary
+classifier model which classifies buildings into blocks of flats or not.
+"""
+
 import polars as pl
 import geopandas as gpd
 
@@ -6,10 +11,15 @@ def generate_df_features(
     buildings_gdf: gpd.GeoDataFrame, uprns_gdf: gpd.GeoDataFrame, id_col: str
 ) -> pl.DataFrame:
     """
+    Generate all features required for block of flats random forest binary classifier.
+
     Args:
         buildings_gdf (gpd.GeoDataFrame): building footprints.
         uprns_gdf (gpd.GeoDataFrame): UPRNs  with `property_type_flat` boolean data.
         id_col (str): name of building ID column
+
+    Return:
+        pl.DataFrame: all features for each building ID
     """
     buildings_w_uprns_gdf = buildings_gdf.sjoin(
         uprns_gdf, how="inner", predicate="contains"
@@ -19,9 +29,9 @@ def generate_df_features(
     )
 
     features_dfs = [
-        generate_df_building_features(buildings_w_uprns_gdf, id_col),
-        generate_df_stacked_uprn_features(uprns_w_buildings_gdf, id_col),
-        generate_df_concave_hull_features(uprns_w_buildings_gdf, id_col),
+        _generate_df_building_features(buildings_w_uprns_gdf, id_col),
+        _generate_df_stacked_uprn_features(uprns_w_buildings_gdf, id_col),
+        _generate_df_concave_hull_features(uprns_w_buildings_gdf, id_col),
     ]
 
     features_dfs = pl.align_frames(*features_dfs, on=id_col, how="left")
@@ -29,11 +39,22 @@ def generate_df_features(
     return pl.concat(features_dfs, how="align")
 
 
-def generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.DataFrame:
+def _generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.DataFrame:
     """
+    Generate select features from building footprints with UPRNs joined to them:
+    - n_UPRNs (per building)
+    - n_flats (per building)
+    - building_area_m2
+    - building_perimeter_m
+    - proportion_flats (proportion of UPRNs which are flats)
+    - UPRNs_per_building_m2 (UPRN density per m2 of building footprint)
+
     Args:
         gdf (gpd.GeoDataFrame): building footprints with UPRNs joined to them. UPRNs must have `property_type_flat` boolean data.
         id_col (str): name of building ID column
+
+    Returns:
+        pl.DataFrame: select features per building footprint
     """
     gdf["building_area_m2"] = gdf.area
     gdf["building_perimeter_m"] = gdf.length
@@ -60,13 +81,20 @@ def generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.Data
     return agg_building_df
 
 
-def generate_df_stacked_uprn_features(
+def _generate_df_stacked_uprn_features(
     gdf: gpd.GeoDataFrame, id_col: str
 ) -> pl.DataFrame:
     """
+    Generate select features from UPRNs with building footprints joined to them:
+    - avg_n_stacked_uprns (the average number of UPRNs sharing the same coordinates per building)
+    - std_n_stacked_uprns (the standard deviation of the number of UPRNs sharing the same coordinates per building)
+
     Args:
         gdf (gpd.GeoDataFrame): UPRNs and geometries with building footprints joined to them
         id_col (str): name of building ID column
+
+    Returns:
+        pl.DataFrame: select features per building footprint
     """
     # Get count of UPRNs at each X and Y coordinates to get the count of UPRNs which share an exact location
     df = pl.from_pandas(gdf.drop(columns="geometry"))
@@ -86,13 +114,24 @@ def generate_df_stacked_uprn_features(
     return df
 
 
-def generate_df_concave_hull_features(
+def _generate_df_concave_hull_features(
     gdf: gpd.GeoDataFrame, id_col: str
 ) -> pl.DataFrame:
     """
+    Generate select features from UPRNs with building footprints joined to them:
+    - concave_hull_area_m2 (the area (m2) of the concave hull of the point geometries of all UPRNs per building)
+    - uprns_per_hull_area_m2 (the number of UPRNs per concave hull area per building)
+    - flats_per_hull_area_m2 (the number of flats per concave hull area per building)
+
+    Note: UPRNs or flats per hull area can be infinite if all UPRNs/flats share the same coordinates (i.e. area = 0m2).
+    In these cases, the uprns_ or flats_per_hull_area_m2 is changed to -1.
+
     Args:
         gdf (gpd.GeoDataFrame): UPRNs and geometries with building footprints joined to them
         id_col (str): name of building ID column
+
+    Returns:
+        pl.DataFrame: select features per building footprint
     """
     # Create concave hull feature to represent spatial distribution of UPRNs in each building
     hull_gdf = gdf.dissolve(id_col).concave_hull().reset_index()
