@@ -2,6 +2,24 @@ import s3fs
 import polars as pl
 import logging
 import boto3
+from sklearn.base import BaseEstimator
+import pickle
+
+
+def save_model_to_pkl_s3(model: BaseEstimator, path: str) -> None:
+    """
+    Save Estimator as pickle file to S3.
+
+    Args:
+        model (BaseEstimator): trained model
+        path (str): path to S3 destination
+
+    Returns:
+        None
+    """
+    fs = s3fs.S3FileSystem()
+    pickle.dump(model, fs.open(path, "wb"))
+    print(f"Saved model to {path}")
 
 
 def save_to_s3(df: pl.DataFrame, path: str) -> None:
