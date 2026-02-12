@@ -140,6 +140,17 @@ def filter_gdf_residential_uprns(
     ]
 
 
+def map_dict_uprns_to_building_id(
+    uprns_gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame, id_col: str
+) -> dict:
+    """ """
+    return (
+        uprns_gdf.sjoin(buildings_gdf, how="inner", predicate="within")
+        .set_index("UPRN")
+        .to_dict()[id_col]
+    )
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
