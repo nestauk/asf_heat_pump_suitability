@@ -1,5 +1,5 @@
 """
-Functions to train a random forest binary classifier model.
+Functions to train and apply a random forest binary classifier model.
 
 Contains script to train a random forest classifier to identify buildings as blocks of flats or not, given features derived
 from building footprint and UPRN geospatial information.
@@ -148,11 +148,16 @@ def predict_class_block_of_flats(
     id_col: str,
 ) -> pl.DataFrame:
     """
+    Predict binary class (block of flats / not) on buildings using trained Random Forest Classifier model.
+
     Args:
         model (RandomForestClassifier): trained model for binary classification of buildings into blocks of flats or not
         features_df (pl.DataFrame): buildings to predict classes on with engineered features for model
         labelled_df (pl.DataFrame): labelled training data with features and target variable
-        id_col (str): name of ID column in both `features_df` and `labelled_df` (must be the same).
+        id_col (str): name of building ID column in both `features_df` and `labelled_df` (must be the same)
+
+    Returns:
+        pl.DataFrame: one row per building with predicted class and probability of predicted class
     """
     print(
         "Predicting classes (block of flats / not) and class probability of buildings..."
@@ -209,7 +214,18 @@ def predict_class_block_of_flats(
 def extend_df_in_block_of_flats_label(
     uprns_df: pl.DataFrame, mapping: dict, predictions_df: pl.DataFrame, id_col: str
 ) -> pl.DataFrame:
-    """ """
+    """
+    Join predicted building class (block of flats / not) to the corresponding UPRNs located within.
+
+    Args:
+        uprns_df (pl.DataFrame): dataset with UPRN column
+        mapping (dict): mapping of UPRNs (keys) to building IDs (values), where the building ID represents the building the UPRN is located within
+        predictions_df (pl.DataFrame): one row per building with predicted class and probability of predicted class
+        id_col (str): name of building ID column in `predictions_df`
+
+    Returns:
+        pl.DataFrame: one row per UPRN with `in_block_of_flats` label indicating the class of building the UPRN is located within
+    """
     print("Adding `in_block_of_flats` label to UPRNs...")
     return (
         uprns_df.with_columns(
