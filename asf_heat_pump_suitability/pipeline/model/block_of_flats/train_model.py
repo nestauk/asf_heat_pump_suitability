@@ -165,7 +165,7 @@ def predict_class_block_of_flats(
     concat_dfs = []
     labelled_ids = labelled_df[id_col].unique()
     X_df = (
-        features_df.filter(pl.col("n_flats") > 0, pl.col(id_col).is_in(labelled_ids))
+        features_df.filter(pl.col("n_flats") > 0, ~pl.col(id_col).is_in(labelled_ids))
         .to_pandas()
         .set_index(id_col)[FEATURES]
     )
