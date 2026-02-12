@@ -22,6 +22,7 @@ import logging
 import argparse
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
+from asf_heat_pump_suitability.utils import geo_utils
 
 
 def generate_gdf_uprn_coords(
@@ -143,7 +144,20 @@ def filter_gdf_residential_uprns(
 def map_dict_uprns_to_building_id(
     uprns_gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame, id_col: str
 ) -> dict:
-    """ """
+    """
+    Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within.
+
+    Args:
+        uprns_gdf (gpd.GeoDataFrame): UPRNs with geospatial point data
+        buildings_gdf (gpd.GeoDataFrame): building footprints
+        id_col (str): name of building ID column in `buildings_gdf`
+
+    Returns:
+        dict: mapping of UPRNs to building IDs
+    """
+    uprns_gdf = geo_utils.verify_gdf_crs(uprns_gdf)
+    buildings_gdf = geo_utils.verify_gdf_crs(buildings_gdf)
+
     return (
         uprns_gdf.sjoin(buildings_gdf, how="inner", predicate="within")
         .set_index("UPRN")
