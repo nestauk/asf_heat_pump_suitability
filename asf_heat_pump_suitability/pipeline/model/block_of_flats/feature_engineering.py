@@ -21,6 +21,7 @@ def generate_df_features(
     Return:
         pl.DataFrame: all features for each building ID
     """
+    print("Generating features required for block of flats classifier...")
     buildings_w_uprns_gdf = buildings_gdf.sjoin(
         uprns_gdf, how="inner", predicate="contains"
     )
