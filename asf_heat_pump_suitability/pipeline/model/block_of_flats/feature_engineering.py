@@ -23,11 +23,11 @@ def generate_df_features(
     """
     print("Generating features required for block of flats classifier...")
     buildings_w_uprns_gdf = buildings_gdf.sjoin(
-        uprns_gdf, how="inner", predicate="contains"
-    )
+        uprns_gdf, how="inner", predicate="intersects"
+    ).dropna(subset=id_col)
     uprns_w_buildings_gdf = uprns_gdf.sjoin(
-        buildings_gdf, how="inner", predicate="within"
-    )
+        buildings_gdf, how="inner", predicate="intersects"
+    ).dropna(subset="UPRN")
 
     features_dfs = [
         _generate_df_building_features(buildings_w_uprns_gdf, id_col),

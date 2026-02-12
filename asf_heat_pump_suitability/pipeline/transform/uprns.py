@@ -142,15 +142,20 @@ def filter_gdf_residential_uprns(
 
 
 def map_dict_uprns_to_building_id(
-    uprns_gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame, id_col: str
+    uprns_gdf: gpd.GeoDataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
+    id_col: str,
+    predicate: str = "intersects",
 ) -> dict:
     """
-    Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within.
+    Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within or intersect with.
 
     Args:
         uprns_gdf (gpd.GeoDataFrame): UPRNs with geospatial point data
         buildings_gdf (gpd.GeoDataFrame): building footprints
         id_col (str): name of building ID column in `buildings_gdf`
+        predicate (str): how to join buildings and UPRNs, of `intersects` which joins UPRNs with building footprints
+        they intersect with, or `within` which joins UPRNs to building footprints they are located within. Default `intersects`.
 
     Returns:
         dict: mapping of UPRNs to building IDs
@@ -159,7 +164,7 @@ def map_dict_uprns_to_building_id(
     buildings_gdf = geo_utils.verify_gdf_crs(buildings_gdf)
 
     return (
-        uprns_gdf.sjoin(buildings_gdf, how="inner", predicate="within")
+        uprns_gdf.sjoin(buildings_gdf, how="inner", predicate=predicate)
         .set_index("UPRN")
         .to_dict()[id_col]
     )
