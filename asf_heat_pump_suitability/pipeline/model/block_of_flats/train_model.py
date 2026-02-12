@@ -27,6 +27,7 @@ from sklearn.model_selection import (
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.metrics import f1_score
 import argparse
+from asf_heat_pump_suitability.pipeline.transform import uprns
 
 # Set random state int and RandomState instance
 RANDOM_STATE = 8
@@ -140,6 +141,85 @@ def train_block_of_flats_classifier(
     return final_model
 
 
+def predict_class_block_of_flats(
+    model: RandomForestClassifier,
+    features_df: pl.DataFrame,
+    labelled_df: pl.DataFrame,
+    id_col: str,
+) -> pl.DataFrame:
+    """
+    Args:
+        model (RandomForestClassifier): trained model for binary classification of buildings into blocks of flats or not
+        features_df (pl.DataFrame): buildings to predict classes on with engineered features for model
+        labelled_df (pl.DataFrame): labelled training data with features and target variable
+        id_col (str): name of ID column in both `features_df` and `labelled_df` (must be the same).
+    """
+    print(
+        "Predicting classes (block of flats / not) and class probability of buildings..."
+    )
+    concat_dfs = []
+    labelled_ids = labelled_df[id_col].unique()
+    X_df = (
+        features_df.filter(pl.col("n_flats") > 0, pl.col(id_col).is_in(labelled_ids))
+        .to_pandas()
+        .set_index(id_col)[FEATURES]
+    )
+    predictions_df = X_df.copy()
+    predictions_df["block_of_flats"] = model.predict(X_df)
+
+    # Add probability of predictions
+    predictions_df[f"block_of_flats_proba_{model.classes_[0]}"] = model.predict_proba(
+        X_df
+    )[:, 0]
+    predictions_df[f"block_of_flats_proba_{model.classes_[1]}"] = model.predict_proba(
+        X_df
+    )[:, 1]
+
+    # Combine into one probability label
+    concat_dfs.append(
+        pl.from_pandas(predictions_df, include_index=True).with_columns(
+            pl.when(pl.col("block_of_flats"))
+            .then(pl.col("block_of_flats_proba_True"))
+            .when(~pl.col("block_of_flats"))
+            .then(pl.col("block_of_flats_proba_False"))
+            .alias("block_of_flats_label_proba")
+        )
+    )
+
+    # Set manually labelled block probability to 1
+    concat_dfs.append(
+        labelled_df.filter(pl.col(id_col).is_in(labelled_ids)).with_columns(
+            pl.lit(1.0).alias("block_of_flats_label_proba")
+        )
+    )
+
+    # Add required columns to buildings which do not contain flats for concatenation
+    concat_dfs.append(
+        features_df.filter(pl.col("n_flats") == 0).with_columns(
+            pl.lit(False).alias("block_of_flats"),
+            pl.lit(None).alias("block_of_flats_label_proba"),
+        )
+    )
+
+    cols = [id_col, "block_of_flats", "block_of_flats_label_proba"]
+
+    return pl.concat([df.select(cols) for df in concat_dfs])
+
+
+def extend_df_in_block_of_flats_label(
+    uprns_df: pl.DataFrame, mapping: dict, predictions_df: pl.DataFrame, id_col: str
+) -> pl.DataFrame:
+    """ """
+    print("Adding `in_block_of_flats` label to UPRNs...")
+    return (
+        uprns_df.with_columns(
+            pl.col("UPRN").replace(mapping, default=None).alias(id_col)
+        )
+        .join(predictions_df, how="left", on=id_col)
+        .rename({"block_of_flats": "in_block_of_flats"})
+    )
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
@@ -222,5 +302,5 @@ if __name__ == "__main__":
         param_search="default",
     )
 
-    save_as = config["output"]["save_as"]["block_of_flats_model"]
+    save_as = config["output"]["save_as"]["model"]["block_of_flats_model"]
     save_utils.save_model_to_pkl_s3(model, save_as)
