@@ -1,6 +1,7 @@
 """
 Script to add features to UPRNs:
 - flat / apartment property type boolean flag
+-
 - estimated max contiguous and total outdoor space (m2)
 
 Run:
@@ -35,9 +36,14 @@ if __name__ == "__main__":
     import polars as pl
     import geopandas as gpd
 
+    from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
-    from asf_heat_pump_suitability.getters import load_tree_input
+    from asf_heat_pump_suitability.getters import load_tree_input, base_getters
     from asf_heat_pump_suitability.pipeline.impute import property_type
+    from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
+        feature_engineering,
+        train_model,
+    )
     from asf_heat_pump_suitability.pipeline.transform import uprns, outdoor_space
 
     args = parse_arguments()
@@ -60,14 +66,49 @@ if __name__ == "__main__":
     )
 
     # ------------------------ #
+    # PREDICT BLOCK OF FLATS CLASSIFICATION
+    # Load building footprint data
+    # TODO scale beyond sampling areas
+    building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+        layer="building", grid_squares="SX"
+    )
+
+    uprn_building_id_dict = uprns.map_dict_uprns_to_building_id(
+        uprns_gdf=uprns_gdf, buildings_gdf=building_footprints_gdf, id_col="ID"
+    )
+
+    uprns_gdf["property_type_flat"] = uprns_gdf["UPRN"].isin(flat_uprns)
+    building_features_df = feature_engineering.generate_df_features(
+        buildings_gdf=building_footprints_gdf,
+        uprns_gdf=uprns_gdf,
+        id_col="ID",
+    )
+
+    # TODO make this robust by loading same labelled data used to train model
+    labelled_df = pl.read_parquet(
+        "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet"
+    )
+    rfc = base_getters.load_pickle(
+        config["output"]["save_as"]["model"]["block_of_flats_model"]
+    )
+    features_df = train_model.extend_df_in_block_of_flats_label(
+        uprns_df=features_df,
+        mapping=uprn_building_id_dict,
+        predictions_df=train_model.predict_class_block_of_flats(
+            model=rfc,
+            features_df=building_features_df,
+            labelled_df=labelled_df,
+            id_col="ID",
+        ),
+        id_col="ID",
+    )
+
+    # ------------------------ #
     # ESTIMATE OUTDOOR SPACE
     # TODO scale beyond Plymouth
     print("Loading land registry data...")
     land_parcels_gdf = gpd.read_file(
         "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
-    )
-    building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-        layer="building", grid_squares="SX"
     )
 
     # Get intersection of building footprint polygons and land polygons
