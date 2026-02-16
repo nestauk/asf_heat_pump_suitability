@@ -17,9 +17,6 @@ import math
 
 import matplotlib.pyplot as plt
 
-import s3fs
-import pickle
-
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.experimental import enable_halving_search_cv  # noqa
 from sklearn.model_selection import (
@@ -158,7 +155,7 @@ buildings_w_uprns_gdf["building_area_m2"] = buildings_w_uprns_gdf.area
 buildings_w_uprns_gdf["building_perimeter_m"] = buildings_w_uprns_gdf.length
 buildings_w_uprns_df = pl.from_pandas(buildings_w_uprns_gdf.drop(columns=["geometry"]))
 
-# Aggregate data per building
+# Aggregate data per building - buildings containing flats only
 agg_building_df = (
     buildings_w_uprns_df.group_by("oct25_building_id")
     .agg(
@@ -273,7 +270,7 @@ features_df = agg_building_df.join(
 )
 
 # %% [markdown]
-# ## Load and process labelled training data
+# ## Load and process labelled training data from S3
 
 # %%
 # Group the manually labelled archetypes into block of flats or not
@@ -609,7 +606,7 @@ pd_model_df = (
 X = pd_model_df[features]
 y = pd_model_df["block_of_flats"]
 
-# Keep a final hold out validation set aside
+# Keep a final hold out test set aside
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=random_state, stratify=y
 )
@@ -637,10 +634,10 @@ print(f"Best params: {search.best_params_}")
 final_model = RandomForestClassifier(**search.best_params_, random_state=rng)
 final_model.fit(X_train, y_train)
 
-# Evaluate final model on hold out validation set
+# Evaluate final model on hold out test set
 y_pred = final_model.predict(X_test)
 val_f1 = f1_score(y_test, y_pred)
-print(f"F1 score on hold out validation set: {val_f1}")
+print(f"F1 score on hold out test set: {val_f1}")
 
 save_utils.save_model_to_pkl_s3(
     final_model,
@@ -769,6 +766,8 @@ save_utils.save_to_s3(
 
 # %% [markdown]
 # ### Run additional model evaluation on final model
+#
+# Note there is data leakage in this evaluation - the final modeling at the end is done by splitting the training sets. But the model has already seen the training sets during CV and tuning of hyperparameters. So those best_params are set based on what works on the training data, so these stats are going to be (most likely) inflated compared to a true hold out (above). Code retained here in case of use for refactoring into evaluation without data leakage.
 
 # %%
 metrics = {
