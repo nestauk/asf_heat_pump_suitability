@@ -15,12 +15,15 @@ import polars as pl
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.colors as mcolors
 import folium
 import os
 
-# %%
 # local imports
 from asf_heat_pump_suitability import PROJECT_DIR
+
+# %%
+# local imports
 from asf_heat_pump_suitability.pipeline.transform.uprns import generate_gdf_uprn_coords
 from asf_heat_pump_suitability.getters.load_tree_input import (
     load_gdf_os_openmap_local_layer,
@@ -56,11 +59,9 @@ colours = {
 # This dataset contains data for Plymouth and other sampling areas.
 
 # %%
-blocks_of_flats = pl.read_parquet(
-    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/sampling_areas_residential_uprns_with_block_of_flats.parquet"
+blocks_of_flats = pd.read_parquet(
+    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/sampling_areas_residential_uprns_with_block_of_flats_label.parquet"
 )
-# Convert to pandas for compatibility with geopandas
-blocks_of_flats = blocks_of_flats.to_pandas()
 
 # %%
 blocks_of_flats.head()
@@ -124,32 +125,22 @@ plymouth_uprns.head()
 # %% [markdown]
 # ### 1.4. City centres and planned HNZ
 #
-# For each domestic UPRN `city_centre_data` contains:
-# - X and Y coordinates of each UPRN
-# - `in_city_centre`: a flag for whether it is located in a city centre according to a set of pre-defined spatial signature types (as per the Spatial Signatures Framework)
-# - `spatial_signature_type`: the respective spatial signature type for each UPRN
-#
-# For each domestic UPRN `hnz_data` contains:
+# For each domestic UPRN `hnz_and_city_centre_data` contains:
 # - X and Y coordinates of each UPRN
 # - `in_hn_zone`: a flag for whether it is located in a planned DESNZ heat network zone
-#
+# - `in_city_centre`: a flag for whether it is located in a city centre according to a set of pre-defined spatial signature types (as per the Spatial Signatures Framework)
+# - `spatial_signature_type`: the respective spatial signature type for each UPRN
+
 
 # %%
 # Getting data and converting polars df to geodf
-city_centre_data = pl.read_parquet(
-    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns_with_city_centres.parquet"
+hnz_and_city_centre_data = pl.read_parquet(
+    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns_with_hn_zones_city_centres.parquet"
 )
-city_centre_data = generate_gdf_uprn_coords(df=city_centre_data)
-city_centre_data.head()
+hnz_and_city_centre_data = generate_gdf_uprn_coords(df=hnz_and_city_centre_data)
+hnz_and_city_centre_data.head()
 
 # %%
-# Getting data and converting polars df to geodf
-hnz_data = pl.read_parquet(
-    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns_with_hn_zones.parquet"
-)
-hnz_data = generate_gdf_uprn_coords(df=hnz_data)
-hnz_data.head()
-
 # %% [markdown]
 # ### 1.5. Plymouth features dataset
 #
@@ -173,9 +164,9 @@ plymouth_with_features.head()
 #
 # Building footprints dataset contains the geometries of all buildings in grid square `SX` including residential and non-residential buildings. This includes an area bigger than Plymouth boundary, so it needs to be filtered to the Plymouth boundary.
 #
-# It includes building footprint IDs and geometries of all buildings in grid square `SX`. To note that one building footprint ID sometimes contains multiple buildings.
+# It includes building footprint IDs and geometries of all buildings in grid square `SX`. To note that one building footprint ID sometimes merges multiple buildings.
 #
-# These are updated regularly by Ordnance Survey and with each update the building footprint IDs might change.
+# These are updated regularly by Ordnance Survey and with each update the building footprint IDs changes.
 
 # %%
 # Loading building footprints for grid square "SX"
@@ -244,8 +235,7 @@ plymouth_hn_zones_gdf.head()
 # %%
 plymouth_uprns.set_index("UPRN", inplace=True)
 plymouth_with_features.set_index("UPRN", inplace=True)
-city_centre_data.set_index("UPRN", inplace=True)
-hnz_data.set_index("UPRN", inplace=True)
+hnz_and_city_centre_data.set_index("UPRN", inplace=True)
 blocks_of_flats.set_index("UPRN", inplace=True)
 
 # %%
@@ -253,25 +243,32 @@ plymouth_uprns.head()
 
 # %%
 # checking if lengths are the same
-len(plymouth_uprns), len(plymouth_with_features), len(city_centre_data), len(hnz_data)
+len(plymouth_uprns), len(plymouth_with_features), len(hnz_and_city_centre_data)
 
 # %%
 # Joining all geodfs into one based on UPRN
-plymouth_gdf = plymouth_uprns.join(city_centre_data[["in_city_centre"]])
-plymouth_gdf = plymouth_gdf.join(hnz_data[["in_hn_zone"]])
-plymouth_gdf = plymouth_gdf.join(
-    plymouth_with_features.drop(columns=["X_COORDINATE", "Y_COORDINATE", "geometry"])
-)
-plymouth_gdf = plymouth_gdf.join(
-    blocks_of_flats.rename(columns={"block_of_flats": "in_block_of_flats"})[
-        ["in_block_of_flats", "block_of_flats_label_proba", "building_type"]
-    ],
-    how="left",
+plymouth_gdf = (
+    plymouth_uprns.join(hnz_and_city_centre_data[["in_city_centre", "in_hn_zone"]])
+    .join(
+        plymouth_with_features.drop(
+            columns=["X_COORDINATE", "Y_COORDINATE", "geometry"]
+        )
+    )
+    .join(
+        blocks_of_flats[["building_type"]],
+        how="left",
+    )
 )
 
 # %%
-# for properties without flats, fill NaN with 1 to represent 100% confidence they are not flats
-plymouth_gdf["block_of_flats_label_proba"].fillna(1, inplace=True)
+plymouth_gdf
+
+# %%
+
+
+# %%
+# # for properties without flats, fill NaN with 1 to represent 100% confidence they are not flats
+# plymouth_gdf["block_of_flats_label_proba"].fillna(1, inplace=True)
 
 # %%
 plymouth_gdf.reset_index(inplace=True)
@@ -279,29 +276,7 @@ plymouth_gdf.reset_index(inplace=True)
 # %%
 plymouth_gdf.head()
 
-# %% [markdown]
-# ### 2.2. [temporary] Identifying properties in blocks of flats
-#
-# Code has now been commented out - this was prior to having the blocks of flats flag data. Doesn't need to be reviewed.
-
 # %%
-# counts of properties per building
-# counts = plymouth_df.groupby("NATIONALCADASTRALREFERENCE").count()
-
-
-## Roisin's suggestion (I ended up doing something easier, based on UPRN counts per land parcel)
-# groupby NATIONALCADASTRALREFERENCE (land parcel) - if garden size > Xm2 and Y number of UPRNs then block (for now)
-
-# NATIONALCADASTRALREFERENCE: ID of the land parcel
-# A land extent should represent a section of a building, rather than the whole building footprint
-# every uprn that shares a garden is in the same land extent
-
-# %%
-# While we wait for the modelled data, we identify blocks of flats as those with 6 or more UPRNs per land parcel
-# blocks_of_flats_ncref = counts[counts["UPRN"]>=6].index.tolist()
-
-# plymouth_df["is_in_block_of_flats"] = plymouth_df["NATIONALCADASTRALREFERENCE"].apply(lambda x: x in blocks_of_flats_ncref)
-
 # %% [markdown]
 # ### 2.3. Spatial join to add building footprints to main geodf
 #
@@ -309,7 +284,7 @@ plymouth_gdf.head()
 
 # %%
 # we create a copy of the (building) geometry column so that we can keep it after the spatial join
-plymouth_gdf["property_geometry"] = plymouth_gdf.geometry
+plymouth_gdf["uprn_geometry"] = plymouth_gdf.geometry
 building_footprints["building_geometry"] = building_footprints["geometry"]
 plymouth_gdf = plymouth_gdf.sjoin(
     building_footprints[["geometry", "building_geometry"]],
@@ -371,17 +346,17 @@ labelled_tech["Name"] = np.where(
 
 
 # %%
-def define_decision_tree(
-    in_block_of_flats: bool, garden_size: float, city_centre_or_hnz: bool
+def identify_dict_most_suitable_tech(
+    in_block_of_flats: bool, outdoor_space: float, city_centre_or_hnz: bool
 ) -> dict:
     """
     Defines the decision tree to identify:
-    - first and second most suitable low carbon heating solutions for each property.
+    - first and second most suitable low carbon heating solutions for each UPRN.
     - the path taken in the decision tree.
 
     Args:
         in_block_of_flats (bool): Whether the property is in a block of flats.
-        garden_size (float): Size of the garden in square meters.
+        outdoor_space (float): Outdoor space in square meters.
         city_centre_or_hnz (bool): Whether the property is in the city centre or in a planned heat network zone.
 
     Returns:
@@ -393,27 +368,27 @@ def define_decision_tree(
             return {
                 1: "District heat network",
                 2: "Communal solutions",
-                "path": "1. blocks of flats and city centre",
+                "path": "1. blocks of flats and HNZ/ city centre",
             }
         else:
             return {
                 1: "Communal solutions",
                 2: "Networked GSHP",
-                "path": "2. blocks of flats, not city centre",
+                "path": "2. blocks of flats, not  HNZ/ city centre",
             }
     else:
         if city_centre_or_hnz:
-            if pd.isnull(garden_size):
+            if pd.isnull(outdoor_space):
                 return {
                     1: "Individual solution or District heat network",
                     2: "Individual solution or District heat network",
-                    "path": "Unknown garden size in city centre",
+                    "path": "Unknown outdoor space in city centre",
                 }
-            elif garden_size > 70:
+            elif outdoor_space > 70:
                 return {
                     1: "Individual solution",
                     2: "District heat network",
-                    "path": "3. not blocks of flats, city centre, big garden (70m2)",
+                    "path": "3. not blocks of flats, city centre, large outdoor space (70m2)",
                 }
             else:
                 return {
@@ -422,25 +397,28 @@ def define_decision_tree(
                     "path": "4. not blocks of flats, city centre, small or no garden",
                 }
         else:
-            if pd.isnull(garden_size):
+            if pd.isnull(outdoor_space):
                 return {
                     1: "Individual solution or Networked GSHP",
                     2: "Networked GSHP or Communal solutions",
-                    "path": "Unknown garden size not in city centre",
+                    "path": "Unknown outdoor space not in city centre",
                 }
-            elif garden_size > 30:
+            elif outdoor_space > 30:
                 return {
                     1: "Individual solution",
                     2: "Networked GSHP",
-                    "path": "5. not blocks of flats, not city centre, big garden (30m2)",
+                    "path": "5. not blocks of flats, not city centre, large outdoor space (30m2)",
                 }
             else:
                 return {
                     1: "Networked GSHP",
                     2: "Communal solutions",
-                    "path": "6. not blocks of flats, not city centre, small/no garden",
+                    "path": "6. not blocks of flats, not city centre, small/no outdoor space",
                 }
 
+
+# %%
+plymouth_gdf
 
 # %%
 plymouth_gdf["in_city_centre_or_hn_zone"] = (
@@ -448,7 +426,7 @@ plymouth_gdf["in_city_centre_or_hn_zone"] = (
 )
 
 plymouth_gdf["most_suitable_solutions"] = plymouth_gdf.apply(
-    lambda x: define_decision_tree(
+    lambda x: identify_dict_most_suitable_tech(
         x["in_block_of_flats"],
         x["max_contiguous_outdoor_space_area_m2"],
         x["in_city_centre_or_hn_zone"],
@@ -521,57 +499,11 @@ for path in garden_sizes_decision_tree_path.index:
 
 
 # %% [markdown]
-# ## 5. Number of solutions per land parcel and building footprint
+# ## 5. Number of solutions per building footprint
 #
-# In this section we check wether there are multiple solutions for properties located in the same land parcel and building footprint. Ideally, all properties in the same land parcel & footprint should have the same solution.
+# In this section we check wether there are multiple solutions for properties located in the same building footprint. Ideally, all properties in the same building footprint should have the same solution.
 #
-# As we can observe below, most land parcels and building footprints have one solution for all properties, but there are some buildings with multiple solutions.
-
-# %%
-# Distribution of unique 1st most suitable solutions per land parcel (in counts)
-plymouth_gdf.groupby("NATIONALCADASTRALREFERENCE")[
-    ["1st_most_suitable_solution"]
-].nunique()["1st_most_suitable_solution"].value_counts()
-
-# %%
-# Distribution of unique 1st most suitable solutions per land parcel (in proportions)
-plymouth_gdf.groupby("NATIONALCADASTRALREFERENCE")[
-    ["1st_most_suitable_solution"]
-].nunique()["1st_most_suitable_solution"].value_counts(normalize=True)
-
-# %%
-# Checking distribution for properties within the specific ward
-plymouth_gdf[~pd.isnull(plymouth_gdf["ward"])].groupby("NATIONALCADASTRALREFERENCE")[
-    ["1st_most_suitable_solution"]
-].nunique()["1st_most_suitable_solution"].value_counts()
-
-# %%
-# Number of unique land parcels in Plymouth vs. number of buildings
-# This shows that lots of land parcels are aggregated into one single building geometry/ footprint
-plymouth_gdf["NATIONALCADASTRALREFERENCE"].nunique(), plymouth_gdf[
-    "building_geometry"
-].nunique()
-
-# %%
-# Identifying pairs of different 1st most suitable solutions per land parcel
-solutions_per_land_parcel = plymouth_gdf.groupby("NATIONALCADASTRALREFERENCE")[
-    "1st_most_suitable_solution"
-].apply(set)
-solutions_per_land_parcel = pd.DataFrame(solutions_per_land_parcel)
-solutions_per_land_parcel["n_solutions"] = solutions_per_land_parcel[
-    "1st_most_suitable_solution"
-].apply(len)
-solutions_per_land_parcel = solutions_per_land_parcel[
-    solutions_per_land_parcel["n_solutions"] > 1
-]
-solutions_per_land_parcel.reset_index(inplace=True)
-solutions_per_land_parcel["1st_most_suitable_solution_str"] = solutions_per_land_parcel[
-    "1st_most_suitable_solution"
-].apply(lambda x: ", ".join(x))
-solutions_per_land_parcel.groupby("1st_most_suitable_solution_str")[
-    ["NATIONALCADASTRALREFERENCE"]
-].nunique()
-
+# As we can observe below, most building footprints have one solution for all properties, but there are some buildings with multiple solutions.
 
 # %%
 # Identifying pairs of different 1st most suitable solutions per building footprint
@@ -595,26 +527,8 @@ solutions_per_footprint.groupby("1st_most_suitable_solution_str")[
 
 
 # %%
-# check if each land parcel appears only within one building footprint
-land_parcel_to_footprint = plymouth_gdf.groupby("NATIONALCADASTRALREFERENCE")[
-    "building_geometry"
-].apply(set)
-land_parcel_to_footprint = pd.DataFrame(land_parcel_to_footprint)
-land_parcel_to_footprint["n_footprints"] = land_parcel_to_footprint[
-    "building_geometry"
-].apply(len)
-
-# %%
-# It doesn't seem to be the case
-land_parcel_to_footprint["n_footprints"].value_counts()
-
-# %%
-land_parcel_to_footprint["n_footprints"].value_counts(normalize=True) * 100
-
 # %% [markdown]
 # In most cases:
-# - the same land parcel should be in one building footprint only (hopefully?)
-# - properties in the same land parcel should have the same most suitable solution
 # - properties in the same building footprint should have the same most suitable solution
 
 # %%
@@ -645,7 +559,7 @@ def assign_unique_sol(solution_set: set) -> str:
     elif "Individual solution or District heat network" in solution_set:
         return "Individual solution or District heat network"
     else:
-        print("This shouldn't happen!")
+        return None  # this shouldn't happen as all combinations should be covered by the above
 
 
 solutions_per_footprint["assigned_tech"] = solutions_per_footprint[
@@ -656,46 +570,6 @@ solutions_per_footprint["assigned_tech"] = solutions_per_footprint[
 mapping_set_to_assigned_tech = solutions_per_footprint.set_index("building_geometry")[
     "assigned_tech"
 ].to_dict()
-
-# %%
-# Mapping properties in the same land parcel with different 1st most suitable solutions (for one ward)
-fig, ax = plt.subplots(figsize=(15, 8))
-
-plot_mult_solutions_ = plymouth_gdf[
-    plymouth_gdf["NATIONALCADASTRALREFERENCE"].isin(
-        solutions_per_land_parcel["NATIONALCADASTRALREFERENCE"]
-    )
-]
-plot_mult_solutions_ = plot_mult_solutions_[~pd.isna(plot_mult_solutions_["ward"])]
-
-build_geom = (
-    plot_mult_solutions_[["building_geometry"]]
-    .rename(columns={"building_geometry": "geometry"})
-    .drop_duplicates()
-)
-build_geom.plot(ax=ax, facecolor="none", edgecolor="black", linewidth=0.5)
-# mapping individual properties with the colour of the most suitable solution
-plot_mult_solutions_.plot(
-    ax=ax,
-    column="1st_most_suitable_solution",
-    categorical=True,
-    legend=True,
-    markersize=1,
-    color=plot_mult_solutions_["1st_most_suitable_solution"].map(colours),
-)
-
-# mapping ward boundary
-specific_ward_gdf.plot(ax=ax, facecolor="none", edgecolor="black", linewidth=1)
-
-
-# title and legend
-ax.set_title(
-    f"Properties in the same land parcel with different techs assigned", fontsize=12
-)
-handles = [
-    mpatches.Patch(facecolor=colours[tech], label=tech) for tech in colours.keys()
-]
-ax.legend(handles=handles, loc="upper right")
 
 # %%
 # Mapping properties in the same building footprint with different 1st most suitable solutions (for one ward)
@@ -755,7 +629,7 @@ ward_gdf = plymouth_gdf[plymouth_gdf["ward"] == ward]
 # %%
 def map_suitable_tech_vs_labelled_tech(
     tech: str,
-    ward_df: gpd.GeoDataFrame,
+    ward_gdf: gpd.GeoDataFrame,
     specific_ward_gdf: gpd.GeoDataFrame,
     labelled_tech: gpd.GeoDataFrame,
     colours: dict,
@@ -765,33 +639,33 @@ def map_suitable_tech_vs_labelled_tech(
 
     Args:
         tech (str): a low carbon heating solution in the set {"Individual solution", "Networked GSHP", "Communal solutions", "District heat network"}
-        ward_df (gpd.GeoDataFrame): ward data with most suitable solutions
+        ward_gdf (gpd.GeoDataFrame): ward data with most suitable solutions
         specific_ward_gdf (gpd.GeoDataFrame): specific ward boundary data
         labelled_tech (gpd.GeoDataFrame): labelled technology polygons data
         colours (dict): mapping of technologies to colours
     """
-    tech_specific_df = ward_df[ward_df["1st_most_suitable_solution"] == tech]
+    tech_specific_gdf = ward_gdf[ward_gdf["1st_most_suitable_solution"] == tech]
     fig, ax = plt.subplots(figsize=(15, 8))
 
     # mapping individual properties with the colour of the most suitable solution
-    tech_specific_df.plot(
+    tech_specific_gdf.plot(
         ax=ax,
         column="1st_most_suitable_solution",
         categorical=True,
         legend=True,
-        color=tech_specific_df["1st_most_suitable_solution"].map(colours),
+        color=tech_specific_gdf["1st_most_suitable_solution"].map(colours),
         markersize=2,
     )
 
     # mapping polygons of labelled data
     if tech != "District heat network":
-        labelled_tech_specifc_df = labelled_tech[labelled_tech["Name"] == tech]
-        labelled_tech_specifc_df.plot(
+        labelled_tech_specific_gdf = labelled_tech[labelled_tech["Name"] == tech]
+        labelled_tech_specific_gdf.plot(
             ax=ax,
             column="Name",
             categorical=True,
             legend=True,
-            color=labelled_tech_specifc_df["Name"].map(colours),
+            color=labelled_tech_specific_gdf["Name"].map(colours),
             edgecolor="black",
             linestyle="--",
             alpha=0.5,
@@ -834,7 +708,7 @@ def map_suitable_tech_vs_labelled_tech(
 # %%
 def map_blocks_of_flats_prob(
     tech: str,
-    ward_df: gpd.GeoDataFrame,
+    ward_gdf: gpd.GeoDataFrame,
     specific_ward_gdf: gpd.GeoDataFrame,
     labelled_tech: gpd.GeoDataFrame,
     colours: dict,
@@ -845,32 +719,35 @@ def map_blocks_of_flats_prob(
 
     Args:
         tech (str): a low carbon heating solution in the set {"Individual solution", "Networked GSHP", "Communal solutions", "District heat network"}
-        ward_df (gpd.GeoDataFrame): ward data with most suitable solutions
+        ward_gdf (gpd.GeoDataFrame): ward data with most suitable solutions
         specific_ward_gdf (gpd.GeoDataFrame): specific ward boundary data
+        labelled_tech (gpd.GeoDataFrame): labelled technology polygons data
+        colours (dict): mapping of technologies to colours
+        threshold (float, optional): threshold for the block of flats label confidence.
     """
 
     if tech != "":
-        tech_specific_df = ward_df[ward_df["1st_most_suitable_solution"] == tech]
+        tech_specific_gdf = ward_gdf[ward_gdf["1st_most_suitable_solution"] == tech]
     else:
-        tech_specific_df = ward_df.copy()
+        tech_specific_gdf = ward_gdf.copy()
     fig, ax = plt.subplots(figsize=(15, 8))
 
     if threshold:
-        tech_specific_df = tech_specific_df[
-            tech_specific_df["block_of_flats_label_proba"] <= threshold
+        tech_specific_gdf = tech_specific_gdf[
+            tech_specific_gdf["block_of_flats_label_proba"] <= threshold
         ]
 
     print("tech:", tech)
 
     # mapping polygons of labelled data
     if tech != "District heat network":
-        labelled_tech_specifc_df = labelled_tech[labelled_tech["Name"] == tech]
-        labelled_tech_specifc_df.plot(
+        labelled_tech_specific_gdf = labelled_tech[labelled_tech["Name"] == tech]
+        labelled_tech_specific_gdf.plot(
             ax=ax,
             column="Name",
             categorical=True,
             legend=True,
-            color=labelled_tech_specifc_df["Name"].map(colours),
+            color=labelled_tech_specific_gdf["Name"].map(colours),
             edgecolor="black",
             linestyle="--",
             alpha=0.5,
@@ -885,7 +762,6 @@ def map_blocks_of_flats_prob(
         )
 
     greys = plt.get_cmap("Greys")
-    import matplotlib.colors as mcolors
 
     # Create a new map using only the range from 0.2 (light gray) to 1.0 (black)
     # 0.0 would be white, so we skip it.
@@ -894,7 +770,7 @@ def map_blocks_of_flats_prob(
     )
 
     # mapping individual properties where the colour indicates probability of being a block of flats
-    tech_specific_df.plot(
+    tech_specific_gdf.plot(
         ax=ax,
         column="block_of_flats_label_proba",
         cmap=cmap_no_white,
@@ -922,7 +798,7 @@ def map_blocks_of_flats_prob(
 # between assigned most suitable solution and labelled data, which doesn't seem to be the case
 map_blocks_of_flats_prob(
     tech="Individual solution",
-    ward_df=ward_gdf,
+    ward_gdf=ward_gdf,
     specific_ward_gdf=specific_ward_gdf,
     labelled_tech=labelled_tech,
     colours=colours,
@@ -932,7 +808,7 @@ map_blocks_of_flats_prob(
 # Mapping properties most suitable for individual solutions vs labelled data
 map_suitable_tech_vs_labelled_tech(
     tech="Individual solution",
-    ward_df=ward_gdf,
+    ward_gdf=ward_gdf,
     specific_ward_gdf=specific_ward_gdf,
     labelled_tech=labelled_tech,
     colours=colours,
@@ -944,7 +820,7 @@ map_suitable_tech_vs_labelled_tech(
 # %%
 map_blocks_of_flats_prob(
     tech="Networked GSHP",
-    ward_df=ward_gdf,
+    ward_gdf=ward_gdf,
     specific_ward_gdf=specific_ward_gdf,
     labelled_tech=labelled_tech,
     colours=colours,
@@ -953,7 +829,7 @@ map_blocks_of_flats_prob(
 # %%
 map_suitable_tech_vs_labelled_tech(
     tech="Networked GSHP",
-    ward_df=ward_gdf,
+    ward_gdf=ward_gdf,
     specific_ward_gdf=specific_ward_gdf,
     labelled_tech=labelled_tech,
     colours=colours,
@@ -965,7 +841,7 @@ map_suitable_tech_vs_labelled_tech(
 # %%
 map_blocks_of_flats_prob(
     tech="Communal solutions",
-    ward_df=ward_gdf,
+    ward_gdf=ward_gdf,
     specific_ward_gdf=specific_ward_gdf,
     labelled_tech=labelled_tech,
     colours=colours,
@@ -974,7 +850,7 @@ map_blocks_of_flats_prob(
 # %%
 map_suitable_tech_vs_labelled_tech(
     tech="Communal solutions",
-    ward_df=ward_gdf,
+    ward_gdf=ward_gdf,
     specific_ward_gdf=specific_ward_gdf,
     labelled_tech=labelled_tech,
     colours=colours,
@@ -992,7 +868,7 @@ intersection_shape = gpd.overlay(ward_hnz_join, specific_ward_gdf, how="intersec
 
 map_blocks_of_flats_prob(
     tech="District heat network",
-    ward_df=ward_gdf,
+    ward_gdf=ward_gdf,
     specific_ward_gdf=specific_ward_gdf,
     labelled_tech=intersection_shape,
     colours=colours,
@@ -1000,17 +876,17 @@ map_blocks_of_flats_prob(
 
 map_suitable_tech_vs_labelled_tech(
     tech="District heat network",
-    ward_df=ward_gdf,
+    ward_gdf=ward_gdf,
     specific_ward_gdf=specific_ward_gdf,
     labelled_tech=intersection_shape,
     colours=colours,
 )
 
 # %%
-# Properties with confidence lower than 0.6 of being a block of flats across all technologies in the whole of Plymouth
+# Properties with blocks of flats confidence label lower than 0.6
 map_blocks_of_flats_prob(
     tech="",
-    ward_df=plymouth_gdf,
+    ward_gdf=plymouth_gdf,
     specific_ward_gdf=plymouth_la_boundaries_gdf,
     threshold=0.6,
     labelled_tech=labelled_tech,
@@ -1050,6 +926,8 @@ confusion_matrix = pd.crosstab(
 confusion_matrix
 
 # %%
+# precision and recall are likely not the best metrics as the labelled data isn't truly a "ground truth", so we can't read too much into these results
+
 recall = {}
 precision = {}
 
@@ -1087,7 +965,14 @@ ward_building_most_suitable_tech.head()
 
 
 # %%
-def map_building_techs_in_ward(techs_gdf, col, specific_ward_gdf, colours, ward, map_):
+def map_building_techs_in_ward(
+    techs_gdf: gpd.GeoDataFrame,
+    col: str,
+    specific_ward_gdf: gpd.GeoDataFrame,
+    colours: dict,
+    ward: str,
+    underlying_data: str,
+):
     """
     Maps buildings in a specific ward with a predicted/labelled low carbon heating solutions.
 
@@ -1097,7 +982,7 @@ def map_building_techs_in_ward(techs_gdf, col, specific_ward_gdf, colours, ward,
         specific_ward_gdf (gpd.GeoDataFrame): specific ward boundary data
         colours (dict): mapping of technologies to colours
         ward (str): name of the ward
-        map_ (str): takes ["Labelled", "Predicted"]
+        underlying_data (str): takes "Labelled" for labelled data and "Predicted" for outputs of the decision tree. Used for title and legend.
     """
 
     fig, ax = plt.subplots(figsize=(15, 8))
@@ -1115,7 +1000,7 @@ def map_building_techs_in_ward(techs_gdf, col, specific_ward_gdf, colours, ward,
     specific_ward_gdf.plot(ax=ax, facecolor="none", edgecolor="black", linewidth=1)
 
     # title and legend
-    ax.set_title(f"{map_} most suitable solution for {ward}", fontsize=12)
+    ax.set_title(f"{underlying_data} most suitable solution for {ward}", fontsize=12)
     handles = []
     handles = [
         mpatches.Patch(facecolor=colours[tech], label=tech) for tech in colours.keys()
@@ -1130,7 +1015,7 @@ map_building_techs_in_ward(
     specific_ward_gdf=specific_ward_gdf,
     colours=colours,
     ward=ward,
-    map_="Predicted",
+    underlying_data="Predicted",
 )
 
 # %%
@@ -1162,7 +1047,7 @@ map_building_techs_in_ward(
     specific_ward_gdf=specific_ward_gdf,
     colours=colours,
     ward=ward,
-    map_="Labelled",
+    underlying_data="Labelled",
 )
 
 # %%
@@ -1222,15 +1107,6 @@ plymouth_building_most_suitable_tech = gpd.GeoDataFrame(
 )
 
 # %%
-type(plymouth_building_most_suitable_tech)
-
-# %%
-# These numbers should be the same, not sure why they are not
-plymouth_building_most_suitable_tech["geometry"].nunique(), len(
-    plymouth_building_most_suitable_tech
-)
-
-# %%
 plymouth_building_most_suitable_tech
 
 # %%
@@ -1240,7 +1116,7 @@ map_building_techs_in_ward(
     specific_ward_gdf=plymouth_la_boundaries_gdf,
     colours=colours,
     ward="Plymouth",
-    map_="Predicted",
+    underlying_data="Predicted",
 )
 
 # %%
@@ -1250,13 +1126,13 @@ plymouth_building_most_suitable_tech[
 ].to_file("plymouth_building_most_suitable_tech.kml", driver="KML")
 
 # %%
-# There are 2 buildings without geometry... needs further investigation. For now we remove them!
+# Checking for missing geometry
 plymouth_building_most_suitable_tech[
     pd.isnull(plymouth_building_most_suitable_tech["geometry"])
 ]
 
 # %%
-# Removing buildings with no geometry
+# Removing rows with no geometry
 plymouth_building_most_suitable_tech = plymouth_building_most_suitable_tech[
     ~pd.isnull(plymouth_building_most_suitable_tech["geometry"])
 ]
@@ -1375,9 +1251,9 @@ popup = folium.GeoJsonPopup(
     ],
     aliases=[
         "Number of flats:",
-        "Number of properties in building:",
+        "Number of UPRNs in building:",
         "Percent of flats (%):",
-        "Property in block of flats:",
+        "UPRNs in block of flats:",
         "Avg max outdoor space area (m2):",
         "In city centre:",
         "In HN zone:",
@@ -1444,9 +1320,9 @@ gdf_plymouth_cc["1st_most_suitable_solution"].value_counts()
 # ## 10. Saving data
 
 # %%
-# plymouth_building_most_suitable_tech.to_parquet(
-#     "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.parquet"
-# )
+plymouth_building_most_suitable_tech.to_parquet(
+    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.parquet"
+)
 
 # %%
 # This is how data can be loaded, for future reference
@@ -1454,8 +1330,11 @@ gdf_plymouth_cc["1st_most_suitable_solution"].value_counts()
 # f = gpd.read_parquet("s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.parquet")
 
 # %%
-# # Save to GeoJSON
-# gdf_plymouth_cc.to_file("s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.geojson", driver='GeoJSON')
+# Save to GeoJSON
+gdf_plymouth_cc.to_file(
+    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.geojson",
+    driver="GeoJSON",
+)
 
 # %%
 plymouth_garden_sizes_data = plymouth_building_most_suitable_tech.copy()
@@ -1563,5 +1442,8 @@ folium.GeoJson(
 map_garden_sizes.save(
     os.path.join(PROJECT_DIR, "outputs", "figures", "plymouth_garden_sizes_2.html")
 )
+
+# %%
+
 
 # %%
