@@ -34,22 +34,45 @@ tech_gdf = (
     .rename(columns={"1st_most_suitable_solution": "tech"})
     .dropna(subset="geometry")
     .drop_duplicates(subset="geometry")
-)
+).to_crs(
+    epsg="27700"
+)  # Convert to British National Grid
+
+# %%
+tech_gdf["tech"].unique()
 
 # %%
 TECHS = [
-    "Communal solutions",
-    "District heat network",
     "Individual solution",
     "Networked GSHP",
+    "Communal solutions",
+    "District heat network",
+    "Individual solution or Networked GSHP",
+    "Individual solution or District heat network",
 ]
 
 COLOURS = {
-    "Individual solution": "orange",
-    "Networked GSHP": "green",
-    "Communal solutions": "hotpink",
-    "District heat network": "blue",
+    "Individual solution": "#18A48C",
+    "Networked GSHP": "#0000FF",
+    "Communal solutions": "#FF6E47",
+    "District heat network": "#EA2541",
+    # "Individual solution or Networked GSHP": "grey",
+    # "Individual solution or District heat network": "gray",
 }
+
+# %%
+# Replace tech type with district heat network if in heat network zone
+tech_gdf["tech"] = tech_gdf.apply(
+    lambda x: ("District heat network" if x["in_hn_zone"] else x["tech"]),
+    axis=1,
+)
+
+tech_gdf["color"] = tech_gdf.apply(
+    lambda x: "#EA2541" if x["in_hn_zone"] else x["color"], axis=1
+)
+
+# %%
+
 
 # %% [markdown]
 # ## Plotting functions
@@ -123,7 +146,9 @@ def dissolve_techs_and_plot_folium(
         gdf (gpd.GeoDataFrame): dataframe with polygons to dissolve and plot and tech labels
         colours (dict): tech type labels and their corresponding colours for plotting
 
-    Returns Folium map
+    Returns:
+        folium.Map: interactive map with dissolved polygons and buildings plotted
+        gpd.GeoDataFrame: dissolved geodataframe with tech types and geometries
     """
     # Dissolve by tech type
     dissolved_gdf = voronoi_gdf.dissolve(by="tech").reset_index()
@@ -132,6 +157,7 @@ def dissolve_techs_and_plot_folium(
     # Convert dissolved tech polygons and buildings to EPSG 4326 for plotting
     dissolved_4326_gdf = dissolved_gdf.to_crs(epsg=4326)
     buildings_gdf = buildings_gdf.to_crs(epsg=4326)
+    # dissolved_4326_gdf['geometry'] = dissolved_4326_gdf['geometry'].simplify(tolerance=0.000005, preserve_topology=True)
 
     # Get centre of boundary to centre map
     boundary_4326 = boundary_gdf.to_crs(epsg=4326)["geometry"].values[0]
@@ -154,6 +180,8 @@ def dissolve_techs_and_plot_folium(
             style_function=lambda x, colour=colour: {
                 "fillColor": colour,
                 "fillOpacity": 0.66,
+                "color": "black",
+                "weight": 0.5,
             },
         )
         folium.Popup(r["tech"]).add_to(geo_j)
@@ -165,11 +193,15 @@ def dissolve_techs_and_plot_folium(
         geo_j = sim_geo.to_json()
         geo_j = folium.GeoJson(
             data=geo_j,
-            style_function=lambda x: {"color": "black", "weight": 1, "fillOpacity": 0},
+            style_function=lambda x: {
+                "color": "black",
+                "weight": 0.5,
+                "fillOpacity": 0,
+            },
         )
         geo_j.add_to(m)
 
-    return m
+    return m, dissolved_4326_gdf
 
 
 # %% [markdown]
@@ -204,147 +236,212 @@ dissolve_techs_and_plot_folium(
 # %% [markdown]
 # ## Densify edges and then voronoi
 
-
 # %%
-def extend_edges(gdf, segment_distance=1.0, buffer_factor=2.0):
+# New code - still Gemini generated. Needs review and lots of tweaks still
+from shapely.geometry import MultiPoint, box, Polygon, MultiPolygon
+from shapely.ops import voronoi_diagram
+
+
+def extend_edges(gdf, segment_distance=1.0, max_edge_dist=20.0):
     """
-    Extends the edges of polygons to create a Voronoi diagram filling the surrounding space.
-    Rewritten logic by Gemini based on fieldmaps/edge-extender.
-
-    Args:
-        gdf (gpd.GeoDataFrame): Input GeoDataFrame containing polygons.
-        segment_distance (float): Distance (in CRS units) to interval points along edges.
-        buffer_factor (float): Factor to expand the bounding box for the Voronoi extent.
-
-    Returns:
-        gpd.GeoDataFrame: A GeoDataFrame of the extended Voronoi regions.
+    High-performance version using vectorized overlay for clipping.
     """
-
-    # Work on a copy to avoid modifying the original
     gdf = gdf.copy()
-
-    # 1. Create a guaranteed unique internal ID for tracking
-    # We use a temporary string column name that is unlikely to conflict with user data
     uid_col = "_internal_unique_id"
     gdf[uid_col] = np.arange(len(gdf))
 
-    print("1. Preparing boundaries...")
-    # Calculate the union of all polygons to find the outer boundary
-    dissolved = gdf.unary_union
-
-    # Extract the boundary of the union (lines touching the empty space)
-    if hasattr(dissolved, "boundary"):
-        overall_boundary = dissolved.boundary
-    else:
-        raise ValueError("Could not compute boundary of input polygons.")
-
-    # Create a GDF for the boundary lines
-    boundary_gdf = gpd.GeoDataFrame(geometry=[overall_boundary], crs=gdf.crs)
-    boundary_gdf = boundary_gdf.explode(index_parts=False)
-
-    # Intersect boundary with original polygons to attribute the edges
-    # We keep only the segments that overlap with our original polygons
-    # This attaches our 'uid_col' to the edge segments
-    attributed_edges = gpd.overlay(
-        boundary_gdf,
-        gdf[[uid_col, "geometry"]],
-        how="intersection",
-        keep_geom_type=True,
-    )
-
-    # Filter for linear geometries only
-    attributed_edges = attributed_edges[
-        attributed_edges.geometry.type.isin(["LineString", "MultiLineString"])
-    ]
-
-    print("2. Generating points from edges...")
     all_points = []
     all_ids = []
 
-    # Iterate through the edges to densify them into points
-    for _, row in attributed_edges.iterrows():
+    for _, row in gdf.iterrows():
         geom = row.geometry
         src_id = row[uid_col]
+        polys = geom.geoms if isinstance(geom, MultiPolygon) else [geom]
 
-        if geom.is_empty:
-            continue
+        for poly in polys:
+            if not isinstance(poly, Polygon):
+                continue
 
-        # Standardize to list of lines
-        lines = list(geom.geoms) if geom.geom_type == "MultiLineString" else [geom]
+            # Densify all rings (exterior + all interiors)
+            rings = [poly.exterior] + list(poly.interiors)
+            for ring in rings:
+                num_pts = int(np.ceil(ring.length / segment_distance))
+                # Use list comprehension for faster point generation
+                pts = [ring.interpolate(i * segment_distance) for i in range(num_pts)]
+                all_points.extend(pts)
+                all_ids.extend([src_id] * len(pts))
 
-        for line in lines:
-            coords = list(line.coords)
-
-            # Interpolate points for long segments
-            length = line.length
-            if length > segment_distance:
-                num_segments = int(np.ceil(length / segment_distance))
-                # Generate intermediate points (skipping 0 to avoid duplication with vertices)
-                for i in range(1, num_segments):
-                    pt = line.interpolate(i * segment_distance)
-                    all_points.append(pt)
-                    all_ids.append(src_id)
-
-            # Add original vertices to preserve corners
-            for coord in coords:
-                all_points.append(Point(coord))
-                all_ids.append(src_id)
-
-    # Create GDF of points linked to the internal ID
     points_gdf = gpd.GeoDataFrame({uid_col: all_ids}, geometry=all_points, crs=gdf.crs)
 
-    print(f"   Generated {len(points_gdf)} points.")
-
-    print("3. Computing Voronoi diagram...")
-    # Define bounding box for Voronoi extent
-    minx, miny, maxx, maxy = gdf.total_bounds
-    width = maxx - minx
-    height = maxy - miny
-    envelope = box(
-        minx - width * buffer_factor,
-        miny - height * buffer_factor,
-        maxx + width * buffer_factor,
-        maxy + height * buffer_factor,
+    coords = MultiPoint(points_gdf.geometry.tolist())
+    # Envelope is slightly larger than the 20m buffer limit
+    vor_collection = voronoi_diagram(
+        coords, envelope=box(*gdf.total_bounds).buffer(max_edge_dist + 5)
     )
+    vor_gdf = gpd.GeoDataFrame(geometry=list(vor_collection.geoms), crs=gdf.crs)
 
-    # Generate Voronoi regions
-    if len(points_gdf) == 0:
-        raise ValueError(
-            "No boundary points generated. Are polygons touching/overlapping perfectly?"
-        )
+    # We join points to Voronoi cells and dissolve to get one polygon per building ID
+    joined = gpd.sjoin(vor_gdf, points_gdf, how="inner", predicate="contains")
+    final_voronoi = joined.dissolve(by=uid_col).reset_index()
 
-    multi_point = MultiPoint(points_gdf.geometry.tolist())
-    voronoi_geoms = voronoi_diagram(multi_point, envelope=envelope)
+    # Create the 20m constraint buffers for all buildings at once
+    constraint_buffers = gdf[[uid_col, "geometry"]].copy()
+    constraint_buffers["geometry"] = constraint_buffers.geometry.buffer(max_edge_dist)
 
-    # Convert GeometryCollection to list of Polygons
-    voronoi_polys = list(voronoi_geoms.geoms)
-    voronoi_gdf = gpd.GeoDataFrame(geometry=voronoi_polys, crs=gdf.crs)
+    # Use overlay 'intersection' to clip cells by their respective buffers
+    # We filter the result to ensure building A's Voronoi is only clipped by building A's buffer
+    result_gdf = gpd.overlay(final_voronoi, constraint_buffers, how="intersection")
+    result_gdf = result_gdf[result_gdf[f"{uid_col}_1"] == result_gdf[f"{uid_col}_2"]]
 
-    print("4. Linking Voronoi regions to original polygons...")
-    # Spatial join to link Voronoi polygons back to the generating points (and thus the ID)
-    joined = gpd.sjoin(voronoi_gdf, points_gdf, how="inner", predicate="contains")
+    # Cleanup and merge original attributes
+    result_gdf = result_gdf.rename(columns={f"{uid_col}_1": uid_col})
+    result_gdf = result_gdf.drop(columns=[f"{uid_col}_2"])
 
-    print("5. Dissolving regions...")
-    # Dissolve Voronoi cells by the internal ID
-    final_voronoi = joined.dissolve(by=uid_col, as_index=False)
-
-    # Merge original attributes back using the internal ID
-    # We drop the geometry from the original merge to keep the new Voronoi geometry
-    original_attrs = gdf.drop(columns="geometry")
-    result = final_voronoi.merge(original_attrs, on=uid_col)
-
-    # Clean up temporary column
-    result = result.drop(columns=[uid_col])
-
-    return result
+    final_result = result_gdf.merge(gdf.drop(columns="geometry"), on=uid_col)
+    return final_result.drop(columns=[uid_col])
 
 
-# Example Usage:
-# polygons = gpd.read_file("my_polygons.shp")
-# # Ensure you are in a projected CRS (meters) for segment_distance to make sense
-# polygons = polygons.to_crs(epsg=3857)
-# voronoi = extend_edges(polygons, segment_distance=50)
-# voronoi.to_file("voronoi_output.gpkg")
+# %%
+# Old code
+# def extend_edges(gdf, segment_distance=1.0, buffer_factor=2.0):
+#     """
+#     Extends the edges of polygons to create a Voronoi diagram filling the surrounding space.
+#     Rewritten logic by Gemini based on fieldmaps/edge-extender.
+
+#     Args:
+#         gdf (gpd.GeoDataFrame): Input GeoDataFrame containing polygons.
+#         segment_distance (float): Distance (in CRS units) to interval points along edges.
+#         buffer_factor (float): Factor to expand the bounding box for the Voronoi extent.
+
+#     Returns:
+#         gpd.GeoDataFrame: A GeoDataFrame of the extended Voronoi regions.
+#     """
+
+#     # Work on a copy to avoid modifying the original
+#     gdf = gdf.copy()
+
+#     # 1. Create a guaranteed unique internal ID for tracking
+#     # We use a temporary string column name that is unlikely to conflict with user data
+#     uid_col = "_internal_unique_id"
+#     gdf[uid_col] = np.arange(len(gdf))
+
+#     print("1. Preparing boundaries...")
+#     # Calculate the union of all polygons to find the outer boundary
+#     dissolved = gdf.unary_union
+
+#     # Extract the boundary of the union (lines touching the empty space)
+#     if hasattr(dissolved, "boundary"):
+#         overall_boundary = dissolved.boundary
+#     else:
+#         raise ValueError("Could not compute boundary of input polygons.")
+
+#     # Create a GDF for the boundary lines
+#     boundary_gdf = gpd.GeoDataFrame(geometry=[overall_boundary], crs=gdf.crs)
+#     boundary_gdf = boundary_gdf.explode(index_parts=False)
+
+#     # Intersect boundary with original polygons to attribute the edges
+#     # We keep only the segments that overlap with our original polygons
+#     # This attaches our 'uid_col' to the edge segments
+#     attributed_edges = gpd.overlay(
+#         boundary_gdf,
+#         gdf[[uid_col, "geometry"]],
+#         how="intersection",
+#         keep_geom_type=True,
+#     )
+
+#     # Filter for linear geometries only
+#     attributed_edges = attributed_edges[
+#         attributed_edges.geometry.type.isin(["LineString", "MultiLineString"])
+#     ]
+
+#     print("2. Generating points from edges...")
+#     all_points = []
+#     all_ids = []
+
+#     # Iterate through the edges to densify them into points
+#     for _, row in attributed_edges.iterrows():
+#         geom = row.geometry
+#         src_id = row[uid_col]
+
+#         if geom.is_empty:
+#             continue
+
+#         # Standardize to list of lines
+#         lines = list(geom.geoms) if geom.geom_type == "MultiLineString" else [geom]
+
+#         for line in lines:
+#             coords = list(line.coords)
+
+#             # Interpolate points for long segments
+#             length = line.length
+#             if length > segment_distance:
+#                 num_segments = int(np.ceil(length / segment_distance))
+#                 # Generate intermediate points (skipping 0 to avoid duplication with vertices)
+#                 for i in range(1, num_segments):
+#                     pt = line.interpolate(i * segment_distance)
+#                     all_points.append(pt)
+#                     all_ids.append(src_id)
+
+#             # Add original vertices to preserve corners
+#             for coord in coords:
+#                 all_points.append(Point(coord))
+#                 all_ids.append(src_id)
+
+#     # Create GDF of points linked to the internal ID
+#     points_gdf = gpd.GeoDataFrame({uid_col: all_ids}, geometry=all_points, crs=gdf.crs)
+
+#     print(f"   Generated {len(points_gdf)} points.")
+
+#     print("3. Computing Voronoi diagram...")
+#     # Define bounding box for Voronoi extent
+#     minx, miny, maxx, maxy = gdf.total_bounds
+#     width = maxx - minx
+#     height = maxy - miny
+#     envelope = box(
+#         minx - width * buffer_factor,
+#         miny - height * buffer_factor,
+#         maxx + width * buffer_factor,
+#         maxy + height * buffer_factor,
+#     )
+
+#     # Generate Voronoi regions
+#     if len(points_gdf) == 0:
+#         raise ValueError(
+#             "No boundary points generated. Are polygons touching/overlapping perfectly?"
+#         )
+
+#     multi_point = MultiPoint(points_gdf.geometry.tolist())
+#     voronoi_geoms = voronoi_diagram(multi_point, envelope=envelope)
+
+#     # Convert GeometryCollection to list of Polygons
+#     voronoi_polys = list(voronoi_geoms.geoms)
+#     voronoi_gdf = gpd.GeoDataFrame(geometry=voronoi_polys, crs=gdf.crs)
+
+#     print("4. Linking Voronoi regions to original polygons...")
+#     # Spatial join to link Voronoi polygons back to the generating points (and thus the ID)
+#     joined = gpd.sjoin(voronoi_gdf, points_gdf, how="inner", predicate="contains")
+
+#     print("5. Dissolving regions...")
+#     # Dissolve Voronoi cells by the internal ID
+#     final_voronoi = joined.dissolve(by=uid_col, as_index=False)
+
+#     # Merge original attributes back using the internal ID
+#     # We drop the geometry from the original merge to keep the new Voronoi geometry
+#     original_attrs = gdf.drop(columns="geometry")
+#     result = final_voronoi.merge(original_attrs, on=uid_col)
+
+#     # Clean up temporary column
+#     result = result.drop(columns=[uid_col])
+
+#     return result
+
+
+# # Example Usage:
+# # polygons = gpd.read_file("my_polygons.shp")
+# # # Ensure you are in a projected CRS (meters) for segment_distance to make sense
+# # polygons = polygons.to_crs(epsg=3857)
+# # voronoi = extend_edges(polygons, segment_distance=50)
+# # voronoi.to_file("voronoi_output.gpkg")
 
 # %%
 edge_extend_gdf = extend_edges(tech_gdf).clip(plymouth_boundary)
@@ -415,7 +512,7 @@ tessellation_gdf = (
 tessellation_gdf.plot()
 
 # %%
-map = dissolve_techs_and_plot_folium(
+map, dissolved_gdf = dissolve_techs_and_plot_folium(
     voronoi_gdf=tessellation_gdf,
     buildings_gdf=tech_gdf,
     boundary_gdf=plymouth_boundaries,
@@ -423,4 +520,26 @@ map = dissolve_techs_and_plot_folium(
 map
 
 # %%
-map.save("20251222_plymouth_folium_map.html")
+map.save("20250205_plymouth_folium_map.html")
+
+# %%
+
+
+# %%
+dissolved_gdf.to_file(
+    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_tech_polygons.geojson",
+    driver="GeoJSON",
+)
+
+# %%
+
+
+# %%
+# # To open this geojson s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_tech_polygons.geojson
+
+# saved_gdf = gpd.read_file(
+#     "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_tech_polygons.geojson"
+# )
+
+
+# %%
