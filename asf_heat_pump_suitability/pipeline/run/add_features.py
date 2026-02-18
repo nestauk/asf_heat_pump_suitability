@@ -4,12 +4,10 @@ Script to add features to UPRNs:
 - estimated max contiguous and total outdoor space (m2)
 
 Run:
-python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs
+python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet
 
-where you should replace `path/to/domestic/UPRNs` with the path to the parquet file
-
-To run in test mode without saving outputs, add --test_mode flag.
-python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs --test_mode
+To save outputs, add --save_outputs True flag:
+python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet --save_outputs True
 """
 
 import argparse
@@ -35,15 +33,17 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="",
+        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
         required=True,
     )
 
     parser.add_argument(
-        "--test_mode",
-        help="If set, runs in test mode without saving outputs.",
-        action="store_true",
+        "--save_outputs",
+        help="If set to `True`, it saves the outputs. Otherwise, outputs are not saved. Defaults to `False`, i.e. not saving outputs.",
+        type=bool,
+        required=False,
+        default=False,
     )
 
     return parser.parse_args()
@@ -59,9 +59,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import load_tree_input
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.transform import uprns, outdoor_space
-    from asf_heat_pump_suitability.getters.get_datasets import (
-        load_gdf_inspire_land_parcels,
-    )
+    from asf_heat_pump_suitability.getters import get_datasets
 
     args = parse_arguments()
     las = args.local_authorities.lower()
@@ -93,20 +91,20 @@ if __name__ == "__main__":
             "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
         )
     else:
-        inspire_file_names = load_gdf_inspire_land_parcels(
+        inspire_file_names = get_datasets.load_gdf_inspire_land_parcels(
             path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EW.geojson"
         )
         inspire_file_names = inspire_file_names[
             inspire_file_names["LAD23NM"].isin(config["constant"][las]["la_names"])
-        ]
-        inspire_file_names = inspire_file_names["inspire_file_name"].unique()
-        land_parcels_gdf = gpd.GeoDataFrame()
-        for file_name in inspire_file_names:
-            print(f"Loading land parcels from {file_name}...")
-            temp_gdf = load_gdf_inspire_land_parcels(path=f"s3://{file_name}")
-            land_parcels_gdf = pd.concat(
-                [land_parcels_gdf, temp_gdf], ignore_index=True
-            )
+        ]["inspire_file_name"].unique()
+
+        land_parcels_gdf = pd.concat(
+            [
+                get_datasets.load_gdf_inspire_land_parcels(path=f"s3://{file}")
+                for file in inspire_file_names
+            ],
+            ignore_index=False,
+        )
 
     building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
         layer="building", grid_squares=config["constant"][las]["grid_squares"]
@@ -144,7 +142,7 @@ if __name__ == "__main__":
     # ------------------------ #
     # SAVE OUTPUTS
 
-    if not args.test_mode:
+    if args.save_outputs:
         save_utils.save_to_s3(
             features_df,
             path=f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{os.path.basename(args.uprns).split('.')[0]}_with_features.parquet",

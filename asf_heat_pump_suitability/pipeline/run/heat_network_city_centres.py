@@ -17,7 +17,7 @@ Defaults to `GB` (all of Great Britain), but this is not yet implemented.
 
 Temporary (before we scale): Set up a new local authority or group of local authorities by adding an entry to the `constant` section of the config.yaml file.
 
-Set --test_mode flag to run in test mode without saving outputs.
+Set --save_outputs flag to True to save the outputs to S3. By default, outputs are not saved.
 """
 
 import argparse
@@ -35,7 +35,7 @@ def parse_arguments() -> argparse.Namespace:
     # Placeholder - this arg is to look up correct paths for residential UPRNs and heat network dataset
     parser.add_argument(
         "--local_authorities",
-        help="Run script for specific local authority or group of local authorities. Defaults to GB (all of Great Britain).",
+        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
         default="GB",
         required=False,
@@ -49,9 +49,11 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--test_mode",
-        help="If set, runs in test mode without saving outputs.",
-        action="store_true",
+        "--save_outputs",
+        help="If set to `True`, it saves the outputs. Otherwise, outputs are not saved. Defaults to `False`, i.e. not saving outputs.",
+        type=bool,
+        required=False,
+        default=False,
     )
 
     return parser.parse_args()
@@ -85,13 +87,13 @@ if __name__ == "__main__":
         ### Existing heat network zones
 
         # Load Plymouth existing heat network zone polygons
-        la_names = config["constant"][las]["la_names"]
         print(f"Loading heat network zone data for {las} Local Authority...")
         hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=las)
 
         # Label UPRNs in existing, potential and planned heat network zones
         print(f"Identifying residential UPRNs in heat network zones for {las}...")
         id_col = [col for col in hn_zones_gdf.columns if "ID" in col][0]
+        print(f"Using Heat Network Zone {id_col} column as ID")
 
         hn_zone_uprn_df = heat_network_zones.label_gdf_heat_network_zone_uprns(
             uprn_gdf=uprn_gdf,
@@ -136,7 +138,7 @@ if __name__ == "__main__":
         )
 
     # Save residential UPRNs with existing heat network zone and city centre labels to S3
-    if not args.test_mode:
+    if args.save_outputs:
         save_utils.save_to_s3(
             hn_zone_city_centre_uprn_df,
             f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet",

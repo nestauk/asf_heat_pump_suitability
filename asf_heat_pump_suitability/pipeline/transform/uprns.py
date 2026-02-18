@@ -19,7 +19,7 @@ Defaults to `GB` (all of Great Britain), but this is not yet implemented.
 
 Temporary (before we scale): Set up a new local authority or group of local authorities by adding an entry to the `constant` section of the config.yaml file.
 
-Set --test_mode flag to run in test mode without saving outputs.
+Set --save_outputs flag to True to save the outputs to S3. By default, outputs are not saved.
 """
 
 import geopandas as gpd
@@ -157,16 +157,18 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Run script for specific local authority or group of local authorities. Defaults to GB (all of Great Britain).",
+        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
         default="GB",
         required=False,
     )
 
     parser.add_argument(
-        "--test_mode",
-        help="If set, runs in test mode without saving outputs.",
-        action="store_true",
+        "--save_outputs",
+        help="If set to `True`, it saves the outputs. Otherwise, outputs are not saved. Defaults to `False`, i.e. not saving outputs.",
+        type=bool,
+        required=False,
+        default=False,
     )
 
     return parser.parse_args()
@@ -251,7 +253,7 @@ if __name__ == "__main__":
         ]
     )
 
-    if not args.test_mode:
+    if args.save_outputs:
         save_utils.save_to_s3(
             df,
             f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns.parquet",

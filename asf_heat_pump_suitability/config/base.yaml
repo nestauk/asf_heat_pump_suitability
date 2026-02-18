@@ -34,7 +34,7 @@ data:
 constant:
   plymouth:
     la_names: "Plymouth"
-    grid_square: "SX"
+    grid_squares: "SX"
   plymouth_similar_cities:
     la_names:
       - "Liverpool"

@@ -14,6 +14,7 @@ import polars as pl
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.colors as mcolors
 import folium
 import os
 
@@ -106,7 +107,7 @@ gm_with_features.head()
 #
 # It includes building footprint IDs and geometries of all buildings in grid squares To note that one building footprint ID sometimes contains multiple buildings.
 #
-# These are updated regularly by Ordnance Survey and with each update the building footprint IDs might change.
+# These are updated regularly by Ordnance Survey and with each update the building footprint IDs change.
 
 # %%
 from asf_heat_pump_suitability import config
@@ -166,8 +167,7 @@ len(gm_uprns), len(gm_with_features), len(hnz_city_centre_data)
 
 # %%
 # Joining all geodfs into one based on UPRN
-gm_gdf = gm_uprns.join(hnz_city_centre_data[["in_city_centre", "in_hn_zone"]])
-gm_gdf = gm_gdf.join(
+gm_gdf = gm_uprns.join(hnz_city_centre_data[["in_city_centre", "in_hn_zone"]]).join(
     gm_with_features.drop(columns=["X_COORDINATE", "Y_COORDINATE", "geometry"])
 )
 
@@ -184,7 +184,7 @@ gm_gdf.head()
 
 # %%
 # we create a copy of the (building) geometry column so that we can keep it after the spatial join
-gm_gdf["property_geometry"] = gm_gdf.geometry
+gm_gdf["uprn_geometry"] = gm_gdf.geometry
 building_footprints["building_geometry"] = building_footprints["geometry"]
 gm_gdf = gm_gdf.sjoin(
     building_footprints[["geometry", "building_geometry"]],
@@ -224,7 +224,8 @@ s3client = boto3.client(
 )
 s3_bucket = "asf-heat-pump-suitability"
 response = s3client.get_object(
-    Bucket=s3_bucket, Key="local_heat_planning/outputs/blocks_of_flats_model.pkl"
+    Bucket=s3_bucket,
+    Key="local_heat_planning/outputs/block_of_flats_building_classifier.pkl",
 )
 
 body = response["Body"].read()
@@ -431,7 +432,7 @@ def define_decision_tree(
 
     Args:
         in_block_of_flats (bool): Whether the property is in a block of flats.
-        garden_size (float): Size of the garden in square meters.
+        utdoor_space (float): Size of the maximum contiguous outdoor space in square meters.
         city_centre_or_hnz (bool): Whether the property is in the city centre or in a planned heat network zone.
 
     Returns:
@@ -544,32 +545,6 @@ gm_gdf.groupby("NATIONALCADASTRALREFERENCE")[["1st_most_suitable_solution"]].nun
 ].value_counts(normalize=True)
 
 # %%
-# Number of unique land parcels in Greater Manchester vs. number of buildings
-# This shows that lots of land parcels are aggregated into one single building geometry/ footprint
-gm_gdf["NATIONALCADASTRALREFERENCE"].nunique(), gm_gdf["building_geometry"].nunique()
-
-# %%
-# Identifying pairs of different 1st most suitable solutions per land parcel
-solutions_per_land_parcel = gm_gdf.groupby("NATIONALCADASTRALREFERENCE")[
-    "1st_most_suitable_solution"
-].apply(set)
-solutions_per_land_parcel = pd.DataFrame(solutions_per_land_parcel)
-solutions_per_land_parcel["n_solutions"] = solutions_per_land_parcel[
-    "1st_most_suitable_solution"
-].apply(len)
-solutions_per_land_parcel = solutions_per_land_parcel[
-    solutions_per_land_parcel["n_solutions"] > 1
-]
-solutions_per_land_parcel.reset_index(inplace=True)
-solutions_per_land_parcel["1st_most_suitable_solution_str"] = solutions_per_land_parcel[
-    "1st_most_suitable_solution"
-].apply(lambda x: ", ".join(x))
-solutions_per_land_parcel.groupby("1st_most_suitable_solution_str")[
-    ["NATIONALCADASTRALREFERENCE"]
-].nunique()
-
-
-# %%
 # Identifying pairs of different 1st most suitable solutions per building footprint
 solutions_per_footprint = gm_gdf.groupby("building_geometry")[
     "1st_most_suitable_solution"
@@ -589,29 +564,6 @@ solutions_per_footprint.groupby("1st_most_suitable_solution_str")[
     ["building_geometry"]
 ].nunique()
 
-
-# %%
-# check if each land parcel appears only within one building footprint
-land_parcel_to_footprint = gm_gdf.groupby("NATIONALCADASTRALREFERENCE")[
-    "building_geometry"
-].apply(set)
-land_parcel_to_footprint = pd.DataFrame(land_parcel_to_footprint)
-land_parcel_to_footprint["n_footprints"] = land_parcel_to_footprint[
-    "building_geometry"
-].apply(len)
-
-# %%
-# It doesn't seem to be the case
-land_parcel_to_footprint["n_footprints"].value_counts()
-
-# %%
-land_parcel_to_footprint["n_footprints"].value_counts(normalize=True) * 100
-
-# %% [markdown]
-# In most cases:
-# - the same land parcel should be in one building footprint only (hopefully?)
-# - properties in the same land parcel should have the same most suitable solution
-# - properties in the same building footprint should have the same most suitable solution
 
 # %%
 # This is currently based on Greater Manchester only (both pairs found in land parcels and building footprints)
@@ -644,24 +596,24 @@ def assign_unique_sol(solution_set: set) -> str:
         print("This shouldn't happen!")
 
 
-solutions_per_footprint["final_solution"] = solutions_per_footprint[
+solutions_per_footprint["assigned_tech"] = solutions_per_footprint[
     "1st_most_suitable_solution"
 ].apply(lambda x: assign_unique_sol(x))
 
 # %%
 
-solutions_per_footprint["final_solution"].value_counts(dropna=False)
+solutions_per_footprint["assigned_tech"].value_counts(dropna=False)
 
 # %%
-mapping_set_to_final_solution = solutions_per_footprint.set_index("building_geometry")[
-    "final_solution"
+mapping_set_to_assigned_tech = solutions_per_footprint.set_index("building_geometry")[
+    "assigned_tech"
 ].to_dict()
 
 # %%
 gm_gdf["1st_most_suitable_solution"] = gm_gdf.apply(
     lambda x: (
-        mapping_set_to_final_solution[x["building_geometry"]]
-        if x["building_geometry"] in mapping_set_to_final_solution
+        mapping_set_to_assigned_tech[x["building_geometry"]]
+        if x["building_geometry"] in mapping_set_to_assigned_tech
         else x["1st_most_suitable_solution"]
     ),
     axis=1,
@@ -674,30 +626,33 @@ gm_gdf["1st_most_suitable_solution"].value_counts(dropna=False)
 # %%
 def map_blocks_of_flats_prob(
     tech: str,
-    ward_df: gpd.GeoDataFrame,
+    ward_gdf: gpd.GeoDataFrame,
     specific_ward_gdf: gpd.GeoDataFrame,
     labelled_tech: gpd.GeoDataFrame,
     colours: dict,
-    threshold=None,
+    threshold: float = None,
 ):
     """
     Maps properties suitable for a specific technology where the colour indicates the confidence in the block of flats label.
 
     Args:
-        tech (str): a low carbon heating solution in the set {"Individual solution", "Networked GSHP", "Communal solutions", "District heat network"}
-        ward_df (gpd.GeoDataFrame): ward data with most suitable solutions
+         tech (str): a low carbon heating solution in the set {"Individual solution", "Networked GSHP", "Communal solutions", "District heat network"}
+        ward_gdf (gpd.GeoDataFrame): ward data with most suitable solutions
         specific_ward_gdf (gpd.GeoDataFrame): specific ward boundary data
+        labelled_tech (gpd.GeoDataFrame): labelled technology polygons data
+        colours (dict): mapping of technologies to colours
+        threshold (float, optional): threshold for the block of flats label confidence.
     """
 
     if tech != "":
-        tech_specific_df = ward_df[ward_df["1st_most_suitable_solution"] == tech]
+        tech_specific_gdf = ward_gdf[ward_gdf["1st_most_suitable_solution"] == tech]
     else:
-        tech_specific_df = ward_df.copy()
+        tech_specific_gdf = ward_gdf.copy()
     fig, ax = plt.subplots(figsize=(15, 8))
 
     if threshold:
-        tech_specific_df = tech_specific_df[
-            tech_specific_df["block_of_flats_label_proba"] <= threshold
+        tech_specific_gdf = tech_specific_gdf[
+            tech_specific_gdf["block_of_flats_label_proba"] <= threshold
         ]
 
     print("tech:", tech)
@@ -725,7 +680,6 @@ def map_blocks_of_flats_prob(
         )
 
     greys = plt.get_cmap("Greys")
-    import matplotlib.colors as mcolors
 
     # Create a new map using only the range from 0.2 (light gray) to 1.0 (black)
     # 0.0 would be white, so we skip it.
@@ -734,7 +688,7 @@ def map_blocks_of_flats_prob(
     )
 
     # mapping individual properties where the colour indicates probability of being a block of flats
-    tech_specific_df.plot(
+    tech_specific_gdf.plot(
         ax=ax,
         column="block_of_flats_label_proba",
         cmap=cmap_no_white,
@@ -826,7 +780,7 @@ gm_building_most_suitable_tech = (
             "LAD23NM": "first",
             "property_type_flat": "sum",
             "UPRN": "count",
-            "max_contiguous_outdoor_space_area_m2": "mean",
+            "max_contiguous_outdoor_space_area_m2": "median",
             "in_block_of_flats": "first",
             "in_city_centre": "first",
             "in_hn_zone": "first",
@@ -856,7 +810,6 @@ gm_building_most_suitable_tech = gpd.GeoDataFrame(
 gm_building_most_suitable_tech
 
 # %%
-# These numbers should be the same, not sure why they are not
 gm_building_most_suitable_tech["geometry"].nunique(), len(
     gm_building_most_suitable_tech
 )
@@ -882,11 +835,11 @@ map_building_techs_in_ward(
 # gm_building_most_suitable_tech[["geometry", "1st_most_suitable_solution"]].to_file("greater_manchester_las_building_most_suitable_tech.kml", driver="KML")
 
 # %%
-# There are 2 buildings without geometry... needs further investigation. For now we remove them!
+# Checking if geometry is ever missing
 gm_building_most_suitable_tech[pd.isnull(gm_building_most_suitable_tech["geometry"])]
 
 # %%
-# Removing buildings with no geometry
+# Removing buildings with no geometry, if applicable
 gm_building_most_suitable_tech = gm_building_most_suitable_tech[
     ~pd.isnull(gm_building_most_suitable_tech["geometry"])
 ]
