@@ -3,20 +3,16 @@ This can be run as a standalone script to calculate grid capacity per LSOA/DataZ
 Outputs will be saved to `outputs/reports/grid_capacity.csv` unless otherwise specified.
 """
 
+import argparse
+import logging
 import re
 from typing import Any
-import logging
-import argparse
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
-import geopandas as gpd
 import polars as pl
 
-from asf_heat_pump_suitability.pipeline.prepare_features import (
-    boundaries,
-    household_count,
-)
 from asf_heat_pump_suitability.getters.get_dno_datasets import (
     generate_enw_gdf,
     generate_npg_gdf,
@@ -25,17 +21,19 @@ from asf_heat_pump_suitability.getters.get_dno_datasets import (
     generate_ukpn_gdf,
     generate_wpd_gdf,
 )
+from asf_heat_pump_suitability.pipeline.prepare_features import (
+    boundaries,
+    household_count,
+)
 
 # Constants
 CRS = "EPSG:4326"  # Geometry coordinate reference system - standard longitude/latitude projection
 POWER_PER_HEATPUMP = 8  # Power rating per heat pump in kW
-COEFFICIENT_OF_PERFORMANCE = (
-    2.5  # Heat output (heat pump rating) / electricity consumed
-)
+COEFFICIENT_OF_PERFORMANCE = 2.5  # Heat output (heat pump rating) / electricity consumed
 SUBSTATION_SCALING_FACTOR = 1.0  # Factor to scale substation power rating (MVA) by
 
 
-def _parse_capacity(value: Any) -> float:
+def _parse_capacity(value: Any) -> float:  # noqa: ANN401
     """
     Parse complex capacity strings and return total capacity as float.
 
@@ -103,14 +101,12 @@ def generate_substations_gdf() -> gpd.GeoDataFrame:
         ]
     )
 
-    assert set(substations_gdf["operator"]) == {
-        "ENW",
-        "NPg",
-        "SPEN",
-        "SSEN",
-        "UKPN",
-        "WPD",
-    }
+    expected_operators = {"ENW", "NPg", "SPEN", "SSEN", "UKPN", "WPD"}
+    actual_operators = set(substations_gdf["operator"])
+    if actual_operators != expected_operators:
+        missing = expected_operators - actual_operators
+        extra = actual_operators - expected_operators
+        raise ValueError(f"Unexpected operator set in substations data. Missing: {missing}, unexpected: {extra}")
 
     return substations_gdf
 
@@ -135,17 +131,13 @@ def distribute_substation_headroom(
     lsoa_with_households = lsoa_gdf.merge(households_df, on="lsoa", how="left")
 
     # Perform spatial join between LSOAs and substations
-    joined = gpd.sjoin(
-        lsoa_with_households, substations_gdf, how="inner", predicate="intersects"
-    ).rename(columns={"id": "substation_id"})
+    joined = gpd.sjoin(lsoa_with_households, substations_gdf, how="inner", predicate="intersects").rename(
+        columns={"id": "substation_id"}
+    )
 
     # Calculate total households served by each substation
-    substation_total_households = (
-        joined.groupby("substation_id")["households_count"].sum().reset_index()
-    )
-    substation_total_households = substation_total_households.rename(
-        columns={"households_count": "total_households"}
-    )
+    substation_total_households = joined.groupby("substation_id")["households_count"].sum().reset_index()
+    substation_total_households = substation_total_households.rename(columns={"households_count": "total_households"})
 
     # Merge total households back to joined dataframe
     joined = joined.merge(substation_total_households, on="substation_id")
@@ -162,9 +154,7 @@ def distribute_substation_headroom(
     return lsoa_headroom
 
 
-def calculate_headroom_per_household(
-    lsoa_headroom: pd.DataFrame, households_df: pd.DataFrame
-) -> pd.DataFrame:
+def calculate_headroom_per_household(lsoa_headroom: pd.DataFrame, households_df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate headroom per household for each LSOA/DataZone.
 
@@ -176,9 +166,7 @@ def calculate_headroom_per_household(
         DataFrame with LSOA/DataZone codes, distributed headroom, household counts, and headroom per household.
     """
     merged = pd.merge(lsoa_headroom, households_df, on="lsoa", how="left")
-    merged["headroom_per_household"] = (
-        merged["distributed_headroom"] / merged["households_count"]
-    )
+    merged["headroom_per_household"] = merged["distributed_headroom"] / merged["households_count"]
     return merged[
         [
             "lsoa",
@@ -205,9 +193,7 @@ def process_substation_lsoa_data(
     Returns:
         DataFrame with processed data including distributed headroom per household.
     """
-    lsoa_headroom = distribute_substation_headroom(
-        substations_gdf, lsoa_gdf, households_df
-    )
+    lsoa_headroom = distribute_substation_headroom(substations_gdf, lsoa_gdf, households_df)
     return calculate_headroom_per_household(lsoa_headroom, households_df)
 
 
@@ -259,22 +245,14 @@ def calculate_grid_capacity() -> pl.DataFrame:
     """
     # Generate and process substation data
     substations = generate_substations_gdf().drop_duplicates(subset="id")
-    substations["firm_capacity_mva"] = substations["firm_capacity_mva"].apply(
-        _parse_capacity
-    )
-    substations["peak_demand_mva"] = substations["peak_demand_mva"].apply(
-        _parse_capacity
-    )
+    substations["firm_capacity_mva"] = substations["firm_capacity_mva"].apply(_parse_capacity)
+    substations["peak_demand_mva"] = substations["peak_demand_mva"].apply(_parse_capacity)
 
     # Apply substation rating scaling factor
-    substations["firm_capacity_mva"] = (
-        substations["firm_capacity_mva"] * SUBSTATION_SCALING_FACTOR
-    )
+    substations["firm_capacity_mva"] = substations["firm_capacity_mva"] * SUBSTATION_SCALING_FACTOR
 
     # Calculate headroom per substation
-    substations["headroom_mva"] = (
-        substations["firm_capacity_mva"] - substations["peak_demand_mva"]
-    )
+    substations["headroom_mva"] = substations["firm_capacity_mva"] - substations["peak_demand_mva"]
 
     # Load and process LSOA/DataZone boundary data
     lsoa_gdf = boundaries.load_transform_gdf_lsoa_dz_boundaries().to_crs(CRS)
