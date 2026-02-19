@@ -27,9 +27,9 @@ from sklearn.model_selection import HalvingRandomSearchCV, StratifiedKFold, trai
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import load_tree_input
 from asf_heat_pump_suitability.pipeline.impute import property_type
+from asf_heat_pump_suitability.pipeline.model.block_of_flats import feature_engineering
 from asf_heat_pump_suitability.pipeline.transform import uprns
 from asf_heat_pump_suitability.utils import save_utils
-from pipeline.model.block_of_flats import feature_engineering
 
 logger = logging.getLogger(__name__)
 
