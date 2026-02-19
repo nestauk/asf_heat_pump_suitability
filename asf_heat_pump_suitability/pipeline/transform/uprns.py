@@ -16,10 +16,12 @@ Local Authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, N
 of Great Britain.
 """
 
+import argparse
+import logging
+
 import geopandas as gpd
 import polars as pl
-import logging
-import argparse
+
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 
@@ -79,10 +81,7 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
     df = df.with_columns(
         # Remove any invalid UPRNs (i.e. those IDs which are generated in EPC preprocessing generated from concatenating building ref number and address)
         # These are not true UPRNs that can be used in joins across other datasets
-        pl.col("UPRN")
-        .cast(pl.Float64, strict=False)
-        .cast(pl.Int64)
-        .alias("UPRN")
+        pl.col("UPRN").cast(pl.Float64, strict=False).cast(pl.Int64).alias("UPRN")
     ).drop_nulls()
     logging.info(
         f"{before - len(df)} invalid UPRNs dropped from {epc_type} EPC register. {len(df)} valid UPRNs remaining"
@@ -112,19 +111,13 @@ def filter_gdf_residential_uprns(
     """
     print("Filtering to residential UPRNs...")
     # Find UPRNs which are in the non-residential buildings
-    non_residential_uprns = set(
-        uprn_gdf.sjoin(non_residential_buildings_gdf, how="inner", predicate="within")[
-            "UPRN"
-        ]
-    )
+    non_residential_uprns = set(uprn_gdf.sjoin(non_residential_buildings_gdf, how="inner", predicate="within")["UPRN"])
 
     # Get valid non-residential EPC UPRNs
     non_residential_uprns.update(load_set_valid_epc_uprns(epc_type="commercial"))
 
     # Find UPRNs which are in any building (i.e. remove UPRNs which represent outdoor addressable locations)
-    uprns_in_buildings = set(
-        uprn_gdf.sjoin(buildings_gdf, how="inner", predicate="intersects")["UPRN"]
-    )
+    uprns_in_buildings = set(uprn_gdf.sjoin(buildings_gdf, how="inner", predicate="intersects")["UPRN"])
 
     # Get valid residential UPRNs
     epc_residential_uprns = load_set_valid_epc_uprns(epc_type="domestic")
@@ -132,8 +125,7 @@ def filter_gdf_residential_uprns(
     return uprn_gdf[
         (
             # Filter to UPRNs which are in buildings AND not in non-residential UPRNs list
-            (~uprn_gdf["UPRN"].isin(non_residential_uprns))
-            & (uprn_gdf["UPRN"].isin(uprns_in_buildings))
+            (~uprn_gdf["UPRN"].isin(non_residential_uprns)) & (uprn_gdf["UPRN"].isin(uprns_in_buildings))
         )
         # Or UPRNs which are in domestic EPC register
         | (uprn_gdf["UPRN"].isin(epc_residential_uprns))
@@ -164,9 +156,9 @@ if __name__ == "__main__":
     import polars as pl
 
     from asf_heat_pump_suitability.getters import (
+        load_boundaries,
         load_geodata,
         load_tree_input,
-        load_boundaries,
     )
     from asf_heat_pump_suitability.pipeline.transform import (
         non_residential_entities,
@@ -183,9 +175,7 @@ if __name__ == "__main__":
     if args.local_authorities.lower() == "plymouth":
         print("Creating residential UPRN dataset for Plymouth Local Authority...")
         grid_squares = config["constant"]["grid_squares"]["plymouth"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las="Plymouth"
-        )
+        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(select_las="Plymouth")
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
             how="inner",
@@ -234,17 +224,13 @@ if __name__ == "__main__":
 
     # Get layers required for identifying residential UPRNs
     layers = {
-        f"{layer}_gdf": load_tree_input.load_gdf_os_openmap_local_layer(
-            layer=layer, grid_squares=grid_squares
-        )
+        f"{layer}_gdf": load_tree_input.load_gdf_os_openmap_local_layer(layer=layer, grid_squares=grid_squares)
         for layer in ["important_building", "railway_station", "building"]
     }
 
     # Identify assumed non-residential buildings
-    non_residential_buildings_gdf = (
-        non_residential_entities.generate_gdf_non_residential_buildings(
-            **layers, poi_gdf=poi_gdf, uprns_gdf=uprns_gdf
-        )
+    non_residential_buildings_gdf = non_residential_entities.generate_gdf_non_residential_buildings(
+        **layers, poi_gdf=poi_gdf, uprns_gdf=uprns_gdf
     )
 
     # Filter UPRNs to assumed residential only
