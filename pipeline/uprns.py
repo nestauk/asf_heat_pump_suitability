@@ -25,6 +25,7 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import load_boundaries, load_geodata, load_tree_input
 from asf_heat_pump_suitability.pipeline.transform import non_residential_entities, poi, uprns
 from asf_heat_pump_suitability.utils import save_utils
+from asf_heat_pump_suitability.utils.storage import mock_aws_if_local
 
 logger = logging.getLogger(__name__)
 
@@ -135,4 +136,5 @@ def run(area: str = "plymouth") -> None:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
-    run(area=args.area)
+    with mock_aws_if_local():
+        run(area=args.area)

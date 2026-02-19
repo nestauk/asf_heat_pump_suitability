@@ -11,7 +11,9 @@ in pipeline code.
 """
 
 import os
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Generator
 
 import boto3
 import s3fs
@@ -44,6 +46,33 @@ def get_boto3_client(service: str) -> boto3.client:
     """
     endpoint_url = os.environ.get("AWS_ENDPOINT_URL")
     return boto3.client(service, endpoint_url=endpoint_url)
+
+
+@contextmanager
+def mock_aws_if_local() -> Generator[None, None, None]:
+    """Activate a moto S3 mock when DATA_MODE is not 's3'.
+
+    Pipeline entry scripts should wrap their ``run()`` call with this context
+    manager. When ``DATA_MODE=local`` (or any non-s3 value), all boto3 and
+    s3fs calls are intercepted by moto so no real AWS credentials are required.
+    When ``DATA_MODE=s3`` (the default for cloud runs), this is a no-op.
+
+    Example usage in a pipeline entry script::
+
+        if __name__ == "__main__":
+            with mock_aws_if_local():
+                run(...)
+
+    Yields:
+        None
+    """
+    if os.environ.get("DATA_MODE", "s3") != "s3":
+        from moto import mock_aws
+
+        with mock_aws():
+            yield
+    else:
+        yield
 
 
 def get_path(key: str, config: "Settings") -> str:  # noqa: F821

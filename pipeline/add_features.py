@@ -23,6 +23,7 @@ from asf_heat_pump_suitability.getters import load_tree_input
 from asf_heat_pump_suitability.pipeline.impute import property_type
 from asf_heat_pump_suitability.pipeline.transform import outdoor_space, uprns
 from asf_heat_pump_suitability.utils import save_utils
+from asf_heat_pump_suitability.utils.storage import mock_aws_if_local
 
 logger = logging.getLogger(__name__)
 
@@ -105,4 +106,5 @@ def run(uprns_path: str) -> None:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
-    run(uprns_path=args.uprns)
+    with mock_aws_if_local():
+        run(uprns_path=args.uprns)
