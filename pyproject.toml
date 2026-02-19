@@ -36,6 +36,12 @@ dependencies = [
     "polars>=1.38.1",
 ]
 
+[project.scripts]
+ahps-uprns = "asf_heat_pump_suitability.pipeline.uprns:main"
+ahps-add-features = "asf_heat_pump_suitability.pipeline.add_features:main"
+ahps-stream-inspire = "asf_heat_pump_suitability.pipeline.setup.stream_inspire_files:main"
+ahps-train-model = "asf_heat_pump_suitability.pipeline.setup.train_model:main"
+
 [project.urls]
 repository = "https://github.com/nestauk/asf_heat_pump_suitability"
 issues = "https://github.com/nestauk/asf_heat_pump_suitability/issues"
