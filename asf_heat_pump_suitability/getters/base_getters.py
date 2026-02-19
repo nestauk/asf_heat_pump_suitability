@@ -1,16 +1,18 @@
 """
-Generic loaders of specific file types. These functions shouldn’t load specific datasets and can be used in multiple specific getters.
+Generic loaders of specific file types. These functions shouldn't load specific datasets and can be used in multiple specific getters.
 """
 
-import requests
-from zipfile import ZipFile
-from io import BytesIO
 import logging
-import s3fs
+from fnmatch import fnmatch
+from io import BytesIO
+from zipfile import ZipFile
+
 import geojson
 import geopandas as gpd
-from fnmatch import fnmatch
 import polars as pl
+import requests
+
+from asf_heat_pump_suitability.utils.storage import get_s3fs
 
 
 def load_df_from_s3(uri: str, **kwargs) -> pl.DataFrame:
@@ -124,7 +126,7 @@ def get_content_from_s3_path(path: str) -> bytes:
     Returns
         bytes: bytes content of file
     """
-    fs = s3fs.S3FileSystem()
+    fs = get_s3fs()
     with fs.open(path, mode="rb") as f:
         content = f.read()
     return content
@@ -156,7 +158,7 @@ def load_gdf_from_s3_geojson(s3_uri: str, crs: str) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame
     """
-    fs = s3fs.S3FileSystem()
+    fs = get_s3fs()
     with fs.open(s3_uri, "rb") as f:
         data = geojson.load(f)
     gdf = gpd.GeoDataFrame.from_features(data["features"], crs=crs)
@@ -174,7 +176,7 @@ def list_obj_s3_location(location: str) -> list:
     Returns:
         list: objects in S3 location
     """
-    fs = s3fs.S3FileSystem()
+    fs = get_s3fs()
     o = fs.ls(location)
 
     return o
