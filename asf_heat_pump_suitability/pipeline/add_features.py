@@ -1,14 +1,14 @@
 """Step 2: Add features to domestic UPRNs.
 
-Reads the domestic UPRN dataset produced by pipeline/uprns.py from S3, adds
+Reads the domestic UPRN dataset produced by uprns.py from S3, adds
 geospatial features (flat/apartment flag, outdoor space estimates), and writes
 the result to S3.
 
 Run locally:
-    python pipeline/add_features.py --uprns <s3-path-or-local-path>
+    uv run ahps-add-features --uprns <s3-path-or-local-path>
 
 Run on the cloud via arm_orbit:
-    orbit launch --script pipeline/add_features.py --team <team> --project <project>
+    orbit launch --script asf_heat_pump_suitability/pipeline/add_features.py --team <team> --project <project>
 """
 
 import argparse
@@ -102,7 +102,12 @@ def run(uprns_path: str) -> None:
     logger.info(f"Saved features for {len(features_df)} UPRNs to {output_path}")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Entry point registered as the ``ahps-add-features`` console script."""
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
     run(uprns_path=args.uprns)
+
+
+if __name__ == "__main__":
+    main()

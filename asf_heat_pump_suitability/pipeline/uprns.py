@@ -4,10 +4,10 @@ Reads the OS Open UPRN dataset from S3, filters to residential properties using
 building footprints, EPC registers, and POI data, and writes the result to S3.
 
 Run locally:
-    python pipeline/uprns.py [--area <area>]
+    uv run ahps-uprns [--area <area>]
 
 Run on the cloud via arm_orbit:
-    orbit launch --script pipeline/uprns.py --team <team> --project <project>
+    orbit launch --script asf_heat_pump_suitability/pipeline/uprns.py --team <team> --project <project>
 
 Area options (--area flag):
     plymouth            Plymouth Local Authority only (default for dev/test)
@@ -132,7 +132,12 @@ def run(area: str = "plymouth") -> None:
     logger.info(f"Saved {len(df)} residential UPRNs to {output_path}")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Entry point registered as the ``ahps-uprns`` console script."""
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
     run(area=args.area)
+
+
+if __name__ == "__main__":
+    main()

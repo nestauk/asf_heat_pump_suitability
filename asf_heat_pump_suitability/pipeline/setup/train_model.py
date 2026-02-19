@@ -127,7 +127,8 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Entry point registered as the ``ahps-train-model`` console script."""
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
 
@@ -163,3 +164,7 @@ if __name__ == "__main__":
     if not args.no_save:
         save_path = config["output"]["save_as"]["block_of_flats_model"]
         save_utils.save_model_to_pkl_s3(model, save_path)
+
+
+if __name__ == "__main__":
+    main()

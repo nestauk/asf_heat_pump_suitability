@@ -5,7 +5,7 @@ England and Wales (from government website) to the asf-heat-pump-suitability S3
 bucket. Files are unzipped during streaming.
 
 Run:
-    python pipeline/setup/stream_inspire_files.py -n all
+    uv run ahps-stream-inspire -n all
 
 Nation options (-n / --nations):
     ew      England and Wales only
@@ -45,7 +45,8 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Entry point registered as the ``ahps-stream-inspire`` console script."""
     args = parse_arguments()
 
     s3 = boto3.client("s3")
@@ -96,3 +97,7 @@ if __name__ == "__main__":
                         Key=f"source_data/inspire_ew/{area}.gml",
                     )
             time.sleep(1)
+
+
+if __name__ == "__main__":
+    main()
