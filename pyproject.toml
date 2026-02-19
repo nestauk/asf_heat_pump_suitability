@@ -1,0 +1,92 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "asf_heat_pump_suitability/__init__.py"
+
+[project]
+name = "asf_heat_pump_suitability"
+dynamic = ["version"]
+description = "Pipeline to generate features required for the heat pump suitability decision tree"
+authors = [{ name = "Nesta" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.21",
+    "bs4>=0.0",
+    "convertbng>=0.7",
+    "geopandas>=1.0",
+    "geojson>=3.2",
+    "osbng>=0.5",
+    "polars-lts-cpu>=1.5",
+    "pyogrio>=0.10",
+    "pyproj>=3.7",
+    "pydantic-settings>=2.0",
+    "pyyaml>=6.0",
+    "regex>=2024.11",
+    "requests>=2.32",
+    "s3fs>=2022.5",
+    "scikit-learn>=1.7",
+    "shapely>=2.1",
+    "smart-open>=7.3",
+    "tenacity>=9.1",
+    "tqdm>=4.67",
+]
+
+[project.urls]
+repository = "https://github.com/nestauk/asf_heat_pump_suitability"
+issues = "https://github.com/nestauk/asf_heat_pump_suitability/issues"
+
+[dependency-groups]
+dev = [
+    "ipykernel",
+    "jupytext",
+    "nbstripout",
+    "ruff",
+    "pytest",
+    "pytest-cov",
+    "pre-commit",
+    "moto[s3]",
+]
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "ANN", # flake8-annotations
+    "B",   # flake8-bugbear: Likely bugs
+    "C",   # flake8-comprehensions and mccabe complexity
+    "E",   # pycodestyle: Errors (default)
+    "F",   # pyflakes: Linter
+    "I",   # isort
+    "N",   # pep8-naming: Naming conventions
+    "W",   # pycodestyle: Warnings (default)
+]
+ignore = [
+    "D100", # Warns about missing module-level docstrings
+    "S101", # Warns about assert being removed when compiled
+    "ANN002", # Warns about missing type annotation on *args
+    "ANN003", # Warns about missing type annotation on **kwargs
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["asf_heat_pump_suitability"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "E402", "D104"]
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

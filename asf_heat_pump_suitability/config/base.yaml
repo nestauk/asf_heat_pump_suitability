@@ -30,6 +30,12 @@ data:
     non_domestic_poi_categories: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/non_residential_poi_categories.csv"
     plymouth_residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet"
 
+output:
+  save_as:
+    block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"
+  residential_uprns_template: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{area}_residential_uprns.parquet"
+  features_template: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{uprns_stem}_with_features.parquet"
+
 constant:
   grid_squares:
     plymouth: "SX"

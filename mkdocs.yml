@@ -1,0 +1,21 @@
+site_name: ASF Heat Pump Suitability
+site_description: Pipeline to generate features required for the heat pump suitability decision tree
+site_author: Nesta
+repo_url: https://github.com/nestauk/asf_heat_pump_suitability
+repo_name: nestauk/asf_heat_pump_suitability
+
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: indigo
+
+nav:
+  - Overview: index.md
+  - Pipeline: pipeline.md
+  - Local Setup: setup.md
+  - Cloud Deployment: cloud.md
+  - Configuration: config.md
+
+plugins:
+  - search
