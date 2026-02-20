@@ -1,7 +1,7 @@
 """
 Script to add features to UPRNs:
 - flat / apartment property type boolean flag
--
+- boolean flag to indicate whether UPRN is in a block of flats
 - estimated max contiguous and total outdoor space (m2)
 
 Run:
@@ -73,29 +73,32 @@ if __name__ == "__main__":
         layer="building", grid_squares="SX"
     )
 
+    # Map UPRNs to the ID of the building they're in
     uprn_building_id_dict = uprns.map_dict_uprns_to_building_id(
         uprns_gdf=uprns_gdf, buildings_gdf=building_footprints_gdf, id_col="ID"
     )
 
     uprns_gdf["property_type_flat"] = uprns_gdf["UPRN"].isin(flat_uprns)
+    # Generate features for block of flats classification model
     building_features_df = feature_engineering.generate_df_features(
         buildings_gdf=building_footprints_gdf,
         uprns_gdf=uprns_gdf,
         id_col="ID",
     )
 
-    # TODO make this robust by loading same labelled data used to train model
+    # TODO make this robust by automatically loading same labelled data used to train model
     labelled_df = pl.read_parquet(
         "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet"
     )
-    rfc = base_getters.load_pickle(
+    # Load trained block of flats classifier model
+    clf = base_getters.load_pickle(
         config["output"]["save_as"]["model"]["block_of_flats_model"]
     )
     features_df = train_model.extend_df_in_block_of_flats_label(
         uprns_df=features_df,
         mapping=uprn_building_id_dict,
         predictions_df=train_model.predict_class_block_of_flats(
-            model=rfc,
+            model=clf,
             features_df=building_features_df,
             labelled_df=labelled_df,
             id_col="ID",

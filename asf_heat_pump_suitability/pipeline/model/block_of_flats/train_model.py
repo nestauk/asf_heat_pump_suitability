@@ -12,6 +12,8 @@ Set the required parameters:
 `labelled_data` takes a path to a parquet file containing labelled data. Requires a boolean 'block_of_flats' column and a building
 ID column with one row per building.
 `uprns` must contain all domestic UPRNs within the area(s) that `labelled_data` samples from.
+
+`labelled_data` takes a path to labelled data to train binary classification model on in parquet file format. Building ID required.
 """
 
 import numpy as np
@@ -78,7 +80,7 @@ def train_block_of_flats_classifier(
         df (pl.DataFrame): engineered features with labelled target variable
         id_col (str): name of ID column
         features (Iterable[str]): features used to train the model
-        target (str): name of target variable,
+        target (str): name of target variable
         param_search (Type[BaseSearchCV]): a class (not an instance) of `BaseSearchCV`, e.g. `HalvingRandomSearchCV` or `HalvingGridSearchCV` etc.
         Defaults to using `HalvingRandomSearchCV` which will create an instance of this class with selected custom arguments for `param_distributions`, `factor`, `cv`,
         and `n_jobs`, using F1 `scoring` metric. If using something other than the default option, kwargs for the selected `BaseSearchCV` class must be given, including param_distributions.
@@ -148,7 +150,18 @@ def predict_class_block_of_flats(
     id_col: str,
 ) -> pl.DataFrame:
     """
-    Predict binary class (block of flats / not) on buildings using trained Random Forest Classifier model.
+    Predict binary class (block of flats / not) on buildings using trained Random Forest Classifier model. Features required:
+        - n_UPRNs
+        - n_flats
+        - building_area_m2
+        - building_perimeter_m
+        - proportion_flats
+        - UPRNs_per_building_m2
+        - concave_hull_area_m2
+        - uprns_per_hull_area_m2
+        - flats_per_hull_area_m2
+        - avg_n_stacked_uprns
+        - std_n_stacked_uprns
 
     Args:
         model (RandomForestClassifier): trained model for binary classification of buildings into blocks of flats or not
@@ -180,7 +193,7 @@ def predict_class_block_of_flats(
         X_df
     )[:, 1]
 
-    # Combine into one probability label
+    # Combine into one probability label - final probability label indicates probability of the class assigned
     concat_dfs.append(
         pl.from_pandas(predictions_df, include_index=True).with_columns(
             pl.when(pl.col("block_of_flats"))
@@ -229,9 +242,14 @@ def extend_df_in_block_of_flats_label(
     print("Adding `in_block_of_flats` label to UPRNs...")
     return (
         uprns_df.with_columns(
-            pl.col("UPRN").replace(mapping, default=None).alias(id_col)
+            # Map building IDs to the UPRNs they contain
+            pl.col("UPRN")
+            .replace(mapping, default=None)
+            .alias(id_col)
         )
+        # Join the predicted block of flats label to the UPRNs via the building ID
         .join(predictions_df, how="left", on=id_col)
+        # Rename class for UPRN-level data
         .rename({"block_of_flats": "in_block_of_flats"})
     )
 
@@ -254,7 +272,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--labelled_data",
-        help="Labelled data to train binary classification model on in parquet file format. Building ID required.",
+        help="Path to labelled data to train binary classification model on in parquet file format. Building ID required.",
         type=str,
         required=True,
     )
