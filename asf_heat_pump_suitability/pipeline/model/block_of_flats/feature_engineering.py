@@ -3,12 +3,16 @@ Functions to generate features for random forest binary classifier model which c
 or not. Features are generated per building from building footprint and UPRN geodata.
 """
 
+import pandas as pd
 import polars as pl
 import geopandas as gpd
 
 
 def generate_df_features(
-    buildings_gdf: gpd.GeoDataFrame, uprns_gdf: gpd.GeoDataFrame, id_col: str
+    buildings_gdf: gpd.GeoDataFrame,
+    domestic_uprns_gdf: gpd.GeoDataFrame,
+    all_uprns_gdf: gpd.GeoDataFrame,
+    id_col: str,
 ) -> pl.DataFrame:
     """
     Generate all features required to train block of flats random forest binary classifier.
@@ -21,6 +25,13 @@ def generate_df_features(
     Return:
         pl.DataFrame: all features for each building ID (per id_col)
     """
+    # Get all UPRNs within building footprints
+    uprns_gdf = _concat_gdf_all_uprns(
+        domestic_uprns_gdf=domestic_uprns_gdf,
+        all_uprns_gdf=all_uprns_gdf,
+        buildings_gdf=buildings_gdf,
+    )
+
     # Join UPRNs to the building footprints they are contained within and retain building geometry
     buildings_w_uprns_gdf = buildings_gdf.sjoin(
         uprns_gdf, how="inner", predicate="contains"
@@ -189,3 +200,33 @@ def _generate_df_concave_hull_features(
     ]
 
     return agg_building_df.select(keep_cols)
+
+
+def _concat_gdf_all_uprns(
+    domestic_uprns_gdf: gpd.GeoDataFrame,
+    all_uprns_gdf: gpd.GeoDataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """
+    Generate GeoDataFrame of all UPRNs (both domestic and non-domestic) contained within buildings in which there is at least
+    one domestic property.
+
+    Args:
+        domestic_uprns_gdf (gpd.GeoDataFrame): domestic UPRNs with `property_type_flat` boolean column
+        all_uprns_gdf (gpd.GeoDataFrame): full dataset of UPRNs
+        buildings_gdf (gpd.GeoDataFrame): building footprints of buildings containing at least one domestic property.
+
+    Returns:
+        gpd.GeoDataFrame: all domestic and non-domestic UPRNs in building containing at least one domestic property
+    """
+    non_domestic_uprns_gdf = all_uprns_gdf[
+        ~all_uprns_gdf["UPRN"].isin(domestic_uprns_gdf)
+    ]
+    # Create subset of non-domestic UPRNs that are located within buildings
+    non_domestic_uprns_gdf = non_domestic_uprns_gdf.sjoin(
+        buildings_gdf[["geometry"]], how="inner", predicate="within"
+    ).drop(columns="index_right")
+    # Add required column for concatenation
+    non_domestic_uprns_gdf["property_type_flat"] = False
+
+    return pd.concat([domestic_uprns_gdf, non_domestic_uprns_gdf])
