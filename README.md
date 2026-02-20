@@ -2,18 +2,24 @@
 
 ### Version 2.0.0 (in progress)
 
-V2.0.0 of `asf_heat_pump_suitability` expands on previous work; we are building a mapping tool that aims to:
+V2.0.0 of the `asf_heat_pump_suitability` repository generates the underlying data for Nesta's local heat planning tool aiming to:
 
-- categorise groups of properties by technology - grouping similar neighbouring properties by the most suitable low-carbon heating technology
-- provide additional key information about properties, households and the area they are located in to support decision-making by local areas and the supply chain
-  Read more about this work [here](https://www.nesta.org.uk/project-updates/a-tool-to-support-local-clean-heat-planning/)
+- cluster groups of properties by technology - grouping similar neighbouring properties by the most suitable low-carbon heating technologies\*
+- provide additional key information for each cluster about properties, households, and the area they are located in
+
+\*Low-carbon heating technologies include **individual heat sources**, **networked ground source heat pumps** (also
+known as **shared ground loops**), **communal heat sources** and **district heat networks**. You can read ead more about this work [here](https://www.nesta.org.uk/project-updates/a-tool-to-support-local-clean-heat-planning/)
 
 ### Version 1.0.0
 
-V1.0.0 of `asf_heat_pump_suitability` contains the code used to calculate heat pump suitability scores for lower-layer
+V1.0.0 of the `asf_heat_pump_suitability` contains the code used to calculate heat pump suitability scores for lower-layer
 super output areas (LSOAs) in England and Wales and Data Zones in Scotland using domestic EPC data and supplementary sources. Scores are
 weight-adjusted for LSOAs where possible to reduce bias.
-Read more about this work [here](https://www.nesta.org.uk/project/mapping-heat-pump-suitability-across-great-britain/).
+
+You can see [heat pump suitability scores across Great Britain in this map](https://heatpumpsuitability.dap-tools.uk/) for
+air source heat pumps, ground source heat pumps, shared group loops, and heat networks. You can read more about this work [here](https://www.nesta.org.uk/project/mapping-heat-pump-suitability-across-great-britain/). Please note that following the shift in our methodology to what we've developing in v2.0.0, the underlying data and associated map are no longer being updated. The map will be decommissioned in the near future.
+
+Source code for v1.0.0 is available under [Releases](https://github.com/nestauk/asf_heat_pump_suitability/releases).
 
 ## Setup
 
@@ -41,7 +47,7 @@ asf_heat_pump_suitability
 │    ├─ base_getters.py - generic getter functions; no specific datasets
 │    ├─ load_geodata.py - load raw geodatasets with no preprocessing
 │    ├─ load_boundaries.py - load census and geographical boundaries (LSOA, LA, national etc.)
-│    ├─ load_data.py - load pecific raw datasets using base getters
+│    ├─ load_data.py - load specific raw datasets using base getters
 ├───pipeline/
 │    Subdirs with modules to process data and produce outputs
 │    ├─ cluster/ - modules to group properties
@@ -111,10 +117,14 @@ All functions must follow the naming format `def a_b_cde()`:
 
 ### 2. Docstrings and type hinting
 
+`.py` files must start with a docstring containing a brief description of the module.
+
 Every function must include:
 
-- **Type Hinting:** For both function arguments and return types. Types must also be listed in the `Args` and `Returns` sections.
-- **Short Description:** A concise explanation of the function's purpose.
+- **Type Hinting:** For both function arguments and return types.
+- **Docstring:** [Google-style docstring](https://google.github.io/styleguide/pyguide.html#383-functions-and-methods) with a concise explanation of the function's purpose, and `Args` and `Returns` information (including listing types).
+
+Getters which load specific raw datasets must include name of data publisher, geographical coverage (where applicable), and, for geospatial data, coordinate reference system.
 
 ### 3. S3 source file naming
 
@@ -129,7 +139,7 @@ Raw source data should be saved to the `asf-heat-pump-suitability` bucket in the
 
 **Example:** `v202510_OSOpenMapLocal_building_geometries_Plymouth.shp`.
 
-See further [Technical and working style guidelines](https://github.com/nestauk/ds-cookiecutter/blob/master/GUIDELINES.md)
+See further [technical and working style guidelines](https://github.com/nestauk/ds-cookiecutter/blob/master/GUIDELINES.md)
 
 ---
 
