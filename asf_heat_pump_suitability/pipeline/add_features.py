@@ -22,10 +22,14 @@ from asf_heat_pump_suitability.config.settings import load_settings
 from asf_heat_pump_suitability.getters import load_tree_input
 from asf_heat_pump_suitability.pipeline.impute import property_type
 from asf_heat_pump_suitability.pipeline.transform import outdoor_space, uprns
+from asf_heat_pump_suitability.pipeline.transform.uprns import get_area_config
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.utils.storage import get_path, mock_aws_if_local
 
 logger = logging.getLogger(__name__)
+
+
+AREA_CHOICES = ["plymouth", "plymouth_similar", "sampling", "gb"]
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -41,19 +45,37 @@ def parse_arguments() -> argparse.Namespace:
         type=str,
         required=True,
     )
+    parser.add_argument(
+        "--area",
+        help=(
+            "Geographic area the UPRNs were filtered to. Used to look up the INSPIRE land-registry "
+            "parcel file and OS OpenMap Local grid squares in config. "
+            "'plymouth' (default), 'plymouth_similar', 'sampling', or 'gb'."
+        ),
+        type=str,
+        choices=AREA_CHOICES,
+        default="plymouth",
+    )
     return parser.parse_args()
 
 
-def run(uprns_path: str) -> None:
+def run(uprns_path: str, area: str = "plymouth") -> None:
     """Add features to domestic UPRNs and write enriched dataset to S3.
 
     Args:
         uprns_path: Path (S3 URI or local) to the domestic UPRNs parquet file.
+        area: Geographic area identifier used to look up INSPIRE land-registry parcels
+            and OS OpenMap Local grid squares from config. One of 'plymouth',
+            'plymouth_similar', 'sampling', or 'gb'.
     """
     settings = load_settings()
     output_stem = os.path.basename(uprns_path).split(".")[0]
     s3_output = settings.output.features_template.format(uprns_stem=output_stem)
     output_path = get_path(s3_output, settings)
+
+    # Derive grid squares and INSPIRE path from area config
+    grid_squares, _ = get_area_config(area)
+    inspire_path = config["data"]["geodata"]["inspire_land_registry"].get(area)
 
     # Load UPRN data
     logger.info(f"Loading domestic UPRNs from: {uprns_path}")
@@ -67,38 +89,44 @@ def run(uprns_path: str) -> None:
     features_df = uprns_df.with_columns(pl.col("UPRN").is_in(flat_uprns).alias("property_type_flat"))
 
     # ── Outdoor space estimation ─────────────────────────────────────────────
-    logger.info("Loading land registry data...")
-    land_parcels_gdf = gpd.read_file(
-        "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
-    )
-    building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(layer="building", grid_squares="SX")
+    if inspire_path is None:
+        logger.warning(
+            f"No INSPIRE land-registry data configured for area {area!r}; "
+            "outdoor space features will be null for all UPRNs."
+        )
+    else:
+        logger.info(f"Loading land registry data from: {inspire_path}")
+        land_parcels_gdf = gpd.read_file(inspire_path)
+        building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+            layer="building", grid_squares=grid_squares
+        )
 
-    intersection_gdf = outdoor_space.generate_gdf_building_intersections(
-        land_parcels_gdf=land_parcels_gdf,
-        building_footprints_gdf=building_footprints_gdf,
-    )
-    outdoor_space_gdf = outdoor_space.generate_gdf_outdoor_space(
-        building_intersections_gdf=intersection_gdf,
-        land_parcels_gdf=land_parcels_gdf,
-    )
-    uprns_space_df = outdoor_space.sjoin_df_uprn_to_outdoor_space(
-        uprns_gdf=uprns_gdf,
-        outdoor_space_gdf=outdoor_space_gdf,
-    )
-    uprns_space_df = outdoor_space.deduplicate_df_outdoor_space(uprns_space_df)
+        intersection_gdf = outdoor_space.generate_gdf_building_intersections(
+            land_parcels_gdf=land_parcels_gdf,
+            building_footprints_gdf=building_footprints_gdf,
+        )
+        outdoor_space_gdf = outdoor_space.generate_gdf_outdoor_space(
+            building_intersections_gdf=intersection_gdf,
+            land_parcels_gdf=land_parcels_gdf,
+        )
+        uprns_space_df = outdoor_space.sjoin_df_uprn_to_outdoor_space(
+            uprns_gdf=uprns_gdf,
+            outdoor_space_gdf=outdoor_space_gdf,
+        )
+        uprns_space_df = outdoor_space.deduplicate_df_outdoor_space(uprns_space_df)
 
-    features_df = features_df.join(
-        uprns_space_df.select(
-            [
-                "UPRN",
-                "NATIONALCADASTRALREFERENCE",
-                "max_contiguous_outdoor_space_area_m2",
-                "total_outdoor_space_area_m2",
-            ]
-        ),
-        how="left",
-        on="UPRN",
-    )
+        features_df = features_df.join(
+            uprns_space_df.select(
+                [
+                    "UPRN",
+                    "NATIONALCADASTRALREFERENCE",
+                    "max_contiguous_outdoor_space_area_m2",
+                    "total_outdoor_space_area_m2",
+                ]
+            ),
+            how="left",
+            on="UPRN",
+        )
 
     # ── Save outputs ─────────────────────────────────────────────────────────
     save_utils.save_to_s3(features_df, output_path)
@@ -109,4 +137,4 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
     with mock_aws_if_local():
-        run(uprns_path=args.uprns)
+        run(uprns_path=args.uprns, area=args.area)
