@@ -25,6 +25,7 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.config.settings import load_settings
 from asf_heat_pump_suitability.getters import load_boundaries, load_geodata, load_tree_input
 from asf_heat_pump_suitability.pipeline.transform import non_residential_entities, poi, uprns
+from asf_heat_pump_suitability.pipeline.transform.uprns import get_area_config
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.utils.storage import get_path, mock_aws_if_local
 
@@ -68,43 +69,16 @@ def run(area: str = "plymouth") -> None:
     uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df)
 
-    if area == "plymouth":
-        logger.info("Filtering to Plymouth Local Authority...")
-        grid_squares = config["constant"]["grid_squares"]["plymouth"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(select_las="Plymouth")
+    grid_squares, la_names = get_area_config(area)
+    logger.info(f"Processing area: {area!r}")
+
+    if la_names is not None:
+        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(select_las=la_names)
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
             how="inner",
             predicate="intersects",
         ).drop(columns="index_right")
-
-    elif area == "plymouth_similar":
-        logger.info("Filtering to Plymouth + similar cities...")
-        grid_squares = config["constant"]["grid_squares"]["plymouth_similar_cities"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=config["constant"]["plymouth_similar_cities"]
-        )
-        uprns_gdf = uprns_gdf.sjoin(
-            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
-            how="inner",
-            predicate="intersects",
-        ).drop(columns="index_right")
-
-    elif area == "sampling":
-        logger.info("Filtering to sampling areas...")
-        grid_squares = config["constant"]["grid_squares"]["sampling_areas"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=config["constant"]["sampling_areas"]
-        )
-        uprns_gdf = uprns_gdf.sjoin(
-            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
-            how="inner",
-            predicate="intersects",
-        ).drop(columns="index_right")
-
-    else:  # gb
-        logger.info("Processing full Great Britain...")
-        grid_squares = None
 
     poi_gdf = load_tree_input.load_gdf_poi()
     poi_gdf = poi.transform_gdf_poi(
