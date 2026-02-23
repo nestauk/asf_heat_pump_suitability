@@ -132,6 +132,40 @@ def filter_gdf_residential_uprns(
     ]
 
 
+def get_area_config(area: str) -> tuple[str | list[str] | None, str | list[str] | None]:
+    """Return (grid_squares, la_names) for a named geographic area.
+
+    Args:
+        area: One of ``'plymouth'``, ``'plymouth_similar'``, ``'sampling'``, or ``'gb'``.
+
+    Returns:
+        Tuple of (grid_squares, la_names) where grid_squares is the OS grid-square
+        code(s) to load OS OpenMap Local data for, and la_names is the LA name(s) to
+        filter UPRNs to.  Both are ``None`` for ``'gb'`` (full Great Britain).
+
+    Raises:
+        ValueError: If *area* is not a recognised identifier.
+    """
+    area_map = {
+        "plymouth": (
+            config["constant"]["grid_squares"]["plymouth"],
+            "Plymouth",
+        ),
+        "plymouth_similar": (
+            config["constant"]["grid_squares"]["plymouth_similar_cities"],
+            config["constant"]["plymouth_similar_cities"],
+        ),
+        "sampling": (
+            config["constant"]["grid_squares"]["sampling_areas"],
+            config["constant"]["sampling_areas"],
+        ),
+        "gb": (None, None),
+    }
+    if area not in area_map:
+        raise ValueError(f"Unknown area: {area!r}. Must be one of {sorted(area_map)}")
+    return area_map[area]
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
@@ -143,9 +177,13 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar}; or Plymouth and 5 different local authorities {sampling_areas}. Default to all of GB",
+        help=(
+            "Area to run for: 'plymouth' (default), 'plymouth_similar', 'sampling', or 'gb' (full Great Britain). "
+            "These correspond to the canonical area identifiers used by get_area_config()."
+        ),
         type=str,
-        default="GB",
+        choices=["plymouth", "plymouth_similar", "sampling", "gb"],
+        default="gb",
         required=False,
     )
 
@@ -171,50 +209,17 @@ if __name__ == "__main__":
     uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
 
-    # TODO I expect this to be simplified at some point but the if/else block allows us to sample from certain areas for now
-    if args.local_authorities.lower() == "plymouth":
-        print("Creating residential UPRN dataset for Plymouth Local Authority...")
-        grid_squares = config["constant"]["grid_squares"]["plymouth"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(select_las="Plymouth")
+    area = args.local_authorities.lower()
+    grid_squares, la_names = get_area_config(area)
+    logging.info(f"Creating residential UPRN dataset for area: {area!r}")
+
+    if la_names is not None:
+        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(select_las=la_names)
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
             how="inner",
             predicate="intersects",
         ).drop(columns="index_right")
-
-    elif args.local_authorities.lower() == "plymouth_similar":
-        print(
-            "Creating residential UPRN dataset for Plymouth, Portsmouth, Southampton, Swansea, and Liverpool Local Authorities..."
-        )
-        grid_squares = config["constant"]["grid_squares"]["plymouth_similar_cities"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=config["constant"]["plymouth_similar_cities"]
-        )
-        uprns_gdf = uprns_gdf.sjoin(
-            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
-            how="inner",
-            predicate="intersects",
-        ).drop(columns="index_right")
-
-    elif args.local_authorities.lower() == "sampling_areas":
-        print(
-            "Creating residential UPRN dataset for Bath, Bradford, Glasgow, Manchester, Nottingham, and Plymouth Local Authorities..."
-        )
-        grid_squares = config["constant"]["grid_squares"]["sampling_areas"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=config["constant"]["sampling_areas"]
-        )
-        uprns_gdf = uprns_gdf.sjoin(
-            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
-            how="inner",
-            predicate="intersects",
-        ).drop(columns="index_right")
-
-    else:  # All of GB
-        # TODO this may not work due to scaling and may require chunking of datasets.
-        # TODO Adding here as placeholder to assist scaling later
-        print("Creating residential UPRN dataset for all of GB...")
-        grid_squares = None
 
     poi_gdf = load_tree_input.load_gdf_poi()
     poi_gdf = poi.transform_gdf_poi(
@@ -241,20 +246,11 @@ if __name__ == "__main__":
     )
 
     # Save residential UPRNs to S3
-    df = pl.from_pandas(
-        residential_uprns_gdf[
-            [
-                "UPRN",
-                "X_COORDINATE",
-                "Y_COORDINATE",
-                "LATITUDE",
-                "LONGITUDE",
-                "LAD23CD",
-                "LAD23NM",
-            ]
-        ]
-    )
+    keep_cols = ["UPRN", "X_COORDINATE", "Y_COORDINATE", "LATITUDE", "LONGITUDE"]
+    if "LAD23CD" in residential_uprns_gdf.columns:
+        keep_cols += ["LAD23CD", "LAD23NM"]
+    df = pl.from_pandas(residential_uprns_gdf[keep_cols])
     save_utils.save_to_s3(
         df,
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns.parquet",
+        config["output"]["residential_uprns_template"].format(area=area),
     )
