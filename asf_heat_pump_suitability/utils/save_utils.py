@@ -21,30 +21,35 @@ def save_model_to_pkl_s3(model: BaseEstimator, path: str) -> None:
 
 
 def save_to_s3(df: pl.DataFrame, path: str) -> None:
-    """
-    Save dataframe as parquet file to S3.
+    """Save a dataframe to S3 or the local filesystem.
+
+    Accepts any path returned by ``utils.storage.get_path()``: an S3 URI
+    (``s3://...``) is written via s3fs; any other path is written directly to
+    the local filesystem using Polars native I/O.
 
     Args:
-        df (pl.DataFrame): dataframe
-        path (str): path to S3 destination
-
-    Returns:
-        None
+        df: DataFrame to save.
+        path: Destination path — either an S3 URI or a local file path.
     """
     logging.info(f"Saving file to {path}")
     file_type = path.split(".")[-1]
-    fs = get_s3fs()
-    if file_type == "parquet":
-        with fs.open(path=path, mode="wb") as f:
-            df.write_parquet(f)
-    elif file_type == "csv":
-        with fs.open(path=path, mode="wb") as f:
-            df.write_csv(f)
-    else:
+    if file_type not in {"parquet", "csv"}:
         raise ValueError(
-            "Save to S3 can only save .parquet or .csv file types."
+            "save_to_s3 can only save .parquet or .csv file types. "
             "Please ensure the `path` argument contains one of these file types."
         )
+    if path.startswith("s3://"):
+        fs = get_s3fs()
+        with fs.open(path=path, mode="wb") as f:
+            if file_type == "parquet":
+                df.write_parquet(f)
+            else:
+                df.write_csv(f)
+    else:
+        if file_type == "parquet":
+            df.write_parquet(path)
+        else:
+            df.write_csv(path)
 
 
 def upload_file_to_s3(

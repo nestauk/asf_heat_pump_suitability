@@ -18,12 +18,12 @@ import os
 import geopandas as gpd
 import polars as pl
 
-from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.config.settings import load_settings
 from asf_heat_pump_suitability.getters import load_tree_input
 from asf_heat_pump_suitability.pipeline.impute import property_type
 from asf_heat_pump_suitability.pipeline.transform import outdoor_space, uprns
 from asf_heat_pump_suitability.utils import save_utils
-from asf_heat_pump_suitability.utils.storage import mock_aws_if_local
+from asf_heat_pump_suitability.utils.storage import get_path, mock_aws_if_local
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,10 @@ def run(uprns_path: str) -> None:
     Args:
         uprns_path: Path (S3 URI or local) to the domestic UPRNs parquet file.
     """
+    settings = load_settings()
     output_stem = os.path.basename(uprns_path).split(".")[0]
-    output_path = config["output"]["features_template"].format(uprns_stem=output_stem)
+    s3_output = settings.output.features_template.format(uprns_stem=output_stem)
+    output_path = get_path(s3_output, settings)
 
     # Load UPRN data
     logger.info(f"Loading domestic UPRNs from: {uprns_path}")
