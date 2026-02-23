@@ -15,6 +15,11 @@ data:
       # Plymouth Heat Network zones
       plymouth: "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/NMR3 Heat Network Zones (Post-Ref).gpkg"
 
+    inspire_land_registry:
+      # INSPIRE Cadastral Parcels (Land Registry land extents) per area.
+      # Add further area keys here as data becomes available.
+      plymouth: "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
+
     gb_spatial_signatures:
       # UrbanGrammarAI Spatial Signatures GB simplified
       simplified: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB_simplified.gpkg"
