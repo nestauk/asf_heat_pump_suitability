@@ -2,10 +2,14 @@
 Functions to label UPRNs within city centre areas.
 """
 
+import logging
+
 import geopandas as gpd
 import polars as pl
 
 from asf_heat_pump_suitability import config
+
+logger = logging.getLogger(__name__)
 
 CITY_CENTRE_TYPES = [  # TODO: confirm types with scaling
     "Hyper concentrated urbanity",
@@ -46,11 +50,11 @@ def label_gdf_city_centre_spatial_signatures_uprns(
 
     if uprn_gdf.crs != target_crs:
         uprn_gdf = uprn_gdf.to_crs(target_crs)
-        print(f"uprn_gdf reprojected to target CRS: {target_crs}")
+        logger.info(f"uprn_gdf reprojected to target CRS: {target_crs}")
 
     if spatial_signatures_gdf.crs != target_crs:
         spatial_signatures_gdf = spatial_signatures_gdf.to_crs(target_crs)
-        print(f"spatial_signatures_gdf reprojected to target CRS: {target_crs}")
+        logger.info(f"spatial_signatures_gdf reprojected to target CRS: {target_crs}")
 
     # Spatial join for labelling UPRN with signature type
     labelled_uprn_gdf = uprn_gdf.sjoin(
@@ -68,7 +72,7 @@ def label_gdf_city_centre_spatial_signatures_uprns(
         labelled_uprn_gdf.groupby("UPRN", as_index=False)
         .agg(
             {
-                **{col: "first" for col in uprn_columns},  # keep original UPRN columns
+                **dict.fromkeys(uprn_columns, "first"),  # keep original UPRN columns
                 "geometry": "first",  # keep the point geometry
                 "type": list,  # combine types into a list
                 "in_city_centre": sum,  # sums >0 indicate UPRN in a city centre signature
@@ -80,13 +84,11 @@ def label_gdf_city_centre_spatial_signatures_uprns(
 
     # UPRNs with no spatial signature match are ultimately classified as not in city centre
     # TODO: consider if unassigned UPRNs should be handled differently in the future
-    labelled_uprn_gdf["in_city_centre"] = labelled_uprn_gdf["in_city_centre"].fillna(
-        False
-    )
+    labelled_uprn_gdf["in_city_centre"] = labelled_uprn_gdf["in_city_centre"].fillna(False)
 
     # Return as polars df without geometry
-    labelled_uprn_df = pl.from_pandas(
-        labelled_uprn_gdf.drop(columns="geometry")
-    ).rename({"type": "spatial_signature_types"})
+    labelled_uprn_df = pl.from_pandas(labelled_uprn_gdf.drop(columns="geometry")).rename(
+        {"type": "spatial_signature_types"}
+    )
 
     return labelled_uprn_df

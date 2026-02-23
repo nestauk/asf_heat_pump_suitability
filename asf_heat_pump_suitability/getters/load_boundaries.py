@@ -2,11 +2,14 @@
 Functions to load raw census geography boundaries, like Local Authority; ward; output areas, etc. No/minimal preprocessing occurs in these functions.
 """
 
+import logging
 from typing import List
 
 import geopandas as gpd
 
 from asf_heat_pump_suitability import config
+
+logger = logging.getLogger(__name__)
 
 
 def load_gdf_local_authority_boundaries(
@@ -25,10 +28,10 @@ def load_gdf_local_authority_boundaries(
     la_boundaries_gdf = gpd.read_file(config["data"]["geodata"]["boundaries"]["UK_ons_lad_bounds"])
 
     if not select_las:
-        print("Loading Local Authority boundaries for UK...")
+        logger.info("Loading Local Authority boundaries for UK...")
         return la_boundaries_gdf
     elif isinstance(select_las, str):
-        print(f"Loading Local Authority boundaries for {select_las}...")
+        logger.info(f"Loading Local Authority boundaries for {select_las}...")
         la_boundaries_gdf = la_boundaries_gdf[la_boundaries_gdf["LAD23NM"].str.contains(select_las.title())]
         # Raise exception if boundaries are not found for LA specified by select_las
         if len(la_boundaries_gdf) == 0:
@@ -36,7 +39,7 @@ def load_gdf_local_authority_boundaries(
         else:
             return la_boundaries_gdf
     else:
-        print(f"Loading Local Authority boundaries for {select_las}...")
+        logger.info(f"Loading Local Authority boundaries for {select_las}...")
         la_boundaries_gdf = la_boundaries_gdf[
             # Filter to exact LA name matches, case insensitive
             la_boundaries_gdf["LAD23NM"].str.fullmatch("|".join(select_las), case=False)

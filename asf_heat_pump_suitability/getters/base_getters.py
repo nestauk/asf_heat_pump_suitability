@@ -14,6 +14,8 @@ import requests
 
 from asf_heat_pump_suitability.utils.storage import get_s3fs
 
+logger = logging.getLogger(__name__)
+
 
 def load_df_from_s3(uri: str, **kwargs) -> pl.DataFrame:
     """
@@ -79,7 +81,7 @@ def get_df_from_zip_csv_s3(path: str, extract_file: str, **kwargs) -> pl.DataFra
     Returns:
         pl.DataFrame: dataset from ZIP file
     """
-    print(f"Loading file from path: {path}")
+    logger.info(f"Loading file from path: {path}")
     content = BytesIO(get_content_from_s3_path(path))
     df = pl.read_csv(ZipFile(content).open(name=extract_file), **kwargs)
 
