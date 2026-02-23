@@ -1,4 +1,8 @@
+import logging
+
 import geopandas as gpd
+
+logger = logging.getLogger(__name__)
 
 
 def impute_set_flat_properties(uprns_gdf: gpd.GeoDataFrame) -> set:
@@ -19,7 +23,7 @@ def impute_set_flat_properties(uprns_gdf: gpd.GeoDataFrame) -> set:
 
     # Filter the GeoDataFrame to only those geometries
     flats = set(uprns_gdf[uprns_gdf["geometry"].isin(duplicate_geoms)]["UPRN"])
-    print(
-        f"{len(flats)} flats found in UPRN dataset, N={len(uprns_gdf)}, {round(len(flats)/len(uprns_gdf)*100, 2)}%"
+    logger.info(
+        f"{len(flats)} flats found in UPRN dataset, N={len(uprns_gdf)}, {round(len(flats) / len(uprns_gdf) * 100, 2)}%"
     )
     return flats

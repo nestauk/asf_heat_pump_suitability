@@ -25,6 +25,8 @@ import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 
+logger = logging.getLogger(__name__)
+
 
 def generate_gdf_uprn_coords(
     df: pl.DataFrame,
@@ -75,7 +77,7 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
     Returns:
         set: valid UPRNs from specified EPC dataset
     """
-    print(f"Loading UPRNs from {epc_type} EPC register...")
+    logger.info(f"Loading UPRNs from {epc_type} EPC register...")
     df = base_getters.load_df_from_s3(config["data"]["epc"][epc_type], columns="UPRN")
     before = len(df)
     df = df.with_columns(
@@ -109,7 +111,7 @@ def filter_gdf_residential_uprns(
     Returns:
         gpd.GeoDataFrame: UPRNs which are assumed to represent residential properties with their point geometries
     """
-    print("Filtering to residential UPRNs...")
+    logger.info("Filtering to residential UPRNs...")
     # Find UPRNs which are in the non-residential buildings
     non_residential_uprns = set(uprn_gdf.sjoin(non_residential_buildings_gdf, how="inner", predicate="within")["UPRN"])
 
@@ -173,7 +175,7 @@ if __name__ == "__main__":
 
     # TODO I expect this to be simplified at some point but the if/else block allows us to sample from certain areas for now
     if args.local_authorities.lower() == "plymouth":
-        print("Creating residential UPRN dataset for Plymouth Local Authority...")
+        logger.info("Creating residential UPRN dataset for Plymouth Local Authority...")
         grid_squares = config["constant"]["grid_squares"]["plymouth"]
         la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(select_las="Plymouth")
         uprns_gdf = uprns_gdf.sjoin(
@@ -183,7 +185,7 @@ if __name__ == "__main__":
         ).drop(columns="index_right")
 
     elif args.local_authorities.lower() == "plymouth_similar":
-        print(
+        logger.info(
             "Creating residential UPRN dataset for Plymouth, Portsmouth, Southampton, Swansea, and Liverpool Local Authorities..."
         )
         grid_squares = config["constant"]["grid_squares"]["plymouth_similar_cities"]
@@ -197,7 +199,7 @@ if __name__ == "__main__":
         ).drop(columns="index_right")
 
     elif args.local_authorities.lower() == "sampling_areas":
-        print(
+        logger.info(
             "Creating residential UPRN dataset for Bath, Bradford, Glasgow, Manchester, Nottingham, and Plymouth Local Authorities..."
         )
         grid_squares = config["constant"]["grid_squares"]["sampling_areas"]
@@ -213,7 +215,7 @@ if __name__ == "__main__":
     else:  # All of GB
         # TODO this may not work due to scaling and may require chunking of datasets.
         # TODO Adding here as placeholder to assist scaling later
-        print("Creating residential UPRN dataset for all of GB...")
+        logger.info("Creating residential UPRN dataset for all of GB...")
         grid_squares = None
 
     poi_gdf = load_tree_input.load_gdf_poi()
