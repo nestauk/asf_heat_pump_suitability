@@ -17,7 +17,6 @@ import argparse
 import time
 import zipfile
 
-import boto3
 import regex as re
 import requests
 from bs4 import BeautifulSoup
@@ -25,6 +24,7 @@ from tqdm import tqdm
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
+from asf_heat_pump_suitability.utils.storage import get_boto3_client
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -48,7 +48,7 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_arguments()
 
-    s3 = boto3.client("s3")
+    s3 = get_boto3_client("s3")
     bucket = "asf-heat-pump-suitability"
 
     if args.nations in ["s", "all"]:

@@ -1,10 +1,10 @@
 import logging
 import pickle
 
-import boto3
 import polars as pl
-import s3fs
 from sklearn.base import BaseEstimator
+
+from asf_heat_pump_suitability.utils.storage import get_boto3_client, get_s3fs
 
 
 def save_model_to_pkl_s3(model: BaseEstimator, path: str) -> None:
@@ -14,10 +14,10 @@ def save_model_to_pkl_s3(model: BaseEstimator, path: str) -> None:
         model: Trained scikit-learn estimator.
         path: S3 URI destination.
     """
-    fs = s3fs.S3FileSystem()
+    fs = get_s3fs()
     with fs.open(path, "wb") as f:
         pickle.dump(model, f)
-    print(f"Saved model to {path}")
+    logging.info(f"Saved model to {path}")
 
 
 def save_to_s3(df: pl.DataFrame, path: str) -> None:
@@ -33,7 +33,7 @@ def save_to_s3(df: pl.DataFrame, path: str) -> None:
     """
     logging.info(f"Saving file to {path}")
     file_type = path.split(".")[-1]
-    fs = s3fs.S3FileSystem()
+    fs = get_s3fs()
     if file_type == "parquet":
         with fs.open(path=path, mode="wb") as f:
             df.write_parquet(f)
@@ -64,7 +64,7 @@ def upload_file_to_s3(
         filename (str): The actual filename to store in S3.
         subfolder (str): Subfolder within S3.
     """
-    s3_client = boto3.client("s3")
+    s3_client = get_boto3_client("s3")
     s3_key = f"{s3_key_dir}{subfolder}/{filename}"
     s3_client.upload_file(local_file_path, s3_bucket, s3_key)
     logging.info(f"File uploaded to s3://{s3_bucket}/{s3_key}")
