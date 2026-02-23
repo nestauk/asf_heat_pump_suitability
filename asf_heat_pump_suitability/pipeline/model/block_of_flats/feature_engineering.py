@@ -6,6 +6,13 @@ Generates per-building features from building footprint and UPRN geodata.
 import geopandas as gpd
 import polars as pl
 
+# Sentinel value used in place of infinity when all UPRNs in a building share the same
+# (X, Y) coordinate, which causes the concave hull to degenerate to a point (area = 0)
+# and yields infinite per-area ratios.  -1 is chosen because it is outside the valid
+# range of the features (which are always >= 0) and is therefore unambiguous to downstream
+# model code.
+INFINITE_HULL_SENTINEL: int = -1
+
 
 def generate_df_features(
     buildings_gdf: gpd.GeoDataFrame,
@@ -127,11 +134,11 @@ def _generate_df_concave_hull_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl
         )
         .with_columns(
             pl.when(pl.col("uprns_per_hull_area_m2").is_infinite())
-            .then(-1)
+            .then(INFINITE_HULL_SENTINEL)
             .otherwise(pl.col("uprns_per_hull_area_m2"))
             .alias("uprns_per_hull_area_m2"),
             pl.when(pl.col("flats_per_hull_area_m2").is_infinite())
-            .then(-1)
+            .then(INFINITE_HULL_SENTINEL)
             .otherwise(pl.col("flats_per_hull_area_m2"))
             .alias("flats_per_hull_area_m2"),
         )
