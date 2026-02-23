@@ -69,6 +69,30 @@ constant:
     - "Nottingham"
     - "Plymouth"
   target_crs: 27700 # British National Grid
+  # Building types from OS OpenMap Local important_building layer which are assumed to have no residential overlap.
+  # See pipeline/transform/non_residential_entities.py
+  non_residential_building_types:
+    - "Port Consisting of Docks and Nautical Berthing"
+    - "Fire Station"
+    - "Hospital"
+    - "Non State Secondary Education"
+    - "Secondary Education"
+    - "Higher or University Education"
+    - "Primary Education"
+    - "Place Of Worship"
+    - "Medical Care Accommodation"
+    - "Museum"
+    - "Special Needs Education"
+    - "Further Education"
+    - "Non State Primary Education"
+    - "Coach Station"
+    - "Police Station"
+    - "Sports And Leisure Centre"
+    - "Vehicular Ferry Terminal"
+    - "Hospice"
+    - "Bus Station"
+    - "Road User Services"
+    - "Passenger Ferry Terminal"
 
 data_source:
   gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
