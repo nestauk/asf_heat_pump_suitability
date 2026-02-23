@@ -26,6 +26,8 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
     household_count,
 )
 
+logger = logging.getLogger(__name__)
+
 # Constants
 CRS = "EPSG:4326"  # Geometry coordinate reference system - standard longitude/latitude projection
 POWER_PER_HEATPUMP = 8  # Power rating per heat pump in kW
@@ -296,11 +298,11 @@ if __name__ == "__main__":
     args = parse_arguments()
 
     grid_capacity_results = calculate_grid_capacity()
-    print(grid_capacity_results.head())
-    print(f"Total LSOAs/DataZones assessed: {len(grid_capacity_results)}")
-    print(
-        "Average LSOA/DataZone installation percentage: "
-        + str(grid_capacity_results["heatpump_installation_percentage"].mean())
+    logger.info("Grid capacity results (head):\n%s", grid_capacity_results.head())
+    logger.info("Total LSOAs/DataZones assessed: %d", len(grid_capacity_results))
+    logger.info(
+        "Average LSOA/DataZone installation percentage: %s",
+        grid_capacity_results["heatpump_installation_percentage"].mean(),
     )
 
     if args.save_as:

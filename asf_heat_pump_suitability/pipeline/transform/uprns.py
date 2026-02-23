@@ -25,6 +25,8 @@ import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 
+logger = logging.getLogger(__name__)
+
 
 def generate_gdf_uprn_coords(
     df: pl.DataFrame,
@@ -75,7 +77,7 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
     Returns:
         set: valid UPRNs from specified EPC dataset
     """
-    print(f"Loading UPRNs from {epc_type} EPC register...")
+    logger.info(f"Loading UPRNs from {epc_type} EPC register...")
     df = base_getters.load_df_from_s3(config["data"]["epc"][epc_type], columns="UPRN")
     before = len(df)
     df = df.with_columns(
@@ -109,7 +111,7 @@ def filter_gdf_residential_uprns(
     Returns:
         gpd.GeoDataFrame: UPRNs which are assumed to represent residential properties with their point geometries
     """
-    print("Filtering to residential UPRNs...")
+    logger.info("Filtering to residential UPRNs...")
     # Find UPRNs which are in the non-residential buildings
     non_residential_uprns = set(uprn_gdf.sjoin(non_residential_buildings_gdf, how="inner", predicate="within")["UPRN"])
 

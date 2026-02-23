@@ -2,10 +2,14 @@
 Functions to label UPRNs within official existing, potential or planned heat network zones.
 """
 
+import logging
+
 import geopandas as gpd
 import polars as pl
 
 from asf_heat_pump_suitability import config
+
+logger = logging.getLogger(__name__)
 
 
 def label_gdf_heat_network_zone_uprns(
@@ -31,11 +35,11 @@ def label_gdf_heat_network_zone_uprns(
 
     if uprn_gdf.crs != target_crs:
         uprn_gdf = uprn_gdf.to_crs(target_crs)
-        print(f"uprn_gdf reprojected to target CRS: {target_crs}")
+        logger.info(f"uprn_gdf reprojected to target CRS: {target_crs}")
 
     if hn_zone_gdf.crs != target_crs:
         hn_zone_gdf = hn_zone_gdf.to_crs(target_crs)
-        print(f"hn_zone_gdf reprojected to target CRS: {target_crs}")
+        logger.info(f"hn_zone_gdf reprojected to target CRS: {target_crs}")
 
     # If usecols specified, filter columns in hn_zone_gdf
     if usecols:

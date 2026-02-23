@@ -2,15 +2,18 @@
 Functions to load specific raw datasets used in decision tree pipeline using base getters and sources in config. No/minimal preprocessing occurs in these functions.
 """
 
+import logging
+from typing import List, Optional
+
 import geopandas as gpd
 import pandas as pd
-from typing import Optional, List
+
 from asf_heat_pump_suitability import config
 
+logger = logging.getLogger(__name__)
 
-def load_gdf_os_openmap_local_layer(
-    layer: str, grid_squares: Optional[List[str]] = None, **kwargs
-) -> gpd.GeoDataFrame:
+
+def load_gdf_os_openmap_local_layer(layer: str, grid_squares: Optional[List[str]] = None, **kwargs) -> gpd.GeoDataFrame:
     """
     Load specified OS OpenMap Local layer for Great Britain or optionally for a specific grid square. CRS British National Grid (27700).
 
@@ -47,7 +50,7 @@ def load_gdf_os_openmap_local_layer(
         gpd.GeoDataFrame: OS OpenMap Local geometries for specified layer
     """
     if not grid_squares:
-        print(f"Loading OS OpenMap Local - {layer.title()}...")
+        logger.info(f"Loading OS OpenMap Local - {layer.title()}...")
         return gpd.read_file(
             filename=config["data"]["geodata"]["gb_os_openmap_local"],
             layer=layer,
@@ -65,7 +68,7 @@ def load_gdf_os_openmap_local_layer(
         gdfs = []
 
         for file in files:
-            print(f"\nLoading OS OpenMap Local - {layer.title()} file: {file}")
+            logger.info(f"Loading OS OpenMap Local - {layer.title()} file: {file}")
             gdfs.append(gpd.read_file(file, **kwargs))
 
         return pd.concat(gdfs).drop_duplicates(subset="ID")
@@ -81,7 +84,7 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
     Raises:
         ValueError: If required columns are missing
     """
-    print("Loading POI data...")
+    logger.info("Loading POI data...")
 
     required_columns = [
         "id",
@@ -95,5 +98,5 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
         columns=required_columns,
         layer="poi_uk",
     ).to_crs("EPSG:4326")
-    print(f"POI CRS: {poi.crs}")
+    logger.info(f"POI CRS: {poi.crs}")
     return poi

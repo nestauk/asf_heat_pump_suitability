@@ -1,6 +1,11 @@
-import polars as pl
+import logging
+
 import geopandas as gpd
+import polars as pl
+
 from asf_heat_pump_suitability.getters import load_geodata
+
+logger = logging.getLogger(__name__)
 
 
 def transform_df_osopen_uprn_latlon() -> pl.DataFrame:
@@ -36,7 +41,7 @@ def generate_gdf_uprn_coords(
     Returns:
         gpd.GeoDataFrame: UPRNs with BNG coordinate point geometries
     """
-    print("Generating point geometries from coordinates...")
+    logger.info("Generating point geometries from coordinates...")
     if not usecols:
         usecols = ["*"]
     else:

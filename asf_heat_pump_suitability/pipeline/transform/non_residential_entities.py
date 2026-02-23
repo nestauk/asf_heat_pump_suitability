@@ -2,35 +2,15 @@
 Functions to transform data related to identifying non-domestic buildings.
 """
 
+import logging
+
 import geopandas as gpd
 import pandas as pd
 
+from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.transform import uprns
 
-# TODO these may need refinement for large cities where overlap with residential is possible
-NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
-    "Port Consisting of Docks and Nautical Berthing",
-    "Fire Station",
-    "Hospital",
-    "Non State Secondary Education",
-    "Secondary Education",
-    "Higher or University Education",
-    "Primary Education",
-    "Place Of Worship",
-    "Medical Care Accommodation",
-    "Museum",
-    "Special Needs Education",
-    "Further Education",
-    "Non State Primary Education",
-    "Coach Station",
-    "Police Station",
-    "Sports And Leisure Centre",
-    "Vehicular Ferry Terminal",
-    "Hospice",
-    "Bus Station",
-    "Road User Services",
-    "Passenger Ferry Terminal",
-]
+logger = logging.getLogger(__name__)
 
 
 def generate_gdf_non_residential_buildings(
@@ -55,7 +35,7 @@ def generate_gdf_non_residential_buildings(
     Returns:
         gpd.GeoDataFrame: geometries of buildings which are unlikely to contain residential properties
     """
-    print("Creating non-residential buildings dataset...")
+    logger.info("Creating non-residential buildings dataset...")
     # Validate that all inputs share the same CRS
     crss = {
         important_building_gdf.crs,
@@ -81,7 +61,7 @@ def generate_gdf_non_residential_buildings(
 
     # Get buildings which are unlikely to have residential overlap
     exclude_buildings_gdf = important_building_gdf[
-        important_building_gdf[col].isin(NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES)
+        important_building_gdf[col].isin(config["constant"]["non_residential_building_types"])
     ]
     poi_buildings_gdf = building_gdf.sjoin(poi_gdf, how="inner", predicate="contains")
 

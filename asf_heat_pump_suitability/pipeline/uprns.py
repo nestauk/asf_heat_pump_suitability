@@ -22,11 +22,12 @@ import logging
 import polars as pl
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.config.settings import load_settings
 from asf_heat_pump_suitability.getters import load_boundaries, load_geodata, load_tree_input
 from asf_heat_pump_suitability.pipeline.transform import non_residential_entities, poi, uprns
 from asf_heat_pump_suitability.pipeline.transform.uprns import get_area_config
 from asf_heat_pump_suitability.utils import save_utils
-from asf_heat_pump_suitability.utils.storage import mock_aws_if_local
+from asf_heat_pump_suitability.utils.storage import get_path, mock_aws_if_local
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,9 @@ def run(area: str = "plymouth") -> None:
         area: Geographic area identifier. One of 'plymouth', 'plymouth_similar',
             'sampling', or 'gb'.
     """
-    output_path = config["output"]["residential_uprns_template"].format(area=area)
+    settings = load_settings()
+    s3_output = settings.output.residential_uprns_template.format(area=area)
+    output_path = get_path(s3_output, settings)
 
     # Load all UPRNs
     uprns_df = load_geodata.load_df_osopen_uprn()
