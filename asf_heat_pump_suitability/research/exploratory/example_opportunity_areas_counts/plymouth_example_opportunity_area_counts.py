@@ -1,5 +1,5 @@
 """
-Script to us EPC data to get value counts of TENURE, ATTACHMENT TYPE, and EPC RATING for
+Script to use EPC data to get value counts of TENURE, ATTACHMENT TYPE, and EPC RATING for
 3 example opportunity areas in Plymouth.
 
 To run:
