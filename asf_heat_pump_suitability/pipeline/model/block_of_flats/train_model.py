@@ -28,8 +28,6 @@ from sklearn.model_selection._search import BaseSearchCV
 from sklearn.metrics import f1_score
 import argparse
 
-from asf_heat_pump_suitability.getters import load_geodata
-
 # Set random state int and RandomState instance
 # See more on controlling randomness in sklearn docs: https://scikit-learn.org/stable/common_pitfalls.html#controlling-randomness
 RANDOM_STATE = (
@@ -39,10 +37,10 @@ RNG = np.random.RandomState(
     RANDOM_STATE
 )  # used in training random forest classifier to increase robustness
 
-# Number of splits for StratifiedKFold cross-val strategy in parameter search
+# Number of splits for StratifiedKFold cross-val strategy
 N_SPLITS = 5
 
-# Size (proportion) of test set
+# Size of test set (proportion)
 TEST_SIZE = 0.2
 
 # Create param distributions for hyperparameter search
@@ -181,6 +179,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--no_save",
         help="Pass to run without saving trained model to S3.",
+        type=bool,
         required=False,
         action="store_false",
     )
@@ -204,11 +203,11 @@ if __name__ == "__main__":
     # LOAD DATA
     # Load UPRN data
     print(f"Loading domestic UPRNs from: {args.uprns}")
-    domestic_uprns_df = pl.read_parquet(
+    uprns_df = pl.read_parquet(
         args.uprns, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
     )
     # Get geopoints of UPRNs
-    domestic_uprns_gdf = uprns.generate_gdf_uprn_coords(df=domestic_uprns_df)
+    uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
 
     # Load building footprint data
     # TODO scale beyond sampling areas
@@ -220,21 +219,14 @@ if __name__ == "__main__":
     # ------------------------ #
     # IMPUTE PROPERTY TYPE FLAT
     # Create boolean column called `property_type_flat` to identify flats
-    flat_uprns = property_type.impute_set_flat_properties(uprns_gdf=domestic_uprns_gdf)
-    domestic_uprns_gdf["property_type_flat"] = domestic_uprns_gdf["UPRN"].isin(
-        flat_uprns
-    )
+    flat_uprns = property_type.impute_set_flat_properties(uprns_gdf=uprns_gdf)
+    uprns_gdf["property_type_flat"] = uprns_gdf["UPRN"].isin(flat_uprns)
 
     # ------------------------ #
     # FEATURE ENGINEERING
-    # TODO load specific area rather than whole GB
-    all_uprns_df = load_geodata.load_df_osopen_uprn()
-    all_uprns_gdf = uprns.generate_gdf_uprn_coords(df=all_uprns_df)
-
     building_features_df = feature_engineering.generate_df_features(
         buildings_gdf=building_footprints_gdf,
-        domestic_uprns_gdf=domestic_uprns_gdf,
-        all_uprns_gdf=all_uprns_gdf,
+        uprns_gdf=uprns_gdf,
         id_col="ID",
     )
 
@@ -250,9 +242,6 @@ if __name__ == "__main__":
         target="block_of_flats",
         param_search="default",
     )
-
-    if args.no_save:
-        exit()
 
     save_as = config["output"]["save_as"]["block_of_flats_model"]
     save_utils.save_model_to_pkl_s3(model, save_as)
