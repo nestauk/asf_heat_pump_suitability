@@ -37,10 +37,10 @@ RNG = np.random.RandomState(
     RANDOM_STATE
 )  # used in training random forest classifier to increase robustness
 
-# Number of splits for StratifiedKFold cross-val strategy
+# Number of splits for StratifiedKFold cross-val strategy in parameter search
 N_SPLITS = 5
 
-# Size of test set (proportion)
+# Size (proportion) of test set
 TEST_SIZE = 0.2
 
 # Create param distributions for hyperparameter search
@@ -242,6 +242,9 @@ if __name__ == "__main__":
         target="block_of_flats",
         param_search="default",
     )
+
+    if args.no_save:
+        exit()
 
     save_as = config["output"]["save_as"]["block_of_flats_model"]
     save_utils.save_model_to_pkl_s3(model, save_as)
