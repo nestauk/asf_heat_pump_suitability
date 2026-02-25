@@ -12,6 +12,8 @@ Set the required parameters:
 `labelled_data` takes a path to a parquet file containing labelled data. Requires a boolean 'block_of_flats' column and a building
 ID column with one row per building.
 `uprns` must contain all domestic UPRNs within the area(s) that `labelled_data` samples from.
+
+Pass the optional `save` parameter if saving to S3 is desired.
 """
 
 import numpy as np
@@ -177,11 +179,11 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--no_save",
-        help="Pass to run without saving trained model to S3.",
+        "--save",
+        help="Save trained model to S3.",
         type=bool,
         required=False,
-        action="store_false",
+        action="store_True",
     )
 
     return parser.parse_args()
@@ -243,8 +245,6 @@ if __name__ == "__main__":
         param_search="default",
     )
 
-    if args.no_save:
-        exit()
-
-    save_as = config["output"]["save_as"]["block_of_flats_model"]
-    save_utils.save_model_to_pkl_s3(model, save_as)
+    if args.save:
+        save_as = config["output"]["save_as"]["block_of_flats_model"]
+        save_utils.save_model_to_pkl_s3(model, save_as)
