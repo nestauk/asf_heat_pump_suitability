@@ -18,7 +18,6 @@ import os
 import geopandas as gpd
 import polars as pl
 
-from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.config.settings import load_settings
 from asf_heat_pump_suitability.getters import load_tree_input
 from asf_heat_pump_suitability.pipeline.impute import property_type
@@ -63,6 +62,11 @@ def parse_arguments() -> argparse.Namespace:
 def run(uprns_path: str, area: str = "plymouth") -> None:
     """Add features to domestic UPRNs and write enriched dataset to S3.
 
+    Data types at each stage:
+        Input   — pl.DataFrame    (pl.read_parquet; efficient columnar reader)
+        Spatial — gpd.GeoDataFrame (one conversion at the top; all spatial ops stay here)
+        Output  — pl.DataFrame    (one pl.from_pandas() conversion before writing)
+
     Args:
         uprns_path: Path (S3 URI or local) to the domestic UPRNs parquet file.
         area: Geographic area identifier used to look up INSPIRE land-registry parcels
@@ -76,20 +80,20 @@ def run(uprns_path: str, area: str = "plymouth") -> None:
 
     # Derive grid squares and INSPIRE path from area config
     grid_squares, _ = get_area_config(area)
-    inspire_path = config["data"]["geodata"]["inspire_land_registry"].get(area)
+    inspire_path = settings.data.geodata.inspire_land_registry.get(area)
 
-    # Load UPRN data
+    # ── Input (Polars) ────────────────────────────────────────────────────────
     logger.info(f"Loading domestic UPRNs from: {uprns_path}")
     uprns_df = pl.read_parquet(uprns_path, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"])
 
-    # Convert to GeoDataFrame with BNG point geometries
+    # ── Spatial processing (GeoDataFrame throughout) ──────────────────────────
     uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
 
-    # ── Flat / apartment imputation ──────────────────────────────────────────
     flat_uprns = property_type.impute_set_flat_properties(uprns_gdf=uprns_gdf)
-    features_df = uprns_df.with_columns(pl.col("UPRN").is_in(flat_uprns).alias("property_type_flat"))
+    uprns_gdf["property_type_flat"] = uprns_gdf["UPRN"].isin(flat_uprns)
 
-    # ── Outdoor space estimation ─────────────────────────────────────────────
+    keep_cols = ["UPRN", "X_COORDINATE", "Y_COORDINATE", "property_type_flat"]
+
     if inspire_path is None:
         logger.warning(
             f"No INSPIRE land-registry data configured for area {area!r}; "
@@ -110,26 +114,19 @@ def run(uprns_path: str, area: str = "plymouth") -> None:
             building_intersections_gdf=intersection_gdf,
             land_parcels_gdf=land_parcels_gdf,
         )
-        uprns_space_df = outdoor_space.sjoin_df_uprn_to_outdoor_space(
+        uprns_gdf = outdoor_space.sjoin_df_uprn_to_outdoor_space(
             uprns_gdf=uprns_gdf,
             outdoor_space_gdf=outdoor_space_gdf,
         )
-        uprns_space_df = outdoor_space.deduplicate_df_outdoor_space(uprns_space_df)
+        uprns_gdf = outdoor_space.deduplicate_df_outdoor_space(uprns_gdf)
+        keep_cols += [
+            "NATIONALCADASTRALREFERENCE",
+            "max_contiguous_outdoor_space_area_m2",
+            "total_outdoor_space_area_m2",
+        ]
 
-        features_df = features_df.join(
-            uprns_space_df.select(
-                [
-                    "UPRN",
-                    "NATIONALCADASTRALREFERENCE",
-                    "max_contiguous_outdoor_space_area_m2",
-                    "total_outdoor_space_area_m2",
-                ]
-            ),
-            how="left",
-            on="UPRN",
-        )
-
-    # ── Save outputs ─────────────────────────────────────────────────────────
+    # ── Output: convert once to Polars before writing ─────────────────────────
+    features_df = pl.from_pandas(uprns_gdf[keep_cols])
     save_utils.save_to_s3(features_df, output_path)
     logger.info(f"Saved features for {len(features_df)} UPRNs to {output_path}")
 

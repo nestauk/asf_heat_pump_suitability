@@ -6,7 +6,6 @@ import logging
 
 import geopandas as gpd
 import pandas as pd
-import polars as pl
 
 # Maximum footprint area (m²) at which a building is treated as an outbuilding
 # (e.g. garage, shed).  30 m² is approximately the floor area of a large double garage.
@@ -153,34 +152,30 @@ def generate_gdf_outdoor_space(
     return outdoor_space_gdf
 
 
-def deduplicate_df_outdoor_space(df: pl.DataFrame) -> pl.DataFrame:
+def deduplicate_df_outdoor_space(df: pd.DataFrame) -> pd.DataFrame:
     """
     Deduplicate UPRNs matched to multiple land extents by keeping the one with the smallest total outdoor space area.
 
     Args:
-        df (pl.DataFrame): UPRNs with outdoor space estimates
+        df (pd.DataFrame): UPRNs with outdoor space estimates (may be a GeoDataFrame)
 
     Returns:
-        pl.DataFrame: deduplicated UPRNs with outdoor space estimates
+        pd.DataFrame: deduplicated UPRNs with outdoor space estimates
     """
-    df = df.with_columns(pl.col("UPRN").is_duplicated().alias("UPRN_duplicated"))
+    is_dup = df["UPRN"].duplicated(keep=False)
+    non_dup = df[~is_dup]
 
-    _deduplicated_df = (
-        df.filter(pl.col("UPRN_duplicated"))
-        .with_columns(min_total=pl.col("total_outdoor_space_area_m2").min().over("UPRN"))
-        .filter(
-            # Get smallest outdoor space
-            pl.col("total_outdoor_space_area_m2") == pl.col("min_total")
-            # Deduplicate - any duplicates will now (most likely) have the same total outdoor space
-        )
-        .unique(subset="UPRN")
-        .drop("min_total")
-    )
+    dup = df[is_dup].copy()
+    dup["_min_total"] = dup.groupby("UPRN")["total_outdoor_space_area_m2"].transform("min")
+    dup = dup[dup["total_outdoor_space_area_m2"] == dup["_min_total"]].drop(columns="_min_total")
+    dup = dup.drop_duplicates(subset="UPRN")
 
-    return pl.concat([df.filter(~pl.col("UPRN_duplicated")), _deduplicated_df]).drop("UPRN_duplicated")
+    return pd.concat([non_dup, dup], ignore_index=True)
 
 
-def sjoin_df_uprn_to_outdoor_space(uprns_gdf: gpd.GeoDataFrame, outdoor_space_gdf: gpd.GeoDataFrame) -> pl.DataFrame:
+def sjoin_df_uprn_to_outdoor_space(
+    uprns_gdf: gpd.GeoDataFrame, outdoor_space_gdf: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
     """
     Join outdoor space estimates to UPRNs. UPRNs will be assigned the outdoor space calculated for the land extent parcel
     that they are contained within.
@@ -190,8 +185,6 @@ def sjoin_df_uprn_to_outdoor_space(uprns_gdf: gpd.GeoDataFrame, outdoor_space_gd
         outdoor_space_gdf (gpd.GeoDataFrame): original land parcel polygons with calculated total and max contiguous outdoor space area (m2)
 
     Returns:
-        pl.DataFrame: UPRNs with estimated outdoor space (m2)
+        gpd.GeoDataFrame: UPRNs with estimated outdoor space (m2); geometry is the UPRN point geometry
     """
-    return pl.from_pandas(
-        uprns_gdf.sjoin(outdoor_space_gdf, how="left", predicate="within").drop(columns=["geometry", "index_right"])
-    )
+    return uprns_gdf.sjoin(outdoor_space_gdf, how="left", predicate="within").drop(columns="index_right")

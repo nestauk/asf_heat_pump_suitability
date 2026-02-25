@@ -1,7 +1,7 @@
 """Unit tests for asf_heat_pump_suitability.pipeline.transform.outdoor_space."""
 
 import geopandas as gpd
-import polars as pl
+import pandas as pd
 import pytest
 from shapely.geometry import Point, box
 
@@ -59,7 +59,7 @@ def test_generate_gdf_outdoor_space_calculates_remaining_area(
 
 def test_deduplicate_df_outdoor_space_keeps_smallest_total() -> None:
     """When a UPRN matches multiple parcels, keep the one with smallest total area."""
-    df = pl.DataFrame(
+    df = pd.DataFrame(
         {
             "UPRN": [1, 1, 2],
             "NATIONALCADASTRALREFERENCE": ["A1", "B1", "C1"],
@@ -68,9 +68,10 @@ def test_deduplicate_df_outdoor_space_keeps_smallest_total() -> None:
         }
     )
     result = deduplicate_df_outdoor_space(df)
+    assert isinstance(result, pd.DataFrame)
     assert len(result) == 2
-    uprn_1_row = result.filter(pl.col("UPRN") == 1)
-    assert uprn_1_row["NATIONALCADASTRALREFERENCE"][0] == "B1"
+    uprn_1_row = result[result["UPRN"] == 1]
+    assert uprn_1_row["NATIONALCADASTRALREFERENCE"].iloc[0] == "B1"
 
 
 def test_sjoin_df_uprn_to_outdoor_space() -> None:
@@ -90,6 +91,6 @@ def test_sjoin_df_uprn_to_outdoor_space() -> None:
         crs="EPSG:27700",
     )
     result = sjoin_df_uprn_to_outdoor_space(uprns_gdf, outdoor_space_gdf)
-    assert isinstance(result, pl.DataFrame)
-    assert result.filter(pl.col("UPRN") == 1)["NATIONALCADASTRALREFERENCE"][0] == "A1"
-    assert result.filter(pl.col("UPRN") == 2)["NATIONALCADASTRALREFERENCE"][0] == "B1"
+    assert isinstance(result, gpd.GeoDataFrame)
+    assert result[result["UPRN"] == 1]["NATIONALCADASTRALREFERENCE"].iloc[0] == "A1"
+    assert result[result["UPRN"] == 2]["NATIONALCADASTRALREFERENCE"].iloc[0] == "B1"
