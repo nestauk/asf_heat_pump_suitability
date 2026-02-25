@@ -24,6 +24,7 @@ class GeoDataPaths(BaseSettings):
     boundaries: dict
     heat_network_zones: dict
     gb_spatial_signatures: dict
+    inspire_land_registry: dict = Field(default_factory=dict)
 
     model_config = {"extra": "allow"}
 
