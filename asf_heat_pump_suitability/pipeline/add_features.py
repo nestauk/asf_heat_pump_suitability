@@ -18,7 +18,6 @@ import os
 import geopandas as gpd
 import polars as pl
 
-from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.config.settings import load_settings
 from asf_heat_pump_suitability.getters import load_tree_input
 from asf_heat_pump_suitability.pipeline.impute import property_type
@@ -76,7 +75,7 @@ def run(uprns_path: str, area: str = "plymouth") -> None:
 
     # Derive grid squares and INSPIRE path from area config
     grid_squares, _ = get_area_config(area)
-    inspire_path = config["data"]["geodata"]["inspire_land_registry"].get(area)
+    inspire_path = settings.data.geodata.inspire_land_registry.get(area)
 
     # Load UPRN data
     logger.info(f"Loading domestic UPRNs from: {uprns_path}")
