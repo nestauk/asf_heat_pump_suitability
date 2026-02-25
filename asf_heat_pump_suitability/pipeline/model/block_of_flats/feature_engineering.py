@@ -5,12 +5,16 @@ classifier model which classifies buildings into blocks of flats or not.
 
 import polars as pl
 import geopandas as gpd
+import shapely
 
 from asf_heat_pump_suitability.pipeline.transform import building_footprints
 
 
 def generate_df_features(
-    buildings_gdf: gpd.GeoDataFrame, uprns_gdf: gpd.GeoDataFrame, id_col: str
+    buildings_gdf: gpd.GeoDataFrame,
+    uprns_gdf: gpd.GeoDataFrame,
+    id_col: str,
+    boundary: shapely.Polygon | shapely.MultiPolygon,
 ) -> pl.DataFrame:
     """
     Generate all features required for block of flats random forest binary classifier.
@@ -35,15 +39,21 @@ def generate_df_features(
         _generate_df_building_features(buildings_w_uprns_gdf, id_col),
         _generate_df_stacked_uprn_features(uprns_w_buildings_gdf, id_col),
         _generate_df_concave_hull_features(uprns_w_buildings_gdf, id_col),
+        _generate_df_building_sections_features(
+            uprns_gdf=uprns_gdf,
+            buildings_gdf=buildings_gdf,
+            boundary=boundary,
+            id_col=id_col,
+        ),
     ]
 
-    features_dfs = pl.align_frames(*features_dfs, on=id_col, how="left").with_columns(
+    features_dfs = pl.align_frames(*features_dfs, on=id_col, how="left")
+
+    return pl.concat(features_dfs, how="align").with_columns(
         (pl.col("concave_hull_area_m2") / pl.col("building_area_m2")).alias(
             "hull_to_building_area_ratio"
         )
     )
-
-    return pl.concat(features_dfs, how="align")
 
 
 def _generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.DataFrame:
@@ -193,23 +203,27 @@ def _generate_df_concave_hull_features(
 
 
 def _generate_df_building_sections_features(
-    uprns_gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame
+    uprns_gdf: gpd.GeoDataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
+    boundary: shapely.Polygon | shapely.MultiPolygon,
+    id_col: str,
 ) -> pl.DataFrame:
     """ """
     building_units_gdf = building_footprints.generate_gdf_building_sections(
-        uprns_gdf=uprns_gdf, buildings_gdf=buildings_gdf
+        uprns_gdf=uprns_gdf, buildings_gdf=buildings_gdf, boundary=boundary
     )
     building_units_gdf["building_unit_area_m2"] = building_units_gdf.area
     building_units_gdf["building_unit_perimeter_m2"] = building_units_gdf.length
 
     return (
         pl.from_pandas(building_units_gdf.drop(columns="geometry"))
-        .group_by("ID")
+        .group_by(id_col)
         .agg(
             pl.col("representative_UPRN").count().alias("n_building_units"),
             pl.col("building_unit_area_m2").mean().alias("avg_building_unit_area_m2"),
             pl.col("building_unit_perimeter_m2")
             .mean()
             .alias("avg_building_unit_perimeter_m2"),
+            pl.col("n_UPRNs").mean().alias("avg_n_uprns_per_building_unit"),
         )
     )
