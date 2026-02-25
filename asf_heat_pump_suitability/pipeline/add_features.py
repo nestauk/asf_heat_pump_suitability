@@ -9,6 +9,11 @@ Run locally:
 
 Run on the cloud via arm_orbit:
     orbit launch --script pipeline/add_features.py --team <team> --project <project>
+
+Interactive development (VS Code / IPython):
+    from asf_heat_pump_suitability.pipeline.add_features import run
+    run(uprns_path="s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet")
+    # or: args = parse_arguments([]); run(uprns_path=args.uprns, area=args.area)
 """
 
 import argparse
@@ -32,8 +37,17 @@ logger = logging.getLogger(__name__)
 AREA_CHOICES = ["plymouth", "plymouth_similar", "sampling", "gb"]
 
 
-def parse_arguments() -> argparse.Namespace:
+_PLYMOUTH_UPRNS = "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet"
+
+
+def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     """Create ArgumentParser and parse.
+
+    Args:
+        argv: Argument list to parse. ``None`` reads from ``sys.argv`` (normal CLI
+            behaviour). Pass an explicit list (e.g. ``[]`` or
+            ``["--uprns", "s3://...", "--area", "gb"]``) for interactive / REPL use.
+            Passing ``[]`` uses all defaults (Plymouth UPRN file, plymouth area).
 
     Returns:
         argparse.Namespace: populated Namespace.
@@ -43,7 +57,7 @@ def parse_arguments() -> argparse.Namespace:
         "--uprns",
         help="S3 URI or local path to the domestic UPRN parquet file produced by pipeline/uprns.py.",
         type=str,
-        required=True,
+        default=_PLYMOUTH_UPRNS,
     )
     parser.add_argument(
         "--area",
@@ -56,7 +70,7 @@ def parse_arguments() -> argparse.Namespace:
         choices=AREA_CHOICES,
         default="plymouth",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def run(uprns_path: str, area: str = "plymouth") -> None:
