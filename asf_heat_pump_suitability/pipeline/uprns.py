@@ -21,7 +21,6 @@ import logging
 
 import polars as pl
 
-from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.config.settings import load_settings
 from asf_heat_pump_suitability.getters import load_boundaries, load_geodata, load_tree_input
 from asf_heat_pump_suitability.pipeline.transform import non_residential_entities, poi, uprns
