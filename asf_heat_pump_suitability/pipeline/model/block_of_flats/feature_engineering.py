@@ -35,7 +35,11 @@ def generate_df_features(
         _generate_df_concave_hull_features(uprns_w_buildings_gdf, id_col),
     ]
 
-    features_dfs = pl.align_frames(*features_dfs, on=id_col, how="left")
+    features_dfs = pl.align_frames(*features_dfs, on=id_col, how="left").with_columns(
+        (pl.col("concave_hull_area_m2") / pl.col("building_area_m2")).alias(
+            "hull_to_building_area_ratio"
+        )
+    )
 
     return pl.concat(features_dfs, how="align")
 
