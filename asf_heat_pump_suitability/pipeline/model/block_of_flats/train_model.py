@@ -183,7 +183,7 @@ def parse_arguments() -> argparse.Namespace:
         help="Save trained model to S3.",
         type=bool,
         required=False,
-        action="store_True",
+        action="store_true",
     )
 
     return parser.parse_args()
