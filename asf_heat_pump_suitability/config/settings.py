@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     environment variable of the same name (case-insensitive).
     """
 
-    data_mode: str = Field(default="s3", description="'s3' or 'local'")
+    data_mode: str = Field(default="local", description="'s3' or 'local'")
     s3_bucket: str = Field(default="asf-heat-pump-suitability")
     aws_endpoint_url: str | None = Field(default=None)
     orbit_env: str = Field(default="prod")

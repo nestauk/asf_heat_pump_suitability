@@ -14,6 +14,11 @@ Area options (--area flag):
     plymouth_similar    Plymouth + Liverpool, Portsmouth, Southampton, Swansea
     sampling            Plymouth + Bath, Bradford, Glasgow, Manchester, Nottingham
     gb                  Full Great Britain
+
+Interactive development (VS Code / IPython):
+    from asf_heat_pump_suitability.pipeline.uprns import run
+    run(area="plymouth")
+    # or: args = parse_arguments(["--area", "plymouth"]); run(**vars(args))
 """
 
 import argparse
@@ -33,8 +38,13 @@ logger = logging.getLogger(__name__)
 AREA_CHOICES = ["plymouth", "plymouth_similar", "sampling", "gb"]
 
 
-def parse_arguments() -> argparse.Namespace:
+def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
     """Create ArgumentParser and parse.
+
+    Args:
+        argv: Argument list to parse. ``None`` reads from ``sys.argv`` (normal CLI
+            behaviour). Pass an explicit list (e.g. ``[]`` or ``["--area", "gb"]``)
+            for interactive / REPL use.
 
     Returns:
         argparse.Namespace: populated Namespace.
@@ -50,7 +60,7 @@ def parse_arguments() -> argparse.Namespace:
         choices=AREA_CHOICES,
         default="plymouth",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def run(area: str = "plymouth") -> None:
