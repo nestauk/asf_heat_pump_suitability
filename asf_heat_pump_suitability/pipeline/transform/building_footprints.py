@@ -18,9 +18,9 @@ def generate_gdf_building_sections(
         voronoi_gdf = uprns_gdf[uprns_gdf.intersects(boundary)].copy()
 
     voronoi_gdf = (
-        voronoi_gdf.dissolve(by=["X_COORDINATE", "Y_COORDINATE"])
+        voronoi_gdf.dissolve(by=["X_COORDINATE", "Y_COORDINATE"], aggfunc="count")
         .reset_index(drop=True)
-        .rename(columns={"UPRN": "representative_UPRN"})
+        .rename(columns={"UPRN": "n_UPRNs"})
     )
     voronoi_gdf["geometry"] = voronoi_gdf.voronoi_polygons(extend_to=boundary)
     voronoi_gdf = voronoi_gdf.dropna(subset="geometry")
