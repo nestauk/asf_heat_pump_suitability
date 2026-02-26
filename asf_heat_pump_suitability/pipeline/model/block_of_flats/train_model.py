@@ -29,6 +29,7 @@ from sklearn.model_selection import (
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.metrics import f1_score
 import argparse
+from asf_heat_pump_suitability.getters import load_boundaries
 from asf_heat_pump_suitability.pipeline.transform import uprns
 
 # Set random state int and RandomState instance
@@ -58,6 +59,11 @@ FEATURES = [
     "flats_per_hull_area_m2",
     "avg_n_stacked_uprns",
     "std_n_stacked_uprns",
+    "hull_to_building_area_ratio",
+    "n_building_units",
+    "avg_building_unit_area_m2",
+    "avg_building_unit_perimeter_m2",
+    "avg_n_uprns_per_building_unit",
 ]
 
 
@@ -309,6 +315,11 @@ if __name__ == "__main__":
         grid_squares=config["constant"]["grid_squares"]["sampling_areas"],
     )
 
+    # Load Local Authority boundaries
+    la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+        select_las=config["constant"]["sampling_areas"]
+    )
+
     # ------------------------ #
     # IMPUTE PROPERTY TYPE FLAT
     # Create boolean column called `property_type_flat` to identify flats
@@ -321,6 +332,7 @@ if __name__ == "__main__":
         buildings_gdf=building_footprints_gdf,
         uprns_gdf=uprns_gdf,
         id_col="ID",
+        boundaries_gdf=la_boundaries_gdf,
     )
 
     # ------------------------ #
@@ -336,5 +348,5 @@ if __name__ == "__main__":
         param_search="default",
     )
 
-    save_as = config["output"]["save_as"]["model"]["block_of_flats_model"]
-    save_utils.save_model_to_pkl_s3(model, save_as)
+    # save_as = config["output"]["save_as"]["model"]["block_of_flats_model"]
+    # save_utils.save_model_to_pkl_s3(model, save_as)
