@@ -8,12 +8,13 @@ To run the script:
 asf_heat_pump_suitability/pipeline/model/block_of_flats/train_model.py
 
 Set the required parameters:
-`uprns` takes a path to a parquet file containing domestic UPRNs with their X and Y coordinates.
-`labelled_data` takes a path to a parquet file containing labelled data. Requires a boolean 'block_of_flats' column and a building
+- `uprns` takes a path to a parquet file containing domestic UPRNs with their X and Y coordinates.
+- `labelled_data` takes a path to labelled data to train binary classification model on in parquet file format. Requires a boolean 'block_of_flats' column and a building
 ID column with one row per building.
-`uprns` must contain all domestic UPRNs within the area(s) that `labelled_data` samples from.
 
-`labelled_data` takes a path to labelled data to train binary classification model on in parquet file format. Building ID required.
+Note: `uprns` file must contain all domestic UPRNs within the area(s) that `labelled_data` samples from.
+
+Pass the optional `save` parameter if saving to S3 is desired.
 """
 
 import numpy as np
@@ -29,11 +30,21 @@ from sklearn.model_selection import (
 from sklearn.model_selection._search import BaseSearchCV
 from sklearn.metrics import f1_score
 import argparse
-from asf_heat_pump_suitability.pipeline.transform import uprns
 
 # Set random state int and RandomState instance
-RANDOM_STATE = 8
-RNG = np.random.RandomState(RANDOM_STATE)
+# See more on controlling randomness in sklearn docs: https://scikit-learn.org/stable/common_pitfalls.html#controlling-randomness
+RANDOM_STATE = (
+    8  # used in cross-validation for consistency of repeated calls to split dataset
+)
+RNG = np.random.RandomState(
+    RANDOM_STATE
+)  # used in training random forest classifier to increase robustness
+
+# Number of splits for StratifiedKFold cross-val strategy in parameter search
+N_SPLITS = 5
+
+# Size (proportion) of test set
+TEST_SIZE = 0.2
 
 # Create param distributions for hyperparameter search
 PARAM_DISTRIBUTIONS = {
@@ -61,7 +72,7 @@ FEATURES = [
 ]
 
 
-def train_block_of_flats_classifier(
+def train_eval_rfc_block_of_flats_classifier(
     df: pl.DataFrame,
     id_col: str,
     features: Iterable[str],
@@ -71,21 +82,21 @@ def train_block_of_flats_classifier(
     **kwargs,
 ) -> RandomForestClassifier:
     """
-    Train and evaluate RandomForestClassifier in binary classification. Uses a search cross-validator to identify best
+    Train and evaluate RandomForestClassifier in binary classification to predict whether a building is a block of flats or not. Uses a search cross-validator to identify best
     hyperparameters and conduct cross validation. Model training and cross-validation is performed on 80% of the data in
     `df` with stratification. A final round of training is performed on the full 80% of training data using the best
     hyperparameters identified, and the model is tested on the 20% hold-out test set.
 
     Args:
         df (pl.DataFrame): engineered features with labelled target variable
-        id_col (str): name of ID column
+        id_col (str): name of building ID column
         features (Iterable[str]): features used to train the model
         target (str): name of target variable
         param_search (Type[BaseSearchCV]): a class (not an instance) of `BaseSearchCV`, e.g. `HalvingRandomSearchCV` or `HalvingGridSearchCV` etc.
         Defaults to using `HalvingRandomSearchCV` which will create an instance of this class with selected custom arguments for `param_distributions`, `factor`, `cv`,
         and `n_jobs`, using F1 `scoring` metric. If using something other than the default option, kwargs for the selected `BaseSearchCV` class must be given, including param_distributions.
         However, note that `estimator` and `random_state` args will always default to RandomForestClassifier and global RANDOM_STATE, respectively, for consistency.
-        scoring (str): kwarg for `param_search` scoring metric used to evaluate predictions on the test set. Default "f1".
+        scoring (str): `param_search` scoring metric used to evaluate predictions on the test set. Default "f1".
         **kwargs for selected `BaseSearchCV` if `param_search` not set to `default`. Note that any kwargs here will be ignored if `param_search` set to `default`.
 
     Returns:
@@ -96,13 +107,13 @@ def train_block_of_flats_classifier(
     X = pd_df[features]
     y = pd_df[target]
 
-    # Keep a final hold out validation set aside
+    # Keep a final hold out test set aside
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y
+        X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
     )
 
     # Create cross-validation splitter and classifier
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
+    cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
     estimator = RandomForestClassifier(random_state=RNG)
     random_state = RANDOM_STATE
     print(
@@ -128,7 +139,9 @@ def train_block_of_flats_classifier(
             **kwargs,
         ).fit(X_train, y_train)
 
-    print(f"Best {scoring} score: {search.best_score_}")
+    print(
+        f"Best {scoring} score during cross-validation and hyperparameter search: {search.best_score_}"
+    )
     print(f"Best params: {search.best_params_}")
 
     # Train final classifier model on full training set with the selected hyperparameters
@@ -138,7 +151,7 @@ def train_block_of_flats_classifier(
     # Evaluate final model on hold out test set
     y_pred = final_model.predict(X_test)
     score = f1_score(y_test, y_pred)
-    print(f"{scoring} score on hold out validation set: {score}")
+    print(f"{scoring} score on hold out test set: {score}")
 
     return final_model
 
@@ -272,9 +285,17 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--labelled_data",
-        help="Path to labelled data to train binary classification model on in parquet file format. Building ID required.",
+        help="Path to labelled data to train binary classification model on in parquet file format. Building ID column required.",
         type=str,
         required=True,
+    )
+
+    parser.add_argument(
+        "--save",
+        help="Save trained model to S3.",
+        type=bool,
+        required=False,
+        action="store_true",
     )
 
     return parser.parse_args()
@@ -328,7 +349,7 @@ if __name__ == "__main__":
     labelled_df = pl.read_parquet(args.labelled_data)
     model_df = labelled_df.join(building_features_df, how="left", on="ID")
 
-    model = train_block_of_flats_classifier(
+    model = train_eval_rfc_block_of_flats_classifier(
         df=model_df,
         id_col="ID",
         features=FEATURES,
@@ -336,5 +357,6 @@ if __name__ == "__main__":
         param_search="default",
     )
 
-    save_as = config["output"]["save_as"]["model"]["block_of_flats_model"]
-    save_utils.save_model_to_pkl_s3(model, save_as)
+    if args.save:
+        save_as = config["output"]["save_as"]["block_of_flats_model"]
+        save_utils.save_model_to_pkl_s3(model, save_as)
