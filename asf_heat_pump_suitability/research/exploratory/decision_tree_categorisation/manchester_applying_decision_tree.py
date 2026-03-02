@@ -1,4 +1,6 @@
 # %%
+
+
 # %% [markdown]
 # # Visualising the results of the decision tree for Greater Manchester
 #
@@ -41,7 +43,6 @@ colours = {
     "Individual solution or Networked GSHP": "grey",
     "Individual solution or District heat network": "gray",
 }
-
 
 # %% [markdown]
 # ## 1. Loading data
@@ -225,12 +226,11 @@ s3client = boto3.client(
 s3_bucket = "asf-heat-pump-suitability"
 response = s3client.get_object(
     Bucket=s3_bucket,
-    Key="local_heat_planning/outputs/block_of_flats_building_classifier.pkl",
+    Key="local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl",
 )
 
 body = response["Body"].read()
 block_of_flats_model = pickle.loads(body)
-
 
 # %%
 # Create features to apply blocks of flats model
@@ -245,7 +245,7 @@ df = pl.from_pandas(
     gm_gdf.drop(
         columns=[
             "geometry",
-            "property_geometry",
+            "uprn_geometry",
             "building_geometry",
             "desnz_hn_zone_geometry",
             "index_right",
@@ -280,7 +280,6 @@ agg_building_df = (
         (pl.col("n_UPRNs") / pl.col("building_area_m2")).alias("UPRNs_per_building_m2"),
     )
 )
-
 
 # %%
 
@@ -347,7 +346,6 @@ features_df = agg_building_df.join(
     how="left",
     on="ID",
 )
-
 
 # %%
 # These are the model features
@@ -423,7 +421,7 @@ gm_gdf["in_hn_zone"].value_counts(dropna=False)
 
 # %%
 def define_decision_tree(
-    in_block_of_flats: bool, garden_size: float, city_centre_or_hnz: bool
+    in_block_of_flats: bool, outdoor_space: float, city_centre_or_hnz: bool
 ) -> dict:
     """
     Defines the decision tree to identify:
@@ -432,7 +430,7 @@ def define_decision_tree(
 
     Args:
         in_block_of_flats (bool): Whether the property is in a block of flats.
-        utdoor_space (float): Size of the maximum contiguous outdoor space in square meters.
+        outdoor_space (float): Size of the maximum contiguous outdoor space in square meters.
         city_centre_or_hnz (bool): Whether the property is in the city centre or in a planned heat network zone.
 
     Returns:
@@ -454,13 +452,13 @@ def define_decision_tree(
             }
     else:
         if city_centre_or_hnz:
-            if pd.isnull(garden_size):
+            if pd.isnull(outdoor_space):
                 return {
                     1: "Individual solution or District heat network",
                     2: "Individual solution or District heat network",
                     "path": "Unknown garden size in city centre",
                 }
-            elif garden_size > 70:
+            elif outdoor_space > 70:
                 return {
                     1: "Individual solution",
                     2: "District heat network",
@@ -473,13 +471,13 @@ def define_decision_tree(
                     "path": "4. not blocks of flats, city centre, small or no garden",
                 }
         else:
-            if pd.isnull(garden_size):
+            if pd.isnull(outdoor_space):
                 return {
                     1: "Individual solution or Networked GSHP",
                     2: "Networked GSHP or Communal solutions",
                     "path": "Unknown garden size not in city centre",
                 }
-            elif garden_size > 30:
+            elif outdoor_space > 30:
                 return {
                     1: "Individual solution",
                     2: "Networked GSHP",
@@ -564,7 +562,6 @@ solutions_per_footprint.groupby("1st_most_suitable_solution_str")[
     ["building_geometry"]
 ].nunique()
 
-
 # %%
 # This is currently based on Greater Manchester only (both pairs found in land parcels and building footprints)
 # but needs to be generalised to all possible cases
@@ -641,7 +638,7 @@ def map_blocks_of_flats_prob(
         specific_ward_gdf (gpd.GeoDataFrame): specific ward boundary data
         labelled_tech (gpd.GeoDataFrame): labelled technology polygons data
         colours (dict): mapping of technologies to colours
-        threshold (float, optional): threshold for the block of flats label confidence.
+        threshold (float, optional): threshold for the block of flats label confidence (includes datapoints with confidence equal to or below the threshold) if provided, otherwise all datapoints are included.
     """
 
     if tech != "":
