@@ -21,15 +21,16 @@ def generate_df_features(
     Return:
         pl.DataFrame: all features for each building ID (per id_col)
     """
-    # Join UPRNs to the building footprints they are contained within and retain building geometry
+    print("Generating features required for block of flats classifier...")
+    # Join UPRNs to the building footprints they intersect with and retain building geometry
     buildings_w_uprns_gdf = buildings_gdf.sjoin(
-        uprns_gdf, how="inner", predicate="contains"
-    )
+        uprns_gdf, how="inner", predicate="intersects"
+    ).dropna(subset=id_col)
 
     # Join buildings to the UPRNs they contain and retain UPRN geometry
     uprns_w_buildings_gdf = uprns_gdf.sjoin(
-        buildings_gdf, how="inner", predicate="within"
-    )
+        buildings_gdf, how="inner", predicate="intersects"
+    ).dropna(subset="UPRN")
 
     features_dfs = [
         # Generate features per building footprint
