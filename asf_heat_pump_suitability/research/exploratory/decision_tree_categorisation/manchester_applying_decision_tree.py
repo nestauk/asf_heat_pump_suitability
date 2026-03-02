@@ -420,17 +420,17 @@ gm_gdf["in_hn_zone"].value_counts(dropna=False)
 
 
 # %%
-def define_decision_tree(
+def identify_dict_most_suitable_tech(
     in_block_of_flats: bool, outdoor_space: float, city_centre_or_hnz: bool
 ) -> dict:
     """
     Defines the decision tree to identify:
-    - first and second most suitable low carbon heating solutions for each property.
+    - first and second most suitable low carbon heating solutions for each UPRN.
     - the path taken in the decision tree.
 
     Args:
         in_block_of_flats (bool): Whether the property is in a block of flats.
-        outdoor_space (float): Size of the maximum contiguous outdoor space in square meters.
+        outdoor_space (float): Outdoor space in square meters.
         city_centre_or_hnz (bool): Whether the property is in the city centre or in a planned heat network zone.
 
     Returns:
@@ -442,13 +442,13 @@ def define_decision_tree(
             return {
                 1: "District heat network",
                 2: "Communal solutions",
-                "path": "1. blocks of flats and city centre",
+                "path": "1. blocks of flats and HNZ/ city centre",
             }
         else:
             return {
                 1: "Communal solutions",
                 2: "Networked GSHP",
-                "path": "2. blocks of flats, not city centre",
+                "path": "2. blocks of flats, not  HNZ/ city centre",
             }
     else:
         if city_centre_or_hnz:
@@ -456,13 +456,13 @@ def define_decision_tree(
                 return {
                     1: "Individual solution or District heat network",
                     2: "Individual solution or District heat network",
-                    "path": "Unknown garden size in city centre",
+                    "path": "Unknown outdoor space in city centre",
                 }
             elif outdoor_space > 70:
                 return {
                     1: "Individual solution",
                     2: "District heat network",
-                    "path": "3. not blocks of flats, city centre, big garden (70m2)",
+                    "path": "3. not blocks of flats, city centre, large outdoor space (70m2)",
                 }
             else:
                 return {
@@ -475,19 +475,19 @@ def define_decision_tree(
                 return {
                     1: "Individual solution or Networked GSHP",
                     2: "Networked GSHP or Communal solutions",
-                    "path": "Unknown garden size not in city centre",
+                    "path": "Unknown outdoor space not in city centre",
                 }
             elif outdoor_space > 30:
                 return {
                     1: "Individual solution",
                     2: "Networked GSHP",
-                    "path": "5. not blocks of flats, not city centre, big garden (30m2)",
+                    "path": "5. not blocks of flats, not city centre, large outdoor space (30m2)",
                 }
             else:
                 return {
                     1: "Networked GSHP",
                     2: "Communal solutions",
-                    "path": "6. not blocks of flats, not city centre, small/no garden",
+                    "path": "6. not blocks of flats, not city centre, small/no outdoor space",
                 }
 
 
@@ -495,7 +495,7 @@ def define_decision_tree(
 gm_gdf["in_city_centre_or_hn_zone"] = gm_gdf["in_city_centre"] | gm_gdf["in_hn_zone"]
 
 gm_gdf["most_suitable_solutions"] = gm_gdf.apply(
-    lambda x: define_decision_tree(
+    lambda x: identify_dict_most_suitable_tech(
         x["in_block_of_flats"],
         x["max_contiguous_outdoor_space_area_m2"],
         x["in_city_centre_or_hn_zone"],
