@@ -7,8 +7,8 @@ Script to add features to UPRNs:
 Run:
 python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet
 
-To save outputs, add --save_outputs True flag:
-python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet --save_outputs True
+To save outputs to S3, add --save flag:
+python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet --save
 """
 
 import argparse
