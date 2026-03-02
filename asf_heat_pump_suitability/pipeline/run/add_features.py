@@ -37,13 +37,12 @@ def parse_arguments() -> argparse.Namespace:
         type=str,
         required=True,
     )
-
     parser.add_argument(
-        "--save_outputs",
-        help="If set to `True`, it saves the outputs. Otherwise, outputs are not saved. Defaults to `False`, i.e. not saving outputs.",
+        "--save",
+        help="If --save is set, it saves outputs to S3.",
         type=bool,
         required=False,
-        default=False,
+        action="store_true",
     )
 
     return parser.parse_args()
@@ -142,7 +141,7 @@ if __name__ == "__main__":
     # ------------------------ #
     # SAVE OUTPUTS
 
-    if args.save_outputs:
+    if args.save:
         save_utils.save_to_s3(
             features_df,
             path=f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{os.path.basename(args.uprns).split('.')[0]}_with_features.parquet",
