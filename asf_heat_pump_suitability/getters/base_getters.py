@@ -11,6 +11,9 @@ import geojson
 import geopandas as gpd
 from fnmatch import fnmatch
 import polars as pl
+import pickle
+import fsspec
+from typing import Any
 
 
 def load_df_from_s3(uri: str, **kwargs) -> pl.DataFrame:
@@ -231,3 +234,18 @@ def get_df_from_parquet(path: str, is_s3: bool = False, **kwargs) -> pl.DataFram
     else:
         # Read directly from local file system
         return pl.read_parquet(path, **kwargs)
+
+
+def load_pickle(path: str) -> Any:
+    """
+    Load the content of a pickle file.
+
+    Args:
+        path (str): path to pickle file
+
+    Returns:
+        Any: contents of pickle file
+    """
+    fs = s3fs.S3FileSystem()
+    with fs.open(path, "rb") as file:
+        return pickle.load(file)
