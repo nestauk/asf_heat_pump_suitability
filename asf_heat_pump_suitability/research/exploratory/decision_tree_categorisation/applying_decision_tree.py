@@ -1,4 +1,6 @@
 # %%
+
+
 # %% [markdown]
 # # Visualising the results of the decision tree
 #
@@ -131,7 +133,6 @@ plymouth_uprns.head()
 # - `in_city_centre`: a flag for whether it is located in a city centre according to a set of pre-defined spatial signature types (as per the Spatial Signatures Framework)
 # - `spatial_signature_type`: the respective spatial signature type for each UPRN
 
-
 # %%
 # Getting data and converting polars df to geodf
 hnz_and_city_centre_data = pl.read_parquet(
@@ -141,6 +142,8 @@ hnz_and_city_centre_data = generate_gdf_uprn_coords(df=hnz_and_city_centre_data)
 hnz_and_city_centre_data.head()
 
 # %%
+
+
 # %% [markdown]
 # ### 1.5. Plymouth features dataset
 #
@@ -264,19 +267,14 @@ plymouth_gdf = (
 plymouth_gdf
 
 # %%
-
-
-# %%
-# # for properties without flats, fill NaN with 1 to represent 100% confidence they are not flats
-# plymouth_gdf["block_of_flats_label_proba"].fillna(1, inplace=True)
-
-# %%
 plymouth_gdf.reset_index(inplace=True)
 
 # %%
 plymouth_gdf.head()
 
 # %%
+
+
 # %% [markdown]
 # ### 2.3. Spatial join to add building footprints to main geodf
 #
@@ -525,8 +523,9 @@ solutions_per_footprint.groupby("1st_most_suitable_solution_str")[
     ["building_geometry"]
 ].nunique()
 
-
 # %%
+
+
 # %% [markdown]
 # In most cases:
 # - properties in the same building footprint should have the same most suitable solution
@@ -1126,13 +1125,13 @@ plymouth_building_most_suitable_tech[
 ].to_file("plymouth_building_most_suitable_tech.kml", driver="KML")
 
 # %%
-# Checking for missing geometry
+# Checking whether there are missing geometries (if there is no building footprint available)
 plymouth_building_most_suitable_tech[
     pd.isnull(plymouth_building_most_suitable_tech["geometry"])
 ]
 
 # %%
-# Removing rows with no geometry
+# Removing rows with no geometry, if applicable
 plymouth_building_most_suitable_tech = plymouth_building_most_suitable_tech[
     ~pd.isnull(plymouth_building_most_suitable_tech["geometry"])
 ]
