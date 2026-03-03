@@ -73,7 +73,8 @@ def extend_edges_gdf(gdf, boundary, segment_distance=1.0):
         voronoi_gdf.sjoin(points_gdf, how="inner", predicate="contains")
         .dissolve(by=id_col)
         .reset_index()
-    )
+    ).clip(boundary)
+
     return gpd.GeoDataFrame(
         gdf.drop(columns=["geometry"])
         .merge(voronoi_gdf, how="inner", on=id_col)
