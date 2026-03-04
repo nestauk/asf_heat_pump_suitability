@@ -1,8 +1,13 @@
+import argparse
 import geopandas as gpd
+import pandas as pd
 import numpy as np
 import shapely
 from shapely.geometry import MultiPoint, LineString, Point, box, Polygon, MultiPolygon
+import libpysal
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.utils import save_utils
+from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
 # INPUT = output of decision tree - one row per building with assigned tech type
 
@@ -22,6 +27,10 @@ def extend_edges_gdf(gdf, boundary, segment_distance=1.0):
     Returns:
         gpd.GeoDataFrame: A GeoDataFrame of the extended Voronoi regions.
     """
+    # TODO - deal with buildings that cross boundaries
+    # Ensure all buildings are within the boundary
+    gdf = gdf[gdf.within(boundary)]
+
     # Add an internal unique ID to each building
     id_col = "_internal_unique_id"
     gdf[id_col] = np.arange(len(gdf))
@@ -82,3 +91,100 @@ def extend_edges_gdf(gdf, boundary, segment_distance=1.0):
         geometry="geometry",
         crs=gdf.crs,
     )
+
+
+def overlay_gdf_physical_barriers(
+    voronoi_gdf: gpd.GeoDataFrame,
+    tech_gdf: gpd.GeoDataFrame,
+    line_overlay_gdf,
+    polygon_overlay_gdf,
+) -> gpd.GeoDataFrame:
+    # Filter to domestic building Voronois only
+    voronoi_gdf = voronoi_gdf.sjoin(
+        tech_gdf[["geometry"]], how="inner", predicate="contains"
+    ).drop(columns="index_right")
+
+    # Remove areas covered by polygons and lines
+    cells_gdf = (
+        voronoi_gdf.overlay(polygon_overlay_gdf, how="difference")
+        .overlay(line_overlay_gdf, how="difference")
+        .explode()
+    )
+
+    # Remove polygons that no longer intersect with a building
+    return cells_gdf.sjoin(
+        tech_gdf[["geometry"]], how="inner", predicate="intersects"
+    ).drop(columns=["index_right"])
+
+
+def tranform_gdf_linestring_barriers(grid_squares) -> gpd.GeoDataFrame:
+    # Linestrings
+    roads_gdf = load_geodata.load_gdf_os_openmap_local_layer(
+        layer="road", grid_squares=grid_squares
+    )
+    railways_gdf = load_geodata.load_gdf_os_openmap_local_layer(
+        layer="railway_track", grid_squares=grid_squares
+    )
+
+    barrier_road_types = [
+        "A Road" "B Road, Collapsed Dual Carriageway",
+        "Minor Road, Collapsed Dual Carriageway",
+        "Primary Road, Collapsed Dual Carriageway",
+        "Motorway",
+        "Motorway, Collapsed Dual Carriageway",
+        "A Road, Collapsed Dual Carriageway",
+    ]
+
+    barrier_roads_gdf = roads_gdf[roads_gdf["CLASSIFICA"].isin(barrier_road_types)]
+
+    line_overlays = [barrier_roads_gdf, railways_gdf]
+    line_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in line_overlays])
+
+    # TODO make more specific for different road types
+    # Add buffer assumed to be width of road / railway (3.5m total - 1.75m either side)
+    barrier_roads_gdf = [roads_gdf, railways_gdf]
+    line_overlay_gdf["geometry"] = line_overlay_gdf.geometry.buffer(1.75)
+
+    return line_overlay_gdf
+
+
+def transform_gdf_polygon_barriers(grid_squares) -> gpd.GeoDataFrame:
+    # Polygons
+    forest_gdf = load_geodata.load_gdf_os_openmap_local_layer(
+        layer="woodland", grid_squares=grid_squares
+    )
+    greenspace_gdf = gpd.read_file("path")
+    surface_water_gdf = gpd.read_file("path")
+    tidal_water_gdf = load_geodata.load_gdf_os_openmap_local_layer(
+        layer="tidal_water", grid_squares=grid_squares
+    )
+
+    polygon_overlays = [forest_gdf, greenspace_gdf, tidal_water_gdf, surface_water_gdf]
+
+    return pd.concat([gdf[["geometry"]] for gdf in polygon_overlays])
+
+
+def reassign_gdf_communal_networked(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+
+    shared_tech_gdf = gdf[gdf["tech"].isin(["Networked GSHP", "Communal solutions"])]
+
+    # Create spatial weights matrix
+    W = libpysal.weights.Queen.from_dataframe(shared_tech_gdf)
+
+    # Get component labels
+    shared_tech_gdf["components"] = W.component_labels
+    gshp_components = shared_tech_gdf[shared_tech_gdf["tech"] == "Networked GSHP"][
+        "components"
+    ].unique()
+
+    shared_tech_gdf["tech"] = np.where(
+        shared_tech_gdf["components"].isin(gshp_components),
+        "Networked GSHP",
+        shared_tech_gdf["tech"],
+    )
+
+    other_tech_gdf = gdf[
+        ~gdf["tech"].isin(["Networked GSHP", "Communal solutions"])
+    ].reset_index()
+
+    return pd.concat([other_tech_gdf, shared_tech_gdf.reset_index()])
