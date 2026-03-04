@@ -62,6 +62,7 @@ constant:
     - "Manchester"
     - "Nottingham"
     - "Plymouth"
+  plymouth: "plymouth"
   target_crs: 27700 # British National Grid
 output:
   save_as:
