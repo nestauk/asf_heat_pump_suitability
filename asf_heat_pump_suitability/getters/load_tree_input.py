@@ -96,4 +96,5 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
         layer="poi_uk",
     ).to_crs("EPSG:4326")
     print(f"POI CRS: {poi.crs}")
-    return poi
+
+    return poi[poi.country == "GB"]
