@@ -26,7 +26,15 @@ def parse_arguments() -> argparse.Namespace:
         help="Path to domestic UPRN dataset with X and Y coordinates in parquet.",
         type=str,
         required=False,
-        default="s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns_with_flats.parquet",
+        default="s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns_with_features.parquet",
+    )
+
+    parser.add_argument(
+        "--hnz",
+        help="Path to domestic UPRN dataset with heat network zone information in parquet.",
+        type=str,
+        required=False,
+        default="s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns_with_hn_zones_city_centres.parquet",
     )
     parser.add_argument(
         "--epc",
@@ -196,6 +204,56 @@ def calculate_df_value_counts_per_opportunity_area(
     return opportunity_areas_df
 
 
+def create_df_remaining_features_per_opportunity_area(
+    opportunity_areas_df: pl.DataFrame,
+    uprns_gdf: gpd.GeoDataFrame,
+) -> pl.DataFrame:
+    """
+    Create dataframe with remaining features per opportunity area:
+    - Average garden size
+    - etc
+
+    Args:
+        opportunity_areas_df (pl.DataFrame): dataframe with value counts per opportunity area for relevant features
+    Returns:
+        pl.DataFrame: dataframe with remaining features per opportunity area
+    """
+
+    # Average contigous outdoor space per opportunity area
+    avg_outdoor_space = uprns_gdf.group_by("cluster_id").agg(
+        pl.col("max_contiguous_outdoor_space_area_m2").mean().alias("avg_outdoor_space")
+    )
+
+    # Join total UPRN counts onto value counts
+    opportunity_areas_df = opportunity_areas_df.join(
+        avg_outdoor_space, how="left", on="cluster_id"
+    )
+
+    # Create HN zone and city centre flags per opportunity area - if any UPRN within the area is in a HN zone or city centre, then the whole area is flagged as being in a HN zone or city centre
+    hnz_city_centre_flags = uprns_gdf.group_by("cluster_id").agg(
+        pl.when(pl.col("in_hn_zone").any())
+        .then(pl.lit("Yes"))
+        .otherwise(pl.lit("No"))
+        .alias("in_hn_zone"),
+        pl.when(pl.col("in_city_centre").any())
+        .then(pl.lit("Yes"))
+        .otherwise(pl.lit("No"))
+        .alias("in_city_centre"),
+    )
+
+    opportunity_areas_df = opportunity_areas_df.join(
+        hnz_city_centre_flags, how="left", on="cluster_id"
+    )
+
+    # TODO add remaining features - the section below is temporary
+    opportunity_areas_df["n_uprns_listed_building"] = "Unknown"
+    opportunity_areas_df["n_uprns_off_gas"] = "Unknown"
+    opportunity_areas_df["near_coast_line"] = "Unknown"
+    opportunity_areas_df["near_anchor_load"] = "Unknown"
+
+    return opportunity_areas_df
+
+
 if __name__ == "__main__":
     import polars as pl
     import geopandas as gpd
@@ -207,7 +265,14 @@ if __name__ == "__main__":
     # Load UPRNs
     print("Loading Plymouth domestic UPRNs...")
     uprns_df = pl.read_parquet(args.uprns)
-    uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df)
+    uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
+
+    hnz_df = pl.read_parquet(args.hnz)
+    hnz_gdf = uprns.generate_gdf_uprn_coords(hnz_df).to_crs(epsg=27700)
+
+    uprns_gdf = uprns_gdf.merge(
+        hnz_gdf[["UPRN", "in_hn_zone", "in_city_centre"]], how="left", on="UPRN"
+    )
 
     # Load EPC
     print("Loading deduplicated EPC data...")
@@ -232,6 +297,12 @@ if __name__ == "__main__":
     # Calculate value counts per opportunity area for relevant features
     opportunity_areas_df = calculate_df_value_counts_per_opportunity_area(
         opportunity_areas_df
+    )
+
+    print("Calculate remaining features per opportunity area...")
+    # Calculate remaining features per opportunity area
+    opportunity_areas_df = create_df_remaining_features_per_opportunity_area(
+        opportunity_areas_df, uprns_gdf
     )
 
     if args.save:
