@@ -51,7 +51,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--save_path",
-        help="Path to save the output csv with value counts per opportunity area.",
+        help="Path to save the output geojson with contextual information per opportunity area.",
         type=str,
         default="s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth/plymouth_cluster_contextual_features.geojson",
     )
@@ -239,6 +239,17 @@ if __name__ == "__main__":
     print(opportunity_areas_df.columns)
 
     if args.save:
+        opportunity_areas_df = opportunity_areas_df.join(
+            pl.from_pandas(areas_gdf[["cluster_id", "geometry"]]),
+            how="left",
+            on="cluster_id",
+        )
+
+        # Saving as EPSG:4326 because we need lat/long for visualisation
+        opportunity_areas_df = gpd.GeoDataFrame(
+            opportunity_areas_df, geometry="geometry", crs="EPSG:4326"
+        )
+
         opportunity_areas_df.to_file(
             args.save_path,
             driver="GeoJSON",
