@@ -234,13 +234,9 @@ if __name__ == "__main__":
         opportunity_areas_df
     )
 
-    print(opportunity_areas_df)
-
-    print(opportunity_areas_df.columns)
-
     if args.save:
-        opportunity_areas_df = opportunity_areas_df.join(
-            pl.from_pandas(areas_gdf[["cluster_id", "geometry"]]),
+        opportunity_areas_df = opportunity_areas_df.to_pandas().merge(
+            areas_gdf[["cluster_id", "geometry"]],
             how="left",
             on="cluster_id",
         )
