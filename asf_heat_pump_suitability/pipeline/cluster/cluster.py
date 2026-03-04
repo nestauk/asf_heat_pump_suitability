@@ -188,3 +188,61 @@ def reassign_gdf_communal_networked(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     ].reset_index()
 
     return pd.concat([other_tech_gdf, shared_tech_gdf.reset_index()])
+
+
+def parse_arguments() -> argparse.Namespace:
+    """
+    Create ArgumentParser and parse.
+
+    Returns:
+        argparse.Namespace: populated `Namespace`
+    """
+    parser = argparse.ArgumentParser()
+
+    # TODO this is a placeholder and likely to change as the script develops
+    parser.add_argument(
+        "--tech_gdf",
+        help="Path to S3 file containing building footprints with their tech types assigned by the decision tree.",
+        type=str,
+        required=True,
+    )
+
+    parser.add_argument(
+        "--local_authorities",
+        help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar_cities}; or Plymouth and 5 different local authorities {sampling_areas}. Default to all of GB",
+        type=str,
+        default="GB",
+        required=False,
+    )
+
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+
+    args = parse_arguments()
+    tech_gdf = gpd.read_file(args.tech_gdf)
+    grid_squares = config["constant"]["grid_squares"][args.local_authorities]
+
+    boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+        select_las=config["constant"][args.local_authorities]
+    )
+    buildings_gdf = load_geodata.load_gdf_os_openmap_local_layer(
+        layer="building", grid_squares=grid_squares
+    )
+    line_overlay_gdf = tranform_gdf_linestring_barriers(grid_squares)
+    polygon_overlay_gdf = transform_gdf_polygon_barriers(grid_squares)
+
+    gdfs = []
+
+    for boundary in boundary_gdf["geometry"].unique():
+        voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
+        cells_gdf = overlay_gdf_physical_barriers(
+            voronoi_gdf=voronoi_gdf,
+            tech_gdf=tech_gdf,
+            line_overlay_gdf=line_overlay_gdf,
+            polygon_overlay_gdf=polygon_overlay_gdf,
+        )
+        gdfs.append(reassign_gdf_communal_networked(cells_gdf))
+
+    clusters_gdf = pd.concat(gdfs)
