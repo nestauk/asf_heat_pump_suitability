@@ -3,15 +3,10 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 import shapely
-from shapely.geometry import MultiPoint, LineString, Point, box, Polygon, MultiPolygon
+from shapely.geometry import MultiPoint, Polygon, MultiPolygon
 import libpysal
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
-
-# INPUT = output of decision tree - one row per building with assigned tech type
-
-# OUTPUT = neat polygons around groups of properties with reassignment of communal buildings
 
 
 def extend_edges_gdf(gdf, boundary, segment_distance=1.0):
@@ -101,7 +96,7 @@ def overlay_gdf_physical_barriers(
 ) -> gpd.GeoDataFrame:
     # Filter to domestic building Voronois only
     voronoi_gdf = voronoi_gdf.sjoin(
-        tech_gdf[["geometry"]], how="inner", predicate="contains"
+        tech_gdf[["tech", "geometry"]], how="inner", predicate="contains"
     ).drop(columns="index_right")
 
     # Remove areas covered by polygons and lines
@@ -153,8 +148,15 @@ def transform_gdf_polygon_barriers(grid_squares) -> gpd.GeoDataFrame:
     forest_gdf = load_geodata.load_gdf_os_openmap_local_layer(
         layer="woodland", grid_squares=grid_squares
     )
-    greenspace_gdf = gpd.read_file("path")
-    surface_water_gdf = gpd.read_file("path")
+
+    # TODO - remove hard coding
+    greenspace_gdf = gpd.read_file(
+        "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/SX/SX_GreenspaceSite.shp"
+    )
+    surface_water_gdf = gpd.read_file(
+        "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/SX/SX_SurfaceWater_Area.shp"
+    )
+
     tidal_water_gdf = load_geodata.load_gdf_os_openmap_local_layer(
         layer="tidal_water", grid_squares=grid_squares
     )
@@ -187,7 +189,9 @@ def reassign_gdf_communal_networked(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         ~gdf["tech"].isin(["Networked GSHP", "Communal solutions"])
     ].reset_index()
 
-    return pd.concat([other_tech_gdf, shared_tech_gdf.reset_index()])
+    return pd.concat(
+        [other_tech_gdf, shared_tech_gdf.drop(columns="components").reset_index()]
+    )
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -221,7 +225,11 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
 
     args = parse_arguments()
-    tech_gdf = gpd.read_file(args.tech_gdf)
+    tech_gdf = (
+        gpd.read_file(args.tech_gdf)
+        .to_crs(config["constant"]["target_crs"])
+        .rename(columns={"1st_most_suitable_solution": "tech"})
+    )
     grid_squares = config["constant"]["grid_squares"][args.local_authorities]
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
@@ -245,4 +253,4 @@ if __name__ == "__main__":
         )
         gdfs.append(reassign_gdf_communal_networked(cells_gdf))
 
-    clusters_gdf = pd.concat(gdfs)
+    clusters_gdf = pd.concat(gdfs).dissolve(by="tech").explode()[["tech", "geometry"]]
