@@ -65,9 +65,9 @@ class CalculateGardenSizeFlow(FlowSpec):
         from asf_heat_pump_suitability.utils import parallel_utils
         from asf_heat_pump_suitability.pipeline.prepare_features import (
             building_footprint,
-            garden_size,
             lat_lon,
         )
+        from asf_heat_pump_suitability.pipeline.transform import outdoor_space
 
         logging.info("Load EPC UPRNs")
         epc_df = pl.read_parquet(self.epc, columns=["UPRN"])
@@ -86,7 +86,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         microsoft_file_bounds = building_footprint.transform_df_uk_dataset_links()
 
         # Match land extent files with overlapping building footprint files
-        file_matches = garden_size.match_series_files_land_building(
+        file_matches = outdoor_space.match_series_files_land_building(
             land_files_gdf=land_file_bounds, building_files_gdf=microsoft_file_bounds
         )
 
@@ -120,9 +120,9 @@ class CalculateGardenSizeFlow(FlowSpec):
         import polars as pl
         from asf_heat_pump_suitability.pipeline.prepare_features import (
             building_footprint,
-            garden_size,
             land_extent,
         )
+        from asf_heat_pump_suitability.pipeline.transform import outdoor_space
 
         prev = None
         self.epc_gardens = []
@@ -151,13 +151,13 @@ class CalculateGardenSizeFlow(FlowSpec):
                 )
 
                 # Get intersection of building footprint polygons and land polygons
-                intersection_gdf = garden_size.generate_gdf_land_building_overlay(
+                intersection_gdf = outdoor_space.generate_gdf_building_intersections(
                     land_parcels_gdf=land_parcels_gdf,
                     building_footprints_gdf=building_footprints_gdf,
                 )
 
                 # Get garden size
-                gardens_gdf = garden_size.generate_gdf_garden_size(
+                gardens_gdf = outdoor_space.generate_gdf_outdoor_space(
                     intersection_gdf, land_parcels_gdf
                 )
                 gardens_gdf = gardens_gdf.assign(
@@ -208,7 +208,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         """
         import polars as pl
         from asf_heat_pump_suitability.utils import save_utils
-        from asf_heat_pump_suitability.pipeline.prepare_features import garden_size
+        from asf_heat_pump_suitability.pipeline.transform import outdoor_space
 
         save_as = f"s3://asf-heat-pump-suitability/outputs/{self.year}Q{self.quarter}/gardens/{self.year}_Q{self.quarter}_EPC_garden_size_estimates_{self.nations.upper()}.parquet"
         if self.sample:
@@ -218,7 +218,7 @@ class CalculateGardenSizeFlow(FlowSpec):
         self.epc_gardens_df = self.epc_gardens_df.with_columns(
             pl.col(pl.Float64).round(2)
         )
-        self.epc_gardens_df = garden_size.deduplicate_df_garden_size(
+        self.epc_gardens_df = outdoor_space.deduplicate_df_outdoor_space(
             self.epc_gardens_df
         )
 

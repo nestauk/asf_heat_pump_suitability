@@ -7,6 +7,7 @@ import shapely
 
 from shapely.geometry.base import BaseGeometry
 from shapely import wkb
+from asf_heat_pump_suitability import config
 
 
 def transform_gdf_drop_duplicates(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -71,3 +72,23 @@ def parse_binary_geometry(
         return wkb.loads(binary_data, hex=True)
     else:
         return None
+
+
+def verify_gdf_crs(
+    gdf: gpd.GeoDataFrame, target_crs: str | int = config["constant"]["target_crs"]
+) -> gpd.GeoDataFrame:
+    """
+    Verify GeoDataFrame uses the defined target CRS. If not, convert to target CRS.
+
+    Args:
+        gdf (gpd.GeoDataFrame): geodataset to check CRS of
+        target_crs (str|int): target CRS. Defaults to target CRS defined in config base.yaml
+
+    Returns:
+        gpd.GeoDataFrame: geodataset in target CRS
+    """
+    if gdf.crs != target_crs:
+        print(f"Converting GeoDataFrame to target CRS: {target_crs}")
+        return gdf.to_crs(target_crs)
+    else:
+        return gdf

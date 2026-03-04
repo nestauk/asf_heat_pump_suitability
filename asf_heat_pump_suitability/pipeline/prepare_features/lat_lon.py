@@ -1,6 +1,6 @@
 import polars as pl
 import geopandas as gpd
-from asf_heat_pump_suitability.getters import get_datasets
+from asf_heat_pump_suitability.getters import load_geodata
 
 
 def transform_df_osopen_uprn_latlon() -> pl.DataFrame:
@@ -10,7 +10,7 @@ def transform_df_osopen_uprn_latlon() -> pl.DataFrame:
     Returns:
         pl.DataFrame: OS Open UPRN dataset with UPRN column in same format as in EPC
     """
-    df = get_datasets.get_df_osopen_uprn_latlon()
+    df = load_geodata.load_df_osopen_uprn()
     # Following line required to convert UPRNs to same format as in EPC
     df = df.with_columns(pl.col("UPRN").cast(pl.Float64).cast(pl.String).alias("UPRN"))
 
