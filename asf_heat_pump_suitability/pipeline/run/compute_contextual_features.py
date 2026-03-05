@@ -252,7 +252,7 @@ if __name__ == "__main__":
 
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet"
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_residential_uprns_with_features.parquet"
     )
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
 
