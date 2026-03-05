@@ -279,7 +279,6 @@ if __name__ == "__main__":
 
     args = parse_arguments()
 
-    # Load UPRNs
     print("Loading Plymouth domestic UPRNs...")
     uprns_df = pl.read_parquet(args.uprns)
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
@@ -291,11 +290,9 @@ if __name__ == "__main__":
         hnz_gdf[["UPRN", "in_hn_zone", "in_city_centre"]], how="left", on="UPRN"
     )
 
-    # Load EPC
     print("Loading deduplicated EPC data...")
     raw_epc_df = pl.read_parquet(args.epc)
 
-    # Load opportunity areas
     print("Loading opportunity areas...")
     areas_gdf = gpd.read_file(args.opportunity_areas).to_crs(epsg=27700)
 
@@ -303,21 +300,17 @@ if __name__ == "__main__":
     epc_df = process_df_epc_data(raw_epc_df)
 
     print("Joining EPC data to UPRNs...")
-    # Add EPC data to UPRNs
     uprns_gdf = join_df_epc_to_uprns(uprns_gdf, epc_df)
 
     print("Filtering to opportunity areas...")
-    # Filter to UPRNs which are in opportunity areas
     opportunity_areas_df = filter_df_uprns_to_opportunity_areas(uprns_gdf, areas_gdf)
 
     print("Calculate value counts per feature...")
-    # Calculate value counts per opportunity area for relevant features
     opportunity_areas_df = calculate_df_dummy_feature_value_counts_per_opportunity_area(
         opportunity_areas_df
     )
 
     print("Calculate remaining features per opportunity area...")
-    # Calculate remaining features per opportunity area
     opportunity_areas_df = create_df_remaining_features_per_opportunity_area(
         opportunity_areas_df, uprns_gdf
     )
@@ -331,8 +324,8 @@ if __name__ == "__main__":
 
         # Saving as EPSG:4326 because we need lat/long for visualisation
         opportunity_areas_df = gpd.GeoDataFrame(
-            opportunity_areas_df, geometry="geometry", crs="EPSG:4326"
-        )
+            opportunity_areas_df, geometry="geometry", crs="EPSG:27700"
+        ).to_crs(epsg=4326)
 
         opportunity_areas_df.to_file(
             args.save_path,
