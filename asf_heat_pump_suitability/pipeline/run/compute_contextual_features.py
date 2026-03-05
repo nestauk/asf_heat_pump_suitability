@@ -2,11 +2,14 @@
 Script to compute contextual information for opportunity areas/clusters, e.g. property type, tenure, EPC rating, etc.
 
 Run:
-python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --uprns path/to/domestic/UPRNs --epc path/to/deduplicated/EPC --opportunity_areas path/to/opportunity/areas.geojson --save --save_path path/to/save/output.csv
+python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
+
+LOCAL_AUTHORITIES should be one of the options specified in base.yaml's `constant` section, e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.
+
+Add --save to save the output to S3 as a geojson with geometry and contextual features per opportunity area/cluster.
 """
 
 import argparse
-from importlib.resources import path
 import polars as pl
 import geopandas as gpd
 
@@ -20,48 +23,18 @@ def parse_arguments() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser()
 
-    # TODO this is a placeholder and likely to change as the script develops
     parser.add_argument(
-        "--uprns",
-        help="Path to domestic UPRN dataset with X and Y coordinates in parquet.",
+        "--local_authorities",
+        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
-        required=False,
-        default="s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns_with_features.parquet",
+        required=True,
     )
 
-    parser.add_argument(
-        "--hnz",
-        help="Path to domestic UPRN dataset with heat network zone information in parquet.",
-        type=str,
-        required=False,
-        default="s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns_with_hn_zones_city_centres.parquet",
-    )
-    parser.add_argument(
-        "--epc",
-        help="Path to deduplicated EPC dataset in parquet.",
-        type=str,
-        required=False,
-        default="s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet",
-    )
-
-    parser.add_argument(
-        "--opportunity_areas",
-        help="Path to opportunity areas dataset in kml or geojson format.",
-        type=str,
-        required=False,
-        default="s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_tech_polygons_with_clusterID.geojson",
-    )
     parser.add_argument(
         "--save",
         help="Whether to save the output to S3.",
         action="store_true",
         default=False,
-    )
-    parser.add_argument(
-        "--save_path",
-        help="Path to save the output geojson with contextual information per opportunity area.",
-        type=str,
-        default="s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth/plymouth_cluster_contextual_features.geojson",
     )
 
     return parser.parse_args()
@@ -272,18 +245,21 @@ def create_df_remaining_features_per_opportunity_area(
 
 
 if __name__ == "__main__":
-    import polars as pl
-    import geopandas as gpd
-    from asf_heat_pump_suitability.utils import save_utils
     from asf_heat_pump_suitability.pipeline.transform import uprns
 
     args = parse_arguments()
+    local_authorities = args.local_authorities
 
-    print("Loading Plymouth domestic UPRNs...")
-    uprns_df = pl.read_parquet(args.uprns)
+    print(f"Loading {local_authorities} domestic UPRNs...")
+    uprns_df = pl.read_parquet(
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet"
+    )
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
 
-    hnz_df = pl.read_parquet(args.hnz)
+    print(f"Loading {local_authorities} HN zone and city centre information...")
+    hnz_df = pl.read_parquet(
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet"
+    )
     hnz_gdf = uprns.generate_gdf_uprn_coords(hnz_df).to_crs(epsg=27700)
 
     uprns_gdf = uprns_gdf.merge(
@@ -291,10 +267,15 @@ if __name__ == "__main__":
     )
 
     print("Loading deduplicated EPC data...")
-    raw_epc_df = pl.read_parquet(args.epc)
+    # TODO change code so that it defaults to getting latest data
+    raw_epc_df = pl.read_parquet(
+        "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
+    )
 
     print("Loading opportunity areas...")
-    areas_gdf = gpd.read_file(args.opportunity_areas).to_crs(epsg=27700)
+    areas_gdf = gpd.read_file(
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_tech_polygons_with_clusterID.geojson"
+    ).to_crs(epsg=27700)
 
     print("Processing EPC data...")
     epc_df = process_df_epc_data(raw_epc_df)
@@ -328,6 +309,6 @@ if __name__ == "__main__":
         ).to_crs(epsg=4326)
 
         opportunity_areas_df.to_file(
-            args.save_path,
+            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_cluster_contextual_features.geojson",
             driver="GeoJSON",
         )
