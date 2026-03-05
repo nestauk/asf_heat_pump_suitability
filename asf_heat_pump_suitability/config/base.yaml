@@ -6,6 +6,8 @@ data:
     gb_os_openmap_local: "s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares
     grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+    # OpenMap Green space layers for certain grid squares
+    grid_square_os_openmap_greenspace: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/{square}/{square}_{layer}.shp"
 
     boundaries:
       # UK LA boundaries
@@ -65,15 +67,15 @@ constant:
   plymouth: "plymouth"
   target_crs: 27700 # British National Grid
   tech_types:
-    individual: "Individual solutions"
-    N_GSHP: "Networked heat pumps"
+    individual: "Individual solution"
+    N_GSHP: "Networked GSHP"
     communal: "Communal solutions"
-    heat_networks: "District heat networks"
+    heat_networks: "District heat network"
 output:
   save_as:
     model:
       block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"
-    tech_clusters: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/{}_clustered_tech_polygons.geojson"
+    tech_clusters: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_clustered_tech_polygons.geojson"
 
 data_source:
   gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
