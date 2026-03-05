@@ -261,6 +261,7 @@ def create_df_remaining_features_per_opportunity_area(
         "n_uprns_off_gas",
         "near_coast_line",
         "near_anchor_load",
+        "in_conservation_area",
     ]
 
     opportunity_areas_df = opportunity_areas_df.with_columns(
