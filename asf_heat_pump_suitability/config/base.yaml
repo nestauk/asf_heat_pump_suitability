@@ -64,6 +64,11 @@ constant:
     - "Plymouth"
   plymouth: "plymouth"
   target_crs: 27700 # British National Grid
+  tech_types:
+    individual: "Individual solutions"
+    N_GSHP: "Networked heat pumps"
+    communal: "Communal solutions"
+    heat_networks: "District heat networks"
 output:
   save_as:
     model:
