@@ -119,11 +119,11 @@ def load_gdf_spatial_signatures_gb(
     return gdf
 
 
-def load_gdf_os_openmap_local_layer(
+def load_gdf_os_openmap_layer(
     layer: str, grid_squares: Optional[List[str]] = None, **kwargs
 ) -> gpd.GeoDataFrame:
     """
-    Load specified OS OpenMap Local layer for Great Britain or optionally for a specific grid square. CRS British National Grid (27700).
+    Load specified OS OpenMap Local or Greenspace layer for Great Britain or optionally for a specific grid square. CRS British National Grid (27700).
 
     Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
 
@@ -139,6 +139,7 @@ def load_gdf_os_openmap_local_layer(
         'foreshore',
         'functional_site',
         'glasshouse',
+        'greenspace_site',
         'important_building',
         'motorway_junction',
         'named_place',
@@ -158,6 +159,11 @@ def load_gdf_os_openmap_local_layer(
         gpd.GeoDataFrame: OS OpenMap Local geometries for specified layer
     """
     if not grid_squares:
+        if layer == "greenspace_site":
+            raise ValueError(
+                "Greenspace site not implemented for GB yet. Please select a grid square."
+            )
+
         print(f"Loading OS OpenMap Local - {layer.title()}...")
         return gpd.read_file(
             filename=config["data"]["geodata"]["gb_os_openmap_local"],
@@ -168,15 +174,27 @@ def load_gdf_os_openmap_local_layer(
     else:
         if not isinstance(grid_squares, List):
             grid_squares = [grid_squares]
+
         # Reformat layer name to how it appears in file name
-        layer = layer.replace("_", " ").title().replace(" ", "")
-        file_path = config["data"]["geodata"]["grid_square_os_openmap_local"]
+        if layer in ["surface_water_area", "surface_water_line"]:
+            layer = "_".join(["SurfaceWater", layer[-4:].title()])
+        else:
+            layer = layer.replace("_", " ").title().replace(" ", "")
+
+        if layer == "GreenspaceSite":
+            file_path = config["data"]["geodata"]["grid_square_os_openmap_greenspace"]
+        else:
+            file_path = config["data"]["geodata"]["grid_square_os_openmap_local"]
+
         files = [file_path.format(square=code, layer=layer) for code in grid_squares]
 
         gdfs = []
 
         for file in files:
-            print(f"\nLoading OS OpenMap Local - {layer.title()} file: {file}")
+            print(f"\nLoading OS OpenMap layer - {layer.title()} file: {file}")
             gdfs.append(gpd.read_file(file, **kwargs))
 
-        return pd.concat(gdfs).drop_duplicates(subset="ID")
+        gdf = pd.concat(gdfs)
+        id_col = "ID" if "ID" in gdf.columns else "id"
+
+        return gdf.drop_duplicates(subset=[id_col, "geometry"])
