@@ -196,7 +196,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--save",
         help="If --save is set, it saves outputs to S3.",
-        type=bool,
         required=False,
         action="store_true",
     )
