@@ -20,6 +20,7 @@ import shapely
 from shapely.geometry import MultiPoint, Polygon, MultiPolygon
 import libpysal
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
 N_GSHP = config["constant"]["tech_types"]["N_GSHP"]
@@ -301,6 +302,10 @@ def parse_arguments() -> argparse.Namespace:
         required=False,
     )
 
+    parser.add_argument(
+        "--save", help="Set to save output GeoDataFrame to S3.", action="store_true"
+    )
+
     return parser.parse_args()
 
 
@@ -345,3 +350,9 @@ if __name__ == "__main__":
         .dissolve(by="assigned_tech")
         .explode()[["assigned_tech", "geometry"]]
     )
+
+    if args.save:
+        save_utils.save_to_s3(
+            clusters_gdf,
+            config["output"]["save_as"]["tech_clusters"].format(args.local_authorities),
+        )
