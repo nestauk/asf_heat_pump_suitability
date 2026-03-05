@@ -136,7 +136,10 @@ def join_df_epc_to_uprns(
     keep_cols = ["UPRN", "ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
     uprns_gdf = uprns_gdf.merge(
         epc_df.select(keep_cols).to_pandas(), how="left", on="UPRN"
-    ).fillna("Unknown")
+    )
+
+    # Only fill with Unknown for cols in keep_cols
+    uprns_gdf[keep_cols] = uprns_gdf[keep_cols].fillna("Unknown")
 
     return uprns_gdf
 
@@ -168,7 +171,7 @@ def filter_df_uprns_to_opportunity_areas(
     return opportunity_areas_df
 
 
-def calculate_df_value_counts_per_opportunity_area(
+def calculate_df_dummy_feature_value_counts_per_opportunity_area(
     opportunity_areas_df: pl.DataFrame,
 ) -> pl.DataFrame:
     """
@@ -219,8 +222,15 @@ def create_df_remaining_features_per_opportunity_area(
         pl.DataFrame: dataframe with remaining features per opportunity area
     """
 
+    # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with opportunity area geodataframe
+    uprns_df = pl.from_pandas(
+        uprns_gdf.sjoin(
+            areas_gdf[["cluster_id", "geometry"]], how="left", predicate="within"
+        ).drop(columns=["geometry"])
+    )
+
     # Average contigous outdoor space per opportunity area
-    avg_outdoor_space = uprns_gdf.group_by("cluster_id").agg(
+    avg_outdoor_space = uprns_df.group_by("cluster_id").agg(
         pl.col("max_contiguous_outdoor_space_area_m2").mean().alias("avg_outdoor_space")
     )
 
@@ -230,7 +240,7 @@ def create_df_remaining_features_per_opportunity_area(
     )
 
     # Create HN zone and city centre flags per opportunity area - if any UPRN within the area is in a HN zone or city centre, then the whole area is flagged as being in a HN zone or city centre
-    hnz_city_centre_flags = uprns_gdf.group_by("cluster_id").agg(
+    hnz_city_centre_flags = uprns_df.group_by("cluster_id").agg(
         pl.when(pl.col("in_hn_zone").any())
         .then(pl.lit("Yes"))
         .otherwise(pl.lit("No"))
@@ -246,10 +256,16 @@ def create_df_remaining_features_per_opportunity_area(
     )
 
     # TODO add remaining features - the section below is temporary
-    opportunity_areas_df["n_uprns_listed_building"] = "Unknown"
-    opportunity_areas_df["n_uprns_off_gas"] = "Unknown"
-    opportunity_areas_df["near_coast_line"] = "Unknown"
-    opportunity_areas_df["near_anchor_load"] = "Unknown"
+    new_cols = [
+        "n_uprns_listed_building",
+        "n_uprns_off_gas",
+        "near_coast_line",
+        "near_anchor_load",
+    ]
+
+    opportunity_areas_df = opportunity_areas_df.with_columns(
+        [pl.lit("Unknown").alias(col) for col in new_cols]
+    )
 
     return opportunity_areas_df
 
@@ -295,7 +311,7 @@ if __name__ == "__main__":
 
     print("Calculate value counts per feature...")
     # Calculate value counts per opportunity area for relevant features
-    opportunity_areas_df = calculate_df_value_counts_per_opportunity_area(
+    opportunity_areas_df = calculate_df_dummy_feature_value_counts_per_opportunity_area(
         opportunity_areas_df
     )
 
