@@ -1,3 +1,4 @@
+import fsspec
 import s3fs
 import polars as pl
 import geopandas as gpd
@@ -56,14 +57,13 @@ def save_to_s3(df: pl.DataFrame | gpd.GeoDataFrame, path: str) -> None:
             )
     elif isinstance(df, gpd.GeoDataFrame):
         if file_type == "parquet":
-            with fs.open(path=path, mode="wb") as f:
-                df.to_parquet(f)
+            df.to_parquet(path)
         elif file_type == "geojson":
             df = df.to_crs(epsg=4326)
-            with fs.open(path=path, mode="wb") as f:
-                df.to_file(f)
+            with fsspec.open(path, "w") as f:
+                f.write(df.to_json())
         else:
-            with fs.open(path=path, mode="wb") as f:
+            with fsspec.open(path, "wb") as f:
                 df.to_file(f)
     else:
         with fs.open(path=path, mode="wb") as f:
