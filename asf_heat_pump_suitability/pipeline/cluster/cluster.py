@@ -1,5 +1,5 @@
 """
-Functions to create dissolved polygon clusters where one cluster:
+Functions to generate clusters of building footprints, where one cluster:
 - Contains buildings which are assigned the same tech type
 - Contains buildings which are not separated by physical environmental barriers
 
@@ -27,6 +27,55 @@ N_GSHP = config["constant"]["tech_types"]["N_GSHP"]
 COMMUNAL = config["constant"]["tech_types"]["communal"]
 
 
+def generate_gdf_clusters(
+    buildings_gdf: gpd.GeoDataFrame,
+    boundary_gdf: gpd.GeoDataFrame,
+    tech_gdf: gpd.GeoDataFrame,
+    line_overlay_gdf: gpd.GeoDataFrame,
+    polygon_overlay_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """
+    Generate clusters of building footprints, where one cluster:
+    - Contains buildings which are assigned the same tech type
+    - Contains buildings which are not separated by physical environmental barriers
+
+    Args:
+        buildings_gdf (gpd.GeoDataFrame): building footprint polygons with `assigned_tech` column to cluster.
+        boundary_gdf (gpd.GeoDataFrame): boundaries of Local Authorities to generate clusters for.
+        tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
+        line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries to separate clusters by.
+        polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
+
+    Returns:
+        gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster
+    """
+    gdfs = []
+
+    # Create Voronoi polygons and overlay physical barriers
+    for boundary in boundary_gdf["geometry"].unique():
+        voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
+        cells_gdf = overlay_gdf_physical_barriers(
+            voronoi_gdf=voronoi_gdf,
+            tech_gdf=tech_gdf,
+            line_overlay_gdf=line_overlay_gdf,
+            polygon_overlay_gdf=polygon_overlay_gdf,
+        )
+        gdfs.append(reassign_gdf_communal_networked(cells_gdf))
+
+    # Generate final clusters
+    if len(gdfs) > 1:
+        clusters_gdf = pd.concat(gdfs)
+    else:
+        clusters_gdf = gdfs[0]
+
+    # TODO add ID column for clusters
+    return (
+        clusters_gdf.dissolve(by="assigned_tech")
+        .explode()
+        .reset_index()[["assigned_tech", "geometry"]]
+    )
+
+
 def extend_edges_gdf(
     gdf: gpd.GeoDataFrame,
     boundary: shapely.Polygon | shapely.MultiPolygon,
@@ -45,7 +94,7 @@ def extend_edges_gdf(
     Returns:
         gpd.GeoDataFrame: Voronoi polygons around the original input polygons. One row per original polygon.
     """
-    # TODO - deal with buildings that cross boundaries
+    # TODO deal with buildings that cross boundaries
     # Ensure all buildings are within the boundary
     gdf = gdf[gdf.within(boundary)]
 
@@ -165,10 +214,10 @@ def load_tranform_gdf_linestring_barriers(
         gpd.GeoDataFrame: physical barriers with (Multi)LineString geometries
     """
     # Linestrings
-    roads_gdf = load_geodata.load_gdf_os_openmap_local_layer(
+    roads_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="road", grid_squares=grid_squares
     )
-    railways_gdf = load_geodata.load_gdf_os_openmap_local_layer(
+    railways_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="railway_track", grid_squares=grid_squares
     )
 
@@ -212,19 +261,19 @@ def load_transform_gdf_polygon_barriers(
         gpd.GeoDataFrame: physical barriers with (Multi)Polygon geometries
     """
     # Polygons
-    forest_gdf = load_geodata.load_gdf_os_openmap_local_layer(
+    forest_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="woodland", grid_squares=grid_squares
     )
 
-    # TODO - remove hard coding
-    greenspace_gdf = gpd.read_file(
-        "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/SX/SX_GreenspaceSite.shp"
-    )
-    surface_water_gdf = gpd.read_file(
-        "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/SX/SX_SurfaceWater_Area.shp"
+    greenspace_gdf = load_geodata.load_gdf_os_openmap_layer(
+        layer="greenspace_site", grid_squares=grid_squares
     )
 
-    tidal_water_gdf = load_geodata.load_gdf_os_openmap_local_layer(
+    surface_water_gdf = load_geodata.load_gdf_os_openmap_layer(
+        layer="surface_water_area", grid_squares=grid_squares
+    )
+
+    tidal_water_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="tidal_water", grid_squares=grid_squares
     )
 
@@ -270,10 +319,15 @@ def reassign_gdf_communal_networked(
     )
 
     # Get gdf of remaining tech types to concatenate reassigned data to
-    other_tech_gdf = gdf[~gdf["assigned_tech"].isin([n_gshp, communal])].reset_index()
+    other_tech_gdf = gdf[~gdf["assigned_tech"].isin([n_gshp, communal])].reset_index(
+        drop=True
+    )
 
     return pd.concat(
-        [other_tech_gdf, shared_tech_gdf.drop(columns="components").reset_index()]
+        [
+            other_tech_gdf,
+            shared_tech_gdf.drop(columns="components").reset_index(drop=True),
+        ]
     )
 
 
@@ -314,7 +368,7 @@ if __name__ == "__main__":
     args = parse_arguments()
     tech_gdf = (
         gpd.read_file(args.tech_gdf).to_crs(config["constant"]["target_crs"])
-        # TODO - rename column in original dataframe
+        # TODO rename column in original dataframe
         .rename(columns={"1st_most_suitable_solution": "assigned_tech"})
     )
     grid_squares = config["constant"]["grid_squares"][args.local_authorities]
@@ -322,7 +376,7 @@ if __name__ == "__main__":
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
         select_las=config["constant"][args.local_authorities]
     )
-    buildings_gdf = load_geodata.load_gdf_os_openmap_local_layer(
+    buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares
     )
 
@@ -330,29 +384,19 @@ if __name__ == "__main__":
     line_overlay_gdf = load_tranform_gdf_linestring_barriers(grid_squares)
     polygon_overlay_gdf = load_transform_gdf_polygon_barriers(grid_squares)
 
-    gdfs = []
-
-    # Create Voronoi polygons and overlay physical barriers
-    for boundary in boundary_gdf["geometry"].unique():
-        voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
-        cells_gdf = overlay_gdf_physical_barriers(
-            voronoi_gdf=voronoi_gdf,
-            tech_gdf=tech_gdf,
-            line_overlay_gdf=line_overlay_gdf,
-            polygon_overlay_gdf=polygon_overlay_gdf,
-        )
-        gdfs.append(reassign_gdf_communal_networked(cells_gdf))
-
-    # Generate final clusters
-    # TODO - add ID column for clusters
-    clusters_gdf = (
-        pd.concat(gdfs)
-        .dissolve(by="assigned_tech")
-        .explode()[["assigned_tech", "geometry"]]
+    # Generate clusters
+    clusters_gdf = generate_gdf_clusters(
+        buildings_gdf=buildings_gdf,
+        boundary_gdf=boundary_gdf,
+        tech_gdf=tech_gdf,
+        line_overlay_gdf=line_overlay_gdf,
+        polygon_overlay_gdf=polygon_overlay_gdf,
     )
 
     if args.save:
         save_utils.save_to_s3(
             clusters_gdf,
-            config["output"]["save_as"]["tech_clusters"].format(args.local_authorities),
+            config["output"]["save_as"]["tech_clusters"].format(
+                local_authorities=args.local_authorities
+            ),
         )
