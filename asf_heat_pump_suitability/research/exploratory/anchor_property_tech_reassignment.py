@@ -1,3 +1,8 @@
+# %% [markdown]
+# ## Anchor Property Tech Reassignment
+#
+# notebook to find buildings within a specified distance of an anchor proprty, reassign their tech type as communal and visualise the results
+
 # %%
 import numpy as np
 import pandas as pd
@@ -16,6 +21,8 @@ from asf_heat_pump_suitability.getters import load_tree_input
 building_footprints = load_tree_input.load_gdf_os_openmap_local_layer(
     layer="building", grid_squares="SX"
 )
+
+# anchor properties list contains POI buildings filtered by building type, see below for list of categories
 anchor_properties = gpd.read_file(
     "s3://asf-heat-pump-suitability/dump/hack_day/anchor_properties_gb.geojson"
 ).to_crs(27700)
@@ -27,7 +34,15 @@ important_buildings = load_tree_input.load_gdf_os_openmap_local_layer(
 )
 
 # %%
-# categories in important building list that could be anchors
+# for reference, these are all the anchor property categories in the POI based list
+anchor_properties["main_category"].unique()
+
+# %%
+# these are all possible building type categories in the OS important building layer
+important_buildings["CLASSIFICA"].unique()
+
+# %%
+# now filter to categories in important building layer that could be anchor properties
 anchor_categories = [
     "Primary Education",
     "Museum",
@@ -90,6 +105,7 @@ anchors_with_footprint = (
 all_anchors_with_footprint = pd.concat(
     [anchors_with_footprint, important_buildings_filtered]
 )
+all_anchors_with_footprint["geometry"] = all_anchors_with_footprint.normalize()
 all_anchors_with_footprint = all_anchors_with_footprint.drop_duplicates(["geometry"])
 
 # %%
@@ -101,31 +117,38 @@ def assign_communal_solutions(
 ) -> gpd.GeoDataFrame:
     """
     Finds nearest anchors and reassigns tech type to 'Communal' if within radius.
+    Args:
+        tech_gdf (gpd.GeodataFrame): dataframe with most suitable tech types assigned to residential buildings
+        anchors_gdf (gpd.GeodataFrame): dataframe with anchor properties
+        radius (float): max distance from anchor property to reassign tech types
+    Returns:
+        dataframe of residential buildings that have had their tech type reassigned, with columns for old tech type, corresponding anchor property geometry and distance from anchor added
+
     """
     # Preserve original geometry for distance calculation after join
     anchors_gdf["anchor_geometry"] = anchors_gdf.geometry
 
     # Spatial join to find nearest anchor for every building
-    nearest = tech_gdf.sjoin_nearest(anchors_gdf, how="left")
-    nearest["distance"] = nearest["geometry"].distance(nearest["anchor_geometry"])
-
-    # Apply reassignment logic
-    reassigned_tech = (nearest[nearest["distance"] < radius]).replace(
-        tech_mapping, inplace=False
+    reassigned_tech = tech_gdf.sjoin_nearest(
+        anchors_gdf, how="left", max_distance=radius, distance_col="distance_m"
     )
-    # save previous tech type for visualisation
-    reassigned_tech["old_tech"] = nearest[nearest["distance"] < radius][
-        "1st_most_suitable_solution"
-    ]
+
+    # save old tech type in a column
+    reassigned_tech["old_tech"] = reassigned_tech["1st_most_suitable_solution"]
+
+    # replace tech types fro buildings < max radius away from an anchor
+    reassigned_tech = (
+        reassigned_tech[(reassigned_tech["distance_m"]).notna()]
+    ).replace({"1st_most_suitable_solution": tech_mapping})
 
     return reassigned_tech
 
 
 # %%
 # set anchor_radius as the radius around the anchor you want to change to communal
-anchor_radius = 100
+anchor_radius = 50
 reassigned_tech = assign_communal_solutions(
-    tech_types, all_anchors_with_footprint, anchor_radius
+    tech_gdf=tech_types, anchors_gdf=all_anchors_with_footprint, radius=anchor_radius
 )
 
 # %%
@@ -137,22 +160,24 @@ def dissolve_techs_and_plot_folium(
     reassigned_tech: gpd.GeoDataFrame,
     anchor_properties_with_footprint: gpd.GeoDataFrame,
     important_building_anchors: gpd.GeoDataFrame,
+    tech_to_plot: str,
     colours: dict = COLOURS,
 ):
     """
     Plot the resulting polygons together for each tech type in Folium.
 
     Args:
-        gdf (gpd.GeoDataFrame): dataframe with polygons to dissolve and plot and tech labels
+        reassigned_tech (gpd.GeoDataFrame): dataframe with polygons to dissolve and plot and tech labels
+        anchor_properties_with_footprints (gpd.GeoDataFrame): dataframe with polygons of anchor properties from POI data
+        important_building_anchors (gpd.GeoDataFrame): dataframe with polygons of anchor properties from important buildings lists
+        tech_to_plot (str): choose to plot either reassigned or old tech types
         colours (dict): tech type labels and their corresponding colours for plotting
 
     Returns Folium map
     """
     # Dissolve by tech type
-    dissolved_gdf = reassigned_tech.dissolve(
-        by="1st_most_suitable_solution"
-    ).reset_index()
-    dissolved_gdf["colour"] = dissolved_gdf["1st_most_suitable_solution"].map(colours)
+    dissolved_gdf = reassigned_tech.dissolve(by=tech_to_plot).reset_index()
+    dissolved_gdf["colour"] = dissolved_gdf[tech_to_plot].map(colours)
 
     # Convert dissolved tech polygons and buildings to EPSG 4326 for plotting
     dissolved_4326_gdf = dissolved_gdf.to_crs(epsg=4326)
@@ -171,7 +196,7 @@ def dissolve_techs_and_plot_folium(
     )
 
     for _, r in dissolved_4326_gdf.iterrows():
-        colour = colours[r["1st_most_suitable_solution"]]
+        colour = colours[r[tech_to_plot]]
         sim_geo = gpd.GeoSeries(r["geometry"])
         geo_j = sim_geo.to_json()
         geo_j = folium.GeoJson(
@@ -191,7 +216,7 @@ def dissolve_techs_and_plot_folium(
         geo_j = folium.GeoJson(
             data=geo_j,
             style_function=lambda x: {
-                "color": "blue",
+                "color": "purple",
                 "weight": 0.1,
                 "fillOpacity": 0.66,
             },
@@ -219,7 +244,57 @@ def dissolve_techs_and_plot_folium(
 # %%
 # click on the building to see either building type or previous tech type
 dissolve_techs_and_plot_folium(
-    reassigned_tech, anchors_with_footprint, important_buildings_filtered, COLOURS
+    reassigned_tech=reassigned_tech,
+    anchor_properties_with_footprint=anchors_with_footprint,
+    important_building_anchors=important_buildings_filtered,
+    tech_to_plot="1st_most_suitable_solution",
+    colours=COLOURS,
+)
+
+# %%
+# just buildings that are assigned 'communal'
+mask = (reassigned_tech["distance_m"].notna()) & (
+    reassigned_tech["1st_most_suitable_solution"] == "Communal solutions"
+)
+dissolve_techs_and_plot_folium(
+    reassigned_tech=reassigned_tech[mask],
+    anchor_properties_with_footprint=anchors_with_footprint,
+    important_building_anchors=important_buildings_filtered,
+    tech_to_plot="1st_most_suitable_solution",
+    colours=COLOURS,
+)
+
+# %%
+dissolve_techs_and_plot_folium(
+    reassigned_tech=reassigned_tech[mask],
+    anchor_properties_with_footprint=anchors_with_footprint,
+    important_building_anchors=important_buildings_filtered,
+    tech_to_plot="old_tech",
+    colours=COLOURS,
+)
+
+# %% [markdown]
+# ## Value counts and proportion data
+
+# %%
+# all buildings that have been reassigned as communal- what tech type did they have before?
+(
+    reassigned_tech[
+        reassigned_tech["1st_most_suitable_solution"] != reassigned_tech["old_tech"]
+    ]
+)["old_tech"].value_counts(dropna=False)
+
+# %%
+proportion_reassigned = (
+    len(
+        reassigned_tech[
+            reassigned_tech["1st_most_suitable_solution"] != reassigned_tech["old_tech"]
+        ]
+    )
+    / len(tech_types)
+) * 100
+print(
+    f"Proportion of buildings which have been reassigned tech type to communal: {proportion_reassigned:.2f}%"
 )
 
 # %%
