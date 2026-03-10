@@ -40,7 +40,7 @@ def generate_gdf_clusters(
     - Contains buildings which are not separated by physical environmental barriers
 
     Args:
-        buildings_gdf (gpd.GeoDataFrame): building footprint polygons with `assigned_tech` column to cluster.
+        buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
         boundary_gdf (gpd.GeoDataFrame): boundaries of Local Authorities to generate clusters for.
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries to separate clusters by.
