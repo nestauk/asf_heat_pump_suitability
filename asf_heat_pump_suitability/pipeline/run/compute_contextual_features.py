@@ -73,7 +73,7 @@ def process_df_epc_data(epc_df: pl.DataFrame) -> pl.DataFrame:
             pl.col("BUILT_FORM").cast(pl.String),
         )
         .with_columns(
-            # Reassign enclosed terrace categories and set 'flat' as an attachment type
+            # Reassign enclosed terrace categories
             pl.when(pl.col("BUILT_FORM") == "Enclosed Mid-Terrace")
             .then(pl.lit("Mid-Terrace"))
             .when(pl.col("BUILT_FORM") == "Enclosed End-Terrace")
@@ -186,11 +186,20 @@ def create_df_remaining_features_per_opportunity_area(
 ) -> pl.DataFrame:
     """
     Create dataframe with remaining features per opportunity area:
-    - Average garden size
-    - etc
+    - Median garden size
+    - HN zone flag
+    - City centre flag
+    TODO Remaining features to be added in future iterations (now set to `Unknown`):
+        - number of listed buildings
+        - number of off-gas properties
+        - proximity to coastline
+        - proximity to anchor load
+        - conservation area flag
+
 
     Args:
         opportunity_areas_df (pl.DataFrame): dataframe with value counts per opportunity area for relevant features
+        uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs with geometry and relevant features
     Returns:
         pl.DataFrame: dataframe with remaining features per opportunity area
     """
@@ -203,13 +212,15 @@ def create_df_remaining_features_per_opportunity_area(
     )
 
     # Average contigous outdoor space per opportunity area
-    avg_outdoor_space = uprns_df.group_by("cluster_id").agg(
-        pl.col("max_contiguous_outdoor_space_area_m2").mean().alias("avg_outdoor_space")
+    median_outdoor_space = uprns_df.group_by("cluster_id").agg(
+        pl.col("max_contiguous_outdoor_space_area_m2")
+        .median()
+        .alias("median_outdoor_space")
     )
 
-    # Join total UPRN counts onto value counts
+    # Join outdoor space to opportunity areas
     opportunity_areas_df = opportunity_areas_df.join(
-        avg_outdoor_space, how="left", on="cluster_id"
+        median_outdoor_space, how="left", on="cluster_id"
     )
 
     # Create HN zone and city centre flags per opportunity area - if any UPRN within the area is in a HN zone or city centre, then the whole area is flagged as being in a HN zone or city centre
@@ -284,7 +295,9 @@ if __name__ == "__main__":
     uprns_gdf = join_df_epc_to_uprns(uprns_gdf, epc_df)
 
     print("Filtering to opportunity areas...")
-    opportunity_areas_df = filter_df_uprns_to_opportunity_areas(uprns_gdf, areas_gdf)
+    opportunity_areas_df = filter_df_uprns_to_opportunity_areas(
+        uprns_gdf=uprns_gdf, areas_gdf=areas_gdf
+    )
 
     print("Calculate value counts per feature...")
     opportunity_areas_df = calculate_df_dummy_feature_value_counts_per_opportunity_area(
@@ -293,7 +306,7 @@ if __name__ == "__main__":
 
     print("Calculate remaining features per opportunity area...")
     opportunity_areas_df = create_df_remaining_features_per_opportunity_area(
-        opportunity_areas_df, uprns_gdf
+        opportunity_areas_df=opportunity_areas_df, uprns_gdf=uprns_gdf
     )
 
     if args.save:
@@ -309,6 +322,6 @@ if __name__ == "__main__":
         ).to_crs(epsg=4326)
 
         opportunity_areas_df.to_file(
-            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_cluster_contextual_features.geojson",
+            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_cluster_contextual_features.geojson",
             driver="GeoJSON",
         )
