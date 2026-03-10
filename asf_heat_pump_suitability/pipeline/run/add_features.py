@@ -5,10 +5,14 @@ Script to add features to UPRNs:
 - estimated max contiguous and total outdoor space (m2)
 
 Run:
-python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs
+python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet
+
+To save outputs to S3, add --save flag:
+python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet --save
 """
 
 import argparse
+from asf_heat_pump_suitability import config
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -28,6 +32,19 @@ def parse_arguments() -> argparse.Namespace:
         required=True,
     )
 
+    parser.add_argument(
+        "--local_authorities",
+        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
+        type=str,
+        required=True,
+    )
+    parser.add_argument(
+        "--save",
+        help="If --save is set, it saves outputs to S3.",
+        required=False,
+        action="store_true",
+    )
+
     return parser.parse_args()
 
 
@@ -35,6 +52,7 @@ if __name__ == "__main__":
     import os
     import polars as pl
     import geopandas as gpd
+    import pandas as pd
 
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
@@ -45,8 +63,10 @@ if __name__ == "__main__":
         train_model,
     )
     from asf_heat_pump_suitability.pipeline.transform import uprns, outdoor_space
+    from asf_heat_pump_suitability.getters import get_datasets
 
     args = parse_arguments()
+    las = args.local_authorities.lower()
 
     # Load UPRN data
     print(f"Loading domestic UPRNs from: {args.uprns}")
@@ -108,10 +128,31 @@ if __name__ == "__main__":
 
     # ------------------------ #
     # ESTIMATE OUTDOOR SPACE
-    # TODO scale beyond Plymouth
+    # TODO scale beyond Plymouth. This is a temporary fix to working with multiple LAs
     print("Loading land registry data...")
-    land_parcels_gdf = gpd.read_file(
-        "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
+
+    if las == "plymouth":
+        land_parcels_gdf = gpd.read_file(
+            "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
+        )
+    else:
+        inspire_file_names = get_datasets.load_gdf_inspire_land_parcels(
+            path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EW.geojson"
+        )
+        inspire_file_names = inspire_file_names[
+            inspire_file_names["LAD23NM"].isin(config["constant"][las]["la_names"])
+        ]["inspire_file_name"].unique()
+
+        land_parcels_gdf = pd.concat(
+            [
+                get_datasets.load_gdf_inspire_land_parcels(path=f"s3://{file}")
+                for file in inspire_file_names
+            ],
+            ignore_index=False,
+        )
+
+    building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+        layer="building", grid_squares=config["constant"][las]["grid_squares"]
     )
 
     # Get intersection of building footprint polygons and land polygons
@@ -145,7 +186,9 @@ if __name__ == "__main__":
 
     # ------------------------ #
     # SAVE OUTPUTS
-    save_utils.save_to_s3(
-        features_df,
-        path=f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{os.path.basename(args.uprns).split('.')[0]}_with_features.parquet",
-    )
+
+    if args.save:
+        save_utils.save_to_s3(
+            features_df,
+            path=f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{os.path.basename(args.uprns).split('.')[0]}_with_features.parquet",
+        )

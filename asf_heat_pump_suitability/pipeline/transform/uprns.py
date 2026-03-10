@@ -9,11 +9,17 @@ residential:
 To run the script:
 python asf_heat_pump_suitability/pipeline/transform/uprns.py
 
-Set the optional `local_authorities` parameter to `plymouth`, `plymouth_similar`, or `sampling_areas`.
-Set to `plymouth` to run for Plymouth Local Authority; `plymouth_similar` to run for Plymouth plus four other similar
-Local Authorities (Liverpool, Portsmouth, Southampton, Swansea); 'sampling_areas' to run for Plymouth plus five other
-Local Authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham); or do not use to run for all
-of Great Britain.
+Set the `local_authorities` parameter to:
+- `plymouth` for Plymouth only
+- `plymouth_similar` for Plymouth and 4 similar local authorities (Liverpool, Portsmouth, Southampton, Swansea)
+- `sampling_areas` for Plymouth and 5 different local authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham)
+- `greater_manchester_las` for all Greater Manchester local authorities (Bolton, Bury, Manchester, Oldham, Rochdale, Salford, Stockport, Tameside, Trafford, Wigan)
+
+Defaults to `GB` (all of Great Britain), but this is not yet implemented.
+
+Temporary (before we scale): Set up a new local authority or group of local authorities by adding an entry to the `constant` section of the config.yaml file.
+
+Set --save to save the outputs to S3. By default, outputs are not saved.
 """
 
 import geopandas as gpd
@@ -181,10 +187,17 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar}; or Plymouth and 5 different local authorities {sampling_areas}. Default to all of GB",
+        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
         default="GB",
         required=False,
+    )
+
+    parser.add_argument(
+        "--save",
+        help="If --save is set, it saves outputs to S3.",
+        required=False,
+        action="store_true",
     )
 
     return parser.parse_args()
@@ -209,52 +222,22 @@ if __name__ == "__main__":
     uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
 
-    # TODO I expect this to be simplified at some point but the if/else block allows us to sample from certain areas for now
-    if args.local_authorities.lower() == "plymouth":
-        print("Creating residential UPRN dataset for Plymouth Local Authority...")
-        grid_squares = config["constant"]["grid_squares"]["plymouth"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las="Plymouth"
-        )
-        uprns_gdf = uprns_gdf.sjoin(
-            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
-            how="inner",
-            predicate="intersects",
-        ).drop(columns="index_right")
-
-    elif args.local_authorities.lower() == "plymouth_similar":
-        print(
-            "Creating residential UPRN dataset for Plymouth, Portsmouth, Southampton, Swansea, and Liverpool Local Authorities..."
-        )
-        grid_squares = config["constant"]["grid_squares"]["plymouth_similar_cities"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=config["constant"]["plymouth_similar_cities"]
-        )
-        uprns_gdf = uprns_gdf.sjoin(
-            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
-            how="inner",
-            predicate="intersects",
-        ).drop(columns="index_right")
-
-    elif args.local_authorities.lower() == "sampling_areas":
-        print(
-            "Creating residential UPRN dataset for Bath, Bradford, Glasgow, Manchester, Nottingham, and Plymouth Local Authorities..."
-        )
-        grid_squares = config["constant"]["grid_squares"]["sampling_areas"]
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=config["constant"]["sampling_areas"]
-        )
-        uprns_gdf = uprns_gdf.sjoin(
-            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
-            how="inner",
-            predicate="intersects",
-        ).drop(columns="index_right")
-
-    else:  # All of GB
+    if args.local_authorities.lower() == "gb":  # All of GB
         # TODO this may not work due to scaling and may require chunking of datasets.
         # TODO Adding here as placeholder to assist scaling later
         print("Creating residential UPRN dataset for all of GB...")
         grid_squares = None
+    else:  # Specific local authorities (any number of LAs can be specified in config file)
+        print(f"Creating residential UPRN dataset for {args.local_authorities}...")
+        grid_squares = config["constant"][args.local_authorities]["grid_squares"]
+        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+            select_las=config["constant"][args.local_authorities]["la_names"]
+        )
+        uprns_gdf = uprns_gdf.sjoin(
+            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
+            how="inner",
+            predicate="intersects",
+        ).drop(columns="index_right")
 
     poi_gdf = load_tree_input.load_gdf_poi()
     poi_gdf = poi.transform_gdf_poi(
@@ -298,7 +281,9 @@ if __name__ == "__main__":
             ]
         ]
     )
-    save_utils.save_to_s3(
-        df,
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns.parquet",
-    )
+
+    if args.save:
+        save_utils.save_to_s3(
+            df,
+            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns.parquet",
+        )
