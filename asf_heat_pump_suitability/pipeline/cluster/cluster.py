@@ -371,10 +371,10 @@ if __name__ == "__main__":
         # TODO rename column in original dataframe
         .rename(columns={"1st_most_suitable_solution": "assigned_tech"})
     )
-    grid_squares = config["constant"]["grid_squares"][args.local_authorities]
+    grid_squares = config["constant"][args.local_authorities]["grid_squares"]
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        select_las=config["constant"][args.local_authorities]
+        select_las=config["constant"][args.local_authorities]["la_names"]
     )
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares
