@@ -2,6 +2,7 @@
 .cookiecutter/state/
 
 *.lock
+!uv.lock
 
 # Proposed convention
 scratch*
@@ -15,7 +16,10 @@ research_daps/
 *.bbl
 *.blg
 
-# Metaflow
+# Local pipeline outputs (use LOCAL_DEV=true to write here)
+outputs/
+
+# Metaflow (removed, kept for history)
 .metaflow
 metaflow.s3.*
 .run_id
@@ -116,7 +120,7 @@ target/
 /outputs/models/*
 !/outputs/models/*.md
 
-# exclude file types
+# exclude file types (with exception for committed test fixtures)
 *.kml
 *.csv
 *.parquet
@@ -127,6 +131,9 @@ target/
 *.cpg
 *.geojson
 *.gml
+# allow committed test fixtures
+!tests/fixtures/*.parquet
+!tests/fixtures/*.geojson
 
 # Mac OS-specific storage files
 .DS_Store

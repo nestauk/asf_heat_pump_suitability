@@ -1,5 +1,5 @@
-import pandas as pd
 import geopandas as gpd
+import pandas as pd
 import polars as pl
 
 from asf_heat_pump_suitability import config
@@ -25,15 +25,9 @@ def generate_enw_gdf() -> gpd.GeoDataFrame:
             - geo_shape: Polygon geometry representing the substation's service area
             - operator: Distribution network operator code ("ENW")
     """
-    enw_demand = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["E_ENW_dfes_primaries"]
-    ).to_pandas()
-    enw_substations = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["E_ENW_ndp_headroom"]
-    ).to_pandas()
-    enw_shape = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["E_ENW_ndp_voronoi"]
-    ).to_pandas()
+    enw_demand = base_getters.get_df_from_parquet_s3_path(config["data_source"]["E_ENW_dfes_primaries"]).to_pandas()
+    enw_substations = base_getters.get_df_from_parquet_s3_path(config["data_source"]["E_ENW_ndp_headroom"]).to_pandas()
+    enw_shape = base_getters.get_df_from_parquet_s3_path(config["data_source"]["E_ENW_ndp_voronoi"]).to_pandas()
 
     # Filter data for primary substations, current year, and best view scenario
     # Best view scenario represents middle ground future projections of demand on substation capacity
@@ -44,9 +38,7 @@ def generate_enw_gdf() -> gpd.GeoDataFrame:
         & (enw_substations["status"] == "FIRM")
     ]
     enw_demand = enw_demand[
-        (enw_demand.group == "PRIMARY")
-        & (enw_demand.year == "2024")
-        & (enw_demand.scenario == "Best View")
+        (enw_demand.group == "PRIMARY") & (enw_demand.year == "2024") & (enw_demand.scenario == "Best View")
     ]
 
     # Merge substation and demand data
@@ -58,9 +50,7 @@ def generate_enw_gdf() -> gpd.GeoDataFrame:
     )
 
     # Calculate firm capacity and add operator information
-    enw["firm_capacity_mva"] = (
-        enw["maximum_demand_mva_per_primary_substation"] + enw["headroom_mva"]
-    )
+    enw["firm_capacity_mva"] = enw["maximum_demand_mva_per_primary_substation"] + enw["headroom_mva"]
     enw["geopoint"] = enw["geopoint"].apply(parse_binary_geometry)
 
     # Distribution areas are given by primary group rather than individual primary substations
@@ -74,9 +64,7 @@ def generate_enw_gdf() -> gpd.GeoDataFrame:
 
     # Aggregate capacity and demand data to primary group level
     enw_df = (
-        enw_df.groupby(["pry_group", "geo_shape"])[
-            ["firm_capacity_mva", "maximum_demand_mva_per_primary_substation"]
-        ]
+        enw_df.groupby(["pry_group", "geo_shape"])[["firm_capacity_mva", "maximum_demand_mva_per_primary_substation"]]
         .sum()
         .reset_index()
     )
@@ -118,12 +106,8 @@ def generate_npg_gdf() -> gpd.GeoDataFrame:
             - geo_shape: Polygon geometry representing the substation's service area
             - operator: Distribution network operator code ("NPg")
     """
-    npg_substations = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["E_NPg_heatmap"]
-    ).to_pandas()
-    npg_demand = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["E_NPg_ndp_demand"]
-    ).to_pandas()
+    npg_substations = base_getters.get_df_from_parquet_s3_path(config["data_source"]["E_NPg_heatmap"]).to_pandas()
+    npg_demand = base_getters.get_df_from_parquet_s3_path(config["data_source"]["E_NPg_ndp_demand"]).to_pandas()
 
     # Filter and process substation data
     npg_substations = npg_substations[npg_substations.substation_class == "Primary"]
@@ -136,17 +120,13 @@ def generate_npg_gdf() -> gpd.GeoDataFrame:
             "location",
         ]
     ]
-    npg["headroom_mva"] = (
-        npg_substations["firm_capacity_load_mva"]
-        - npg_substations["maximum_demand_mva"]
-    )
+    npg["headroom_mva"] = npg_substations["firm_capacity_load_mva"] - npg_substations["maximum_demand_mva"]
     npg["operator"] = "NPg"
     npg["location"] = npg["location"].apply(parse_binary_geometry)
 
     # Filter demand data
     npg_demand = npg_demand[
-        (npg_demand["bulk_supply_point_or_primary"] == "Primary")
-        & (npg_demand["scenario_name"] == "NPg Best View")
+        (npg_demand["bulk_supply_point_or_primary"] == "Primary") & (npg_demand["scenario_name"] == "NPg Best View")
     ]
     npg_demand["geo_shape"] = npg_demand["geo_shape"].apply(parse_binary_geometry)
     npg_shape = npg_demand["geo_shape"].drop_duplicates()
@@ -159,9 +139,7 @@ def generate_npg_gdf() -> gpd.GeoDataFrame:
 
     # Prepare final dataframe
     npg_df["id"] = npg_df["substation_name"] + "_" + npg_df["substation_id"]
-    return npg_df[
-        ["id", "firm_capacity_load_mva", "maximum_demand_mva", "geo_shape", "operator"]
-    ].rename(
+    return npg_df[["id", "firm_capacity_load_mva", "maximum_demand_mva", "geo_shape", "operator"]].rename(
         columns={
             "firm_capacity_load_mva": "firm_capacity_mva",
             "maximum_demand_mva": "peak_demand_mva",
@@ -192,22 +170,14 @@ def generate_spen_gdf() -> gpd.GeoDataFrame:
     spen_spm_substations = base_getters.get_df_from_parquet_s3_path(
         config["data_source"]["W_SPEN_spm_substations"]
     ).to_pandas()
-    spen_spd_shape = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["S_SPEN_spd_polygons"]
-    ).to_pandas()
-    spen_spm_shape = base_getters.get_df_from_parquet_s3_path(
-        config["data_source"]["W_SPEN_spm_polygons"]
-    ).to_pandas()
+    spen_spd_shape = base_getters.get_df_from_parquet_s3_path(config["data_source"]["S_SPEN_spd_polygons"]).to_pandas()
+    spen_spm_shape = base_getters.get_df_from_parquet_s3_path(config["data_source"]["W_SPEN_spm_polygons"]).to_pandas()
 
     # Process SPM data
     # geometry data for SPM is only available at the primary group level which are groups of 1-3 primary substations
     # therefore we need to first aggregate primary substation data to primary group level
     spen_spm_substations = (
-        spen_spm_substations.groupby("primary_group")[
-            ["firm_capacity_mva", "maximum_load_mva"]
-        ]
-        .sum()
-        .reset_index()
+        spen_spm_substations.groupby("primary_group")[["firm_capacity_mva", "maximum_load_mva"]].sum().reset_index()
     )
 
     spm_df = spen_spm_substations.merge(spen_spm_shape, how="left", on="primary_group")
@@ -251,9 +221,7 @@ def generate_spen_gdf() -> gpd.GeoDataFrame:
                 "geo_shape",
                 "operator",
             ]
-        ].rename(
-            columns={"substation_name": "id", "maximum_load_mva": "peak_demand_mva"}
-        ),
+        ].rename(columns={"substation_name": "id", "maximum_load_mva": "peak_demand_mva"}),
         geometry="geo_shape",
         crs=CRS,
     )
@@ -281,9 +249,7 @@ def generate_ssen_gdf() -> gpd.GeoDataFrame:
 
     ssen_demand = load_transform_df_ssen_demand().to_pandas()
 
-    ssen_df = ssen_demand.merge(
-        ssen_shape, left_on="Primary Substation Name", right_on="Primary"
-    )
+    ssen_df = ssen_demand.merge(ssen_shape, left_on="Primary Substation Name", right_on="Primary")
 
     ssen_df["operator"] = "SSEN"
 
@@ -336,9 +302,7 @@ def load_transform_df_ssen_demand() -> pl.DataFrame:
     ssen_demand = []
 
     ssen_demand.append(
-        base_getters.get_df_from_csv_s3_path(
-            config["data_source"]["E_SSEN_demand"], columns=cols
-        ).select(cols)
+        base_getters.get_df_from_csv_s3_path(config["data_source"]["E_SSEN_demand"], columns=cols).select(cols)
     )
 
     ssen_demand.append(
@@ -353,9 +317,7 @@ def load_transform_df_ssen_demand() -> pl.DataFrame:
         ).select(cols)
     )
 
-    ssen_demand = pl.concat(ssen_demand).with_columns(
-        pl.col("Primary Substation Name").str.to_uppercase()
-    )
+    ssen_demand = pl.concat(ssen_demand).with_columns(pl.col("Primary Substation Name").str.to_uppercase())
 
     return ssen_demand
 
@@ -382,11 +344,7 @@ def generate_ukpn_gdf() -> gpd.GeoDataFrame:
 
     # Process UKPN data
     ukpn_primary_substations["firm_capacity_mva"] = ukpn_primary_substations.apply(
-        lambda x: (
-            x["firmcapacitywinter"]
-            if x["seasonofconstraint"] == "Winter"
-            else x["firmcapacitysummer"]
-        ),
+        lambda x: x["firmcapacitywinter"] if x["seasonofconstraint"] == "Winter" else x["firmcapacitysummer"],
         axis=1,
     )
 
@@ -394,13 +352,10 @@ def generate_ukpn_gdf() -> gpd.GeoDataFrame:
     # The "demand" column is the percentage of total capacity that the substation has available at peak load
     # So to calculate the actual value in MVA, we need to multiply demand headroom by capacity
     ukpn_primary_substations["headroom_mva"] = (
-        ukpn_primary_substations["firm_capacity_mva"]
-        * ukpn_primary_substations["demand"]
-        / 100
+        ukpn_primary_substations["firm_capacity_mva"] * ukpn_primary_substations["demand"] / 100
     )
     ukpn_primary_substations["maximum_load_mva"] = (
-        ukpn_primary_substations["firm_capacity_mva"]
-        - ukpn_primary_substations["headroom_mva"]
+        ukpn_primary_substations["firm_capacity_mva"] - ukpn_primary_substations["headroom_mva"]
     )
 
     ukpn = ukpn_primary_substations[
@@ -450,9 +405,7 @@ def generate_wpd_gdf() -> gpd.GeoDataFrame:
             - geo_shape: Polygon geometry representing the substation's service area
             - operator: Distribution network operator code ("WPD")
     """
-    wpd_substations = base_getters.get_df_from_csv_s3_path(
-        config["data_source"]["EW_WPD_capacity"]
-    ).to_pandas()
+    wpd_substations = base_getters.get_df_from_csv_s3_path(config["data_source"]["EW_WPD_capacity"]).to_pandas()
 
     # Load shape files for each region
     wpd_shapes = []
@@ -462,16 +415,13 @@ def generate_wpd_gdf() -> gpd.GeoDataFrame:
         "E_WPD_south_west_bounds",
         "E_WPD_west_midlands_bounds",
     ]:
-        wpd_shapes.append(
-            base_getters.get_gdf_from_gpkg_s3_path(config["data_source"][region])
-        )
+        wpd_shapes.append(base_getters.get_gdf_from_gpkg_s3_path(config["data_source"][region]))
     wpd_shapes = pd.concat(wpd_shapes)
 
     # Process WPD data
     wpd_substations = wpd_substations[wpd_substations["Asset_Type"] == "Primary"]
     wpd_substations["headroom_mva"] = (
-        wpd_substations["Firm_Capacity_of_Substation_(MVA)"]
-        - wpd_substations["Measured_Peak_Demand_(MVA)"]
+        wpd_substations["Firm_Capacity_of_Substation_(MVA)"] - wpd_substations["Measured_Peak_Demand_(MVA)"]
     )
     wpd = wpd_substations[
         [

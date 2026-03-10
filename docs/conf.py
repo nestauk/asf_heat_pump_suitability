@@ -1,6 +1,6 @@
 """Sphinx configuration."""
-from datetime import datetime
 
+from datetime import datetime
 
 project = "heat_pump_suitability"
 author = "Nesta"

@@ -88,9 +88,7 @@ def generate_gdf_non_residential_buildings(
     poi_buildings_gdf = building_gdf.sjoin(poi_gdf, how="inner", predicate="contains")
 
     # Get buildings which are railway stations (railway stations are only given as point geometries)
-    railway_station_gdf = railway_station_gdf.sjoin(
-        building_gdf, how="inner", predicate="within"
-    )
+    railway_station_gdf = railway_station_gdf.sjoin(building_gdf, how="inner", predicate="within")
 
     exclude_buildings_gdf = pd.concat(
         [
@@ -110,9 +108,9 @@ def generate_gdf_non_residential_buildings(
     )
 
     # Filter to buildings that don't contain a domestic UPRN
-    exclude_buildings_gdf = exclude_buildings_gdf[
-        exclude_buildings_gdf["UPRN"].isnull()
-    ].drop(columns=["UPRN", "index_right"])
+    exclude_buildings_gdf = exclude_buildings_gdf[exclude_buildings_gdf["UPRN"].isnull()].drop(
+        columns=["UPRN", "index_right"]
+    )
 
     # Normalize to drop duplicate building footprints
     exclude_buildings_gdf["geometry"] = exclude_buildings_gdf.normalize()

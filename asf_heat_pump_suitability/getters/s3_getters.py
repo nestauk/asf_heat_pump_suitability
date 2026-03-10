@@ -2,26 +2,23 @@
 Data getters (and savers)
 """
 
-from fnmatch import fnmatch
-import json
-import pickle
 import gzip
-import os
-import shutil
-import tempfile
-
-import pandas as pd
-import boto3
-from decimal import Decimal
-import numpy
-import yaml
 import io
+import json
+import os
+import pickle
+from decimal import Decimal
+from fnmatch import fnmatch
 from io import BytesIO
-import geopandas as gpd
+from typing import Any, NoReturn
 
-from asf_heat_pump_suitability import logger, PROJECT_DIR
-from typing import List, Any, NoReturn
-import requests
+import boto3
+import geopandas as gpd
+import numpy
+import pandas as pd
+import yaml
+
+from asf_heat_pump_suitability import logger
 
 
 class CustomJsonEncoder(json.JSONEncoder):
@@ -63,9 +60,7 @@ def save_to_s3(bucket_name: str, output_var: Any, output_file_path: str) -> NoRe
     if fnmatch(output_file_path, "*.csv"):
         output_var.to_csv("s3://" + bucket_name + "/" + output_file_path, index=False)
     elif fnmatch(output_file_path, "*.parquet"):
-        output_var.to_parquet(
-            "s3://" + bucket_name + "/" + output_file_path, index=False
-        )
+        output_var.to_parquet("s3://" + bucket_name + "/" + output_file_path, index=False)
     elif fnmatch(output_file_path, "*.pkl") or fnmatch(output_file_path, "*.pickle"):
         obj.put(Body=pickle.dumps(output_var))
     elif fnmatch(output_file_path, "*.gz"):
@@ -73,9 +68,7 @@ def save_to_s3(bucket_name: str, output_var: Any, output_file_path: str) -> NoRe
     elif fnmatch(output_file_path, "*.txt"):
         obj.put(Body=output_var)
     elif (
-        fnmatch(output_file_path, "*.jpg")
-        or fnmatch(output_file_path, "*.png")
-        or fnmatch(output_file_path, "*.jpeg")
+        fnmatch(output_file_path, "*.jpg") or fnmatch(output_file_path, "*.png") or fnmatch(output_file_path, "*.jpeg")
     ):
         image_data = BytesIO(output_var)
         obj.put(Body=image_data)
@@ -132,11 +125,7 @@ def load_s3_data(
     elif fnmatch(file_name, "*.geojson"):
         with BytesIO(obj.get()["Body"].read()) as file:
             return gpd.read_file(file)
-    elif (
-        fnmatch(file_name, "*.jpg")
-        or fnmatch(file_name, "*.png")
-        or fnmatch(file_name, "*.jpeg")
-    ):
+    elif fnmatch(file_name, "*.jpg") or fnmatch(file_name, "*.png") or fnmatch(file_name, "*.jpeg"):
         # Download the image from S3 into a BytesIO object
         image_data = BytesIO()
         obj.download_fileobj(image_data)
@@ -148,9 +137,7 @@ def load_s3_data(
         )
 
 
-def dictionary_to_s3(
-    data_dict: dict, s3_bucket: str, s3_folder: str, file_name: str
-) -> NoReturn:
+def dictionary_to_s3(data_dict: dict, s3_bucket: str, s3_folder: str, file_name: str) -> NoReturn:
     """
     Transforms a dictionary into a json and uploads to S3.
 

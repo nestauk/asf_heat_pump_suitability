@@ -17,28 +17,25 @@ Note: `uprns` file must contain all domestic UPRNs within the area(s) that `labe
 Pass the optional `save` parameter if saving to S3 is desired.
 """
 
+import argparse
+from typing import Iterable, Type
+
 import numpy as np
 import polars as pl
-from typing import Iterable, Type
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.experimental import enable_halving_search_cv  # noqa
+from sklearn.metrics import f1_score
 from sklearn.model_selection import (
-    train_test_split,
     HalvingRandomSearchCV,
     StratifiedKFold,
+    train_test_split,
 )
 from sklearn.model_selection._search import BaseSearchCV
-from sklearn.metrics import f1_score
-import argparse
 
 # Set random state int and RandomState instance
 # See more on controlling randomness in sklearn docs: https://scikit-learn.org/stable/common_pitfalls.html#controlling-randomness
-RANDOM_STATE = (
-    8  # used in cross-validation for consistency of repeated calls to split dataset
-)
-RNG = np.random.RandomState(
-    RANDOM_STATE
-)  # used in training random forest classifier to increase robustness
+RANDOM_STATE = 8  # used in cross-validation for consistency of repeated calls to split dataset
+RNG = np.random.RandomState(RANDOM_STATE)  # used in training random forest classifier to increase robustness
 
 # Number of splits for StratifiedKFold cross-val strategy in parameter search
 N_SPLITS = 5
@@ -116,9 +113,7 @@ def train_eval_rfc_block_of_flats_classifier(
     cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
     estimator = RandomForestClassifier(random_state=RNG)
     random_state = RANDOM_STATE
-    print(
-        f"Training Random Forest binary classifier model with random state: {RANDOM_STATE}..."
-    )
+    print(f"Training Random Forest binary classifier model with random state: {RANDOM_STATE}...")
 
     if param_search == "default":
         # Conduct halving random search for hyperparameters and cross-validation
@@ -139,9 +134,7 @@ def train_eval_rfc_block_of_flats_classifier(
             **kwargs,
         ).fit(X_train, y_train)
 
-    print(
-        f"Best {scoring} score during cross-validation and hyperparameter search: {search.best_score_}"
-    )
+    print(f"Best {scoring} score during cross-validation and hyperparameter search: {search.best_score_}")
     print(f"Best params: {search.best_params_}")
 
     # Train final classifier model on full training set with the selected hyperparameters
@@ -185,9 +178,7 @@ def predict_class_block_of_flats(
     Returns:
         pl.DataFrame: one row per building with predicted class and probability of predicted class
     """
-    print(
-        "Predicting classes (block of flats / not) and class probability of buildings..."
-    )
+    print("Predicting classes (block of flats / not) and class probability of buildings...")
     concat_dfs = []
     labelled_ids = labelled_df[id_col].unique()
     X_df = (
@@ -199,12 +190,8 @@ def predict_class_block_of_flats(
     predictions_df["block_of_flats"] = model.predict(X_df)
 
     # Add probability of predictions
-    predictions_df[f"block_of_flats_proba_{model.classes_[0]}"] = model.predict_proba(
-        X_df
-    )[:, 0]
-    predictions_df[f"block_of_flats_proba_{model.classes_[1]}"] = model.predict_proba(
-        X_df
-    )[:, 1]
+    predictions_df[f"block_of_flats_proba_{model.classes_[0]}"] = model.predict_proba(X_df)[:, 0]
+    predictions_df[f"block_of_flats_proba_{model.classes_[1]}"] = model.predict_proba(X_df)[:, 1]
 
     # Combine into one probability label - final probability label indicates probability of the class assigned
     concat_dfs.append(
@@ -256,9 +243,7 @@ def extend_df_in_block_of_flats_label(
     return (
         uprns_df.with_columns(
             # Map building IDs to the UPRNs they contain
-            pl.col("UPRN")
-            .replace(mapping, default=None)
-            .alias(id_col)
+            pl.col("UPRN").replace(mapping, default=None).alias(id_col)
         )
         # Join the predicted block of flats label to the UPRNs via the building ID
         .join(predictions_df, how="left", on=id_col)
@@ -304,11 +289,11 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.getters import load_tree_input
-    from asf_heat_pump_suitability.pipeline.transform import uprns
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
         feature_engineering,
     )
+    from asf_heat_pump_suitability.pipeline.transform import uprns
     from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
@@ -317,9 +302,7 @@ if __name__ == "__main__":
     # LOAD DATA
     # Load UPRN data
     print(f"Loading domestic UPRNs from: {args.uprns}")
-    uprns_df = pl.read_parquet(
-        args.uprns, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
-    )
+    uprns_df = pl.read_parquet(args.uprns, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"])
     # Get geopoints of UPRNs
     uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
 

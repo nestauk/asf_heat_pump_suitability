@@ -2,18 +2,18 @@
 Generic loaders of specific file types. These functions shouldn’t load specific datasets and can be used in multiple specific getters.
 """
 
-import requests
-from zipfile import ZipFile
-from io import BytesIO
 import logging
-import s3fs
+import pickle
+from fnmatch import fnmatch
+from io import BytesIO
+from typing import Any
+from zipfile import ZipFile
+
 import geojson
 import geopandas as gpd
-from fnmatch import fnmatch
 import polars as pl
-import pickle
-import fsspec
-from typing import Any
+import requests
+import s3fs
 
 
 def load_df_from_s3(uri: str, **kwargs) -> pl.DataFrame:

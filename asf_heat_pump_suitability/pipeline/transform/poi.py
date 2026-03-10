@@ -2,9 +2,9 @@
 Functions to preprocess Points of Interest (POI) data for Great Britain.
 """
 
-import geopandas as gpd
 from typing import Iterable
-import csv
+
+import geopandas as gpd
 import smart_open
 
 from asf_heat_pump_suitability import config
@@ -35,7 +35,7 @@ def transform_gdf_poi(
     poi = poi.to_crs(target_crs)
 
     print(f"Found {len(poi)} points of interest")
-    print(f'POI CRS converted to: {config["constant"]["target_crs"]}')
+    print(f"POI CRS converted to: {config['constant']['target_crs']}")
     return poi
 
 
@@ -46,8 +46,6 @@ def load_set_non_domestic_poi_categories() -> set:
     Returns:
         set: non-domestic POI categories
     """
-    with smart_open.open(
-        config["data"]["processed"]["non_domestic_poi_categories"], "r"
-    ) as f:
+    with smart_open.open(config["data"]["processed"]["non_domestic_poi_categories"], "r") as f:
         categories = [line.strip() for line in f]
     return set(categories)

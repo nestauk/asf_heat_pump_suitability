@@ -2,15 +2,15 @@
 Functions to load specific raw datasets used in decision tree pipeline using base getters and sources in config. No/minimal preprocessing occurs in these functions.
 """
 
+from typing import List, Optional
+
 import geopandas as gpd
 import pandas as pd
-from typing import Optional, List
+
 from asf_heat_pump_suitability import config
 
 
-def load_gdf_os_openmap_local_layer(
-    layer: str, grid_squares: Optional[List[str]] = None, **kwargs
-) -> gpd.GeoDataFrame:
+def load_gdf_os_openmap_local_layer(layer: str, grid_squares: Optional[List[str]] = None, **kwargs) -> gpd.GeoDataFrame:
     """
     Load specified OS OpenMap Local layer for Great Britain or optionally for a specific grid square. CRS British National Grid (27700).
 
