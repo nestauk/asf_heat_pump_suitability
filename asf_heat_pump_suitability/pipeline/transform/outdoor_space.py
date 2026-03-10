@@ -2,8 +2,9 @@
 Functions to calculate outdoor space estimates from building footprints and land extents.
 """
 
-import geopandas as gpd
 import logging
+
+import geopandas as gpd
 import pandas as pd
 import polars as pl
 
@@ -24,9 +25,7 @@ def match_series_files_land_building(
     """
     logging.info("Mapping building footprint files to INSPIRE land registry files")
     gdf = land_files_gdf.sjoin(building_files_gdf, how="inner", predicate="intersects")
-    file_matches = pd.Series(
-        gdf["ms_url"].values, index=gdf["inspire_file_name"]
-    ).sort_index()
+    file_matches = pd.Series(gdf["ms_url"].values, index=gdf["inspire_file_name"]).sort_index()
 
     return file_matches
 
@@ -76,15 +75,9 @@ def generate_gdf_building_intersections(
     gdf = gdf[
         (
             (gdf["building_area_m2"] <= outbuilding_size)
-            & (
-                gdf["building_intersection_area_m2"]
-                >= gdf["min_size_of_small_building"]
-            )
+            & (gdf["building_intersection_area_m2"] >= gdf["min_size_of_small_building"])
         )
-        | (
-            (gdf["building_area_m2"] > outbuilding_size)
-            & (gdf["building_intersection_area_m2"] >= min_intersection)
-        )
+        | ((gdf["building_area_m2"] > outbuilding_size) & (gdf["building_intersection_area_m2"] >= min_intersection))
     ]
 
     # Drop intersecting geometries which are Points or LineStrings
@@ -117,9 +110,7 @@ def generate_gdf_outdoor_space(
 
     # Explode multi-part geometries into single part geometries to get largest piece
     land_minus_buildings_parts = land_minus_buildings.explode(index_parts=False)
-    land_minus_buildings_parts["outdoor_space_area_m2"] = (
-        land_minus_buildings_parts.geometry.area
-    )
+    land_minus_buildings_parts["outdoor_space_area_m2"] = land_minus_buildings_parts.geometry.area
 
     # Keep max size and total outdoor area
     outdoor_space_df = (
@@ -161,27 +152,20 @@ def deduplicate_df_outdoor_space(df: pl.DataFrame) -> pl.DataFrame:
 
     _deduplicated_df = (
         df.filter(pl.col("UPRN_duplicated"))
-        .with_columns(
-            min_total=pl.col("total_outdoor_space_area_m2").min().over("UPRN")
-        )
+        .with_columns(min_total=pl.col("total_outdoor_space_area_m2").min().over("UPRN"))
         .filter(
             # Get smallest outdoor space
-            pl.col("total_outdoor_space_area_m2")
-            == pl.col("min_total")
+            pl.col("total_outdoor_space_area_m2") == pl.col("min_total")
             # Deduplicate - any duplicates will now (most likely) have the same total outdoor space
         )
         .unique(subset="UPRN")
         .drop("min_total")
     )
 
-    return pl.concat([df.filter(~pl.col("UPRN_duplicated")), _deduplicated_df]).drop(
-        "UPRN_duplicated"
-    )
+    return pl.concat([df.filter(~pl.col("UPRN_duplicated")), _deduplicated_df]).drop("UPRN_duplicated")
 
 
-def sjoin_df_uprn_to_outdoor_space(
-    uprns_gdf: gpd.GeoDataFrame, outdoor_space_gdf: gpd.GeoDataFrame
-) -> pl.DataFrame:
+def sjoin_df_uprn_to_outdoor_space(uprns_gdf: gpd.GeoDataFrame, outdoor_space_gdf: gpd.GeoDataFrame) -> pl.DataFrame:
     """
     Join outdoor space estimates to UPRNs. UPRNs will be assigned the outdoor space calculated for the land extent parcel
     that they are contained within.
@@ -194,7 +178,5 @@ def sjoin_df_uprn_to_outdoor_space(
         pl.DataFrame: UPRNs with estimated outdoor space (m2)
     """
     return pl.from_pandas(
-        uprns_gdf.sjoin(outdoor_space_gdf, how="left", predicate="within").drop(
-            columns=["geometry", "index_right"]
-        )
+        uprns_gdf.sjoin(outdoor_space_gdf, how="left", predicate="within").drop(columns=["geometry", "index_right"])
     )

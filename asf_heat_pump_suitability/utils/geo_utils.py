@@ -1,12 +1,11 @@
 import logging
-from typing import Union, List
+from typing import Union
 
 import geopandas as gpd
-import pandas as pd
 import shapely
-
-from shapely.geometry.base import BaseGeometry
 from shapely import wkb
+from shapely.geometry.base import BaseGeometry
+
 from asf_heat_pump_suitability import config
 
 
@@ -24,15 +23,10 @@ def transform_gdf_drop_duplicates(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     if gdf["rep_point"].nunique() != len(gdf):
         duplicate_count = gdf.duplicated(subset="rep_point").sum()
 
-        logging.info(
-            f"Polygons containing same representative point found. "
-            f"Dropping {duplicate_count} polygons."
-        )
+        logging.info(f"Polygons containing same representative point found. Dropping {duplicate_count} polygons.")
 
         # Sort values to create replicable duplicate removal process
-        gdf = gdf.sort_values(by="geometry").drop_duplicates(
-            subset="rep_point", keep="first"
-        )
+        gdf = gdf.sort_values(by="geometry").drop_duplicates(subset="rep_point", keep="first")
 
     gdf = gdf.drop("rep_point", axis=1)
 
@@ -74,9 +68,7 @@ def parse_binary_geometry(
         return None
 
 
-def verify_gdf_crs(
-    gdf: gpd.GeoDataFrame, target_crs: str | int = config["constant"]["target_crs"]
-) -> gpd.GeoDataFrame:
+def verify_gdf_crs(gdf: gpd.GeoDataFrame, target_crs: str | int = config["constant"]["target_crs"]) -> gpd.GeoDataFrame:
     """
     Verify GeoDataFrame uses the defined target CRS. If not, convert to target CRS.
 

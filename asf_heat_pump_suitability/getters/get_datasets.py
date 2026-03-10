@@ -1,14 +1,16 @@
-import polars as pl
-import pandas as pd
-import geopandas as gpd
 import logging
+import warnings
+from io import StringIO
+from typing import Tuple
+
+import geopandas as gpd
+import pandas as pd
+import polars as pl
+import pyogrio
+from tenacity import retry, stop_after_attempt
+
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters, schemas
-from io import StringIO
-from tenacity import retry, stop_after_attempt
-import warnings
-import pyogrio
-from typing import Tuple
 
 # Ignore RunTimeWarning when loading Microsoft building footprint files
 # as reading from gzipped stream should be faster than unzipping and loading data
@@ -77,9 +79,7 @@ def load_gdf_microsoft_building_footprints(url: str) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: Microsoft building footprint polygons
     """
-    gdf = gpd.read_file(
-        f"GeoJSONSeq:/vsigzip//vsicurl/{url}", engine="pyogrio", use_arrow=True
-    )
+    gdf = gpd.read_file(f"GeoJSONSeq:/vsigzip//vsicurl/{url}", engine="pyogrio", use_arrow=True)
 
     return gdf
 
@@ -113,9 +113,7 @@ def get_df_ons_garden_space_avg(**kwargs) -> pl.DataFrame:
     Returns:
         pl.DataFrame: raw ONS 'Access to garden space' dataset
     """
-    content = base_getters.get_content_from_s3_path(
-        config["data_source"]["GB_ons_garden_space_access"]
-    )
+    content = base_getters.get_content_from_s3_path(config["data_source"]["GB_ons_garden_space_access"])
     df = pl.read_excel(
         content,
         sheet_name="MSOA gardens",
@@ -156,9 +154,7 @@ def load_gdf_historic_england_conservation_areas(**kwargs) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: polygons of building conservation areas in England
     """
-    gdf = gpd.read_file(
-        config["data_source"]["E_historic_england_conservation_areas"], **kwargs
-    )
+    gdf = gpd.read_file(config["data_source"]["E_historic_england_conservation_areas"], **kwargs)
 
     return gdf
 
@@ -174,9 +170,7 @@ def load_gdf_welsh_gov_conservation_areas(**kwargs) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: polygons of building conservation areas in Wales
     """
-    gdf = gpd.read_file(
-        config["data_source"]["W_welsh_gov_conservation_areas"], **kwargs
-    )
+    gdf = gpd.read_file(config["data_source"]["W_welsh_gov_conservation_areas"], **kwargs)
 
     return gdf
 
@@ -257,19 +251,13 @@ def load_gdf_listed_buildings(nation: str, **kwargs) -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: raw Listed Buildings dataset for specified nation
     """
     if nation.lower() == "england":
-        gdf = gpd.read_file(
-            config["data_source"]["E_historicengland_listed_buildings"], **kwargs
-        )
+        gdf = gpd.read_file(config["data_source"]["E_historicengland_listed_buildings"], **kwargs)
     elif nation.lower() == "wales":
         gdf = gpd.read_file(config["data_source"]["W_cadw_listed_buildings"], **kwargs)
     elif nation.lower() == "scotland":
-        gdf = gpd.read_file(
-            config["data_source"]["S_scottish_gov_listed_buildings"], **kwargs
-        )
+        gdf = gpd.read_file(config["data_source"]["S_scottish_gov_listed_buildings"], **kwargs)
     else:
-        raise ValueError(
-            "Please set `nation` to either 'England', 'Scotland', or 'Wales'."
-        )
+        raise ValueError("Please set `nation` to either 'England', 'Scotland', or 'Wales'.")
     return gdf
 
 
@@ -298,9 +286,7 @@ def load_gdf_scotgov_data_zone_bounds(**kwargs) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: boundary polygons and area standard area measurement data for 2011 Scottish Data Zones
     """
-    return gpd.read_file(
-        config["data_source"]["S_scottish_gov_DZ2011_boundaries"], **kwargs
-    )
+    return gpd.read_file(config["data_source"]["S_scottish_gov_DZ2011_boundaries"], **kwargs)
 
 
 def load_df_nrs_dwellings() -> pl.DataFrame:
@@ -311,9 +297,7 @@ def load_df_nrs_dwellings() -> pl.DataFrame:
     Returns:
         pl.DataFrame: dwelling counts per 2011 Scottish Data Zone
     """
-    df = base_getters.get_df_from_excel_s3_path(
-        config["data_source"]["S_NRScotland_households"], sheet_name="2023"
-    )
+    df = base_getters.get_df_from_excel_s3_path(config["data_source"]["S_NRScotland_households"], sheet_name="2023")
     # Remove empty rows and set column headers to correct names
     df.columns = df.row(2)
     df = df[3:].cast(schemas.nrs_dwellings)
@@ -321,9 +305,7 @@ def load_df_nrs_dwellings() -> pl.DataFrame:
     return df
 
 
-def load_desnz_geodata(
-    gpkg_path: str, shp_path: str, layer_name: str
-) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+def load_desnz_geodata(gpkg_path: str, shp_path: str, layer_name: str) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Load DESNZ heat network polygons from a GeoPackage and LSOA shapefile.
 
@@ -358,9 +340,7 @@ def load_df_gov_LSOA_LA() -> pd.DataFrame:
     """
     Load data.gov data of LSOA and the local authority they are part of.
     """
-    df = pd.read_csv(
-        config["data_source"]["EW_LSOA_LA"], usecols=["LSOA21CD", "LAD23NM", "LAD23CD"]
-    )
+    df = pd.read_csv(config["data_source"]["EW_LSOA_LA"], usecols=["LSOA21CD", "LAD23NM", "LAD23CD"])
     return df
 
 
@@ -368,9 +348,7 @@ def load_df_gov_LSOA_region() -> pd.DataFrame:
     """
     Load data.gov data of LSOA and the region they are part of.
     """
-    return pd.read_csv(
-        config["data_source"]["EW_LSOA_region"], usecols=["LSOA21CD", "RGN22NM"]
-    )
+    return pd.read_csv(config["data_source"]["EW_LSOA_region"], usecols=["LSOA21CD", "RGN22NM"])
 
 
 def load_df_lsoa_lad_lookup(**kwargs) -> pl.DataFrame:

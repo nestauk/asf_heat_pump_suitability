@@ -130,16 +130,9 @@ def load_transform_df_target_property_type_scotland() -> pl.DataFrame:
     )
     flats_cols = [col for col in df.columns if "Flat" in col]
     df = (
-        df.with_columns(
-            pl.sum_horizontal(flats_cols).alias("Flat, maisonette or apartment")
-        )
+        df.with_columns(pl.sum_horizontal(flats_cols).alias("Flat, maisonette or apartment"))
         .drop(flats_cols)
-        .rename(
-            {
-                col: col.replace("Whole house or bungalow: ", "")
-                for col in df.select(cs.numeric()).columns
-            }
-        )
+        .rename({col: col.replace("Whole house or bungalow: ", "") for col in df.select(cs.numeric()).columns})
         .rename(
             {"Type of accomodation": "lsoa"}
         )  # The Data Zone (lsoa) column name is mislabelled due to .csv formatting
@@ -201,20 +194,13 @@ def load_transform_df_target_tenure_scotland() -> pl.DataFrame:
     private_rental = [col for col in df.columns if "Private" in col]
     private_rental.extend(["Lives Rent Free"])
     df = df.with_columns(
-        pl.sum_horizontal([col for col in df.columns if "Owned" in col]).alias(
-            "owner-occupied"
-        ),
+        pl.sum_horizontal([col for col in df.columns if "Owned" in col]).alias("owner-occupied"),
         pl.sum_horizontal(private_rental).alias("rental (private)"),
-        pl.sum_horizontal([col for col in df.columns if "Social" in col]).alias(
-            "rental (social)"
-        ),
+        pl.sum_horizontal([col for col in df.columns if "Social" in col]).alias("rental (social)"),
     )
 
     # A small number of rows seem to erroneously have zero values for all tenure types, we need to remove them
-    df = df.filter(
-        pl.sum_horizontal(["owner-occupied", "rental (social)", "rental (private)"])
-        != 0
-    )
+    df = df.filter(pl.sum_horizontal(["owner-occupied", "rental (social)", "rental (private)"]) != 0)
 
     return df.select(["lsoa", "owner-occupied", "rental (social)", "rental (private)"])
 
@@ -260,9 +246,7 @@ def load_transform_df_target_tenure_ew() -> pl.DataFrame:
                 pl.sum_horizontal(private_rent_cols).alias("rental (private)"),
             ]
         )
-        .select(
-            pl.col(["lsoa", "owner-occupied", "rental (social)", "rental (private)"])
-        )
+        .select(pl.col(["lsoa", "owner-occupied", "rental (social)", "rental (private)"]))
     )
 
     return df

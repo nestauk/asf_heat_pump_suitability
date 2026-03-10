@@ -20,6 +20,6 @@ def impute_set_flat_properties(uprns_gdf: gpd.GeoDataFrame) -> set:
     # Filter the GeoDataFrame to only those geometries
     flats = set(uprns_gdf[uprns_gdf["geometry"].isin(duplicate_geoms)]["UPRN"])
     print(
-        f"{len(flats)} flats found in UPRN dataset, N={len(uprns_gdf)}, {round(len(flats)/len(uprns_gdf)*100, 2)}% of all UPRNs"
+        f"{len(flats)} flats found in UPRN dataset, N={len(uprns_gdf)}, {round(len(flats) / len(uprns_gdf) * 100, 2)}% of all UPRNs"
     )
     return flats

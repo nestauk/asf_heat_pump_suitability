@@ -3,13 +3,11 @@ Functions to generate features for random forest binary classifier model which c
 or not. Features are generated per building from building footprint and UPRN geodata.
 """
 
-import polars as pl
 import geopandas as gpd
+import polars as pl
 
 
-def generate_df_features(
-    buildings_gdf: gpd.GeoDataFrame, uprns_gdf: gpd.GeoDataFrame, id_col: str
-) -> pl.DataFrame:
+def generate_df_features(buildings_gdf: gpd.GeoDataFrame, uprns_gdf: gpd.GeoDataFrame, id_col: str) -> pl.DataFrame:
     """
     Generate all features required to train block of flats random forest binary classifier.
 
@@ -23,14 +21,10 @@ def generate_df_features(
     """
     print("Generating features required for block of flats classifier...")
     # Join UPRNs to the building footprints they intersect with and retain building geometry
-    buildings_w_uprns_gdf = buildings_gdf.sjoin(
-        uprns_gdf, how="inner", predicate="intersects"
-    ).dropna(subset=id_col)
+    buildings_w_uprns_gdf = buildings_gdf.sjoin(uprns_gdf, how="inner", predicate="intersects").dropna(subset=id_col)
 
     # Join buildings to the UPRNs they contain and retain UPRN geometry
-    uprns_w_buildings_gdf = uprns_gdf.sjoin(
-        buildings_gdf, how="inner", predicate="intersects"
-    ).dropna(subset="UPRN")
+    uprns_w_buildings_gdf = uprns_gdf.sjoin(buildings_gdf, how="inner", predicate="intersects").dropna(subset="UPRN")
 
     features_dfs = [
         # Generate features per building footprint
@@ -77,18 +71,14 @@ def _generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.Dat
         )
         .with_columns(
             (pl.col("n_flats") / pl.col("n_UPRNs")).alias("proportion_flats"),
-            (pl.col("n_UPRNs") / pl.col("building_area_m2")).alias(
-                "UPRNs_per_building_m2"
-            ),
+            (pl.col("n_UPRNs") / pl.col("building_area_m2")).alias("UPRNs_per_building_m2"),
         )
     )
 
     return agg_building_df
 
 
-def _generate_df_stacked_uprn_features(
-    gdf: gpd.GeoDataFrame, id_col: str
-) -> pl.DataFrame:
+def _generate_df_stacked_uprn_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.DataFrame:
     """
     Generate select features from UPRNs with building footprints joined to them:
     - avg_n_stacked_uprns (the average number of UPRNs sharing the same coordinates per building)
@@ -105,9 +95,7 @@ def _generate_df_stacked_uprn_features(
     df = pl.from_pandas(gdf.drop(columns="geometry"))
     df = df.with_columns(
         # Count of stacked UPRNs per coordinate
-        n_stacked_uprns=pl.col("UPRN")
-        .count()
-        .over(["X_COORDINATE", "Y_COORDINATE"])
+        n_stacked_uprns=pl.col("UPRN").count().over(["X_COORDINATE", "Y_COORDINATE"])
     )
 
     # Group by building and get the average and STD of UPRNs sharing the same coordinates
@@ -119,9 +107,7 @@ def _generate_df_stacked_uprn_features(
     return df
 
 
-def _generate_df_concave_hull_features(
-    gdf: gpd.GeoDataFrame, id_col: str
-) -> pl.DataFrame:
+def _generate_df_concave_hull_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.DataFrame:
     """
     Generate select features from UPRNs with building footprints joined to them:
     - concave_hull_area_m2 (the area (m2) of the concave hull of the point geometries of all UPRNs per building)
@@ -161,12 +147,8 @@ def _generate_df_concave_hull_features(
         )
         .with_columns(
             # Calculate additional features from the concave hull area
-            (pl.col("n_UPRNs") / pl.col("concave_hull_area_m2")).alias(
-                "uprns_per_hull_area_m2"
-            ),
-            (pl.col("n_flats") / pl.col("concave_hull_area_m2")).alias(
-                "flats_per_hull_area_m2"
-            ),
+            (pl.col("n_UPRNs") / pl.col("concave_hull_area_m2")).alias("uprns_per_hull_area_m2"),
+            (pl.col("n_flats") / pl.col("concave_hull_area_m2")).alias("flats_per_hull_area_m2"),
         )
         .with_columns(
             # UPRNs or flats per hull area can be infinite if all UPRNs/flats share the same coordinates (i.e. area = 0m2)

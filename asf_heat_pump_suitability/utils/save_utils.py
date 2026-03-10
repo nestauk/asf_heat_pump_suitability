@@ -1,9 +1,10 @@
-import s3fs
-import polars as pl
 import logging
-import boto3
-from sklearn.base import BaseEstimator
 import pickle
+
+import boto3
+import polars as pl
+import s3fs
+from sklearn.base import BaseEstimator
 
 
 def save_model_to_pkl_s3(model: BaseEstimator, path: str) -> None:

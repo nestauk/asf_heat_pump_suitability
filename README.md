@@ -1,148 +1,251 @@
 # ASF Heat Pump Suitability
 
-### Version 2.0.0 (in progress)
+Generates property-level data for Nesta's local heat planning tool, which clusters
+residential properties by the most suitable low-carbon heating technology (air source heat
+pump, ground source heat pump, shared ground loop, district heat network, or communal heat
+source) and provides supporting information about each cluster.
 
-V2.0.0 of the `asf_heat_pump_suitability` repository generates the underlying data for Nesta's local heat planning tool aiming to:
+---
 
-- cluster groups of properties by technology - grouping similar neighbouring properties by the most suitable low-carbon heating technologies\*
-- provide additional key information for each cluster about properties, households, and the area they are located in
+## Pipeline overview
 
-\*Low-carbon heating technologies include **individual heat sources**, **networked ground source heat pumps** (also
-known as **shared ground loops**), **communal heat sources** and **district heat networks**. You can read ead more about this work [here](https://www.nesta.org.uk/project-updates/a-tool-to-support-local-clean-heat-planning/)
+```
+OS Open UPRN  ──┐
+EPC register  ──┼──▶  uprns.py  ──▶  domestic_uprns.parquet
+Building       ─┘               (filter to domestic only)
+footprints
+                                        │
+         ┌──────────────────────────────┘
+         ▼
+Land registry ─┐
+Building       ─┼──▶  add_features.py  ──▶  uprns_with_features.parquet
+footprints     ─┘    (add property type,       (ready for decision tree)
+Block-of-flats        block-of-flats flag,
+classifier            outdoor space)
+```
 
-### Version 1.0.0
+| Script | Input | Output | Description |
+|---|---|---|---|
+| `pipeline/uprns.py` | S3: OS Open UPRN, EPC, building footprints | `domestic_uprns.parquet` | Filter all UK UPRNs to domestic-only |
+| `pipeline/add_features.py` | `domestic_uprns.parquet` + S3 data | `uprns_with_features.parquet` | Add features for decision tree |
+| `pipeline/run.py` | — | — | Orchestrate both steps in order |
 
-V1.0.0 of the `asf_heat_pump_suitability` contains the code used to calculate heat pump suitability scores for lower-layer
-super output areas (LSOAs) in England and Wales and Data Zones in Scotland using domestic EPC data and supplementary sources. Scores are
-weight-adjusted for LSOAs where possible to reduce bias.
-
-You can see [heat pump suitability scores across Great Britain in this map](https://heatpumpsuitability.dap-tools.uk/) for
-air source heat pumps, ground source heat pumps, shared group loops, and heat networks. You can read more about this work [here](https://www.nesta.org.uk/project/mapping-heat-pump-suitability-across-great-britain/). Please note that following the shift in our methodology to what we've developing in v2.0.0, the underlying data and associated map are no longer being updated. The map will be decommissioned in the near future.
-
-Source code for v1.0.0 is available under [Releases](https://github.com/nestauk/asf_heat_pump_suitability/releases).
+---
 
 ## Setup
 
-- Meet the data science cookiecutter [requirements](http://nestauk.github.io/ds-cookiecutter/quickstart), in brief:
-  - Install: `direnv` and `conda`
-- Clone the repo and navigate to your local repo folder
-- Run `direnv allow`
-- Run `make install` to configure the development environment:
-  - Setup the conda environment
-  - Configure `pre-commit`
-  - Install requirements
-- Run `conda activate asf_heat_pump_suitability`
-- Instructions to run pipeline scripts can be found in [asf_heat_pump_suitability/pipeline/README.md](https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/pipeline#readme)
+### Prerequisites
 
-## Repository structure
+- [uv](https://docs.astral.sh/uv/) (Python package manager)
+- [direnv](https://direnv.net/) (optional, for automatic env vars)
+- AWS credentials with read access to `s3://asf-heat-pump-suitability` (for pipeline runs)
 
-```
-asf_heat_pump_suitability
-├───config/
-│    Respository config files and global variables
-│    ├─ base.yaml - data sources and global variables and constants
-│    ├─ README.md - data source information, citations, and attributions
-├───getters/
-│    Modules with functions to load data
-│    ├─ base_getters.py - generic getter functions; no specific datasets
-│    ├─ load_geodata.py - load raw geodatasets with no preprocessing
-│    ├─ load_boundaries.py - load census and geographical boundaries (LSOA, LA, national etc.)
-│    ├─ load_data.py - load specific raw datasets using base getters
-├───pipeline/
-│    Subdirs with modules to process data and produce outputs
-│    ├─ cluster/ - modules to group properties
-│    ├─ impute/ - modules to impute missing data
-│    ├─ model/ - modules to engineer features and train models
-│    ├─ run/ - main scripts to run the pipeline
-│    ├─ transform/ - modules to process input datasets, files named by feature (e.g. `uprns.py`)
-│    ├─ README.md - instructions to run pipeline
-├───research/
-│    Any exploratory or analytical work; each piece of work should have its own subdir within either the `exploratory` or `analysis folders
-│    ├─ analysis/ - ad-hoc analysis that uses the data from the project or is relevant to the project
-│    ├─ exploratory/ - exploration of methods, datasets, or functions that may be incorporated into the data pipeline
-├───utils/
-│    Modules with generic utils
+### Install
+
+```bash
+git clone <repo-url>
+cd asf_heat_pump_suitability
+uv sync --all-extras
 ```
 
-## Data sources and acknowledgements
+### Environment variables
 
-A comprehensive table of citations for data used in this analysis can be found in [asf_heat_pump_suitability/config/README.md](https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme). See attributions below.
+The pipeline reads two environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `LOCAL_DEV` | `true` | When `true`, pipeline outputs are written to the local filesystem. Set `false` for production/cloud runs that write to S3. |
+| `OUTPUT_DIR` | `./outputs/` (local) or `s3://asf-heat-pump-suitability/outputs/` (cloud) | Base directory for all pipeline outputs. |
+
+**Using direnv** (recommended): run `direnv allow` to automatically set `LOCAL_DEV=true` and
+`OUTPUT_DIR=./outputs/` whenever you enter the repo directory. This prevents accidental writes
+to S3 from a developer laptop.
+
+**Manually**: export the variables before running any pipeline script:
+
+```bash
+export LOCAL_DEV=true
+export OUTPUT_DIR=./outputs/
+```
+
+---
+
+## Running the pipeline
+
+### Full pipeline (both steps)
+
+```bash
+# Local run — Plymouth only, writes to ./outputs/
+uv run python pipeline/run.py --local-authorities plymouth
+
+# Greater Manchester
+uv run python pipeline/run.py --local-authorities greater_manchester_las
+
+# Production run — full GB, writes to S3
+LOCAL_DEV=false uv run python pipeline/run.py
+```
+
+### Individual steps
+
+```bash
+# Step 1: filter UPRNs to domestic
+uv run python pipeline/uprns.py --local-authorities plymouth
+
+# Step 2: add features (reads from OUTPUT_DIR/domestic_uprns.parquet by default)
+uv run python pipeline/add_features.py --local-authorities plymouth
+
+# Step 2 with explicit input path
+uv run python pipeline/add_features.py \
+    --uprns ./outputs/domestic_uprns.parquet \
+    --local-authorities plymouth
+```
+
+### Available `--local-authorities` presets
+
+| Preset | Coverage |
+|---|---|
+| `plymouth` | Plymouth |
+| `plymouth_similar_cities` | Plymouth, Liverpool, Portsmouth, Southampton, Swansea |
+| `sampling_areas` | Bath, Bradford, Glasgow, Manchester, Nottingham, Plymouth |
+| `greater_manchester_las` | All 10 Greater Manchester local authorities |
+
+Omit `--local-authorities` to process all of GB (not yet fully scaled).
+
+---
+
+## Companion scripts
+
+These scripts are run once to set up data that the pipeline depends on.
+
+### `pipeline/setup/train_model.py` — train the block-of-flats classifier
+
+Trains the Random Forest classifier that `add_features.py` uses to predict whether a
+building is a block of flats. Run this once when new labelled training data is available.
+
+```bash
+uv run python pipeline/setup/train_model.py \
+    --uprns s3://asf-heat-pump-suitability/local_heat_planning/outputs/sampling_areas_residential_uprns.parquet \
+    --labelled-data s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet \
+    --save
+```
+
+### `pipeline/setup/stream_inspire_files.py` — stream INSPIRE land registry files to S3
+
+Downloads INSPIRE land parcel polygons from the HMLR (England & Wales) and Registers of
+Scotland websites and streams them to S3. Run this quarterly when INSPIRE data is updated.
+
+```bash
+# Stream both England & Wales and Scotland
+uv run python pipeline/setup/stream_inspire_files.py --nations all
+
+# England & Wales only
+uv run python pipeline/setup/stream_inspire_files.py --nations ew
+```
+
+---
+
+## Running tests
+
+```bash
+uv run pytest                          # all tests
+uv run pytest tests/unit/              # unit tests only
+uv run pytest tests/integration/       # integration tests (some skipped until fixtures generated)
+uv run pytest --cov=asf_heat_pump_suitability  # with coverage
+```
+
+### Generating test fixtures
+
+Integration tests require small fixture files committed to `tests/fixtures/`. Generate
+them once with real S3 access, then commit the results:
+
+```bash
+python tests/generate_fixtures.py
+git add tests/fixtures/
+```
+
+---
+
+## Development commands
+
+```bash
+uv sync --all-extras              # install all deps including dev
+uv run pytest                    # run tests
+uv run ruff check .              # lint
+uv run ruff format .             # format
+uv run ruff check --fix .        # lint and auto-fix
+uv run python pipeline/uprns.py --help  # CLI help
+```
+
+---
+
+## Contributing
+
+### Function naming convention
+
+All functions follow `action_returntype_description()`:
+
+- **action**: `load`, `transform`, `generate`, `extend`, `filter`, `predict`, `impute`
+- **returntype**: `df` (Polars), `gdf` (GeoDataFrame), `dict`, `set`, `list`
+- **description**: short description of the function, e.g. `osopen_uprn`, `residential_uprns`
+
+Examples: `load_df_osopen_uprn()`, `filter_gdf_residential_uprns()`, `generate_gdf_uprn_coords()`
+
+### Docstrings
+
+All public functions use [Google-style docstrings](https://google.github.io/styleguide/pyguide.html#383-functions-and-methods)
+with `Args` and `Returns` sections including types.
+
+### S3 file naming convention
+
+Raw source data in `s3://asf-heat-pump-suitability/` follows `a_vb_c_d_e`:
+
+- **a**: Publication date
+- **b**: Version date (if available)
+- **c**: Source name (e.g. `OSOpen`, `ONS`)
+- **d**: Short descriptive name
+- **e**: Geographical coverage
+
+Example: `v202510_OSOpenMapLocal_building_geometries_Plymouth.shp`
+
+Record all data sources in `asf_heat_pump_suitability/config/README.md`.
+
+---
+
+## Data sources
+
+A comprehensive table of data sources, citations, and attributions is in
+[asf_heat_pump_suitability/config/README.md](asf_heat_pump_suitability/config/README.md).
+
+Key sources:
+
+- **UPRNs**: OS Open UPRN (Crown copyright)
+- **EPC**: Domestic EPC register via `asf-daps` lakehouse; Commercial EPC (HMLR)
+- **Building footprints**: Microsoft Global ML Building Footprints (ODbL)
+- **Boundaries**: ONS LAD boundaries (OGL v3)
+- **Land parcels**: INSPIRE Index Polygons (HMLR / Crown copyright)
+- **Grid capacity**: ENW, Northern Powergrid, SPEN, SSEN, UKPN, NGED
+
+### Attributions
 
 - Contains OS data © Crown copyright and database right 2025.
 - Contains Royal Mail data © Royal Mail copyright and database right 2025.
 - Contains Office for National Statistics information licensed under the Open Government Licence v.3.0.
-- Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/)
-- This information is subject to Crown copyright and database rights 2025 and is reproduced with the permission of HM Land Registry. See INSPIRE index polygons [conditions of use](https://use-land-property-data.service.gov.uk/datasets/inspire#conditions).
-- This work uses HM Land Registry's INSPIRE Index Polygons service. This information is subject to Crown copyright and database rights 2024 and is reproduced with the permission of HM Land Registry. The polygons (including the associated geometry, namely x, y co-ordinates) are subject to Crown copyright and database rights 2025 Ordnance Survey 100026316.
-- Microsoft GlobalMLBuildingFootprints are made available under the [Open Database License](http://opendatacommons.org/licenses/odbl/1.0/). Any rights in individual contents of the database are licensed under the [Database Contents License](http://opendatacommons.org/licenses/dbcl/1.0/\).
+- This information is subject to Crown copyright and database rights 2025 and is reproduced with the permission of HM Land Registry.
+- Microsoft GlobalMLBuildingFootprints are made available under the [Open Database License](http://opendatacommons.org/licenses/odbl/1.0/).
 - This work uses designated Historic Asset GIS Data, The Welsh Historic Environment Service (Cadw), 2025, licensed under the Open Government Licence.
-- This work uses Historic England data © Historic England 2025. Contains Ordnance Survey data © Crown copyright and database right 2025. The Historic England GIS Data contained in this material was obtained on August 2024. The most publicly available up to date Historic England GIS Data can be obtained from HistoricEngland.org.uk.
+- This work uses Historic England data © Historic England 2025.
 - This work uses data provided by the Consumer Data Research Centre, an ESRC Data Investment.
-- This work uses Registers of Scotland's land extent polygons. © Crown copyright. Reproduced with the permission of Registers of Scotland.
+- This work uses Registers of Scotland's land extent polygons. © Crown copyright.
 - This work uses data from the Scottish Census © Crown copyright. Data supplied by National Records of Scotland.
-- This work uses data from Electricity North West Ltd, SP Energy Networks, SSEN Distribution, UK Power Networks. Creative Commons Attribution: https://creativecommons.org/licenses/by/4.0/
+- This work uses data from Electricity North West Ltd, SP Energy Networks, SSEN Distribution, UK Power Networks. [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
 - Supported by Northern Powergrid Open Data. [License](https://northernpowergrid.opendatasoft.com/p/opendatalicence/)
 - Supported by NGED Open Data. [License](https://www.nationalgrid.co.uk/open-data-licence)
-- This work uses [Facebook Research's balance package](https://github.com/facebookresearch/balance) and [ipfn](https://github.com/Dirguis/ipfn) to conduct iterative proportional fitting.
-  Sarig, T., Galili, T., & Eilat, R. (2023). balance – a Python package for balancing biased data samples. https://arxiv.org/abs/2307.06024
-
-## License
-
-This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
-
-## Contributor guidelines and style guide
-
-This guide outlines the conventions for function and file naming for the `asf_heat_pump_suitability` project.
-
-### 1. Function naming conventions
-
-All functions must follow the naming format `def a_b_cde()`:
-
-- **a (Action):** What the function does (e.g., `load`, `transform`, `generate`, `extend`).
-- **b (Return Type):** The type of object the function returns (e.g., `df`, `gdf`, `list`, `dict`).
-- **cde (Description):** Short description of the function - e.g. for getters we want to specify the source and dataset.
-
-#### Common actions ('a')
-
-- **load:** Load raw dataframes (from S3) with no processing.
-- **transform:** Process a dataframe or data.
-- **generate:** Create a new dataframe or variable.
-- **extend:** Add columns to a dataframe.
-
-#### Example function names
-
-- `load_df_osopen_uprn()`: Load raw OSOpen UPRN dataframe.
-- `filter_gdf_residential_uprns()`: Filter GeoDataFrame of UPRNs to residential UPRNs only.
-- `generate_gdf_non_residential_buildings()`: Generate a new GeoDataFrame containing non-residential buildings.
-
-### 2. Docstrings and type hinting
-
-`.py` files must start with a docstring containing a brief description of the module.
-
-Every function must include:
-
-- **Type Hinting:** For both function arguments and return types.
-- **Docstring:** [Google-style docstring](https://google.github.io/styleguide/pyguide.html#383-functions-and-methods) with a concise explanation of the function's purpose, and `Args` and `Returns` information (including listing types).
-
-Getters which load specific raw datasets must include name of data publisher, geographical coverage (where applicable), and, for geospatial data, coordinate reference system.
-
-### 3. S3 source file naming
-
-**Important:** keep track of original source locations and descriptions in `config/README.md` using the established table format for every dataset used.
-Raw source data should be saved to the `asf-heat-pump-suitability` bucket in the `/local_heat_planning/inputs/` directory (and appropriate subdir, if applicable) using the format `a_vb_c_d_e`:
-
-- **a**: Date of origin (publication date).
-- **b**: Version date (if available).
-- **c**: Source name (e.g. `OSOpen`, `ONS`).
-- **d**: Short descriptive name (e.g. `building_geometries`).
-- **e**: Geographical coverage (e.g. `UK`, `GB`, `global`).
-
-**Example:** `v202510_OSOpenMapLocal_building_geometries_Plymouth.shp`.
-
-See further [technical and working style guidelines](https://github.com/nestauk/ds-cookiecutter/blob/master/GUIDELINES.md)
 
 ---
 
-<small><p>Project based on <a target="_blank" href="https://github.com/nestauk/ds-cookiecutter">Nesta's data science project template</a>
-(<a href="http://nestauk.github.io/ds-cookiecutter">Read the docs here</a>).
-</small>
+## License
+
+This project is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+International License.
+
+<small>Project based on <a target="_blank" href="https://github.com/nestauk/ds-cookiecutter">Nesta's data science project template</a>.</small>

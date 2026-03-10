@@ -1,6 +1,6 @@
-import polars as pl
 from collections import OrderedDict
 
+import polars as pl
 
 onspd_schema = OrderedDict(
     [
@@ -59,9 +59,7 @@ onspd_schema = OrderedDict(
         ("msoa21", pl.String),
     ]
 )
-microsoft_datalinks = OrderedDict(
-    [("Location", str), ("QuadKey", str), ("Url", str), ("Size", str)]
-)
+microsoft_datalinks = OrderedDict([("Location", str), ("QuadKey", str), ("Url", str), ("Size", str)])
 nrs_dwellings = OrderedDict(
     [
         ("Data Zone code", pl.String),

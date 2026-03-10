@@ -80,13 +80,11 @@ def label_gdf_city_centre_spatial_signatures_uprns(
 
     # UPRNs with no spatial signature match are ultimately classified as not in city centre
     # TODO: consider if unassigned UPRNs should be handled differently in the future
-    labelled_uprn_gdf["in_city_centre"] = labelled_uprn_gdf["in_city_centre"].fillna(
-        False
-    )
+    labelled_uprn_gdf["in_city_centre"] = labelled_uprn_gdf["in_city_centre"].fillna(False)
 
     # Return as polars df without geometry
-    labelled_uprn_df = pl.from_pandas(
-        labelled_uprn_gdf.drop(columns="geometry")
-    ).rename({"type": "spatial_signature_types"})
+    labelled_uprn_df = pl.from_pandas(labelled_uprn_gdf.drop(columns="geometry")).rename(
+        {"type": "spatial_signature_types"}
+    )
 
     return labelled_uprn_df
