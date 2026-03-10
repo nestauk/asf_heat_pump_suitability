@@ -66,6 +66,8 @@ constant:
     - "Plymouth"
   plymouth: "plymouth"
   target_crs: 27700 # British National Grid
+
+  # TODO update to new names before running the pipeline again
   tech_types:
     individual: "Individual solution"
     N_GSHP: "Networked GSHP"
