@@ -61,7 +61,7 @@ def save_to_s3(df: pl.DataFrame | gpd.GeoDataFrame, path: str) -> None:
         elif file_type == "geojson":
             df = df.to_crs(epsg=4326)
             with fsspec.open(path, "w") as f:
-                f.write(df.to_json())
+                f.write(df.to_json(drop_id=True))
         else:
             with fsspec.open(path, "wb") as f:
                 df.to_file(f)
