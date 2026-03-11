@@ -31,3 +31,4 @@ pyarrow
 simplekml
 smart-open~=7.3
 git+https://github.com/OrdnanceSurvey/osbng-py.git
+momepy
