@@ -101,7 +101,7 @@ anchors_with_footprint = (
 
 # %%
 # add POI and important building lists together and remove duplicate buildings
-# I don't think the removing duplicates is fully working, need to check
+
 all_anchors_with_footprint = pd.concat(
     [anchors_with_footprint, important_buildings_filtered]
 )
