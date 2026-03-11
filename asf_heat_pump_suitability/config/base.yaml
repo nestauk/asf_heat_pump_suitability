@@ -71,6 +71,7 @@ constant:
     N_GSHP: "Networked GSHP"
     communal: "Communal solutions"
     heat_networks: "District heat network"
+  radius: 50
 output:
   save_as:
     model:
