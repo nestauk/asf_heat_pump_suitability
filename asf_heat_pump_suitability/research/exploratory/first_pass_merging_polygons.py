@@ -42,18 +42,26 @@ tech_gdf = (
 tech_gdf["tech"].unique()
 
 # %%
+tech_gdf["tech"] = (
+    tech_gdf["tech"]
+    .replace("Individual solution or Networked GSHP", "Networked GSHP")
+    .replace("Individual solution or District heat network", "District heat network")
+    .replace("Networked GSHP", "Networked Heat Pump")
+)
+
+# %%
 TECHS = [
     "Individual solution",
-    "Networked GSHP",
+    "Networked Heat Pump",
     "Communal solutions",
     "District heat network",
-    "Individual solution or Networked GSHP",
-    "Individual solution or District heat network",
+    # "Individual solution or Networked GSHP",
+    # "Individual solution or District heat network",
 ]
 
 COLOURS = {
     "Individual solution": "#18A48C",
-    "Networked GSHP": "#0000FF",
+    "Networked Heat Pump": "#0000FF",
     "Communal solutions": "#FF6E47",
     "District heat network": "#EA2541",
     # "Individual solution or Networked GSHP": "grey",
@@ -222,16 +230,6 @@ voronoi_polygons_gdf = voronoi_polygons_gdf.sjoin(
 
 # %%
 plot_tech_separate_subplots(voronoi_polygons_gdf)
-
-# %%
-dissolve_techs_and_plot_static(voronoi_polygons_gdf)
-
-# %%
-dissolve_techs_and_plot_folium(
-    voronoi_gdf=voronoi_polygons_gdf,
-    buildings_gdf=tech_gdf,
-    boundary_gdf=plymouth_boundaries,
-)
 
 # %% [markdown]
 # ## Densify edges and then voronoi
@@ -523,16 +521,38 @@ map
 map.save("20250205_plymouth_folium_map.html")
 
 # %%
-
+# explode into one line per geometry
+dissolved_gdf = dissolved_gdf[["tech", "geometry"]].explode()
 
 # %%
-dissolved_gdf.to_file(
-    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_tech_polygons.geojson",
-    driver="GeoJSON",
+dissolved_gdf["tech"].unique()
+
+# %%
+tech_code = {
+    "Communal solutions": "COM",
+    "District heat network": "DHNZ",
+    "Individual solution": "IND",
+    "Networked Heat Pump": "NHP",
+}
+
+# %%
+dissolved_gdf["code"] = dissolved_gdf["tech"].map(tech_code)
+
+# %%
+# create an ID for each geometry that starts with the tech code and ends with a unique number, e.g. COM_1, COM_2, etc.
+dissolved_gdf["cluster_id"] = dissolved_gdf.groupby("tech").cumcount()
+dissolved_gdf["cluster_id"] = (
+    dissolved_gdf["code"] + "_" + (dissolved_gdf["cluster_id"] + 1).astype(str)
 )
 
 # %%
+dissolved_gdf
 
+# %%
+dissolved_gdf.to_file(
+    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_tech_polygons_with_clusterID.geojson",
+    driver="GeoJSON",
+)
 
 # %%
 # # To open this geojson s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_tech_polygons.geojson
@@ -540,6 +560,9 @@ dissolved_gdf.to_file(
 # saved_gdf = gpd.read_file(
 #     "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_tech_polygons.geojson"
 # )
+
+
+# %%
 
 
 # %%
