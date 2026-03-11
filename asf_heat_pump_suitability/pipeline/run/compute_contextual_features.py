@@ -309,6 +309,9 @@ if __name__ == "__main__":
         opportunity_areas_df=opportunity_areas_df, uprns_gdf=uprns_gdf
     )
 
+    print("Remove clusters without any UPRNs within them...")
+    opportunity_areas_df = opportunity_areas_df.filter(pl.col("n_UPRNs") > 0)
+
     if args.save:
         opportunity_areas_df = opportunity_areas_df.to_pandas().merge(
             areas_gdf[["cluster_id", "geometry"]],
