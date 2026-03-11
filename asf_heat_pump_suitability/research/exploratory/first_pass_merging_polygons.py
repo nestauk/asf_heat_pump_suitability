@@ -231,13 +231,6 @@ voronoi_polygons_gdf = voronoi_polygons_gdf.sjoin(
 # %%
 plot_tech_separate_subplots(voronoi_polygons_gdf)
 
-# %%
-dissolve_techs_and_plot_folium(
-    voronoi_gdf=voronoi_polygons_gdf,
-    buildings_gdf=tech_gdf,
-    boundary_gdf=plymouth_boundaries,
-)
-
 # %% [markdown]
 # ## Densify edges and then voronoi
 
@@ -548,8 +541,8 @@ dissolved_gdf["code"] = dissolved_gdf["tech"].map(tech_code)
 # %%
 # create an ID for each geometry that starts with the tech code and ends with a unique number, e.g. COM_1, COM_2, etc.
 dissolved_gdf["cluster_id"] = dissolved_gdf.groupby("tech").cumcount()
-dissolved_gdf["cluster_id"] = dissolved_gdf.apply(
-    lambda x: f"{x['code']}_{x['cluster_id']+1}", axis=1
+dissolved_gdf["cluster_id"] = (
+    dissolved_gdf["code"] + "_" + (dissolved_gdf["cluster_id"] + 1).astype(str)
 )
 
 # %%
