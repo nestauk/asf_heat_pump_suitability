@@ -62,7 +62,7 @@ if __name__ == "__main__":
         feature_engineering,
         train_model,
     )
-    from asf_heat_pump_suitability.pipeline.transform import uprns, outdoor_space
+    from asf_heat_pump_suitability.pipeline.transform import uprns, outdoor_space, epc
     from asf_heat_pump_suitability.getters import get_datasets
 
     args = parse_arguments()
@@ -182,6 +182,17 @@ if __name__ == "__main__":
         ),
         how="left",
         on="UPRN",
+    )
+
+    # ------------------------ #
+    # PRIORITISATION FEATURES
+    # ------------------------ #
+    # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE
+    epc_df = pl.read_parquet("")
+    uprns_df = epc.extend_df_epc_features(
+        uprns_df=uprns_df,
+        epc_df=epc_df,
+        columns=["UPRN", "ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"],
     )
 
     # ------------------------ #
