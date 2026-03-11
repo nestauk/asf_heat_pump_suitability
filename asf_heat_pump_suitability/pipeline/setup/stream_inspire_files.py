@@ -1,6 +1,6 @@
 """CLI: Stream INSPIRE land registry files from government websites to S3.
 
-Streams INSPIRE land parcel polygon files to the ``asf-heat-pump-suitability``
+Streams INSPIRE land parcel polygon files to the ``asf-local-heat-planning-tool``
 S3 bucket. Files are unzipped during streaming.
 
 - **Scotland**: Partitioned by Registration County (shapefile packages) from the
@@ -15,13 +15,13 @@ to run as part of the regular pipeline.
 Example usage:
 
     # Stream both Scotland and England & Wales
-    uv run python pipeline/setup/stream_inspire_files.py --nations all
+    uv run python asf_heat_pump_suitability/pipeline/setup/stream_inspire_files.py --nations all
 
     # Stream England & Wales only
-    uv run python pipeline/setup/stream_inspire_files.py --nations ew
+    uv run python asf_heat_pump_suitability/pipeline/setup/stream_inspire_files.py --nations ew
 
     # Stream Scotland only
-    uv run python pipeline/setup/stream_inspire_files.py --nations s
+    uv run python asf_heat_pump_suitability/pipeline/setup/stream_inspire_files.py --nations s
 """
 
 import time
@@ -57,7 +57,7 @@ def main(
 ) -> None:
     """Stream INSPIRE land registry files to S3."""
     s3 = boto3.client("s3")
-    bucket = "asf-heat-pump-suitability"
+    bucket = "asf-local-heat-planning-tool"
 
     if nations in ["s", "all"]:
         _stream_scotland(s3=s3, bucket=bucket)
@@ -75,7 +75,7 @@ def _stream_scotland(s3: boto3.client, bucket: str) -> None:
         s3: Boto3 S3 client.
         bucket: Name of the S3 bucket to upload to.
     """
-    ros_url = config["data_source"]["S_ros_inspire_url"]
+    ros_url = config["inputs"]["inspire"]["scotland_url"]
     print(f"Fetching Scottish INSPIRE file list from: {ros_url}")
 
     page = requests.get(ros_url)
@@ -106,7 +106,7 @@ def _stream_england_wales(s3: boto3.client, bucket: str) -> None:
         s3: Boto3 S3 client.
         bucket: Name of the S3 bucket to upload to.
     """
-    ew_url = config["data_source"]["EW_inspire_url"]
+    ew_url = config["inputs"]["inspire"]["england_wales_url"]
     print(f"Fetching England & Wales INSPIRE file list from: {ew_url}")
 
     page = requests.get(url=ew_url, headers={"User-Agent": "Data collection for research."})

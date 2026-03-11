@@ -3,13 +3,13 @@
 Example usage:
 
     # Full UK run (production, writes to S3)
-    LOCAL_DEV=false uv run python pipeline/run.py
+    LOCAL_DEV=false uv run python asf_heat_pump_suitability/pipeline/run.py
 
     # Greater Manchester only (local, writes to ./outputs/)
-    uv run python pipeline/run.py --local-authorities greater_manchester_las
+    uv run python asf_heat_pump_suitability/pipeline/run.py --local-authorities greater_manchester_las
 
     # Plymouth, custom output dir
-    uv run python pipeline/run.py --local-authorities plymouth --output-dir /data/outputs/
+    uv run python asf_heat_pump_suitability/pipeline/run.py --local-authorities plymouth --output-dir /data/outputs/
 """
 
 import subprocess
@@ -52,13 +52,13 @@ def main(
 
     # Step 1: filter UPRNs to domestic
     print("=== Step 1/2: uprns.py ===")
-    result = subprocess.run(build_args("pipeline/uprns.py"), check=False)
+    result = subprocess.run(build_args("asf_heat_pump_suitability/pipeline/uprns.py"), check=False)
     if result.returncode != 0:
         sys.exit(result.returncode)
 
     # Step 2: add features
     print("=== Step 2/2: add_features.py ===")
-    result = subprocess.run(build_args("pipeline/add_features.py"), check=False)
+    result = subprocess.run(build_args("asf_heat_pump_suitability/pipeline/add_features.py"), check=False)
     if result.returncode != 0:
         sys.exit(result.returncode)
 

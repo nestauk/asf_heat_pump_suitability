@@ -3,12 +3,12 @@
 ## Data sources
 
 The sources of data used in this project are listed in the tables below. Data is downloaded from these sources and saved
-to S3 in Nesta's `asf-heat-pump-suitability` bucket (private) in the `source_data` directory. The files in S3 must be
+to S3 in the `asf-local-heat-planning-tool` bucket (private) under the `inputs/` prefix. The files in S3 must be
 manually updated when new versions of the source data are available. The appropriate value in
 `asf_heat_pump_suitability/config/base.yaml` must then be updated with the new S3 URI.
 
-In the tables below, the 'Config key' column indicates the
-key used in `asf_heat_pump_suitability/config/base.yaml` under the primary `["data_source"]` key.
+In the tables below, the 'Config key' column indicates the nested key path used in
+`asf_heat_pump_suitability/config/base.yaml` under the primary `["inputs"]` key (e.g. `["inputs"]["geodata"]["lad_boundaries"]`).
 
 ### EPC data
 

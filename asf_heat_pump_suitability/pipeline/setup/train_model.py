@@ -8,17 +8,16 @@ Requires domestic UPRNs parquet and manually-labelled building data.
 
 Example usage:
 
-    uv run python pipeline/setup/train_model.py \\
-        --uprns s3://asf-heat-pump-suitability/local_heat_planning/outputs/sampling_areas_residential_uprns.parquet \\
-        --labelled-data s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet \\
+    uv run python asf_heat_pump_suitability/pipeline/setup/train_model.py \\
+        --uprns s3://asf-local-heat-planning-tool/outputs/sampling_areas_residential_uprns.parquet \\
+        --labelled-data s3://asf-local-heat-planning-tool/inputs/reference/manually_labelled_block_of_flats.parquet \\
         --save
 """
 
-import polars as pl
 import typer
 
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.getters import load_tree_input
+from asf_heat_pump_suitability.getters import base_getters, load_tree_input
 from asf_heat_pump_suitability.pipeline.impute import property_type
 from asf_heat_pump_suitability.pipeline.model.block_of_flats import feature_engineering, train_model
 from asf_heat_pump_suitability.pipeline.transform import uprns
@@ -47,7 +46,7 @@ def main(
 ) -> None:
     """Train the block-of-flats Random Forest classifier and optionally save it to S3."""
     print(f"Loading domestic UPRNs from: {uprns_path}")
-    uprns_df = pl.read_parquet(uprns_path, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"])
+    uprns_df = base_getters.load_df(uprns_path, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"])
 
     uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
 
@@ -66,7 +65,7 @@ def main(
     )
 
     print(f"Loading labelled data from: {labelled_data}")
-    labelled_df = pl.read_parquet(labelled_data)
+    labelled_df = base_getters.load_df(labelled_data)
     model_df = labelled_df.join(building_features_df, how="left", on="ID")
 
     model = train_model.train_eval_rfc_block_of_flats_classifier(
@@ -78,9 +77,7 @@ def main(
     )
 
     if save:
-        save_as = config["output"]["save_as"]["model"]["block_of_flats_model"]
-        print(f"Saving model to: {save_as}")
-        save_utils.save_model_to_pkl_s3(model, save_as)
+        save_utils.save_model_to_pkl(model, config["outputs"]["models"]["block_of_flats"])
     else:
         print("Model trained. Use --save to persist to S3.")
 

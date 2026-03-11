@@ -5,7 +5,7 @@ Functions to transform data related to identifying non-domestic buildings.
 import geopandas as gpd
 import pandas as pd
 
-from asf_heat_pump_suitability.pipeline.transform import uprns
+from asf_heat_pump_suitability.getters import get_epc
 
 # TODO these may need refinement for large cities where overlap with residential is possible
 NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
@@ -99,7 +99,7 @@ def generate_gdf_non_residential_buildings(
     )
 
     # Get locations of UPRNs in domestic EPC
-    include_uprns = uprns.load_set_valid_epc_uprns(epc_type="domestic")
+    include_uprns = get_epc.load_set_valid_epc_uprns(epc_type="domestic")
     uprns_gdf = uprns_gdf[uprns_gdf["UPRN"].isin(include_uprns)].copy()
 
     # Find buildings that contain a domestic UPRN

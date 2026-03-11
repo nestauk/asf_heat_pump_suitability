@@ -13,7 +13,7 @@ from asf_heat_pump_suitability import config
 def transform_gdf_poi(
     poi: gpd.GeoDataFrame,
     filter_categories: Iterable[str] = None,
-    target_crs: str | int = config["constant"]["target_crs"],
+    target_crs: str | int = None,
 ) -> gpd.GeoDataFrame:
     """
     Transform Points of Interest data for Great Britain - filter to specified categories and reproject to target CRS.
@@ -26,6 +26,9 @@ def transform_gdf_poi(
     Returns:
         gpd.GeoDataFrame: Processed POI data containing types of POI specified
     """
+    if target_crs is None:
+        target_crs = config["constant"]["target_crs"]
+
     # Filter to Great Britain
     poi = poi[poi.country == "GB"].copy()
 
@@ -46,6 +49,6 @@ def load_set_non_domestic_poi_categories() -> set:
     Returns:
         set: non-domestic POI categories
     """
-    with smart_open.open(config["data"]["processed"]["non_domestic_poi_categories"], "r") as f:
+    with smart_open.open(config["inputs"]["reference"]["non_domestic_poi_categories"], "r") as f:
         categories = [line.strip() for line in f]
     return set(categories)

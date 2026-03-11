@@ -16,7 +16,7 @@ class Settings(BaseSettings):
             filesystem. Set to False for cloud/production runs that write to S3.
         output_dir: Override the base directory for resolved output paths. If not set,
             defaults to ``./outputs/`` when ``local_dev=True`` and to
-            ``s3://asf-heat-pump-suitability/outputs/`` when ``local_dev=False``.
+            ``s3://asf-local-heat-planning-tool/outputs/`` when ``local_dev=False``.
     """
 
     local_dev: bool = True
@@ -33,7 +33,7 @@ class Settings(BaseSettings):
         """
         if self.output_dir:
             return self.output_dir
-        return "./outputs/" if self.local_dev else "s3://asf-heat-pump-suitability/outputs/"
+        return "./outputs/" if self.local_dev else "s3://asf-local-heat-planning-tool/outputs/"
 
     def resolve_output_path(self, filename: str) -> str:
         """Resolve a pipeline output filename to its full path.

@@ -2,32 +2,8 @@
 Functions to calculate outdoor space estimates from building footprints and land extents.
 """
 
-import logging
-
 import geopandas as gpd
-import pandas as pd
 import polars as pl
-
-
-def match_series_files_land_building(
-    land_files_gdf: gpd.GeoDataFrame, building_files_gdf: gpd.GeoDataFrame
-) -> pd.Series:
-    """
-    Get Series of intersecting INSPIRE land parcel files and Microsoft building footprint files.
-
-    Args:
-        land_files_gdf (gpd.GeoDataFrame): INSPIRE land file names and file bounding polygons
-        building_files_gdf (gpd.GeoDataFrame): Microsoft building footprint file names and file bounding polygons
-
-    Returns:
-        pd.Series: Series where indices are INSPIRE land parcel file names and values are Microsoft building footprint files
-        names
-    """
-    logging.info("Mapping building footprint files to INSPIRE land registry files")
-    gdf = land_files_gdf.sjoin(building_files_gdf, how="inner", predicate="intersects")
-    file_matches = pd.Series(gdf["ms_url"].values, index=gdf["inspire_file_name"]).sort_index()
-
-    return file_matches
 
 
 def generate_gdf_building_intersections(
@@ -117,8 +93,8 @@ def generate_gdf_outdoor_space(
         # Group land extent intersections by their ID to get the largest part per parcel
         land_minus_buildings_parts.groupby("NATIONALCADASTRALREFERENCE")
         .agg(
-            max_contiguous_outdoor_space_area_m2=("outdoor_space_area_m2", max),
-            total_outdoor_space_area_m2=("outdoor_space_area_m2", sum),
+            max_contiguous_outdoor_space_area_m2=("outdoor_space_area_m2", "max"),
+            total_outdoor_space_area_m2=("outdoor_space_area_m2", "sum"),
         )
         .reset_index(
             # Drop duplicates in case there are multiple max values

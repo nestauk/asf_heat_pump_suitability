@@ -1,73 +1,68 @@
 import logging
 import pickle
+from pathlib import Path
 
-import boto3
 import polars as pl
 import s3fs
 from sklearn.base import BaseEstimator
 
+from asf_heat_pump_suitability.config.settings import Settings
 
-def save_model_to_pkl_s3(model: BaseEstimator, path: str) -> None:
-    """
-    Save Estimator as pickle file to S3.
-
-    Args:
-        model (BaseEstimator): trained model
-        path (str): path to S3 destination
-
-    Returns:
-        None
-    """
-    fs = s3fs.S3FileSystem()
-    pickle.dump(model, fs.open(path, "wb"))
-    print(f"Saved model to {path}")
+logger = logging.getLogger(__name__)
 
 
-def save_to_s3(df: pl.DataFrame, path: str) -> None:
-    """
-    Save dataframe as parquet file to S3.
+def save_df(df: pl.DataFrame, filename: str, settings: Settings) -> None:
+    """Save a DataFrame to the configured output directory (local or S3).
+
+    The output path is resolved from ``filename`` using ``settings``. Supports
+    .parquet and .csv. Local paths have their parent directory created
+    automatically if it does not already exist.
 
     Args:
-        df (pl.DataFrame): dataframe
-        path (str): path to S3 destination
-
-    Returns:
-        None
+        df (pl.DataFrame): DataFrame to save.
+        filename (str): Output filename (e.g. ``domestic_uprns.parquet``).
+        settings (Settings): Pipeline settings used to resolve the output path.
     """
-    logging.info(f"Saving file to {path}")
+    path = settings.resolve_output_path(filename)
+    print(f"Saving to: {path}")
     file_type = path.split(".")[-1]
-    fs = s3fs.S3FileSystem()
-    if file_type == "parquet":
-        with fs.open(path=path, mode="wb") as f:
-            df.write_parquet(f)
-    elif file_type == "csv":
-        with fs.open(path=path, mode="wb") as f:
-            df.write_csv(f)
+    if path.startswith("s3://"):
+        fs = s3fs.S3FileSystem()
+        if file_type == "parquet":
+            with fs.open(path=path, mode="wb") as f:
+                df.write_parquet(f)
+        elif file_type == "csv":
+            with fs.open(path=path, mode="wb") as f:
+                df.write_csv(f)
+        else:
+            raise ValueError(f"Unsupported file type for S3 save: .{file_type}")
     else:
-        raise ValueError(
-            "Save to S3 can only save .parquet or .csv file types."
-            "Please ensure the `path` argument contains one of these file types."
-        )
+        Path(path).resolve().parent.mkdir(parents=True, exist_ok=True)
+        if file_type == "parquet":
+            df.write_parquet(path)
+        elif file_type == "csv":
+            df.write_csv(path)
+        else:
+            raise ValueError(f"Unsupported file type for local save: .{file_type}")
 
 
-def upload_file_to_s3(
-    local_file_path: str,
-    s3_bucket: str,
-    s3_key_dir: str,
-    filename: str,
-    subfolder: str,
-):
-    """
-    Upload a local file to an S3 bucket.
+def save_model_to_pkl(model: BaseEstimator, path: str) -> None:
+    """Save a fitted scikit-learn estimator as a pickle file to S3 or local filesystem.
+
+    Local paths have their parent directory created automatically if it does not
+    already exist.
 
     Args:
-        local_file_path (str): Path to the local file.
-        s3_bucket (str): Name of the S3 bucket.
-        s3_key_dir (str): S3 key (path) where the file should be uploaded.
-        filename (str): The actual filename to store in S3.
-        subfolder (str): Subfolder within S3.
+        model (BaseEstimator): Trained estimator to persist.
+        path (str): Destination path — either a local filesystem path or an
+            ``s3://`` URI.
     """
-    s3_client = boto3.client("s3")
-    s3_key = f"{s3_key_dir}{subfolder}/{filename}"
-    s3_client.upload_file(local_file_path, s3_bucket, s3_key)
-    logging.info(f"File uploaded to s3://{s3_bucket}/{s3_key}")
+    if path.startswith("s3://"):
+        fs = s3fs.S3FileSystem()
+        with fs.open(path, "wb") as f:
+            pickle.dump(model, f)
+    else:
+        Path(path).resolve().parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
+            pickle.dump(model, f)
+    print(f"Saved model to {path}")

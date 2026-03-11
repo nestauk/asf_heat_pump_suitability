@@ -1,35 +1,34 @@
-data:
+inputs:
   geodata:
     # OpenMap UPRN with coordinates
-    uk_osopen_uprn: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/osopenuprn_202510_csv.zip"
+    osopen_uprn:                  "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_csv.zip"
     # OpenMap Local Geopackage
-    gb_os_openmap_local: "s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg"
+    os_openmap_local:             "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares
-    grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
-
-    boundaries:
-      # UK LA boundaries
-      UK_ons_lad_bounds: "s3://asf-heat-pump-suitability/source_data/Local_Authority_Districts_December_2023_Boundaries_UK_BFE_-2600600853110041429/LAD_DEC_2023_UK_BFE.shp"
-
-    heat_network_zones:
-      # Plymouth Heat Network zones
-      plymouth: "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/NMR3 Heat Network Zones (Post-Ref).gpkg"
-      greater_manchester_las: "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Greater-Manchester.gpkg"
-
-    gb_spatial_signatures:
-      # UrbanGrammarAI Spatial Signatures GB simplified
-      simplified: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB_simplified.gpkg"
-      # UrbanGrammarAI Spatial Signatures GB detailed
-      full: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB.gpkg"
+    os_openmap_local_grid_square: "s3://asf-local-heat-planning-tool/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+    # UK LA boundaries
+    lad_boundaries:               "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/LAD_DEC_2023_UK_BFE.shp"
+    # Points of Interest
+    poi:                          "s3://asf-local-heat-planning-tool/inputs/geodata/poi_uk.gpkg"
+    # Plymouth Land Registry cadastral parcels
+    plymouth_land_registry:       "s3://asf-local-heat-planning-tool/inputs/geodata/Plymouth_Land_Registry_Cadastral_Parcels.gml"
 
   epc:
-    domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
-    commercial: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v092025_EPC_NonDomestic_EW.csv"
+    domestic:   "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
+    commercial: "s3://asf-local-heat-planning-tool/inputs/epc/v092025_EPC_NonDomestic_EW.csv"
 
-  # Preprocessed data
-  processed:
-    non_domestic_poi_categories: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/non_residential_poi_categories.csv"
-    plymouth_residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet"
+  reference:
+    non_domestic_poi_categories:        "s3://asf-local-heat-planning-tool/inputs/reference/non_residential_poi_categories.csv"
+    manually_labelled_block_of_flats:   "s3://asf-local-heat-planning-tool/inputs/reference/manually_labelled_block_of_flats.parquet"
+
+  inspire:
+    scotland_url:       "https://ros.locationcentre.co.uk/inspire/"
+    england_wales_url:  "https://use-land-property-data.service.gov.uk/datasets/inspire/download"
+    file_bounds_ew:     "s3://asf-local-heat-planning-tool/inputs/inspire/inspire_file_bounds_EW.geojson"
+
+outputs:
+  models:
+    block_of_flats: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_building_classifier.pkl"
 
 constant:
   plymouth:
@@ -84,167 +83,3 @@ constant:
       - "SJ"
       - "SK"
   target_crs: 27700 # British National Grid
-
-output:
-  save_as:
-    model:
-      block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"
-
-data_source:
-  gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
-  gb_ons_postcode_dir_file_path: "Data/ONSPD_AUG_2023_UK.csv" # Aug 2023 data
-  UK_ons_postcode_dir: "s3://asf-heat-pump-suitability/source_data/ONSPD_AUG_2023_UK.csv"
-  EW_census_tenure: "s3://asf-heat-pump-suitability/source_data/2021census_2023Mar_tenure_E_W.csv"
-  S_census_tenure: "s3://asf-heat-pump-suitability/source_data/2022_Scotlands_census_tenure_S.csv"
-  EW_census_number_of_rooms: "s3://asf-heat-pump-suitability/source_data/2021census_Mar2023_number_of_rooms_E_W.csv"
-  EW_census_number_of_households: "s3://asf-heat-pump-suitability/source_data/2021_vMar2023_census_numberofhouseholds_EW.csv"
-  EW_census_land_area: "s3://asf-heat-pump-suitability/source_data/2021_vMar2021_census_landareaKM_EW.csv"
-  EW_cdrc_dwelling_age: "s3://asf-heat-pump-suitability/source_data/2015cdrc_dwelling_ages_E_W.csv"
-  EW_cdrc_dwelling_age_la: "s3://asf-heat-pump-suitability/source_data_minor_edits/2015cdrc_dwelling_ages_E_W_per_la_02.parquet"
-  GB_ons_garden_space_access: "s3://asf-heat-pump-suitability/source_data/ONS_Apr2020_access_to_garden_space.xlsx"
-  GB_osopen_uprn_latlon: "s3://asf-heat-pump-suitability/source_data/osopenuprn_202405_csv.zip"
-  EW_census_accommodation_type: "s3://asf-heat-pump-suitability/source_data/2021census_Mar2023_accommodation_type_E_W.csv"
-  S_census_accommodation_type: "s3://asf-heat-pump-suitability/source_data/2022_Scotlands_census_accommodation_type_S.csv"
-  UK_ons_lad_bounds: "s3://asf-heat-pump-suitability/source_data/Local_Authority_Districts_December_2023_Boundaries_UK_BFE_-2600600853110041429/LAD_DEC_2023_UK_BFE.shp"
-  EW_inspire_land_extent_dir: "s3://asf-heat-pump-suitability/source_data/inspire_ew/"
-  S_inspire_land_extent_dir: "s3://asf-heat-pump-suitability/source_data/inspire_scotland/"
-  global_microsoft_building_footprint_links: "https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv"
-  E_historic_england_conservation_areas: "s3://asf-heat-pump-suitability/source_data/Feb2025_historic_england_conservation_areas_E.geojson"
-  W_welsh_gov_conservation_areas: "s3://asf-heat-pump-suitability/source_data/2022_welsh_gov_building_conservation_areas_W.gpkg"
-  UK_spa_offgasgrid: "s3://asf-heat-pump-suitability/source_data/2024_vMar2024_SPA_offgaspostcode_UK.xlsx"
-  E_historicengland_listed_buildings: "s3://asf-heat-pump-suitability/source_data/Jun2024_vJul2024_HistoricEngland_listedbuilding_E.gpkg"
-  W_cadw_listed_buildings: "s3://asf-heat-pump-suitability/source_data/May2024_vMay2024_Cadw_listedbuilding_W.gpkg"
-  S_scottish_gov_listed_buildings: "s3://asf-heat-pump-suitability/source_data/lb_scotland/Listed_Buildings.shp"
-  EW_ons_lsoa_lad_lookup: "s3://asf-heat-pump-suitability/source_data/2021_vApr2023_ons_lsoa_to_lad_lookup_EW.csv"
-  S_dz_lookup: "s3://asf-heat-pump-suitability/source_data/location_lookups/2011_vDec2024_scotgov_DZ2011lookup_S.csv"
-  EW_lsoa_bounds: "s3://asf-heat-pump-suitability/source_data/Lower_layer_Super_Output_Areas_2021_EW_BFE_V9_-9107090204806789093/LSOA_2021_EW_BFE_V9.shp"
-  UK_poi_locations: "s3://asf-heat-pump-suitability/source_data/poi_uk.gpkg"
-  E_ENW_dfes_primaries: "s3://asf-heat-pump-suitability/source_data/grid_operators/ENW/dfes-2023-primary-data0.parquet"
-  E_ENW_ndp_headroom: "s3://asf-heat-pump-suitability/source_data/grid_operators/ENW/ndp-pry-bsp-headroom.parquet"
-  E_ENW_ndp_voronoi: "s3://asf-heat-pump-suitability/source_data/grid_operators/ENW/ndp-pry-voronoi.parquet"
-  E_NPg_heatmap: "s3://asf-heat-pump-suitability/source_data/grid_operators/NPg/heatmapdemanddata.parquet"
-  E_NPg_ndp_demand: "s3://asf-heat-pump-suitability/source_data/grid_operators/NPg/npg_ndp_demand_headroom.parquet"
-  S_SPEN_spd_substations: "s3://asf-heat-pump-suitability/source_data/grid_operators/SPEN/distributed-generation-sp-distribution-heat-maps-spd-primary-substations.parquet"
-  W_SPEN_spm_substations: "s3://asf-heat-pump-suitability/source_data/grid_operators/SPEN/distributed-generation-sp-manweb-heat-maps-spm-primary-substations.parquet"
-  S_SPEN_spd_polygons: "s3://asf-heat-pump-suitability/source_data/grid_operators/SPEN/ndp-spd-primary-substation-polygons.parquet"
-  W_SPEN_spm_polygons: "s3://asf-heat-pump-suitability/source_data/grid_operators/SPEN/ndp-spm-primary-group-polygons.parquet"
-  E_SSEN_demand: "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/demand-heat-map-update-feb-24.xlsx - PS.csv"
-  S_SSEN_demand: "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/scotland-demand-heat-map-august-2023.xlsx"
-  SHET_SSEN_demand: "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/shetland-demand-heat-map-august-2023.xlsx"
-  S_SSEN_sepd_bounds: "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/SEPD Primary Sub Boundaries"
-  E_SSEN_shepd_bounds: "s3://asf-heat-pump-suitability/source_data/grid_operators/SSEN/SHEPD Primary Sub Boundaries"
-  E_UKPN_primaries: "s3://asf-heat-pump-suitability/source_data/grid_operators/UKPN/ukpn_primary_postcode_area.parquet"
-  EW_WPD_capacity: "s3://asf-heat-pump-suitability/source_data/grid_operators/WPD/wpd-network-capacity-map.csv"
-  E_WPD_east_midlands_bounds: "s3://asf-heat-pump-suitability/source_data/grid_operators/WPD/east-midlands-primary.gpkg"
-  W_WPD_south_wales_bounds: "s3://asf-heat-pump-suitability/source_data/grid_operators/WPD/south-wales-primary.gpkg"
-  E_WPD_south_west_bounds: "s3://asf-heat-pump-suitability/source_data/grid_operators/WPD/south-west-primary.gpkg"
-  E_WPD_west_midlands_bounds: "s3://asf-heat-pump-suitability/source_data/grid_operators/WPD/west-midlands-primary.gpkg"
-  S_historic_environment_scotland_world_heritage_sites: "s3://asf-heat-pump-suitability/source_data/WHS/World_Heritage_Sites.shp"
-  S_ros_inspire_url: "https://ros.locationcentre.co.uk/inspire/"
-  EW_inspire_url: "https://use-land-property-data.service.gov.uk/datasets/inspire/download"
-  S_scottish_gov_DZ2011_boundaries: "s3://asf-heat-pump-suitability/source_data/2014_Scottish_Government_DataZoneBoundaries_2011_S/SG_DataZone_Bdry_2011.shp"
-  S_NRScotland_households: "s3://asf-heat-pump-suitability/source_data/June2024_NRScotland_households_and_dwellings_S.xlsx"
-  S_data_zone_LA: "s3://asf-heat-pump-suitability/source_data/location_lookups/DataZone2022lookup_2024-12-16.csv"
-  EW_LSOA_LA: "s3://asf-heat-pump-suitability/source_data/location_lookups/Lower_Layer_Super_Output_Area_(2021)_to_LAD_(April_2023)_Lookup_in_England_and_Wales.csv"
-  EW_LSOA_region: "s3://asf-heat-pump-suitability/source_data/location_lookups/LSOA_(2021)_to_Built_Up_Area_to_Local_Authority_District_to_Region_(December_2022)_Lookup_in_England_and_Wales_v2.csv"
-webmap_data_source:
-  EW_detailed_lsoa_geojson: "s3://asf-heat-pump-suitability/mapdata/Lower_layer_Super_Output_Areas_(December_2021)_Boundaries_EW_BFC_(V10).geojson"
-  S_detailed_datazone_geojson: "s3://asf-heat-pump-suitability/mapdata/SG_DataZoneBdry_2011.geojson"
-  EW_generalised_lsoa_geojson: "s3://asf-heat-pump-suitability/mapdata/Lower_layer_Super_Output_Areas_(December_2021)_Boundaries_EW_BGC_(V5).geojson"
-  S_generalised_datazone_geojson: "s3://asf-heat-pump-suitability/mapdata/SG_DataZoneBdry_2011_generalised.geojson"
-  EW_super_generalised_lsoa_geojson: "s3://asf-heat-pump-suitability/mapdata/Lower_layer_Super_Output_Areas_December_2021_Boundaries_EW_BSC_V4.geojson"
-  S_super_generalised_datazone_geojson: "s3://asf-heat-pump-suitability/mapdata/SG_DataZoneBdry_2011_supergeneralised.geojson"
-  EW_ultra_generalised_lsoa_geojson: "s3://asf-heat-pump-suitability/mapdata/Lower_layer_Super_Output_Areas_(December_2021)_Boundaries_EW_ultrageneralised.geojson"
-  S_ultra_generalised_datazone_geojson: "s3://asf-heat-pump-suitability/mapdata/SG_DataZoneBdry_2011_ultrageneralised.geojson"
-  out_key: "s3://asf-heat-pump-suitability/mapdata/tiling/"
-mapping:
-  build_year_pre_cols:
-    - BP_PRE_1900
-    - BP_1900_1918
-    - BP_1919_1929
-  build_year_post_cols:
-    - BP_1930_1939
-    - BP_1945_1954
-    - BP_1955_1964
-    - BP_1965_1972
-    - BP_1973_1982
-    - BP_1983_1992
-    - BP_1993_1999
-    - BP_2000_2009
-    - BP_2010_2015
-  pre_post_1930_epc:
-    "England and Wales: before 1900": "pre_1930"
-    "Scotland: before 1919": "pre_1930"
-    "1900-1929": "pre_1930"
-    "1930-1949": "post_1930"
-    "1950-1966": "post_1930"
-    "1965-1975": "post_1930"
-    "1976-1983": "post_1930"
-    "1983-1991": "post_1930"
-    "1991-1998": "post_1930"
-    "1996-2002": "post_1930"
-    "2003-2007": "post_1930"
-    "2007 onwards": "post_1930"
-    "unknown": "unknown"
-    "UNKNOWN": "unknown"
-  ruc_two_fold:
-    "1": "Urban"
-    "2": "Urban"
-    "3": "Urban"
-    "4": "Urban"
-    "5": "Urban"
-    "6": "Rural"
-    "7": "Rural"
-    "8": "Rural"
-    "A1": "Urban"
-    "B1": "Urban"
-    "C1": "Urban"
-    "C2": "Urban"
-    "D1": "Rural"
-    "D2": "Rural"
-    "E1": "Rural"
-    "E2": "Rural"
-    "F1": "Rural"
-    "F2": "Rural"
-    "Z9": "Channel Islands/Isle of Man"
-  ruc_EW_ten_fold:
-    "A1": "Urban major conurbation"
-    "B1": "Urban minor conurbation"
-    "C1": "Urban city and town"
-    "C2": "Urban city and town in a sparse setting"
-    "D1": "Rural town and fringe"
-    "D2": "Rural town and fringe in a sparse setting"
-    "E1": "Rural village"
-    "E2": "Rural village in a sparse setting"
-    "F1": "Rural hamlet and isolated dwellings"
-    "F2": "Rural hamlet and isolated dwellings in a sparse setting"
-    "Z9": "Channel Islands/Isle of Man"
-  ruc_S_eight_fold:
-    "1": "Large urban area"
-    "2": "Other urban area"
-    "3": "Accessible small town"
-    "4": "Remote small town"
-    "5": "Very remote small town"
-    "6": "Accessible rural"
-    "7": "Remote rural"
-    "8": "Very remote rural"
-features:
-  - "CURRENT_ENERGY_RATING"
-  - "property_type"
-  - "ruc_two_fold"
-  - "off_gas"
-  - "listed_building"
-  - "in_protected_area"
-  - "garden_area_m2"
-  - "households_per_km2"
-  - "has_anchor_property"
-  - "heatpump_installation_percentage"
-tech_types:
-  - "ASHP_S"
-  - "ASHP_N"
-  - "GSHP_S"
-  - "GSHP_N"
-  - "SGL_S"
-  - "SGL_N"
-  - "HN_S"
-  - "HN_N"

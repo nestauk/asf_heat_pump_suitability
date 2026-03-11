@@ -8,16 +8,15 @@ Filters all UK UPRNs to residential UPRNs only. A UPRN is assumed to be resident
 Example usage:
 
     # Full GB run (writes to S3)
-    LOCAL_DEV=false uv run python pipeline/uprns.py
+    LOCAL_DEV=false uv run python asf_heat_pump_suitability/pipeline/uprns.py
 
     # Plymouth only (writes to ./outputs/)
-    uv run python pipeline/uprns.py --local-authorities plymouth
+    uv run python asf_heat_pump_suitability/pipeline/uprns.py --local-authorities plymouth
 
     # Greater Manchester only with custom output directory
-    uv run python pipeline/uprns.py --local-authorities greater_manchester_las --output-dir /data/outputs/
+    uv run python asf_heat_pump_suitability/pipeline/uprns.py --local-authorities greater_manchester_las --output-dir /data/outputs/
 """
 
-import os
 from typing import Optional
 
 import polars as pl
@@ -100,15 +99,8 @@ def main(
 
     df = pl.from_pandas(residential_uprns_gdf[output_cols])
 
-    output_path = settings.resolve_output_path("domestic_uprns.parquet")
-    print(f"Saving {len(df):,} domestic UPRNs to: {output_path}")
-
-    # Ensure local output directory exists
-    if not output_path.startswith("s3://"):
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        df.write_parquet(output_path)
-    else:
-        save_utils.save_to_s3(df, output_path)
+    print(f"Saving {len(df):,} domestic UPRNs...")
+    save_utils.save_df(df, "domestic_uprns.parquet", settings)
 
     print("Done.")
 

@@ -22,7 +22,7 @@ def load_gdf_local_authority_boundaries(
     Returns:
         gpd.GeoDataFrame: boundaries for specified Local Authority Districts
     """
-    la_boundaries_gdf = gpd.read_file(config["data"]["geodata"]["boundaries"]["UK_ons_lad_bounds"])
+    la_boundaries_gdf = gpd.read_file(config["inputs"]["geodata"]["lad_boundaries"])
 
     if not select_las:
         print("Loading Local Authority boundaries for UK...")

@@ -26,9 +26,9 @@ classifier            outdoor space)
 
 | Script | Input | Output | Description |
 |---|---|---|---|
-| `pipeline/uprns.py` | S3: OS Open UPRN, EPC, building footprints | `domestic_uprns.parquet` | Filter all UK UPRNs to domestic-only |
-| `pipeline/add_features.py` | `domestic_uprns.parquet` + S3 data | `uprns_with_features.parquet` | Add features for decision tree |
-| `pipeline/run.py` | — | — | Orchestrate both steps in order |
+| `asf_heat_pump_suitability/pipeline/uprns.py` | S3: OS Open UPRN, EPC, building footprints | `domestic_uprns.parquet` | Filter all UK UPRNs to domestic-only |
+| `asf_heat_pump_suitability/pipeline/add_features.py` | `domestic_uprns.parquet` + S3 data | `uprns_with_features.parquet` | Add features for decision tree |
+| `asf_heat_pump_suitability/pipeline/run.py` | — | — | Orchestrate both steps in order |
 
 ---
 
@@ -38,7 +38,7 @@ classifier            outdoor space)
 
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
 - [direnv](https://direnv.net/) (optional, for automatic env vars)
-- AWS credentials with read access to `s3://asf-heat-pump-suitability` (for pipeline runs)
+- AWS credentials with read access to `s3://asf-local-heat-planning-tool` (for pipeline runs)
 
 ### Install
 
@@ -55,7 +55,7 @@ The pipeline reads two environment variables:
 | Variable | Default | Description |
 |---|---|---|
 | `LOCAL_DEV` | `true` | When `true`, pipeline outputs are written to the local filesystem. Set `false` for production/cloud runs that write to S3. |
-| `OUTPUT_DIR` | `./outputs/` (local) or `s3://asf-heat-pump-suitability/outputs/` (cloud) | Base directory for all pipeline outputs. |
+| `OUTPUT_DIR` | `./outputs/` (local) or `s3://asf-local-heat-planning-tool/outputs/` (cloud) | Base directory for all pipeline outputs. |
 
 **Using direnv** (recommended): run `direnv allow` to automatically set `LOCAL_DEV=true` and
 `OUTPUT_DIR=./outputs/` whenever you enter the repo directory. This prevents accidental writes
@@ -76,26 +76,26 @@ export OUTPUT_DIR=./outputs/
 
 ```bash
 # Local run — Plymouth only, writes to ./outputs/
-uv run python pipeline/run.py --local-authorities plymouth
+uv run python asf_heat_pump_suitability/pipeline/run.py --local-authorities plymouth
 
 # Greater Manchester
-uv run python pipeline/run.py --local-authorities greater_manchester_las
+uv run python asf_heat_pump_suitability/pipeline/run.py --local-authorities greater_manchester_las
 
 # Production run — full GB, writes to S3
-LOCAL_DEV=false uv run python pipeline/run.py
+LOCAL_DEV=false uv run python asf_heat_pump_suitability/pipeline/run.py
 ```
 
 ### Individual steps
 
 ```bash
 # Step 1: filter UPRNs to domestic
-uv run python pipeline/uprns.py --local-authorities plymouth
+uv run python asf_heat_pump_suitability/pipeline/uprns.py --local-authorities plymouth
 
 # Step 2: add features (reads from OUTPUT_DIR/domestic_uprns.parquet by default)
-uv run python pipeline/add_features.py --local-authorities plymouth
+uv run python asf_heat_pump_suitability/pipeline/add_features.py --local-authorities plymouth
 
 # Step 2 with explicit input path
-uv run python pipeline/add_features.py \
+uv run python asf_heat_pump_suitability/pipeline/add_features.py \
     --uprns ./outputs/domestic_uprns.parquet \
     --local-authorities plymouth
 ```
@@ -117,29 +117,29 @@ Omit `--local-authorities` to process all of GB (not yet fully scaled).
 
 These scripts are run once to set up data that the pipeline depends on.
 
-### `pipeline/setup/train_model.py` — train the block-of-flats classifier
+### `asf_heat_pump_suitability/pipeline/setup/train_model.py` — train the block-of-flats classifier
 
 Trains the Random Forest classifier that `add_features.py` uses to predict whether a
 building is a block of flats. Run this once when new labelled training data is available.
 
 ```bash
-uv run python pipeline/setup/train_model.py \
-    --uprns s3://asf-heat-pump-suitability/local_heat_planning/outputs/sampling_areas_residential_uprns.parquet \
-    --labelled-data s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet \
+uv run python asf_heat_pump_suitability/pipeline/setup/train_model.py \
+    --uprns s3://asf-local-heat-planning-tool/outputs/sampling_areas_residential_uprns.parquet \
+    --labelled-data s3://asf-local-heat-planning-tool/inputs/reference/manually_labelled_block_of_flats.parquet \
     --save
 ```
 
-### `pipeline/setup/stream_inspire_files.py` — stream INSPIRE land registry files to S3
+### `asf_heat_pump_suitability/pipeline/setup/stream_inspire_files.py` — stream INSPIRE land registry files to S3
 
 Downloads INSPIRE land parcel polygons from the HMLR (England & Wales) and Registers of
 Scotland websites and streams them to S3. Run this quarterly when INSPIRE data is updated.
 
 ```bash
 # Stream both England & Wales and Scotland
-uv run python pipeline/setup/stream_inspire_files.py --nations all
+uv run python asf_heat_pump_suitability/pipeline/setup/stream_inspire_files.py --nations all
 
 # England & Wales only
-uv run python pipeline/setup/stream_inspire_files.py --nations ew
+uv run python asf_heat_pump_suitability/pipeline/setup/stream_inspire_files.py --nations ew
 ```
 
 ---
@@ -173,7 +173,7 @@ uv run pytest                    # run tests
 uv run ruff check .              # lint
 uv run ruff format .             # format
 uv run ruff check --fix .        # lint and auto-fix
-uv run python pipeline/uprns.py --help  # CLI help
+uv run python asf_heat_pump_suitability/pipeline/uprns.py --help  # CLI help
 ```
 
 ---
@@ -197,7 +197,7 @@ with `Args` and `Returns` sections including types.
 
 ### S3 file naming convention
 
-Raw source data in `s3://asf-heat-pump-suitability/` follows `a_vb_c_d_e`:
+Raw source data in `s3://asf-local-heat-planning-tool/` follows `a_vb_c_d_e`:
 
 - **a**: Publication date
 - **b**: Version date (if available)

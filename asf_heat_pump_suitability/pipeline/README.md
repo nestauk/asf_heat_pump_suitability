@@ -1,68 +1,83 @@
-# asf_heat_pump_suitability pipeline README
+# asf_heat_pump_suitability/pipeline
 
-## `asf_heat_pump_suitability/pipeline` structure
+## Directory structure
 
 ```
-asf_heat_pump_suitability/pipeline
-├───evaluation/
-│    Modules with functions for evaluating outputs, e.g. reweighting
-├───prepare_features/
-│    Modules with functions for preparing new features to join to EPC data
-├───reweight_epc/
-│    Modules with functions to prepare and conduct reweighting with IPF
-├───run_scripts/
-│    All run scripts to weight EPC, add new features, and calculate suitability
-├───sampling/
-│    Scripts to generate samples of EPC data, e.g. for use in testing
-├───suitability/
-│    Modules with functions to calculate heat pump suitability
+asf_heat_pump_suitability/pipeline/
+├── uprns.py                  CLI: filter all UPRNs to domestic-only
+├── add_features.py           CLI: add features required for the decision tree
+├── run.py                    CLI: orchestrate both steps end-to-end
+├── impute/
+│   └── property_type.py      Impute flat/apartment property type flag
+├── model/
+│   └── block_of_flats/
+│       ├── feature_engineering.py  Generate building-level features for classifier
+│       └── train_model.py          Train/evaluate Random Forest block-of-flats classifier
+├── setup/
+│   ├── train_model.py        CLI: train and save block-of-flats model to S3
+│   └── stream_inspire_files.py  CLI: stream INSPIRE land registry files to S3
+└── transform/
+    ├── non_residential_entities.py  Flag non-residential UPRNs
+    ├── outdoor_space.py             Estimate outdoor space from land parcels
+    ├── poi.py                       Transform Points of Interest data
+    └── uprns.py                     Generate UPRN geodataframes and building mappings
 ```
 
-## Run full pipeline to generate heat pump suitability scores
+## Entry-point scripts
 
-To calculate heat pump suitability, you first need to produce the required inputs:
-To weight the EPC data, add new features, and estimate garden size of properties in preparation for calculating suitability, you can run the
-following files in any order. All scripts take the preprocessed and deduplicated EPC dataset (output from `asf-daps`) in
-parquet file format as input via the `--epc` argument. Ensure you set the `--year` and `--quarter` arguments to correspond to those of the EPC
-dataset when running each script. See the script `.py` files for more detailed running instructions.
+### `uprns.py` — filter UPRNs to domestic
 
-E.g. to run the pipeline for 2023 Q4 EPC data, you would set the following args for each script in the table below:
+Reads OS Open UPRN and EPC registers; outputs a parquet of domestic-only UPRNs with coordinates.
 
-- `--epc s3://asf-daps/lakehouse/processed/epc/old/deduplicated/processed_dedupl-0.parquet`
-- `--year 2023`
-- `--quarter 4`
+```bash
+uv run python asf_heat_pump_suitability/pipeline/uprns.py --local-authorities plymouth
+```
 
-|             Script             | Purpose                                                                                                                          | Inputs                                                                                                                                                                                                                                  | Output filename                                                                                        | Output description                                                                                                                                        |
-| :----------------------------: | :------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
-|  `run_compute_epc_weights.py`  | Weight properties with Iterative Proportional Fitting per LSOA / Data Zone to reduce bias.                                       | EPC preprocessed and deduplicated parquet file from `asf-daps`.                                                                                                                                                                         | `[DATE]_[EPC_YEAR]_[EPC_Q]_EPC_weights.parquet`; `[DATE]_[EPC_YEAR]_[EPC_Q]_EPC_weights_stats.parquet` | Weighted EPC data and weighting run stats. Unweighted rows are not retained.                                                                              |
-|     `run_add_features.py`      | Add new features to the EPC dataset.                                                                                             | EPC preprocessed and deduplicated parquet file from `asf-daps`.                                                                                                                                                                         | `[DATE]_[EPC_YEAR]_[EPC_Q]_EPC_features.parquet`                                                       | Full preprocessed and deduplicated EPC dataset with all features added to each record where available.                                                    |
-| `run_calculate_garden_size.py` | Calculate estimated garden size for EPC UPRNs where available from INSPIRE land registry data and Microsoft building footprints. | EPC preprocessed and deduplicated parquet file from `asf-daps` and `inspire_file_bounds_[NATION(S)].geojson`. The `geojson` file contains the geospatial boundary polygons of the INSPIRE land extent files for the specified nation.\* | `[DATE]_[EPC_YEAR]_[EPC_Q]_EPC_garden_size_estimates_[NATION(S)].parquet`                              | EPC UPRNs with estimated garden sizes for the specified nation(s) (of England & Wales; Scotland; or all). UPRNs not matched to a garden are not retained. |
+### `add_features.py` — add decision-tree features
 
-To calculate heat pump suitability per property / LSOA, you can then run the following file:
+Takes `domestic_uprns.parquet` and adds `property_type_flat`, `in_block_of_flats`,
+`max_contiguous_outdoor_space_area_m2`, and `total_outdoor_space_area_m2`.
 
-|             Script             | Purpose                                                                                                                                                                                                                                                           | Inputs                                                   | Output filename                                                                                                                                                                                            | Output description                                                                                                       |
-| :----------------------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------- |
-| `run_calculate_suitability.py` | Calculate heat pump suitability of properties and LSOAs for four tech types (air-source heat pumps, ground-source heat pumps, shared ground loops, and heat networks) using conventional view criteria and Nesta view criteria, so 8 suitability scores in total. | EPC weights; EPC features; and EPC garden size estimates | `[DATE]_[EPC_YEAR]_[EPC_Q]_heat_pump_suitability_per_lsoa.parquet`; `[DATE]_[EPC_YEAR]_[EPC_Q]_heat_pump_suitability_per_lsoa.csv`; `[DATE]_[EPC_YEAR]_[EPC_Q]_heat_pump_suitability_per_property.parquet` | Heat pump suitability scores for four different tech types in Nesta and 'conventional' views per property, and per LSOA. |
+```bash
+uv run python asf_heat_pump_suitability/pipeline/add_features.py --local-authorities plymouth
+```
 
-\*To produce the `inspire_file_bounds_[NATION(S)].geojson` file, run the files below in the given order. See the script `.py` files
-for more detailed running instructions.
+### `run.py` — full pipeline
 
-1. `run_stream_inspire_files.py` - stream INSPIRE land registry files for Scotland from ROS webpage and/or INSPIRE files for England and Wales
-   from government website to S3 asf-heat-pump-suitability bucket. Files are unzipped during streaming and
-   saved to S3 in unzipped format.
-2. `run_get_inspire_file_bounds.py` - generate bounding polygons of each INSPIRE land registry file and save to S3.
+Runs `uprns.py` then `add_features.py` in sequence.
 
-## Get sample EPC datasets
+```bash
+uv run python asf_heat_pump_suitability/pipeline/run.py --local-authorities plymouth
+```
 
-To take a sample subset of the EPC dataset to work with, run the following command in terminal after navigating to the
-`asf_heat_pump_suitability` root folder:
-`python asf_heat_pump_suitability/pipeline/get_samples/sample_by_area.py`
+## Setup companion scripts
 
-The script will produce two datasets and save them to S3 in `asf-heat-pump-suitability/outputs`:
+These are run once (or when source data changes), not as part of the regular pipeline.
 
-- `epc_sample_lsoa.parquet`
-- `epc_sample_msoa.parquet`
+### `setup/train_model.py` — train block-of-flats classifier
 
-The datasets are samples of the EPC dataset. They are generated by filtering the EPC dataset to sample output areas
-(OAs) (lower-layer super output areas (LSOAs) or middle-layer super output areas (MSOAs)). Sample OAs are selected from
-each of England, Scotland, and Wales and represent a range of n-observations per OA.
+Trains the Random Forest classifier used by `add_features.py`. Requires labelled training data
+and a domestic UPRN parquet covering the same area.
+
+```bash
+uv run python asf_heat_pump_suitability/pipeline/setup/train_model.py \
+    --uprns s3://asf-local-heat-planning-tool/outputs/sampling_areas_residential_uprns.parquet \
+    --labelled-data s3://asf-local-heat-planning-tool/inputs/reference/manually_labelled_block_of_flats.parquet \
+    --save
+```
+
+### `setup/stream_inspire_files.py` — stream INSPIRE land registry files to S3
+
+Downloads INSPIRE land parcel polygons from HMLR (England & Wales) and Registers of Scotland
+and streams them to the `asf-local-heat-planning-tool` S3 bucket. Run quarterly when data is updated.
+
+```bash
+# Both nations
+uv run python asf_heat_pump_suitability/pipeline/setup/stream_inspire_files.py --nations all
+
+# England & Wales only
+uv run python asf_heat_pump_suitability/pipeline/setup/stream_inspire_files.py --nations ew
+
+# Scotland only
+uv run python asf_heat_pump_suitability/pipeline/setup/stream_inspire_files.py --nations s
+```

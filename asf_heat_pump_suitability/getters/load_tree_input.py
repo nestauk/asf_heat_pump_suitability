@@ -49,7 +49,7 @@ def load_gdf_os_openmap_local_layer(layer: str, grid_squares: Optional[List[str]
     if not grid_squares:
         print(f"Loading OS OpenMap Local - {layer.title()}...")
         return gpd.read_file(
-            filename=config["data"]["geodata"]["gb_os_openmap_local"],
+            filename=config["inputs"]["geodata"]["os_openmap_local"],
             layer=layer,
             **kwargs,
         ).drop_duplicates(subset="ID")
@@ -59,7 +59,7 @@ def load_gdf_os_openmap_local_layer(layer: str, grid_squares: Optional[List[str]
             grid_squares = [grid_squares]
         # Reformat layer name to how it appears in file name
         layer = layer.replace("_", " ").title().replace(" ", "")
-        file_path = config["data"]["geodata"]["grid_square_os_openmap_local"]
+        file_path = config["inputs"]["geodata"]["os_openmap_local_grid_square"]
         files = [file_path.format(square=code, layer=layer) for code in grid_squares]
 
         gdfs = []
@@ -91,7 +91,7 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
         "geometry",
     ]
     poi = gpd.read_file(
-        filename=config["data_source"]["UK_poi_locations"],
+        filename=config["inputs"]["geodata"]["poi"],
         columns=required_columns,
         layer="poi_uk",
     ).to_crs("EPSG:4326")

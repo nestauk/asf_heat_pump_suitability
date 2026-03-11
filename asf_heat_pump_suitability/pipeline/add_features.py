@@ -9,18 +9,18 @@ Takes the domestic UPRNs parquet produced by ``uprns.py`` and adds:
 Example usage:
 
     # Default — reads domestic_uprns.parquet from OUTPUT_DIR, writes uprns_with_features.parquet
-    uv run python pipeline/add_features.py --local-authorities greater_manchester_las
+    uv run python asf_heat_pump_suitability/pipeline/add_features.py --local-authorities greater_manchester_las
 
     # Explicit uprns path
-    uv run python pipeline/add_features.py \\
+    uv run python asf_heat_pump_suitability/pipeline/add_features.py \\
         --uprns ./outputs/domestic_uprns.parquet \\
         --local-authorities greater_manchester_las
 
     # Production run (writes to S3)
-    LOCAL_DEV=false uv run python pipeline/add_features.py
+    LOCAL_DEV=false uv run python asf_heat_pump_suitability/pipeline/add_features.py
 """
 
-import os
+import logging
 from typing import Optional
 
 import geopandas as gpd
@@ -35,6 +35,8 @@ from asf_heat_pump_suitability.pipeline.impute import property_type
 from asf_heat_pump_suitability.pipeline.model.block_of_flats import feature_engineering, train_model
 from asf_heat_pump_suitability.pipeline.transform import outdoor_space, uprns
 from asf_heat_pump_suitability.utils import save_utils
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(help=__doc__)
 
@@ -71,7 +73,7 @@ def main(
 
     # Load UPRN data
     print(f"Loading domestic UPRNs from: {uprns_path}")
-    uprns_df = pl.read_parquet(uprns_path, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"])
+    uprns_df = base_getters.load_df(uprns_path, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"])
 
     # Get geopoints of UPRNs
     uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
@@ -97,10 +99,8 @@ def main(
         id_col="ID",
     )
 
-    labelled_df = pl.read_parquet(
-        "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet"
-    )
-    clf = base_getters.load_pickle(config["output"]["save_as"]["model"]["block_of_flats_model"])
+    labelled_df = base_getters.load_df(config["inputs"]["reference"]["manually_labelled_block_of_flats"])
+    clf = base_getters.load_pickle(config["outputs"]["models"]["block_of_flats"])
     features_df = train_model.extend_df_in_block_of_flats_label(
         uprns_df=features_df,
         mapping=uprn_building_id_dict,
@@ -117,12 +117,10 @@ def main(
     print("Loading land registry data...")
 
     if las == "plymouth":
-        land_parcels_gdf = gpd.read_file(
-            "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
-        )
+        land_parcels_gdf = gpd.read_file(config["inputs"]["geodata"]["plymouth_land_registry"])
     else:
         inspire_file_names = get_datasets.load_gdf_inspire_land_parcels(
-            path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EW.geojson"
+            path=config["inputs"]["inspire"]["file_bounds_ew"]
         )
         inspire_file_names = inspire_file_names[
             inspire_file_names["LAD23NM"].isin(config["constant"][las]["la_names"])
@@ -164,14 +162,8 @@ def main(
     )
 
     # --- SAVE OUTPUTS ---
-    output_path = settings.resolve_output_path("uprns_with_features.parquet")
-    print(f"Saving {len(features_df):,} UPRNs with features to: {output_path}")
-
-    if not output_path.startswith("s3://"):
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        features_df.write_parquet(output_path)
-    else:
-        save_utils.save_to_s3(features_df, output_path)
+    print(f"Saving {len(features_df):,} UPRNs with features...")
+    save_utils.save_df(features_df, "uprns_with_features.parquet", settings)
 
     print("Done.")
 

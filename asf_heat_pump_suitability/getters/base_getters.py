@@ -9,16 +9,41 @@ from io import BytesIO
 from typing import Any
 from zipfile import ZipFile
 
-import geojson
 import geopandas as gpd
 import polars as pl
 import requests
 import s3fs
 
 
+def load_df(path: str, **kwargs) -> pl.DataFrame:
+    """Load a Polars DataFrame from a local path or S3 URI.
+
+    Dispatches to :func:`load_df_from_s3` for ``s3://`` paths so that
+    credentials are resolved via s3fs rather than Polars' built-in S3 reader.
+    Supports .parquet and .csv.
+
+    Args:
+        path (str): Local filesystem path or ``s3://`` URI.
+        **kwargs: Forwarded to the underlying Polars reader.
+
+    Returns:
+        pl.DataFrame
+    """
+    if path.startswith("s3://"):
+        return load_df_from_s3(path, **kwargs)
+    if fnmatch(path, "*.parquet"):
+        return pl.read_parquet(path, **kwargs)
+    elif fnmatch(path, "*.csv"):
+        return pl.read_csv(path, **kwargs)
+
+
 def load_df_from_s3(uri: str, **kwargs) -> pl.DataFrame:
     """
     Load polars dataframe from S3.
+
+    Uses s3fs for credential resolution so the local AWS credential chain
+    (profile, env vars, etc.) is respected rather than Polars' built-in S3
+    reader which defaults to EC2 instance metadata.
 
     Args:
         uri (str): S3 URI
@@ -27,45 +52,12 @@ def load_df_from_s3(uri: str, **kwargs) -> pl.DataFrame:
     Returns:
         pl.DataFrame
     """
-    if fnmatch(uri, "*.parquet"):
-        return pl.read_parquet(uri, **kwargs)
-    elif fnmatch(uri, "*.csv"):
-        return pl.read_csv(uri, **kwargs)
-
-
-def get_df_from_excel_url(url: str, **kwargs) -> pl.DataFrame:
-    """
-    Get dataframe from Excel file stored at URL.
-
-    Args
-        url (str): URL location of Excel file download
-        **kwargs for pl.read_excel()
-
-    Returns
-        pl.DataFrame: dataframe from Excel file
-    """
-    content = get_content_from_url(url)
-    df = pl.read_excel(content, **kwargs)
-
-    return df
-
-
-def get_df_from_zip_url(url: str, extract_file: str, **kwargs) -> pl.DataFrame:
-    """
-    Get dataframe from ZIP file stored at URL.
-
-    Args:
-        url (str): URL location of ZIP file load
-        extract_file (str): name of file to extract
-        **kwargs for pl.read_csv()
-
-    Returns:
-        pl.DataFrame: dataset from ZIP file
-    """
-    content = get_content_from_url(url)
-    df = pl.read_csv(ZipFile(content).open(name=extract_file), **kwargs)
-
-    return df
+    fs = s3fs.S3FileSystem()
+    with fs.open(uri, "rb") as f:
+        if fnmatch(uri, "*.parquet"):
+            return pl.read_parquet(f, **kwargs)
+        elif fnmatch(uri, "*.csv"):
+            return pl.read_csv(f, **kwargs)
 
 
 def get_df_from_zip_csv_s3(path: str, extract_file: str, **kwargs) -> pl.DataFrame:
@@ -148,41 +140,6 @@ def get_content_from_url(url: str) -> BytesIO:
     return content
 
 
-def load_gdf_from_s3_geojson(s3_uri: str, crs: str) -> gpd.GeoDataFrame:
-    """
-    Load GeoDataFrame from GeoJSON on S3.
-
-    Args:
-        s3_uri (str): URI to S3 GeoJSON
-        crs (str): coordinate reference system of GeoJSON
-
-    Returns:
-        gpd.GeoDataFrame
-    """
-    fs = s3fs.S3FileSystem()
-    with fs.open(s3_uri, "rb") as f:
-        data = geojson.load(f)
-    gdf = gpd.GeoDataFrame.from_features(data["features"], crs=crs)
-
-    return gdf
-
-
-def list_obj_s3_location(location: str) -> list:
-    """
-    List objects in an S3 location.
-
-    Args:
-        location (str): S3 URI
-
-    Returns:
-        list: objects in S3 location
-    """
-    fs = s3fs.S3FileSystem()
-    o = fs.ls(location)
-
-    return o
-
-
 def get_df_from_parquet_s3_path(path: str, **kwargs) -> pl.DataFrame:
     """
     Get dataframe from Parquet file stored in s3 path.
@@ -211,29 +168,6 @@ def get_gdf_from_gpkg_s3_path(path: str, **kwargs) -> gpd.GeoDataFrame:
     content = BytesIO(get_content_from_s3_path(path))
     gdf = gpd.read_file(content, **kwargs)
     return gdf
-
-
-def get_df_from_parquet(path: str, is_s3: bool = False, **kwargs) -> pl.DataFrame:
-    """
-    Get a Polars dataframe from a Parquet file, either from local disk or from an S3 URI.
-
-    Args:
-        path (str):
-            - If is_s3=False, this is a *local file path* to the Parquet file, e.g. "./data/foo.parquet"
-            - If is_s3=True, this is an *S3 URI*, e.g. "s3://my-bucket/path/foo.parquet"
-        is_s3 (bool): Whether to interpret 'path' as an S3 URI or a local path.
-        **kwargs: Additional keyword args for pl.read_parquet().
-
-    Returns:
-        pl.DataFrame: Loaded Parquet file as a Polars DataFrame.
-    """
-
-    if is_s3:
-        # Read from s3
-        return get_df_from_parquet_s3_path(path, **kwargs)
-    else:
-        # Read directly from local file system
-        return pl.read_parquet(path, **kwargs)
 
 
 def load_pickle(path: str) -> Any:
