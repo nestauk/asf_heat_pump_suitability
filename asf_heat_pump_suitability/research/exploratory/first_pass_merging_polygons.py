@@ -1,7 +1,9 @@
 # %% [markdown]
-# ## First pass for merging polygons
+# ## Exploration of how to merge polygons
 #
 # This notebook explores the use of Voronoi diagrams to create contiguous polygons to fill the space within a given boundary (Plymouth). The starting point for the merged polygons are the building footprint polygons after they have been labelled with a suitable tech type. Neighbouring buildings which have the same technology should end up in the same merged polygon.
+#
+# This is not up to date. The fine pipeline for merging polygons and clustering can be found in the pipeline folder.
 
 # %%
 import polars as pl
@@ -560,9 +562,3 @@ dissolved_gdf.to_file(
 # saved_gdf = gpd.read_file(
 #     "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_tech_polygons.geojson"
 # )
-
-
-# %%
-
-
-# %%
