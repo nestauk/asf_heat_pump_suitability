@@ -48,6 +48,7 @@ def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFr
     Load GeoDataFrame with heat network zone polygons in given Local Authority.
 
     Args:
+        local_authority (str): Local Authority to load Heat Network zone polygons for.
         **kwargs for `gpd.read_file()`
 
     Returns:

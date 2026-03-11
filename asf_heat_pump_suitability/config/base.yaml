@@ -16,6 +16,7 @@ data:
     heat_network_zones:
       # Plymouth Heat Network zones
       plymouth: "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/NMR3 Heat Network Zones (Post-Ref).gpkg"
+      greater_manchester_las: "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Greater-Manchester.gpkg"
 
     gb_spatial_signatures:
       # UrbanGrammarAI Spatial Signatures GB simplified
@@ -33,9 +34,17 @@ data:
     plymouth_residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet"
 
 constant:
-  grid_squares:
-    plymouth: "SX"
-    plymouth_similar_cities: # Liverpool, Plymouth, Portsmouth, Southampton, Swansea
+  plymouth:
+    la_names: "Plymouth"
+    grid_squares: "SX"
+  plymouth_similar_cities:
+    la_names:
+      - "Liverpool"
+      - "Plymouth"
+      - "Portsmouth"
+      - "Southampton"
+      - "Swansea"
+    grid_squares:
       - "SD"
       - "SJ"
       - "SN"
@@ -43,7 +52,15 @@ constant:
       - "SU"
       - "SX"
       - "SZ"
-    sampling_areas: # Plymouth, Nottingham, Bradford, Glasgow, Manchester, Bath
+  sampling_areas:
+    la_names:
+      - "Bath and North East Somerset"
+      - "Bradford"
+      - "Glasgow City"
+      - "Manchester"
+      - "Nottingham"
+      - "Plymouth"
+    grid_squares:
       - "NS"
       - "SD"
       - "SE"
@@ -51,21 +68,25 @@ constant:
       - "SK"
       - "ST"
       - "SX"
-  plymouth_similar_cities:
-    - "Liverpool"
-    - "Plymouth"
-    - "Portsmouth"
-    - "Southampton"
-    - "Swansea"
-  sampling_areas:
-    - "Bath and North East Somerset"
-    - "Bradford"
-    - "Glasgow City"
-    - "Manchester"
-    - "Nottingham"
-    - "Plymouth"
-  plymouth: "plymouth"
+  greater_manchester_las:
+    la_names:
+      - "Bolton"
+      - "Bury"
+      - "Manchester"
+      - "Oldham"
+      - "Rochdale"
+      - "Salford"
+      - "Stockport"
+      - "Tameside"
+      - "Trafford"
+      - "Wigan"
+    grid_squares:
+      - "SD"
+      - "SE"
+      - "SJ"
+      - "SK"
   target_crs: 27700 # British National Grid
+  # TODO update to new names before running the pipeline again
   tech_types:
     individual: "Individual solution"
     N_GSHP: "Networked GSHP"

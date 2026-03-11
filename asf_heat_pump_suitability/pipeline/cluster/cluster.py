@@ -75,7 +75,7 @@ def generate_gdf_clusters(
     - Buildings within a given radius of an anchor as assigned a tech type of 'Communal solutions', unless in a district heat network
 
     Args:
-        buildings_gdf (gpd.GeoDataFrame): building footprint polygons with `assigned_tech` column to cluster.
+        buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
         boundary_gdf (gpd.GeoDataFrame): boundaries of Local Authorities to generate clusters for.
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries to separate clusters by.
@@ -484,10 +484,10 @@ if __name__ == "__main__":
         # TODO rename column in original dataframe
         .rename(columns={"1st_most_suitable_solution": "assigned_tech"})
     )
-    grid_squares = config["constant"]["grid_squares"][args.local_authorities]
+    grid_squares = config["constant"][args.local_authorities]["grid_squares"]
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        select_las=config["constant"][args.local_authorities]
+        select_las=config["constant"][args.local_authorities]["la_names"]
     )
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares

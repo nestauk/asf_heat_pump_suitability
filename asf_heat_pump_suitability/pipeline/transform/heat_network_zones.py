@@ -50,8 +50,11 @@ def label_gdf_heat_network_zone_uprns(
         predicate="intersects",  # include properties intersecting heat network zone boundary
     ).drop(columns="index_right")
 
+    id_col = [col for col in labelled_uprn_gdf.columns if "ID" in col][0]
+    print(f"Using Heat Network Zone {id_col} column as ID")
+
     # Add heat network zone boolean label
-    labelled_uprn_gdf["in_hn_zone"] = labelled_uprn_gdf["ZoneID"].notna()
+    labelled_uprn_gdf["in_hn_zone"] = labelled_uprn_gdf[id_col].notna()
 
     # Return as polars df without geometry
     labelled_uprn_df = pl.from_pandas(labelled_uprn_gdf.drop(columns="geometry"))
