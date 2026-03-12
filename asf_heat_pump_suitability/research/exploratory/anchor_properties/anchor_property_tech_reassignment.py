@@ -101,7 +101,7 @@ anchors_with_footprint = (
 
 # %%
 # add POI and important building lists together and remove duplicate buildings
-
+# I don't think the removing duplicates is fully working, need to check
 all_anchors_with_footprint = pd.concat(
     [anchors_with_footprint, important_buildings_filtered]
 )
@@ -122,7 +122,7 @@ def assign_communal_solutions(
         anchors_gdf (gpd.GeodataFrame): dataframe with anchor properties and their building footprints
         radius (float): max distance from anchor property to reassign tech types
     Returns:
-        reassigned_tech (gpd.GeoDataFrame): dataframe of residential buildings that have had their tech type reassigned, with columns for old tech type, corresponding anchor property geometry and distance from anchor added
+        gpd.GeoDataFrame: dataframe of residential buildings that have had their tech type reassigned, with columns for old tech type, corresponding anchor property geometry and distance from anchor added
 
     """
 
@@ -182,9 +182,9 @@ def dissolve_techs_and_plot_folium(
     anchor_4326 = anchor_properties_with_footprint.to_crs(4326)
     important_4326 = important_building_anchors.to_crs(4326)
 
-    # Get centre of boundary to centre map
-    boundary_4326 = dissolved_4326_gdf["geometry"].values[0]
-    centre_map = shapely.get_coordinates(boundary_4326.centroid)
+    # Get centre of first polygon in dissolved gdf to centre map
+    centre_4326 = dissolved_4326_gdf["geometry"].values[0]
+    centre_map = shapely.get_coordinates(centre_4326.centroid)
 
     # Create map
     m = folium.Map(
