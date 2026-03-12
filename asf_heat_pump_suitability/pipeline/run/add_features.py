@@ -56,13 +56,23 @@ if __name__ == "__main__":
 
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
-    from asf_heat_pump_suitability.getters import load_tree_input, base_getters
+    from asf_heat_pump_suitability.getters import (
+        load_tree_input,
+        base_getters,
+        load_geodata,
+    )
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
         feature_engineering,
         train_model,
     )
-    from asf_heat_pump_suitability.pipeline.transform import uprns, outdoor_space, epc
+    from asf_heat_pump_suitability.pipeline.transform import (
+        uprns,
+        outdoor_space,
+        epc,
+        heat_network_zones,
+        city_centres,
+    )
     from asf_heat_pump_suitability.getters import get_datasets
 
     args = parse_arguments()
@@ -124,6 +134,24 @@ if __name__ == "__main__":
             id_col="ID",
         ),
         id_col="ID",
+    )
+
+    # ------------------------ #
+    # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
+    # Load Plymouth existing heat network zone polygons and label UPRNs in HN zones
+    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=las)
+    features_df = heat_network_zones.extend_df_heat_network_zone_bool(
+        df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
+    )
+
+    # Load spatial signature polygons and label UPRNs in city centres
+    spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
+        detail_level="full"
+    )
+    features_df = city_centres.extend_df_city_centre_labels(
+        df=features_df,
+        uprns_gdf=uprns_gdf,
+        spatial_signatures_gdf=spatial_signatures_gdf,
     )
 
     # ------------------------ #
