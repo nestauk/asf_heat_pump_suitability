@@ -60,6 +60,7 @@ def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFr
             f"No path found for heat network zone geodata in Local Authority: {local_authority}"
         )
 
+    print(f"Loading heat network zone data for {local_authority} Local Authority...")
     gdf = base_getters.get_gdf_from_gpkg_s3_path(
         path=config["data"]["geodata"]["heat_network_zones"][local_authority],
         **kwargs,
@@ -106,6 +107,7 @@ def load_gdf_spatial_signatures_gb(
             f"detail_level must be 'full' or 'simplified', not {detail_level}"
         )
 
+    print("Loading spatial signatures dataset...")
     gdf = base_getters.get_gdf_from_gpkg_s3_path(
         path=config["data"]["geodata"]["gb_spatial_signatures"][detail_level],
         **kwargs,
