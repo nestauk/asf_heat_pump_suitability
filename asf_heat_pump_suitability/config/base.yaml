@@ -85,6 +85,12 @@ constant:
       - "SK"
   target_crs: 27700 # British National Grid
 
+  tech_types:
+    individual: "Individual solution"
+    networked: "Networked heat pump"
+    communal: "Communal solution"
+    heat_network: "District heat network"
+
 output:
   save_as:
     model:
