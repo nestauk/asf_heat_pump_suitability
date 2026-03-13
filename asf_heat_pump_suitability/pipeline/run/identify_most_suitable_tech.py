@@ -37,6 +37,8 @@ from asf_heat_pump_suitability.getters.load_geodata import (
 )
 from asf_heat_pump_suitability import config
 
+TECH_TYPES = config["constant"]["tech_types"]
+
 
 def parse_arguments() -> argparse.Namespace:
     """
@@ -175,9 +177,9 @@ def identify_dict_most_suitable_tech(
     - the path taken in the decision tree.
 
     Args:
-        in_block_of_flats (bool): Whether the property is in a block of flats.
-        outdoor_space (float): Outdoor space in square meters.
-        city_centre_or_hnz (bool): Whether the property is in the city centre or in a planned heat network zone.
+        in_block_of_flats (bool): Whether UPRN is in a block of flats.
+        outdoor_space (float): Outdoor space in squared meters.
+        city_centre_or_hnz (bool): Whether the UPRN is in the city centre or in a planned heat network zone.
 
     Returns:
         dict: A dictionary with the first and second most suitable heating solutions and the path taken in the decision tree.
@@ -186,45 +188,45 @@ def identify_dict_most_suitable_tech(
     if in_block_of_flats:
         if city_centre_or_hnz:
             return {
-                "assigned_tech": "District heat network",
+                "assigned_tech": TECH_TYPES["heat_network"],
                 "decision_tree_path": "1. blocks of flats, in HNZ/ city centre",
             }
         else:
             return {
-                "assigned_tech": "Communal solutions",
+                "assigned_tech": TECH_TYPES["communal"],
                 "decision_tree_path": "2. blocks of flats, not in  HNZ/ city centre",
             }
     else:
         if city_centre_or_hnz:
             if pd.isnull(outdoor_space):
                 return {
-                    "assigned_tech": "Individual solution or District heat network",
+                    "assigned_tech": f"{TECH_TYPES['individual']} or {TECH_TYPES['heat_network']}",
                     "decision_tree_path": "Unknown outdoor space in city centre",
                 }
             elif outdoor_space > 70:
                 return {
-                    "assigned_tech": "Individual solution",
+                    "assigned_tech": TECH_TYPES["individual"],
                     "decision_tree_path": "3. not in blocks of flats, in city centre, large outdoor space",
                 }
             else:
                 return {
-                    "assigned_tech": "District heat network",
+                    "assigned_tech": TECH_TYPES["heat_network"],
                     "decision_tree_path": "4. not in blocks of flats, in city centre, small or no outdoor space",
                 }
         else:
             if pd.isnull(outdoor_space):
                 return {
-                    "assigned_tech": "Individual solution or Networked GSHP",
+                    "assigned_tech": f"{TECH_TYPES['individual']} or {TECH_TYPES['networked']}",
                     "decision_tree_path": "Unknown outdoor space not in city centre/ HN zone",
                 }
             elif outdoor_space > 30:
                 return {
-                    "assigned_tech": "Individual solution",
+                    "assigned_tech": TECH_TYPES["individual"],
                     "decision_tree_path": "5. not in blocks of flats, not in city centre/ HN zone, large outdoor space",
                 }
             else:
                 return {
-                    "assigned_tech": "Networked GSHP",
+                    "assigned_tech": TECH_TYPES["networked"],
                     "decision_tree_path": "6. not in blocks of flats, not in city centre/ HN zone, small/no outdoor space",
                 }
 
@@ -328,19 +330,19 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
             # where some properties are assigned district heat network and some networked GSHP
             # due to being just outside the HN zone boundary
             pl.when(
-                pl.col("assigned_tech").list.contains("District heat network")
-                & pl.col("assigned_tech").list.contains("Networked GSHP")
+                pl.col("assigned_tech").list.contains(TECH_TYPES["heat_network"])
+                & pl.col("assigned_tech").list.contains(TECH_TYPES["networked"])
             )
-            .then(pl.lit("Communal solutions"))
-            .when(pl.col("assigned_tech").list.contains("District heat network"))
-            .then(pl.lit("District heat network"))
-            .when(pl.col("assigned_tech").list.contains("Networked GSHP"))
-            .then(pl.lit("Networked GSHP"))
-            .when(pl.col("assigned_tech").list.contains("Communal solutions"))
-            .then(pl.lit("Communal solutions"))
+            .then(pl.lit(TECH_TYPES["communal"]))
+            .when(pl.col("assigned_tech").list.contains(TECH_TYPES["heat_network"]))
+            .then(pl.lit(TECH_TYPES["heat_network"]))
+            .when(pl.col("assigned_tech").list.contains(TECH_TYPES["networked"]))
+            .then(pl.lit(TECH_TYPES["networked"]))
+            .when(pl.col("assigned_tech").list.contains(TECH_TYPES["communal"]))
+            .then(pl.lit(TECH_TYPES["communal"]))
             .when(
                 pl.col("assigned_tech").list.contains(
-                    "Individual solution or Networked GSHP"
+                    f"{TECH_TYPES['individual']} or {TECH_TYPES['networked']}"
                 )
             )
             .then(
@@ -350,12 +352,12 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
                         pl.col("median_contiguous_outdoor_space_area_m2") > 30
                     )  # Using your column name from previous step
                 )
-                .then(pl.lit("Individual solution"))
-                .otherwise(pl.lit("Networked GSHP"))
+                .then(pl.lit(TECH_TYPES["individual"]))
+                .otherwise(pl.lit(TECH_TYPES["networked"]))
             )
             .when(
                 pl.col("assigned_tech").list.contains(
-                    "Individual solution or District heat network"
+                    f"{TECH_TYPES['individual']} or {TECH_TYPES['heat_network']}"
                 )
             )
             .then(
@@ -363,8 +365,8 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
                     (pl.col("perc_properties_available_outdoor_space_data") >= 50)
                     & (pl.col("median_contiguous_outdoor_space_area_m2") > 70)
                 )
-                .then(pl.lit("Individual solution"))
-                .otherwise(pl.lit("District heat network"))
+                .then(pl.lit(TECH_TYPES["individual"]))
+                .otherwise(pl.lit(TECH_TYPES["heat_network"]))
             )
             .otherwise(pl.lit("Unexpected combination"))
         )
@@ -428,12 +430,12 @@ def identify_most_suitable_tech_uprn_and_building(
     # Create new columns in uprns_gdf and solutions_per_footprint_gdf
     # If the building is in a HN zone, assign "District heat network" as the most suitable tech, regardless of the assigned tech based on the decision tree
     uprns_gdf["assigned_tech_hn_precedence"] = np.where(
-        uprns_gdf["in_hn_zone"], "District heat network", uprns_gdf["assigned_tech"]
+        uprns_gdf["in_hn_zone"], TECH_TYPES["heat_network"], uprns_gdf["assigned_tech"]
     )
 
     solutions_per_footprint_gdf["assigned_tech_hn_precedence"] = np.where(
         solutions_per_footprint_gdf["building_in_hn_zone"],
-        "District heat network",
+        TECH_TYPES["heat_network"],
         solutions_per_footprint_gdf["assigned_tech"],
     )
 
