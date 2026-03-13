@@ -92,6 +92,8 @@ constant:
     N_GSHP: "Networked GSHP"
     communal: "Communal solutions"
     heat_networks: "District heat network"
+  ID:
+    building: "ID"
 output:
   save_as:
     model:
