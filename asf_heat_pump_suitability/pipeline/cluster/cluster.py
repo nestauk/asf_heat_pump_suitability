@@ -23,6 +23,7 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
+BUILDING_ID = config["constant"]["ID"]["building"]
 N_GSHP = config["constant"]["tech_types"]["N_GSHP"]
 COMMUNAL = config["constant"]["tech_types"]["communal"]
 
@@ -33,6 +34,7 @@ def generate_gdf_clusters(
     tech_gdf: gpd.GeoDataFrame,
     line_overlay_gdf: gpd.GeoDataFrame,
     polygon_overlay_gdf: gpd.GeoDataFrame,
+    id_col: str = BUILDING_ID,
 ) -> gpd.GeoDataFrame:
     """
     Generate clusters of building footprints, where one cluster:
@@ -45,6 +47,7 @@ def generate_gdf_clusters(
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries to separate clusters by.
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
+        id_col (str): building ID column name in `buildings_gdf`.
 
     Returns:
         gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster
@@ -59,6 +62,7 @@ def generate_gdf_clusters(
             tech_gdf=tech_gdf,
             line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
+            id_col=id_col,
         )
         gdfs.append(reassign_gdf_communal_networked(cells_gdf))
 
@@ -165,6 +169,7 @@ def overlay_gdf_physical_barriers(
     tech_gdf: gpd.GeoDataFrame,
     line_overlay_gdf: gpd.GeoDataFrame,
     polygon_overlay_gdf: gpd.GeoDataFrame,
+    id_col: str,
 ) -> gpd.GeoDataFrame:
     """
     Conduct difference overlay of physical barriers onto Voronoi polygons. Physical barriers represent features of the
@@ -176,7 +181,8 @@ def overlay_gdf_physical_barriers(
         voronoi_gdf (gpd.GeoDataFrame): Voronoi polygons around building footprints
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types
         line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries
-        polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries
+        polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries.
+        id_col (str): building ID column name in `voronoi_gdf`.
 
     Returns:
         gpd.GeoDataFrame: Voronoi polygons with overlapping physical barriers removed
@@ -193,10 +199,77 @@ def overlay_gdf_physical_barriers(
         .explode()
     )
 
+    # Deal with buildings that have multiple cell fragements
+    # This happens in edge cases where a barrier bisects a Voronoi polygon
+    cells_gdf = _handle_gdf_fragmented_cells(
+        cells_gdf=cells_gdf, tech_gdf=tech_gdf, id_col=id_col
+    )
+
+    cells_gdf["voronoi_geometry"] = cells_gdf["geometry"]
+
     # Remove polygons that no longer intersect with a building
-    return cells_gdf.sjoin(
-        tech_gdf[["geometry"]], how="inner", predicate="intersects"
-    ).drop(columns=["index_right"])
+    cells_gdf = (
+        tech_gdf[["geometry"]]
+        .sjoin(cells_gdf, how="left", predicate="intersects")
+        .drop(columns=["index_right"])
+    )
+
+    # If building is missing a Voronoi cell (due to overlay operation), then assign it the building footprint geometry
+    # This happens in some edge cases
+    cells_gdf["voronoi_geometry"] = cells_gdf["voronoi_geometry"].fillna(
+        cells_gdf["geometry"]
+    )
+
+    return (
+        cells_gdf.drop(columns="geometry")
+        .rename(columns={"voronoi_geometry": "geometry"})
+        .set_geometry("geometry", crs=config["constant"]["target_crs"])
+    )
+
+
+def _handle_gdf_fragmented_cells(
+    cells_gdf: gpd.GeoDataFrame, tech_gdf: gpd.GeoDataFrame, id_col: str
+) -> gpd.GeoDataFrame:
+    """
+    Handle fragmented Voronoi cells which are created when a Voronoi cell for a single building footprint is fragmented
+    during overlaying the physical barriers.
+
+    E.g. a physical barrier can bisect the Voronoi cell or remove parts of the Voronoi cell. This can result in a single
+    building footprint becoming joined to multiple cell fragments. This handles the fragments by retaining the largest
+    intersecting fragment for the Voronoi, and discarding the rest.
+    """
+    # Add unique ID for every cell / cell fragment
+    cells_gdf["_cell_id"] = "cell_" + cells_gdf.index.astype(str)
+
+    # Get building IDs of building footprints with multiple cell fragments
+    fragmented_cell_building_ids = cells_gdf[cells_gdf[id_col].duplicated()][
+        id_col
+    ].unique()
+
+    # Get building footprints of fragmented cells
+    fragmented_cells_gdf = cells_gdf[
+        cells_gdf[id_col].isin(fragmented_cell_building_ids)
+    ].set_index("_cell_id")
+
+    # Calculate intersection area of each cell fragment per building footprint
+    fragmented_cells_gdf = fragmented_cells_gdf.overlay(
+        tech_gdf[["geometry"]], how="intersection"
+    )
+    fragmented_cells_gdf["intersection_area_m2"] = fragmented_cells_gdf.area
+
+    # Keep cell segments with the largest intersection with the building footprint
+    keep_cells_ids = (
+        fragmented_cells_gdf.groupby(id_col)["intersection_area_m2"].idxmax().values
+    )
+
+    return pd.concat(
+        [
+            # Keep cells of buildings joined to only one cell
+            cells_gdf[~cells_gdf[id_col].isin(fragmented_cell_building_ids)],
+            # Keep cell segments with the largest overlay of buildings with multiple cells
+            cells_gdf[cells_gdf["_internal_id"].isin(keep_cells_ids)],
+        ]
+    ).drop(columns="_internal_id")
 
 
 def load_tranform_gdf_linestring_barriers(
@@ -237,7 +310,6 @@ def load_tranform_gdf_linestring_barriers(
 
     # TODO make more specific for different road types
     # Add buffer assumed to be width of road / railway (3.5m total - 1.75m either side)
-    barrier_roads_gdf = [roads_gdf, railways_gdf]
     line_overlay_gdf["geometry"] = line_overlay_gdf.geometry.buffer(1.75)
 
     return line_overlay_gdf
@@ -391,6 +463,7 @@ if __name__ == "__main__":
         tech_gdf=tech_gdf,
         line_overlay_gdf=line_overlay_gdf,
         polygon_overlay_gdf=polygon_overlay_gdf,
+        id_col=BUILDING_ID,
     )
 
     if args.save:
