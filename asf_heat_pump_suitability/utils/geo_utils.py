@@ -1,6 +1,6 @@
 import geopandas as gpd
 
-from asf_heat_pump_suitability import config
+TARGET_CRS = 27700  # British National Grid
 
 
 def verify_gdf_crs(gdf: gpd.GeoDataFrame, target_crs: str | int = None) -> gpd.GeoDataFrame:
@@ -8,13 +8,13 @@ def verify_gdf_crs(gdf: gpd.GeoDataFrame, target_crs: str | int = None) -> gpd.G
 
     Args:
         gdf (gpd.GeoDataFrame): geodataset to check CRS of
-        target_crs (str|int): target CRS. Defaults to target CRS defined in config base.yaml
+        target_crs (str|int): target CRS. Defaults to TARGET_CRS (British National Grid, 27700)
 
     Returns:
         gpd.GeoDataFrame: geodataset in target CRS
     """
     if target_crs is None:
-        target_crs = config["constant"]["target_crs"]
+        target_crs = TARGET_CRS
     if gdf.crs != target_crs:
         print(f"Converting GeoDataFrame to target CRS: {target_crs}")
         return gdf.to_crs(target_crs)

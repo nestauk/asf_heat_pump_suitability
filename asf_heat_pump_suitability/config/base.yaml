@@ -1,25 +1,26 @@
 inputs:
   geodata:
     # OpenMap UPRN with coordinates
-    osopen_uprn:                  "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_csv.zip"
-    # OpenMap Local Geopackage
-    os_openmap_local:             "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_gb.gpkg"
-    # OpenMap Local layers for certain grid squares
-    os_openmap_local_grid_square: "s3://asf-local-heat-planning-tool/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+    osopen_uprn:            "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_csv.zip"
+    # OpenMap Local Geopackage (read via pyogrio with LAD boundary mask)
+    os_openmap_local:       "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_gb.gpkg"
     # UK LA boundaries
-    lad_boundaries:               "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/LAD_DEC_2023_UK_BFE.shp"
+    lad_boundaries:         "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/LAD_DEC_2023_UK_BFE.shp"
     # Points of Interest
-    poi:                          "s3://asf-local-heat-planning-tool/inputs/geodata/poi_uk.gpkg"
+    poi:                    "s3://asf-local-heat-planning-tool/inputs/geodata/poi_uk.gpkg"
     # Plymouth Land Registry cadastral parcels
-    plymouth_land_registry:       "s3://asf-local-heat-planning-tool/inputs/geodata/Plymouth_Land_Registry_Cadastral_Parcels.gml"
+    plymouth_land_registry: "s3://asf-local-heat-planning-tool/inputs/geodata/Plymouth_Land_Registry_Cadastral_Parcels.gml"
 
   epc:
     domestic:   "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
     commercial: "s3://asf-local-heat-planning-tool/inputs/epc/v092025_EPC_NonDomestic_EW.csv"
 
   reference:
-    non_domestic_poi_categories:        "s3://asf-local-heat-planning-tool/inputs/reference/non_residential_poi_categories.csv"
-    manually_labelled_block_of_flats:   "s3://asf-local-heat-planning-tool/inputs/reference/manually_labelled_block_of_flats.parquet"
+    non_domestic_poi_categories:      "s3://asf-local-heat-planning-tool/inputs/reference/non_residential_poi_categories.csv"
+    manually_labelled_block_of_flats: "s3://asf-local-heat-planning-tool/inputs/reference/manually_labelled_block_of_flats.parquet"
+    geography_lookup:                 "s3://asf-heat-pump-suitability/inputs/reference/geography_lookup.parquet"
+    lad_utla_lookup:                  "https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/LAD23_UTLA23_EW_LU/FeatureServer/0"
+    lad_combined_lookup:              "https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/LAD23_CAUTH23_EN_LU/FeatureServer/0"
 
   inspire:
     scotland_url:       "https://ros.locationcentre.co.uk/inspire/"
@@ -29,57 +30,3 @@ inputs:
 outputs:
   models:
     block_of_flats: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_building_classifier.pkl"
-
-constant:
-  plymouth:
-    la_names: "Plymouth"
-    grid_squares: "SX"
-  plymouth_similar_cities:
-    la_names:
-      - "Liverpool"
-      - "Plymouth"
-      - "Portsmouth"
-      - "Southampton"
-      - "Swansea"
-    grid_squares:
-      - "SD"
-      - "SJ"
-      - "SN"
-      - "SS"
-      - "SU"
-      - "SX"
-      - "SZ"
-  sampling_areas:
-    la_names:
-      - "Bath and North East Somerset"
-      - "Bradford"
-      - "Glasgow City"
-      - "Manchester"
-      - "Nottingham"
-      - "Plymouth"
-    grid_squares:
-      - "NS"
-      - "SD"
-      - "SE"
-      - "SJ"
-      - "SK"
-      - "ST"
-      - "SX"
-  greater_manchester_las:
-    la_names:
-      - "Bolton"
-      - "Bury"
-      - "Manchester"
-      - "Oldham"
-      - "Rochdale"
-      - "Salford"
-      - "Stockport"
-      - "Tameside"
-      - "Trafford"
-      - "Wigan"
-    grid_squares:
-      - "SD"
-      - "SE"
-      - "SJ"
-      - "SK"
-  target_crs: 27700 # British National Grid

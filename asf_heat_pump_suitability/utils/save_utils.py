@@ -6,24 +6,20 @@ import polars as pl
 import s3fs
 from sklearn.base import BaseEstimator
 
-from asf_heat_pump_suitability.config.settings import Settings
-
 logger = logging.getLogger(__name__)
 
 
-def save_df(df: pl.DataFrame, filename: str, settings: Settings) -> None:
-    """Save a DataFrame to the configured output directory (local or S3).
+def save_df(df: pl.DataFrame, path: str) -> None:
+    """Save a DataFrame to a local or S3 path.
 
-    The output path is resolved from ``filename`` using ``settings``. Supports
-    .parquet and .csv. Local paths have their parent directory created
+    Supports .parquet and .csv. Local paths have their parent directory created
     automatically if it does not already exist.
 
     Args:
         df (pl.DataFrame): DataFrame to save.
-        filename (str): Output filename (e.g. ``domestic_uprns.parquet``).
-        settings (Settings): Pipeline settings used to resolve the output path.
+        path (str): Full output path — either a local filesystem path or an
+            ``s3://`` URI (e.g. ``s3://bucket/prefix/lad-slug/file.parquet``).
     """
-    path = settings.resolve_output_path(filename)
     print(f"Saving to: {path}")
     file_type = path.split(".")[-1]
     if path.startswith("s3://"):

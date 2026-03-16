@@ -35,14 +35,18 @@ class Settings(BaseSettings):
             return self.output_dir
         return "./outputs/" if self.local_dev else "s3://asf-local-heat-planning-tool/outputs/"
 
-    def resolve_output_path(self, filename: str) -> str:
-        """Resolve a pipeline output filename to its full path.
+    def resolve_output_path(self, lad_slug: str, filename: str) -> str:
+        """Resolve a pipeline output filename to its full per-LAD path.
+
+        Outputs are partitioned by LAD slug:
+        ``{output_dir}/{lad_slug}/{filename}``
 
         Args:
+            lad_slug: URL-safe LAD identifier (e.g. ``manchester``).
             filename: The bare filename (e.g. ``domestic_uprns.parquet``).
 
         Returns:
-            str: Full path including the resolved base output directory.
+            str: Full path including the resolved base output directory and LAD slug.
         """
         base = self.resolved_output_dir.rstrip("/")
-        return f"{base}/{filename}"
+        return f"{base}/{lad_slug}/{filename}"
