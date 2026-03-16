@@ -285,5 +285,5 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             df,
-            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}_residential_uprns.parquet",
+            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}/{args.local_authorities}_residential_uprns.parquet",
         )
