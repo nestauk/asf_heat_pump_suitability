@@ -83,6 +83,9 @@ constant:
       - "SE"
       - "SJ"
       - "SK"
+  cardiff:
+    la_names: "Cardiff"
+    grid_squares: "ST"
   target_crs: 27700 # British National Grid
 
 output:
