@@ -60,7 +60,8 @@ def generate_gdf_clusters(
             line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
         )
-        gdfs.append(reassign_gdf_communal_networked(cells_gdf))
+        # gdfs.append(reassign_gdf_communal_networked(cells_gdf))
+        gdfs.append(cells_gdf)
 
     # Generate final clusters
     if len(gdfs) > 1:
@@ -68,12 +69,14 @@ def generate_gdf_clusters(
     else:
         clusters_gdf = gdfs[0]
 
-    # TODO add ID column for clusters
-    return (
-        clusters_gdf.dissolve(by="assigned_tech")
-        .explode()
-        .reset_index()[["assigned_tech", "geometry"]]
-    )
+    return clusters_gdf
+
+    # # TODO add ID column for clusters
+    # return (
+    #     clusters_gdf.dissolve(by="assigned_tech")
+    #     .explode()
+    #     .reset_index()[["assigned_tech", "geometry"]]
+    # )
 
 
 def extend_edges_gdf(
@@ -192,6 +195,8 @@ def overlay_gdf_physical_barriers(
         .overlay(line_overlay_gdf, how="difference")
         .explode()
     )
+    print("difference_overlay")
+    cells_gdf.plot()
 
     # Deal with buildings that have multiple cell fragments
     # This happens in edge cases where a barrier bisects a Voronoi polygon
@@ -221,15 +226,16 @@ def _handle_gdf_fragmented_cells(
     """
     # Get only cells that intersect with a building and aggregate them
     union_gdf = cells_gdf[["geometry"]].overlay(tech_gdf[["geometry"]], how="union")
+    union_gdf.plot()
+    print("union_overlay")
+    print(len(union_gdf))
 
     # Retain original unionised cell geometry
     union_gdf["unionised_geometry"] = union_gdf["geometry"]
 
     # Join unionised cells back to original buildings
-    cells_gdf = (
-        tech_gdf[["geometry"]]
-        .sjoin(union_gdf, how="left", predicate="intersects")
-        .drop(columns=["index_right"])
+    cells_gdf = tech_gdf.sjoin(union_gdf, how="left", predicate="intersects").drop(
+        columns=["index_right"]
     )
 
     # If building is missing a Voronoi cell (due to overlay operation), then assign it the building footprint geometry
