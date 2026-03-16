@@ -69,14 +69,12 @@ def generate_gdf_clusters(
     else:
         clusters_gdf = gdfs[0]
 
-    return clusters_gdf
-
-    # # TODO add ID column for clusters
-    # return (
-    #     clusters_gdf.dissolve(by="assigned_tech")
-    #     .explode()
-    #     .reset_index()[["assigned_tech", "geometry"]]
-    # )
+    # TODO add ID column for clusters
+    return (
+        clusters_gdf.dissolve(by="assigned_tech")
+        .explode()
+        .reset_index()[["assigned_tech", "geometry"]]
+    )
 
 
 def extend_edges_gdf(
@@ -195,8 +193,6 @@ def overlay_gdf_physical_barriers(
         .overlay(line_overlay_gdf, how="difference")
         .explode()
     )
-    print("difference_overlay")
-    cells_gdf.plot()
 
     # Deal with buildings that have multiple cell fragments
     # This happens in edge cases where a barrier bisects a Voronoi polygon
@@ -224,11 +220,17 @@ def _handle_gdf_fragmented_cells(
     Returns:
         gpd.GeoDataFrame: domestic building cells with overlapping physical barriers removed and cell fragments handled
     """
-    # Get only cells that intersect with a building and aggregate them
-    union_gdf = cells_gdf[["geometry"]].overlay(tech_gdf[["geometry"]], how="union")
-    union_gdf.plot()
-    print("union_overlay")
-    print(len(union_gdf))
+    # Reduce the cell polygons by 1cm to avoid unions of touching cells
+    # Then union cells with building footprints
+    union = pd.concat(
+        [cells_gdf["geometry"].buffer(-0.01), tech_gdf["geometry"]]
+    ).unary_union
+
+    # Explode union
+    union_gdf = gpd.GeoDataFrame(
+        geometry=gpd.GeoSeries(union).explode(index_parts=False),
+        crs=config["constant"]["target_crs"],
+    )
 
     # Retain original unionised cell geometry
     union_gdf["unionised_geometry"] = union_gdf["geometry"]
