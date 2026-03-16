@@ -5,10 +5,17 @@ Script to add features to UPRNs:
 - estimated max contiguous and total outdoor space (m2)
 
 Run:
-python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet
+python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES
 
-To save outputs to S3, add --save flag:
-python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet --save
+where LOCAL_AUTHORITIES is one of:
+- `plymouth` for Plymouth only
+- `plymouth_similar` for Plymouth and 4 similar local authorities (Liverpool, Portsmouth, Southampton, Swansea)
+- `sampling_areas` for Plymouth and 5 different local authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham)
+- `greater_manchester_las` for all Greater Manchester local authorities (Bolton, Bury, Manchester, Oldham, Rochdale, Salford, Stockport, Tameside, Trafford, Wigan)
+- `cardiff` for Cardiff only
+You can see the full list of local authority options in the `constant` section of the config.yaml file.
+
+To save outputs to S3, add --save flag, which will save outputs to S3.
 """
 
 import argparse
@@ -23,14 +30,6 @@ def parse_arguments() -> argparse.Namespace:
         argparse.Namespace: populated `Namespace`
     """
     parser = argparse.ArgumentParser()
-
-    # TODO this is a placeholder and likely to change as the script develops
-    parser.add_argument(
-        "--uprns",
-        help="Path to domestic UPRN dataset with X and Y coordinates in parquet.",
-        type=str,
-        required=True,
-    )
 
     parser.add_argument(
         "--local_authorities",
@@ -49,7 +48,6 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    import os
     import polars as pl
     import geopandas as gpd
     import pandas as pd
@@ -67,11 +65,20 @@ if __name__ == "__main__":
 
     args = parse_arguments()
     las = args.local_authorities.lower()
+    # TODO check if we want to import HNZ data separately or move code into this script.
+    uprns_path = f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{las}/{las}_residential_uprns_with_hn_zones_city_centres.parquet"
 
     # Load UPRN data
-    print(f"Loading domestic UPRNs from: {args.uprns}")
+    print(f"Loading domestic UPRNs from: {uprns_path}")
     uprns_df = pl.read_parquet(
-        args.uprns, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
+        uprns_path,
+        columns=[
+            "UPRN",
+            "X_COORDINATE",
+            "Y_COORDINATE",
+            "in_hn_zone",
+            "in_city_centre",
+        ],
     )
 
     # Get geopoints of UPRNs
@@ -90,7 +97,7 @@ if __name__ == "__main__":
     # Load building footprint data
     # TODO scale beyond sampling areas
     building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-        layer="building", grid_squares="SX"
+        layer="building", grid_squares=config["constant"][las]["grid_squares"]
     )
 
     # Map UPRNs to the ID of the building they're in
@@ -139,8 +146,13 @@ if __name__ == "__main__":
         inspire_file_names = get_datasets.load_gdf_inspire_land_parcels(
             path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EW.geojson"
         )
+        list_las = (
+            config["constant"][las]["la_names"]
+            if isinstance(config["constant"][las]["la_names"], list)
+            else [config["constant"][las]["la_names"]]
+        )
         inspire_file_names = inspire_file_names[
-            inspire_file_names["LAD23NM"].isin(config["constant"][las]["la_names"])
+            inspire_file_names["LAD23NM"].isin(list_las)
         ]["inspire_file_name"].unique()
 
         land_parcels_gdf = pd.concat(
@@ -190,5 +202,5 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             features_df,
-            path=f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{os.path.basename(args.uprns).split('.')[0]}_with_features.parquet",
+            path=f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{las}/{las}_with_features.parquet",
         )
