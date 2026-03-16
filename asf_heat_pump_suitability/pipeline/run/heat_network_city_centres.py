@@ -21,7 +21,6 @@ Set --save to save the outputs to S3. By default, outputs are not saved.
 """
 
 import argparse
-import polars as pl
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -61,7 +60,8 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    from asf_heat_pump_suitability import config
+    import polars as pl
+
     from asf_heat_pump_suitability.getters import base_getters, load_geodata
     from asf_heat_pump_suitability.pipeline.transform import uprns
     from asf_heat_pump_suitability.pipeline.transform import (
