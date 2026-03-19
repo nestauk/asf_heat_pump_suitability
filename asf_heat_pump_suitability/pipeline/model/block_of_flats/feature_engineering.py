@@ -3,6 +3,7 @@ Functions to generate features for random forest binary classifier model which c
 or not. Features are generated per building from building footprint and UPRN geodata.
 """
 
+import numpy as np
 import polars as pl
 import geopandas as gpd
 import pandas as pd
@@ -44,6 +45,9 @@ def generate_df_features(
         _generate_df_building_features(buildings_w_uprns_gdf, id_col),
         _generate_df_stacked_uprn_features(uprns_w_buildings_gdf, id_col),
         _generate_df_concave_hull_features(uprns_w_buildings_gdf, id_col),
+        _generate_df_convex_hull_features(uprns_w_buildings_gdf, id_col),
+        _generate_df_footprint_geometry_features(buildings_gdf, id_col),
+        _generate_df_uprn_perimeter_distance_features(buildings_w_uprns_gdf, id_col),
         _generate_df_building_sections_features(
             uprns_gdf=uprns_gdf,
             buildings_gdf=buildings_gdf,
@@ -57,7 +61,14 @@ def generate_df_features(
     return pl.concat(features_dfs, how="align").with_columns(
         (pl.col("concave_hull_area_m2") / pl.col("building_area_m2")).alias(
             "hull_to_building_area_ratio"
-        )
+        ),
+        (pl.col("convex_hull_area_m2") / pl.col("building_area_m2")).alias(
+            "convex_hull_to_building_area_ratio"
+        ),
+        pl.when(pl.col("convex_hull_area_m2") == 0)
+        .then(-1)
+        .otherwise(pl.col("concave_hull_area_m2") / pl.col("convex_hull_area_m2"))
+        .alias("concave_to_convex_hull_ratio"),
     )
 
 
@@ -110,6 +121,7 @@ def _generate_df_stacked_uprn_features(
     Generate select features from UPRNs with building footprints joined to them:
     - avg_n_stacked_uprns (the average number of UPRNs sharing the same coordinates per building)
     - std_n_stacked_uprns (the standard deviation of the number of UPRNs sharing the same coordinates per building)
+    - max_n_stacked_uprns (the maximum number of UPRNs sharing the same coordinates per building)
 
     Args:
         gdf (gpd.GeoDataFrame): UPRNs and geometries with building footprints joined to them
@@ -127,10 +139,11 @@ def _generate_df_stacked_uprn_features(
         .over(["X_COORDINATE", "Y_COORDINATE"])
     )
 
-    # Group by building and get the average and STD of UPRNs sharing the same coordinates
+    # Group by building and get the average, STD, and max of UPRNs sharing the same coordinates
     df = df.group_by(id_col).agg(
         pl.col("n_stacked_uprns").mean().alias("avg_n_stacked_uprns"),
         pl.col("n_stacked_uprns").std().alias("std_n_stacked_uprns"),
+        pl.col("n_stacked_uprns").max().alias("max_n_stacked_uprns"),
     )
 
     return df
@@ -207,6 +220,165 @@ def _generate_df_concave_hull_features(
     ]
 
     return agg_building_df.select(keep_cols)
+
+
+def _generate_df_convex_hull_features(
+    gdf: gpd.GeoDataFrame, id_col: str
+) -> pl.DataFrame:
+    """
+    Generate convex hull features from UPRNs with building footprints joined to them:
+    - convex_hull_area_m2 (the area (m2) of the convex hull of the point geometries of all UPRNs per building)
+    - uprns_per_convex_hull_area_m2 (the number of UPRNs per convex hull area per building)
+    - flats_per_convex_hull_area_m2 (the number of flats per convex hull area per building)
+
+    The convex hull is the smallest convex polygon containing all UPRNs in the building. Combined
+    with the concave hull, the ratio of the two provides information on the shape regularity of the
+    UPRN distribution (a ratio close to 1 means UPRNs are spread in a convex pattern).
+
+    Note: UPRNs or flats per hull area can be infinite if all UPRNs share collinear or identical
+    coordinates (i.e. area = 0m2). In these cases the value is set to -1.
+
+    Args:
+        gdf (gpd.GeoDataFrame): UPRNs and geometries with building footprints joined to them
+        id_col (str): name of building ID column
+
+    Returns:
+        pl.DataFrame: select features per building footprint (per id_col)
+    """
+    dissolved = gdf.dissolve(id_col)
+    dissolved["convex_hull_area_m2"] = dissolved.geometry.convex_hull.area
+    hull_df = pl.from_pandas(dissolved[["convex_hull_area_m2"]].reset_index())
+
+    agg_building_df = (
+        pl.from_pandas(gdf.drop(columns=["geometry"]))
+        .group_by(id_col)
+        .agg(
+            pl.col("UPRN").count().alias("n_UPRNs"),
+            pl.col("property_type_flat").sum().alias("n_flats"),
+        )
+        .join(hull_df, how="left", on=id_col)
+        .with_columns(
+            (pl.col("n_UPRNs") / pl.col("convex_hull_area_m2")).alias(
+                "uprns_per_convex_hull_area_m2"
+            ),
+            (pl.col("n_flats") / pl.col("convex_hull_area_m2")).alias(
+                "flats_per_convex_hull_area_m2"
+            ),
+        )
+        .with_columns(
+            pl.when(pl.col("uprns_per_convex_hull_area_m2").is_infinite())
+            .then(-1)
+            .otherwise(pl.col("uprns_per_convex_hull_area_m2"))
+            .alias("uprns_per_convex_hull_area_m2"),
+            pl.when(pl.col("flats_per_convex_hull_area_m2").is_infinite())
+            .then(-1)
+            .otherwise(pl.col("flats_per_convex_hull_area_m2"))
+            .alias("flats_per_convex_hull_area_m2"),
+        )
+    )
+
+    return agg_building_df.select(
+        [
+            id_col,
+            "convex_hull_area_m2",
+            "uprns_per_convex_hull_area_m2",
+            "flats_per_convex_hull_area_m2",
+        ]
+    )
+
+
+def _generate_df_footprint_geometry_features(
+    buildings_gdf: gpd.GeoDataFrame, id_col: str
+) -> pl.DataFrame:
+    """
+    Generate geometric descriptor features directly from building footprint polygons:
+    - n_building_vertices (total number of exterior ring vertices across all polygon parts)
+    - footprint_edge_ratio (ratio of longest to shortest exterior edge; None for degenerate geometries)
+
+    Args:
+        buildings_gdf (gpd.GeoDataFrame): building footprints, one row per building
+        id_col (str): name of building ID column
+
+    Returns:
+        pl.DataFrame: select features per building footprint (per id_col)
+    """
+
+    def _polygon_edges(geom) -> np.ndarray:
+        """Return edge lengths for all exterior rings in a Polygon or MultiPolygon."""
+        parts = list(geom.geoms) if geom.geom_type == "MultiPolygon" else [geom]
+        edges = []
+        for part in parts:
+            coords = np.array(part.exterior.coords)
+            edges.append(np.linalg.norm(np.diff(coords, axis=0), axis=1))
+        return np.concatenate(edges)
+
+    n_vertices = []
+    edge_ratios = []
+
+    for geom in buildings_gdf.geometry:
+        if geom.geom_type == "Polygon":
+            n_verts = len(geom.exterior.coords) - 1
+        elif geom.geom_type == "MultiPolygon":
+            n_verts = sum(len(g.exterior.coords) - 1 for g in geom.geoms)
+        else:
+            n_verts = 0
+
+        n_vertices.append(n_verts)
+
+        if geom.geom_type in ("Polygon", "MultiPolygon"):
+            edge_lengths = _polygon_edges(geom)
+            min_edge = edge_lengths.min()
+            edge_ratios.append(edge_lengths.max() / min_edge if min_edge > 0 else None)
+        else:
+            edge_ratios.append(None)
+
+    return pl.DataFrame(
+        {
+            id_col: buildings_gdf[id_col].tolist(),
+            "n_building_vertices": n_vertices,
+            "footprint_edge_ratio": edge_ratios,
+        }
+    )
+
+
+def _generate_df_uprn_perimeter_distance_features(
+    gdf: gpd.GeoDataFrame, id_col: str
+) -> pl.DataFrame:
+    """
+    Compute the distance from each UPRN to its building's exterior perimeter, then aggregate
+    per building:
+    - avg_uprn_perimeter_dist_m
+    - std_uprn_perimeter_dist_m
+    - min_uprn_perimeter_dist_m
+    - max_uprn_perimeter_dist_m
+
+    UPRNs near the perimeter (low distance) suggest edge-of-building units; UPRNs far from the
+    perimeter suggest interior units — a pattern useful for distinguishing block of flats from
+    other building types.
+
+    Args:
+        gdf (gpd.GeoDataFrame): building footprints with UPRNs joined to them (building geometry
+            is the active geometry; UPRN coordinates come from X_COORDINATE / Y_COORDINATE columns)
+        id_col (str): name of building ID column
+
+    Returns:
+        pl.DataFrame: distance summary features per building footprint (per id_col)
+    """
+    uprn_points = shapely.points(gdf["X_COORDINATE"].values, gdf["Y_COORDINATE"].values)
+    # shapely.boundary() returns the exterior ring for Polygon or MultiLineString for MultiPolygon
+    building_boundaries = shapely.boundary(gdf.geometry.values)
+    dists = shapely.distance(uprn_points, building_boundaries)
+
+    return (
+        pl.DataFrame({id_col: gdf[id_col].tolist(), "uprn_perimeter_dist_m": dists})
+        .group_by(id_col)
+        .agg(
+            pl.col("uprn_perimeter_dist_m").mean().alias("avg_uprn_perimeter_dist_m"),
+            pl.col("uprn_perimeter_dist_m").std().alias("std_uprn_perimeter_dist_m"),
+            pl.col("uprn_perimeter_dist_m").min().alias("min_uprn_perimeter_dist_m"),
+            pl.col("uprn_perimeter_dist_m").max().alias("max_uprn_perimeter_dist_m"),
+        )
+    )
 
 
 def _generate_df_building_sections_features(

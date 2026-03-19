@@ -336,12 +336,12 @@ if __name__ == "__main__":
     # TODO scale beyond sampling areas
     building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
         layer="building",
-        grid_squares=config["constant"]["grid_squares"]["sampling_areas"],
+        grid_squares=config["constant"]["sampling_areas"]["grid_squares"],
     )
 
     # Load Local Authority boundaries
     la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        select_las=config["constant"]["sampling_areas"]
+        select_las=config["constant"]["sampling_areas"]["la_names"]
     )
 
     # ------------------------ #
