@@ -9,12 +9,23 @@ from asf_heat_pump_suitability import config
 
 
 def extend_df_heat_network_zone_bool(
-    df: pl.DataFrame, uprns_gdf: gpd.GeoDataFrame, hn_zone_gdf: gpd.GeoDataFrame
+    uprns_df: pl.DataFrame, uprns_gdf: gpd.GeoDataFrame, hn_zone_gdf: gpd.GeoDataFrame
 ) -> pl.DataFrame:
+    """
+    Add boolean `in_hn_zone` column to UPRN dataframe to indicate whether UPRN is in a heat network zone or not.
+
+    Args:
+        uprns_df (pl.DataFrame): dataframe with UPRNs
+        uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries
+        hn_zone_gdf (gpd.GeoDataFrame): heat network zone polygons
+
+    Returns:
+        pl.DataFrame: UPRN dataframe with boolean `in_hn_zone` column.
+    """
     uprns_in_hnz = generate_dict_heat_network_zone_uprns(
         uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zone_gdf
     ).keys()
-    return df.with_columns(
+    return uprns_df.with_columns(
         pl.when(pl.col("UPRN").is_in(uprns_in_hnz))
         .then(True)
         .otherwise(False)
@@ -27,14 +38,14 @@ def generate_dict_heat_network_zone_uprns(
     hn_zone_gdf: gpd.GeoDataFrame,
 ) -> dict:
     """
-    Label UPRNs that are located within a heat network zone.
+    Create dict of UPRNs that are located within a heat network zone with their corresponding HN zone IDs.
 
     Args:
         uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be labelled
         hn_zone_gdf (gpd.GeoDataFrame): polygons of heat network zones
 
     Returns:
-        dict: UPRNs intersecting with heat network zones and their zone identifiers
+        dict: UPRNs intersecting with heat network zones and their zone IDs
     """
     print(f"Identifying residential UPRNs in heat network zones...")
     # CRS checks and reprojection if needed
@@ -61,7 +72,7 @@ def generate_dict_heat_network_zone_uprns(
             predicate="intersects",  # include properties intersecting heat network zone boundary
         )
         .drop(columns="index_right")
-        .rename({id_col: "HNZoneID"})
+        .rename(columns={id_col: "HNZoneID"})
     )
 
     return labelled_uprn_gdf.set_index("UPRN").to_dict()["HNZoneID"]
