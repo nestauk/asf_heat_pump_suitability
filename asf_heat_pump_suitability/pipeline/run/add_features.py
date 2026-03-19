@@ -1,14 +1,14 @@
 """
 Script to add features to UPRNs:
 - flat / apartment property type boolean flag
-- boolean flag to indicate whether UPRN is in a block of flats
+- boolean flags to indicate whether UPRN is in a block of flats; in a heat network zone; and in a city centre
 - estimated max contiguous and total outdoor space (m2)
+- EPC-derived features of tenure; attachment type of property; and current energy rating
 
 Run:
 python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet
 
-To save outputs to S3, add --save flag:
-python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet --save
+To save outputs to S3, add --save flag.
 """
 
 import argparse
