@@ -141,7 +141,7 @@ if __name__ == "__main__":
     # Load Plymouth existing heat network zone polygons and label UPRNs in HN zones
     hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=las)
     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
-        df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
+        uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
     )
 
     # Load spatial signature polygons and label UPRNs in city centres
@@ -149,7 +149,7 @@ if __name__ == "__main__":
         detail_level="full"
     )
     features_df = city_centres.extend_df_city_centre_labels(
-        df=features_df,
+        uprns_df=features_df,
         uprns_gdf=uprns_gdf,
         spatial_signatures_gdf=spatial_signatures_gdf,
     )
@@ -216,7 +216,7 @@ if __name__ == "__main__":
     # PRIORITISATION FEATURES
     # ------------------------ #
     # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE
-    epc_df = pl.read_parquet("")
+    epc_df = pl.read_parquet(config["data"]["epc"]["domestic"])
     uprns_df = epc.extend_df_epc_features(
         uprns_df=uprns_df,
         epc_df=epc_df,
