@@ -81,17 +81,17 @@ def load_df_uprn_data(local_authorities: str) -> gpd.GeoDataFrame:
     """
 
     uprns = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_residential_uprns.parquet"
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_residential_uprns.parquet"
     )
     uprns = generate_gdf_uprn_coords(df=uprns)
 
     hnz_and_city_centre_data = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet"
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet"
     )
     hnz_and_city_centre_data = generate_gdf_uprn_coords(df=hnz_and_city_centre_data)
 
     uprns_with_features = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_residential_uprns_with_features.parquet"
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_residential_uprns_with_features.parquet"
     )
     uprns_with_features = generate_gdf_uprn_coords(df=uprns_with_features)
 
@@ -389,7 +389,13 @@ def identify_most_suitable_tech_uprn_and_building(
     """
 
     # Load and process data
-    hn_zones_gdf = load_gdf_heat_network_zones(local_authority=local_authorities)
+    try:
+        hn_zones_gdf = load_gdf_heat_network_zones(local_authority=local_authorities)
+    except ValueError:
+        print(
+            f"No heat network zone geodataframe found for {local_authorities}. Proceeding without heat network zone data."
+        )
+
     building_footprints = load_gdf_os_openmap_local_layer(
         layer="building",
         grid_squares=config["constant"][local_authorities]["grid_squares"],
@@ -397,7 +403,13 @@ def identify_most_suitable_tech_uprn_and_building(
 
     uprns_gdf = load_df_uprn_data(local_authorities)
     uprns_gdf = extend_gdf_building_footprints(uprns_gdf, building_footprints)
-    uprns_gdf = extend_gdf_hn_zone_geometry(uprns_gdf, hn_zones_gdf)
+
+    try:
+        uprns_gdf = extend_gdf_hn_zone_geometry(uprns_gdf, hn_zones_gdf)
+    except ValueError:
+        print(
+            f"No heat network zone geodataframe found for {local_authorities}. Proceeding without heat network zone data."
+        )
 
     # Identify most suitable tech for each UPRN
     uprns_gdf["most_suitable_solutions"] = uprns_gdf.apply(
