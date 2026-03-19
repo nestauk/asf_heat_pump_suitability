@@ -54,6 +54,13 @@ if __name__ == "__main__":
     import geopandas as gpd
     import pandas as pd
 
+    import warnings
+
+    warnings.filterwarnings(
+        action="ignore",
+        message=r"datetime.datetime.utcnow\(\) is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now\(datetime.UTC\).",
+    )
+
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
     from asf_heat_pump_suitability.getters import (
@@ -94,6 +101,8 @@ if __name__ == "__main__":
     features_df = uprns_df.with_columns(
         pl.col("UPRN").is_in(flat_uprns).alias("property_type_flat")
     )
+
+    del flat_uprns
 
     # ------------------------ #
     # PREDICT BLOCK OF FLATS CLASSIFICATION
@@ -136,6 +145,8 @@ if __name__ == "__main__":
         id_col="ID",
     )
 
+    del uprn_building_id_dict, building_features_df, labelled_df, clf
+
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
     # Load Plymouth existing heat network zone polygons and label UPRNs in HN zones
@@ -153,6 +164,7 @@ if __name__ == "__main__":
         uprns_gdf=uprns_gdf,
         spatial_signatures_gdf=spatial_signatures_gdf,
     )
+    del hn_zones_gdf, spatial_signatures_gdf
 
     # ------------------------ #
     # ESTIMATE OUTDOOR SPACE
@@ -212,16 +224,29 @@ if __name__ == "__main__":
         on="UPRN",
     )
 
+    del (
+        land_parcels_gdf,
+        building_footprints_gdf,
+        intersection_gdf,
+        outdoor_space_gdf,
+        uprns_space_df,
+    )
+
     # ------------------------ #
     # PRIORITISATION FEATURES
     # ------------------------ #
     # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE
-    epc_df = pl.read_parquet(config["data"]["epc"]["domestic"])
-    uprns_df = epc.extend_df_epc_features(
-        uprns_df=uprns_df,
-        epc_df=epc_df,
-        columns=["UPRN", "ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"],
+    epc_df = pl.read_parquet(
+        config["data"]["epc"]["domestic"],
+        columns=["UPRN", "TENURE", "BUILT_FORM", "CURRENT_ENERGY_RATING"],
     )
+    features_df = epc.extend_df_epc_features(
+        df=features_df,
+        epc_df=epc_df,
+        columns=["UPRN", "TENURE", "CURRENT_ENERGY_RATING"],
+    )
+
+    del epc_df
 
     # ------------------------ #
     # SAVE OUTPUTS

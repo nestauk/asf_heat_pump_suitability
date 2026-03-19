@@ -3,7 +3,7 @@ from typing import List, Optional
 
 
 def extend_df_epc_features(
-    uprns_df: pl.DataFrame, epc_df: pl.DataFrame, columns: Optional[List[str]]
+    df: pl.DataFrame, epc_df: pl.DataFrame, columns: Optional[List[str]]
 ) -> pl.DataFrame:
     """
     Join EPC-derived features to UPRNs. Features added are:
@@ -12,7 +12,7 @@ def extend_df_epc_features(
     - `CURRENT_ENERGY_RATING` which represents the EPC rating of the property
 
     Args:
-        uprns_df (pl.DataFrame): UPRN data with one row per UPRN containing `property_type_flat` column.
+        df (pl.DataFrame): UPRN data with one row per UPRN containing `property_type_flat` column to join new features to..
         epc_df (pl.DataFrame): preprocessed and deduplicated EPC data from asf-daps `UPRN`, `BUILT_FORM`, and `TENURE`
         columns.
         columns (List[str]): list of EPC columns to keep, optional. If not set, uses all columns in `epc_df`.
@@ -23,20 +23,24 @@ def extend_df_epc_features(
     if columns:
         columns += ["UPRN", "BUILT_FORM", "TENURE"]
         epc_df = epc_df.select(set(columns))
-    epc_df = clean_df_epc(epc_df)
+    epc_df = clean_extend_df_epc(epc_df)
 
-    return uprns_df.join(epc_df, how="left", on="UPRN").with_columns(
-        # Change attachment to flat if it is one
-        pl.when(pl.col("property_type_flat"))
-        .then(pl.lit("Flat"))
-        .otherwise(pl.col("ATTACHMENT"))
-        .alias("ATTACHMENT")
+    return (
+        df.join(epc_df, how="left", on="UPRN")
+        .with_columns(
+            # Change attachment to flat if it is one
+            pl.when(pl.col("property_type_flat"))
+            .then(pl.lit("Flat"))
+            .otherwise(pl.col("ATTACHMENT"))
+            .alias("ATTACHMENT")
+        )
+        .drop("BUILT_FORM")
     )
 
 
-def clean_df_epc(df: pl.DataFrame) -> pl.DataFrame:
+def clean_extend_df_epc(df: pl.DataFrame) -> pl.DataFrame:
     """
-    Clean preprocessed EPC dataframe to create EPC-derived features for clusters.
+    Clean preprocessed EPC dataframe and add new `ATTACHMENT` column to create EPC-derived features for clusters.
 
     Args:
         df (pl.DataFrame): preprocessed EPC dataframe containing `UPRN`, `BUILT_FORM`, and `TENURE` columns.
