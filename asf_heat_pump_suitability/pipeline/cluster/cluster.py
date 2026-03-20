@@ -220,10 +220,10 @@ def _handle_gdf_fragmented_cells(
     Returns:
         gpd.GeoDataFrame: domestic building cells with overlapping physical barriers removed and cell fragments handled
     """
-    # Reduce the cell polygons by 1cm to avoid unions of touching cells
+    # Reduce the polygons by 1cm to avoid unions of touching cells
     # Then union cells with building footprints
     union = pd.concat(
-        [cells_gdf["geometry"].buffer(-0.01), tech_gdf["geometry"]]
+        [cells_gdf["geometry"].buffer(-0.01), tech_gdf["geometry"].buffer(-0.01)]
     ).unary_union
 
     # Explode union
@@ -231,6 +231,9 @@ def _handle_gdf_fragmented_cells(
         geometry=gpd.GeoSeries(union).explode(index_parts=False),
         crs=config["constant"]["target_crs"],
     )
+
+    # Add 1cm buffer back so that dissolving works later
+    union_gdf["geometry"] = union_gdf["geometry"].buffer(0.01)
 
     # Retain original unionised cell geometry
     union_gdf["unionised_geometry"] = union_gdf["geometry"]
