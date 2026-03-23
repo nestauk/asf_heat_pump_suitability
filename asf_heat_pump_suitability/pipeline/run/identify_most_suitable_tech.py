@@ -1,7 +1,7 @@
 """
 This script codes the decision tree that outputs the most suitable tech for each UPRN given the following inputs:
 - whether it is in a city centre or planned HN zone
-- contigous outdoor space size
+- maximum contiguous outdoor space size
 - whether the property is in a block of flats or not
 
 It then aggregates the most suitable tech information at building footprint level, and assigns a unique solution for each building.
@@ -111,26 +111,26 @@ def load_df_uprn_data(local_authorities: str) -> gpd.GeoDataFrame:
 
 
 def extend_gdf_building_footprints(
-    gdf: gpd.GeoDataFrame, building_footprints: gpd.GeoDataFrame
+    gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
     """
-    Extends the GeoDataFrame with building footprints information.
+    Extends the GeoDataFrame with building footprint polygons
 
     Args:
         gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
-        building_footprints (gpd.GeoDataFrame): GeoDataFrame with building footprints.
+        buildings_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
 
     Returns:
-        gpd.GeoDataFrame: GeoDataFrame with building footprints information.
+        gpd.GeoDataFrame: GeoDataFrame with building footprint polygons added.
     """
     # Creates a copy of the (building) geometry column to keep after the spatial join
     gdf["uprn_geometry"] = gdf.geometry
-    building_footprints["building_geometry"] = building_footprints["geometry"]
+    buildings_gdf["building_geometry"] = buildings_gdf["geometry"]
 
     # Spatial join to add building footprints geometry to the UPRN geodataframe
     # based on whether the UPRN point is within the building footprint polygon
     gdf = gdf.sjoin(
-        building_footprints[["geometry", "building_geometry"]],
+        buildings_gdf[["geometry", "building_geometry"]],
         how="left",
         predicate="within",
     ).drop(columns=["index_right"])
@@ -178,11 +178,11 @@ def identify_dict_most_suitable_tech(
 
     Args:
         in_block_of_flats (bool): Whether UPRN is in a block of flats.
-        outdoor_space (float): Outdoor space in squared meters.
+        outdoor_space (float): Maximum contiguous outdoor space in metres squared.
         city_centre_or_hnz (bool): Whether the UPRN is in the city centre or in a planned heat network zone.
 
     Returns:
-        dict: A dictionary with the first and second most suitable heating solutions and the path taken in the decision tree.
+        dict: A dictionary with the most suitable heating solution and the path taken in the decision tree.
     """
 
     if in_block_of_flats:
@@ -198,10 +198,10 @@ def identify_dict_most_suitable_tech(
             }
     else:
         if city_centre_or_hnz:
-            if pd.isnull(outdoor_space):
+            if not outdoor_space:
                 return {
                     "assigned_tech": f"{TECH_TYPES['individual']} or {TECH_TYPES['heat_network']}",
-                    "decision_tree_path": "Unknown outdoor space in city centre",
+                    "decision_tree_path": "Not in block of flats. Unknown outdoor space in city centre",
                 }
             elif outdoor_space > 70:
                 return {
@@ -214,10 +214,10 @@ def identify_dict_most_suitable_tech(
                     "decision_tree_path": "4. not in blocks of flats, in city centre, small or no outdoor space",
                 }
         else:
-            if pd.isnull(outdoor_space):
+            if not outdoor_space:
                 return {
                     "assigned_tech": f"{TECH_TYPES['individual']} or {TECH_TYPES['networked']}",
-                    "decision_tree_path": "Unknown outdoor space not in city centre/ HN zone",
+                    "decision_tree_path": "Not in block of flats. Unknown outdoor space not in city centre/ HN zone",
                 }
             elif outdoor_space > 30:
                 return {
@@ -239,10 +239,10 @@ def identify_df_building_most_suitable_tech(
     based on the combination of solutions in the set (for the UPRNs in the building).
 
     Args:
-        uprnsuprns_gdf_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
+        uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
 
     Returns:
-       gpd.GeoDataFrame: building footprint with assigned most suitable tech.
+       gpd.GeoDataFrame: building footprints with assigned most suitable tech.
     """
 
     # Convert building geometry to WKB format before converting to Polars DataFrame
@@ -259,7 +259,7 @@ def identify_df_building_most_suitable_tech(
                     "in_hn_zone",
                 ]
             ]
-        ).copy()
+        )
     )
 
     solutions_per_footprint_df = (
@@ -279,9 +279,9 @@ def identify_df_building_most_suitable_tech(
             .count(),
             n_properties=pl.col("UPRN").count(),
             building_in_hn_zone=pl.col("in_hn_zone").any(),
+            n_solutions=pl.col("assigned_tech").n_unique(),
         )
         # Filter for footprints with more than 1 solution
-        .with_columns(n_solutions=pl.col("assigned_tech").list.len())
         .filter(pl.col("n_solutions") > 1)
         # Calculate the percentage of properties with available outdoor space data for each building footprint
         .with_columns(
@@ -290,8 +290,7 @@ def identify_df_building_most_suitable_tech(
                 / pl.col("n_properties")
                 * 100
             )
-        )
-        .drop(["n_solutions"])
+        ).drop(["n_solutions"])
     )
 
     solutions_per_footprint_df = assign_df_unique_solution(solutions_per_footprint_df)
