@@ -23,7 +23,7 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
-N_GSHP = config["constant"]["tech_types"]["N_GSHP"]
+NETWORKED = config["constant"]["tech_types"]["networked"]
 COMMUNAL = config["constant"]["tech_types"]["communal"]
 
 
@@ -54,12 +54,15 @@ def generate_gdf_clusters(
     # Create Voronoi polygons and overlay physical barriers
     for boundary in boundary_gdf["geometry"].unique():
         voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
+
+        print("After extending edges:, ", tech_gdf.head())
         cells_gdf = overlay_gdf_physical_barriers(
             voronoi_gdf=voronoi_gdf,
             tech_gdf=tech_gdf,
             line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
         )
+        print("After overlaying physical barriers:, ", tech_gdf.head())
         # gdfs.append(reassign_gdf_communal_networked(cells_gdf))
         gdfs.append(cells_gdf)
 
@@ -69,12 +72,33 @@ def generate_gdf_clusters(
     else:
         clusters_gdf = gdfs[0]
 
-    # TODO add ID column for clusters
-    return (
+    print("Clusters gdf: ", clusters_gdf.head())
+
+    clusters_gdf = (
         clusters_gdf.dissolve(by="assigned_tech")
         .explode()
         .reset_index()[["assigned_tech", "geometry"]]
     )
+
+    print("Clusters gdf after dissolving and exploding: ", clusters_gdf.head())
+
+    tech_code = {
+        "Communal solution": "COM",
+        "District heat network": "DHNZ",
+        "Individual solution": "IND",
+        "Networked heat pump": "NHP",
+    }
+
+    clusters_gdf["code"] = clusters_gdf["assigned_tech"].map(tech_code)
+
+    # create an ID for each geometry that starts with the tech code and ends with a unique number, e.g. COM_1, COM_2, etc.
+    clusters_gdf["cluster_id"] = clusters_gdf.groupby("assigned_tech").cumcount()
+
+    clusters_gdf["cluster_id"] = (
+        clusters_gdf["code"] + "_" + (clusters_gdf["cluster_id"] + 1).astype(str)
+    )
+
+    return clusters_gdf
 
 
 def extend_edges_gdf(
@@ -340,7 +364,7 @@ def load_transform_gdf_polygon_barriers(
 
 
 def reassign_gdf_communal_networked(
-    gdf: gpd.GeoDataFrame, n_gshp: str = N_GSHP, communal: str = COMMUNAL
+    gdf: gpd.GeoDataFrame, n_gshp: str = NETWORKED, communal: str = COMMUNAL
 ) -> gpd.GeoDataFrame:
     """
     Reassign technology type of Voronoi polygons labelled with 'Communal solutions' if they are in an island* with Voronoi polygons labelled
@@ -421,13 +445,14 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-
     args = parse_arguments()
     tech_gdf = (
-        gpd.read_file(args.tech_gdf).to_crs(config["constant"]["target_crs"])
-        # TODO rename column in original dataframe
-        .rename(columns={"1st_most_suitable_solution": "assigned_tech"})
+        gpd.read_parquet(args.tech_gdf)
+        .rename(columns={"building_geometry": "geometry"})
+        .set_geometry("geometry")
+        .to_crs(config["constant"]["target_crs"])
     )
+    print("TECH GDF LOADED", tech_gdf["assigned_tech"].unique())
     grid_squares = config["constant"][args.local_authorities]["grid_squares"]
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
