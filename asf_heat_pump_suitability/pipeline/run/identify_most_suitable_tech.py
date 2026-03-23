@@ -32,9 +32,6 @@ from asf_heat_pump_suitability.pipeline.transform.uprns import generate_gdf_uprn
 from asf_heat_pump_suitability.getters.load_tree_input import (
     load_gdf_os_openmap_local_layer,
 )
-from asf_heat_pump_suitability.getters.load_geodata import (
-    load_gdf_heat_network_zones,
-)
 from asf_heat_pump_suitability import config
 
 TECH_TYPES = config["constant"]["tech_types"]
@@ -68,10 +65,12 @@ def parse_arguments() -> argparse.Namespace:
 
 def load_df_uprn_data(local_authorities: str) -> gpd.GeoDataFrame:
     """
-    TODO: change after all columns exist within the same df.
-    Temporary function to join UPRN features including:
-    - UPRNs and their geometries
-    - Block of flats information
+    Loads UPRN level data with relevant features for the decision tree, including:
+    - whether the UPRN is in a block of flats
+    - maximum contiguous outdoor space area in metres squared
+    - whether the UPRN is in a city centre or planned HN zone
+
+    Creates new column `in_city_centre_or_hn_zone` which indicates whether the UPRN is in the city centre or in a planned HN zone.
 
     Args:
         local_authorities (str): Local authority or authorities.
@@ -80,34 +79,16 @@ def load_df_uprn_data(local_authorities: str) -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: GeoDataFrame with UPRNs and respective features.
     """
 
-    uprns = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_residential_uprns.parquet"
-    )
-    uprns = generate_gdf_uprn_coords(df=uprns)
-
-    hnz_and_city_centre_data = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet"
-    )
-    hnz_and_city_centre_data = generate_gdf_uprn_coords(df=hnz_and_city_centre_data)
-
     uprns_with_features = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_residential_uprns_with_features.parquet"
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_with_features.parquet"
     )
     uprns_with_features = generate_gdf_uprn_coords(df=uprns_with_features)
 
-    uprns.set_index("UPRN", inplace=True)
-    hnz_and_city_centre_data.set_index("UPRN", inplace=True)
-    uprns_with_features.set_index("UPRN", inplace=True)
-
-    # Joining all geodfs into one based on UPRN
-    gdf = uprns.join(hnz_and_city_centre_data[["in_city_centre", "in_hn_zone"]]).join(
-        uprns_with_features.drop(columns=["X_COORDINATE", "Y_COORDINATE", "geometry"])
+    uprns_with_features["in_city_centre_or_hn_zone"] = (
+        uprns_with_features["in_city_centre"] | uprns_with_features["in_hn_zone"]
     )
-    gdf["in_city_centre_or_hn_zone"] = gdf["in_city_centre"] | gdf["in_hn_zone"]
 
-    gdf.reset_index(inplace=True)
-
-    return gdf
+    return uprns_with_features
 
 
 def extend_gdf_building_footprints(
@@ -262,6 +243,7 @@ def identify_df_building_most_suitable_tech(
         )
     )
 
+    # Create df with set of most suitable tech per building footprint
     solutions_per_footprint_df = (
         # Aggregate at building footprint level to identify the set of most suitable tech for properties within the same building
         uprns_df.group_by("building_geometry")
@@ -281,6 +263,11 @@ def identify_df_building_most_suitable_tech(
             building_in_hn_zone=pl.col("in_hn_zone").any(),
             n_solutions=pl.col("assigned_tech").n_unique(),
         )
+    )
+
+    # Dealing with building footprints with more than 1 solution in the set of most suitable tech for the building footprint
+    buildings_with_multiple_solutions_df = (
+        solutions_per_footprint_df
         # Filter for footprints with more than 1 solution
         .filter(pl.col("n_solutions") > 1)
         # Calculate the percentage of properties with available outdoor space data for each building footprint
@@ -293,10 +280,23 @@ def identify_df_building_most_suitable_tech(
         ).drop(["n_solutions"])
     )
 
-    solutions_per_footprint_df = assign_df_unique_solution(solutions_per_footprint_df)
-
-    solutions_per_footprint_df = solutions_per_footprint_df.select(
+    buildings_with_multiple_solutions_df = assign_df_unique_solution(
+        buildings_with_multiple_solutions_df
+    )
+    buildings_with_multiple_solutions_df = buildings_with_multiple_solutions_df.select(
         ["building_geometry", "assigned_tech", "building_in_hn_zone"]
+    )
+
+    # For building footprints with only 1 solution, assign that solution as the unique solution for the building
+    buildings_with_single_solution_df = (
+        solutions_per_footprint_df.filter(pl.col("n_solutions") == 1)
+        .with_columns(assigned_tech=pl.col("assigned_tech").list.get(0))
+        .select(["building_geometry", "assigned_tech", "building_in_hn_zone"])
+    )
+
+    # Combine the dataframes of building footprints with multiple solutions and single solution to get the final dataframe with a unique assigned solution for each building footprint
+    solutions_per_footprint_df = pl.concat(
+        [buildings_with_multiple_solutions_df, buildings_with_single_solution_df]
     )
 
     # Convert back to GeoDataFrame
@@ -387,14 +387,6 @@ def identify_most_suitable_tech_uprn_and_building(
         save (bool): Whether to save outputs to S3.
     """
 
-    # Load and process data
-    try:
-        hn_zones_gdf = load_gdf_heat_network_zones(local_authority=local_authorities)
-    except ValueError:
-        print(
-            f"No heat network zone geodataframe found for {local_authorities}. Proceeding without heat network zone data."
-        )
-
     building_footprints = load_gdf_os_openmap_local_layer(
         layer="building",
         grid_squares=config["constant"][local_authorities]["grid_squares"],
@@ -402,13 +394,6 @@ def identify_most_suitable_tech_uprn_and_building(
 
     uprns_gdf = load_df_uprn_data(local_authorities)
     uprns_gdf = extend_gdf_building_footprints(uprns_gdf, building_footprints)
-
-    try:
-        uprns_gdf = extend_gdf_hn_zone_geometry(uprns_gdf, hn_zones_gdf)
-    except ValueError:
-        print(
-            f"No heat network zone geodataframe found for {local_authorities}. Proceeding without heat network zone data."
-        )
 
     # Identify most suitable tech for each UPRN
     uprns_gdf["most_suitable_solutions"] = uprns_gdf.apply(
@@ -458,9 +443,7 @@ def identify_most_suitable_tech_uprn_and_building(
 
     if args.save:
         uprns_gdf.to_parquet(
-            uprns_gdf.to_parquet(
-                f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
-            )
+            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
         )
         solutions_per_footprint_gdf.to_parquet(
             f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_building_most_suitable_tech.parquet"
