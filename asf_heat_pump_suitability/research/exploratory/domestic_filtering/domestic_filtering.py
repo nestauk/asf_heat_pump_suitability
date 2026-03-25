@@ -31,7 +31,7 @@ from asf_heat_pump_suitability.pipeline.transform import uprns, poi
 building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
     layer="building", grid_squares="SX"
 )
-# anchor_properties_gdf = gpd.read_file('s3://asf-heat-pump-suitability/dump/hack_day/anchor_properties_gb.geojson').to_crs(27700)
+
 tech_types_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.geojson"
 ).to_crs(27700)
@@ -50,7 +50,7 @@ residential_uprn_df = base_getters.load_df_from_s3(
 residential_gdf = uprns.generate_gdf_uprn_coords(residential_uprn_df)
 residential_gdf = building_footprints_gdf.sjoin(
     residential_gdf, how="inner", predicate="intersects"
-)
+).drop(columns="index_right")
 
 # %%
 # Load POI data
@@ -276,8 +276,9 @@ residential_with_uprn_counts_gdf = gpd.GeoDataFrame(
 # %%
 # add column with area per UPRN for each building
 residential_with_uprn_counts_gdf["area_per_UPRN"] = (
-    residential_gdf.area
-) / residential_gdf["UPRN_count"]
+    residential_with_uprn_counts_gdf.area
+    / residential_with_uprn_counts_gdf["UPRN_count"]
+)
 np.average(residential_with_uprn_counts_gdf["area_per_UPRN"])  # for reference
 
 # %%
@@ -321,7 +322,7 @@ residential_with_important[residential_with_important["UPRN_count"] == 1]
 # %%
 # same as above, with POI data
 
-residential_with_poi = residential_gdf.sjoin(
+residential_with_poi = residential_with_uprn_counts_gdf.sjoin(
     poi_gdf, how="inner", predicate="intersects"
 )
 residential_with_poi[residential_with_poi["UPRN_count"] == 1]
