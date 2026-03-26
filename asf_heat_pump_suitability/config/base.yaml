@@ -94,6 +94,8 @@ constant:
     heat_networks: "District heat network"
   # radius in metres around anchor properties within which we are reassigning N-GSHP to communal
   anchor_radius: 50
+  ID:
+    building: "ID"
 output:
   save_as:
     model:
