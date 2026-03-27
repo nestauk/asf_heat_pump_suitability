@@ -187,8 +187,17 @@ def identify_df_building_most_suitable_tech(
     uprns_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """
-    Identifies sets of most suitable tech per building footprint, and assigns a unique solution for each building
-    based on the combination of solutions in the set (for the UPRNs in the building).
+    Assigns a single most suitable tech solution to each building footprint.
+
+    - Identifies the different solutions for each building (the set of solutions for UPRNs within the same building footprint)
+    - Where only 1 solution exists for a building footprint, assign that solution as the most suitable tech for the building footprint
+    - Where multiple solutions exist for a building footprint, assign a unique solution based on the combination of solutions in the set and the median outdoor space of properties within the building footprint.
+    This function aggregates the most suitable tech from individual UPRNs to the building level.
+
+    Multiple solutions within the same building might occur when a building contains multiple UPRNs and the decision tree assigns different technologies to at least 2 of them.
+    A few examples of where this happens:
+    - a building that sits at the edge of a HN zones, might have properties in the building assigned district heat network and others networked GSHP.
+    - a building footprint consisting of a row of terraced houses, where some properties have large outdoor space and others small outdoor space.
 
     Args:
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
