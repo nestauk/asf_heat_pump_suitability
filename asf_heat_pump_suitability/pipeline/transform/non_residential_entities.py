@@ -37,6 +37,7 @@ def generate_gdf_non_residential_buildings(
     important_building_gdf: gpd.GeoDataFrame,
     railway_station_gdf: gpd.GeoDataFrame,
     poi_gdf: gpd.GeoDataFrame,
+    poi_unfiltered_gdf: gpd.GeoDataFrame,
     building_gdf: gpd.GeoDataFrame,
     uprns_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
@@ -49,6 +50,7 @@ def generate_gdf_non_residential_buildings(
         important_building_gdf (gpd.GeoDataFrame): OS OpenMap Local important building footprints in area of interest
         railway_station_gdf (gpd.GeoDataFrame): OS OpenMap Local railway station point geometries in area of interest
         poi_gdf (gpd.GeoDataFrame): non-domestic Points of Interest geopoints in area of interest
+        poi_unfiltered_gdf (gpd.GeoDataFrame): All Points of Interest geopoints in area of interest
         building_gdf (gpd.GeoDataFrame): all building footprints in area of interest
         uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries in area of interest
 
@@ -63,6 +65,7 @@ def generate_gdf_non_residential_buildings(
                 important_building_gdf.crs,
                 railway_station_gdf.crs,
                 poi_gdf.crs,
+                poi_unfiltered_gdf.crs,
                 building_gdf.crs,
                 uprns_gdf.crs,
             }
@@ -86,6 +89,9 @@ def generate_gdf_non_residential_buildings(
         important_building_gdf[col].isin(NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES)
     ]
     poi_buildings_gdf = building_gdf.sjoin(poi_gdf, how="inner", predicate="contains")
+    poi_unfiltered_gdf = building_gdf.sjoin(
+        poi_unfiltered_gdf, how="inner", predicate="contains"
+    ).drop("index_right", axis=1)
 
     # Get buildings which are railway stations (railway stations are only given as point geometries)
     railway_station_gdf = railway_station_gdf.sjoin(
@@ -97,6 +103,39 @@ def generate_gdf_non_residential_buildings(
             exclude_buildings_gdf[["geometry"]],
             railway_station_gdf[["geometry"]],
             poi_buildings_gdf[["geometry"]],
+        ]
+    )
+
+    # creating list of buildings from all important buildings and POI data with exactly 1 UPRN in them
+
+    # join unfiltered important buildings and POI with all UPRNs
+    important_building_gdf = important_building_gdf.sjoin(
+        uprns_gdf, how="left", predicate="contains"
+    ).drop("index_right", axis=1)
+    poi_unfiltered_gdf = poi_unfiltered_gdf.sjoin(
+        uprns_gdf, how="left", predicate="contains"
+    ).drop("index_right", axis=1)
+
+    # find number of UPRNs per building
+    important_building_gdf = (
+        important_building_gdf.groupby("geometry").size().reset_index(name="UPRN_count")
+    )
+    poi_unfiltered_gdf = (
+        poi_unfiltered_gdf.groupby("geometry").size().reset_index(name="UPRN_count")
+    )
+
+    # select buildings with 1 UPRN
+    important_building_gdf = important_building_gdf.loc[
+        important_building_gdf["UPRN_count"] == 1
+    ]
+    poi_unfiltered_gdf = poi_unfiltered_gdf.loc[poi_unfiltered_gdf["UPRN_count"] == 1]
+
+    # add this to list of buildings to exclude
+    exclude_buildings_gdf = pd.concat(
+        [
+            exclude_buildings_gdf[["geometry"]],
+            important_building_gdf[["geometry"]],
+            poi_unfiltered_gdf[["geometry"]],
         ]
     )
 

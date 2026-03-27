@@ -240,6 +240,10 @@ if __name__ == "__main__":
         ).drop(columns="index_right")
 
     poi_gdf = load_tree_input.load_gdf_poi()
+    poi_unfiltered_gdf = poi.transform_gdf_poi(
+        poi_gdf,
+        filter_categories=None,
+    )
     poi_gdf = poi.transform_gdf_poi(
         poi_gdf,
         filter_categories=poi.load_set_non_domestic_poi_categories(),
@@ -256,7 +260,10 @@ if __name__ == "__main__":
     # Identify assumed non-residential buildings
     non_residential_buildings_gdf = (
         non_residential_entities.generate_gdf_non_residential_buildings(
-            **layers, poi_gdf=poi_gdf, uprns_gdf=uprns_gdf
+            **layers,
+            poi_gdf=poi_gdf,
+            poi_unfiltered_gdf=poi_unfiltered_gdf,
+            uprns_gdf=uprns_gdf,
         )
     )
 
