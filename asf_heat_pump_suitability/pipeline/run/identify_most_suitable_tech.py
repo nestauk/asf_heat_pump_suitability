@@ -294,7 +294,19 @@ def identify_df_building_most_suitable_tech(
 def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.DataFrame:
     """
     Assigns a unique solution for each building footprint based on the combination of solutions in the set
-    and the median outdoor space of properties within the building footprint.
+    and the median outdoor space of properties within the building footprint, following the logic below:
+
+    - If the set of solutions contains both "District heat network" and "Networked heat pump", assign "Communal".
+    - Else if the set of solutions contains "District heat network", assign "District heat network".
+    - Else if the set of solutions contains "Networked heat pump", assign "Networked heat pump".
+    - Else if the set of solutions contains "Communal", assign "Communal"
+    - Else if the set of solutions contains both "Individual heat pump" and "Networked heat pump", assign:
+        - "Individual heat pump" if at least 50% of properties in the building footprint have outdoor space data available and the median outdoor space area is greater than 30m2
+        - "Networked heat pump" otherwise
+    - Else if the set of solutions contains both "Individual heat pump" and "District heat network", assign:
+        - "Individual heat pump" if at least 50% of properties in the building footprint have outdoor space data available and the median outdoor space area is greater than 70m2
+        - "District heat network" otherwise
+    - Else, assign "Unexpected combination of solutions in building footprint"
 
     Args:
         solutions_per_footprint_df (pl.DataFrame): DataFrame with the set of most suitable tech for each building footprint, median outdoor space, and percentage of properties with outdoor space data.
