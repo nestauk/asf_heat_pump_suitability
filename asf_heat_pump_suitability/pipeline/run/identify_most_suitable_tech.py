@@ -84,6 +84,7 @@ def load_df_uprn_data(local_authorities: str) -> gpd.GeoDataFrame:
     )
     uprns_with_features = generate_gdf_uprn_coords(df=uprns_with_features)
 
+    # TODO: move this to add_features.py
     uprns_with_features["in_city_centre_or_hn_zone"] = (
         uprns_with_features["in_city_centre"] | uprns_with_features["in_hn_zone"]
     )
@@ -115,36 +116,6 @@ def extend_gdf_building_footprints(
         how="left",
         predicate="within",
     ).drop(columns=["index_right"])
-
-    return gdf
-
-
-def extend_gdf_hn_zone_geometry(
-    gdf: gpd.GeoDataFrame, hn_zones_gdf: gpd.GeoDataFrame
-) -> gpd.GeoDataFrame:
-    """
-    Extends the GeoDataFrame with heat network zone information.
-
-    Args:
-        gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
-        hn_zones_gdf (gpd.GeoDataFrame): GeoDataFrame with heat network zones.
-
-    Returns:
-        gpd.GeoDataFrame: GeoDataFrame with heat network zone information.
-    """
-    # Adds a column to indicate if the property is within a DESNZ heat network zone
-    hn_zones_gdf["desnz_hn_zone"] = True
-
-    # Creates a copy of the geometry column to keep after the spatial join
-    hn_zones_gdf["desnz_hn_zone_geometry"] = hn_zones_gdf["geometry"]
-
-    # Spatial join to add heat network zone geometry to the UPRN geodataframe
-    # based on whether the UPRN point is within the heat network zone polygon
-    gdf = gdf.sjoin(
-        hn_zones_gdf[["geometry", "desnz_hn_zone_geometry"]],
-        how="left",
-        predicate="within",
-    )
 
     return gdf
 
@@ -441,7 +412,7 @@ def identify_most_suitable_tech_uprn_and_building(
         columns=["building_in_hn_zone"]
     )
 
-    if args.save:
+    if save:
         uprns_gdf.to_parquet(
             f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
         )
