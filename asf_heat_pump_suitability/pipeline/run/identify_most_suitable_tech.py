@@ -455,6 +455,10 @@ def identify_most_suitable_tech_uprn_and_building(
         columns=["building_in_hn_zone"]
     )
 
+    solutions_per_footprint_gdf.rename(
+        columns={"building_geometry": "geometry"}, inplace=True
+    )
+
     if save:
         uprns_gdf.to_parquet(
             f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
