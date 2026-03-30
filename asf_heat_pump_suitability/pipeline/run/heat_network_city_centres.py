@@ -91,7 +91,6 @@ if __name__ == "__main__":
         print(f"Loading heat network zone data for {las} Local Authority...")
         try:
             hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=las)
-            print("hummm... this should not be happening")
 
             # Label UPRNs in existing, potential and planned heat network zones
             print(f"Identifying residential UPRNs in heat network zones for {las}...")
