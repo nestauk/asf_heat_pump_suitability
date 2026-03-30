@@ -169,7 +169,9 @@ def map_dict_uprns_to_building_id(
     Returns:
         dict: mapping of UPRNs to building IDs
     """
-    # uprns_gdf = geo_utils.verify_gdf_crs(uprns_gdf)
+    uprns_gdf = geo_utils.verify_gdf_crs(uprns_gdf)
+    buildings_gdf = geo_utils.verify_gdf_crs(buildings_gdf)
+
     epc_residential_uprns = load_set_valid_epc_uprns(epc_type="domestic")
 
     # set of residential UPRNs not in the domestic epc list
@@ -191,7 +193,6 @@ def map_dict_uprns_to_building_id(
         .set_index("UPRN")
         .to_dict()[id_col]
     )
-    buildings_gdf = geo_utils.verify_gdf_crs(buildings_gdf)
 
     return gpd.GeoDataFrame(
         pd.concat([uprns_non_epc_gdf, epc_gdf]), crs=config["constant"]["target_crs"]
