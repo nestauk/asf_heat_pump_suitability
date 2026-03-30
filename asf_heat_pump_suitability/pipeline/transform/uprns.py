@@ -23,6 +23,7 @@ Set --save to save the outputs to S3. By default, outputs are not saved.
 """
 
 import geopandas as gpd
+import pandas as pd
 import polars as pl
 import logging
 import argparse
@@ -152,6 +153,7 @@ def map_dict_uprns_to_building_id(
     buildings_gdf: gpd.GeoDataFrame,
     id_col: str,
     predicate: str = "intersects",
+    max_distance: float = 1,
 ) -> dict:
     """
     Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within or intersect with.
@@ -162,17 +164,37 @@ def map_dict_uprns_to_building_id(
         id_col (str): name of building ID column in `buildings_gdf`
         predicate (str): how to join buildings and UPRNs. Can be one of: `intersects`, which joins UPRNs with building footprints
         they intersect with, or `within` which joins UPRNs to building footprints they are located within. Default `intersects`.
+        max_distance (float): max distance (metres) from which to join EPC UPRNs to a building footprint. Default 1m.
 
     Returns:
         dict: mapping of UPRNs to building IDs
     """
-    uprns_gdf = geo_utils.verify_gdf_crs(uprns_gdf)
-    buildings_gdf = geo_utils.verify_gdf_crs(buildings_gdf)
+    # uprns_gdf = geo_utils.verify_gdf_crs(uprns_gdf)
+    epc_residential_uprns = load_set_valid_epc_uprns(epc_type="domestic")
 
-    return (
-        uprns_gdf.sjoin(buildings_gdf, how="inner", predicate=predicate)
+    # set of residential UPRNs not in the domestic epc list
+    uprns_non_epc_gdf = uprns_gdf[~(uprns_gdf["UPRN"].isin(epc_residential_uprns))]
+
+    # set of residential UPRNs in the domestic epc list
+    epc_gdf = uprns_gdf[(uprns_gdf["UPRN"].isin(epc_residential_uprns))]
+
+    # join non-epc domestic UPRNs to building footprints if they are located within them
+    uprns_non_epc_gdf = (
+        uprns_non_epc_gdf.sjoin(buildings_gdf, how="inner", predicate=predicate)
         .set_index("UPRN")
         .to_dict()[id_col]
+    )
+
+    # join epc domestic UPRNs to nearest building footprint < max_distance (default 1m) away. They are usually inside a building
+    epc_gdf = (
+        epc_gdf.sjoin_nearest(buildings_gdf, how="inner", max_distance=max_distance)
+        .set_index("UPRN")
+        .to_dict()[id_col]
+    )
+    buildings_gdf = geo_utils.verify_gdf_crs(buildings_gdf)
+
+    return gpd.GeoDataFrame(
+        pd.concat([uprns_non_epc_gdf, epc_gdf]), crs=config["constant"]["target_crs"]
     )
 
 
