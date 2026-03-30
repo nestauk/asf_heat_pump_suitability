@@ -408,22 +408,18 @@ def identify_most_suitable_tech_uprn_and_building(
     uprns_gdf = extend_gdf_building_footprints(uprns_gdf, building_footprints)
 
     # Identify most suitable tech for each UPRN
-    uprns_gdf["most_suitable_solutions"] = uprns_gdf.apply(
+    decision_tree_outputs = uprns_gdf.apply(
         lambda x: identify_dict_most_suitable_tech(
             x["in_block_of_flats"],
             x["max_contiguous_outdoor_space_area_m2"],
             x["in_city_centre_or_hn_zone"],
         ),
         axis=1,
+        result_type="expand",
     )
 
-    # Create new columns for assigned tech and decision tree path based on the most suitable solutions dictionary
-    uprns_gdf["assigned_tech"] = [
-        x["assigned_tech"] for x in uprns_gdf["most_suitable_solutions"]
-    ]
-    uprns_gdf["decision_tree_path"] = [
-        x["decision_tree_path"] for x in uprns_gdf["most_suitable_solutions"]
-    ]
+    # Create new columns for `assigned_tech` and `decision_tree_path` based on the most suitable solutions dictionary
+    uprns_gdf = pd.concat([uprns_gdf, decision_tree_outputs], axis=1)
 
     # Identify set of most suitable tech per building
     solutions_per_footprint_gdf = identify_df_building_most_suitable_tech(uprns_gdf)
