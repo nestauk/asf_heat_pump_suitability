@@ -184,7 +184,7 @@ def identify_dict_most_suitable_tech(
 
 
 def identify_df_building_most_suitable_tech(
-    uprns_gdf: gpd.GeoDataFrame,
+    tech_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """
     Assigns a single most suitable tech solution to each building footprint.
@@ -200,18 +200,38 @@ def identify_df_building_most_suitable_tech(
     - a building footprint consisting of a row of terraced houses, where some properties have large outdoor space and others small outdoor space.
 
     Args:
-        uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
+    tech_gdf (gpd.GeoDataFrame): GeoDataFrame containing UPRN-level most suitable tech. Must contain the following columns:
+        * `UPRN`: Unique identifier for the property.
+        * `assigned_tech`: The most suitable tech assigned by the decision tree.
+        * `building_geometry`: Geometry of the building footprint.
+        * `max_contiguous_outdoor_space_area_m2`: Maximum contiguous outdoor space in metres squared.
+        * `in_hn_zone`: Boolean flag indicating whether the UPRN is in a heat network zone.
 
     Returns:
-       gpd.GeoDataFrame: building footprints with assigned most suitable tech.
+        gpd.GeoDataFrame: Building footprints with a single assigned technology.
+
+    Raises:
+        ValueError: If `tech_gdf` is missing any of the required columns.
     """
 
-    # Convert building geometry to WKB format before converting to Polars DataFrame
-    uprns_gdf["building_geometry"] = uprns_gdf["building_geometry"].to_wkb()
+    for col in [
+        "UPRN",
+        "assigned_tech",
+        "building_geometry",
+        "max_contiguous_outdoor_space_area_m2",
+        "in_hn_zone",
+    ]:
+        if col not in tech_gdf.columns:
+            raise ValueError(
+                "Input GeoDataFrame must contain the following columns: ['UPRN', 'assigned_tech', 'building_geometry', 'max_contiguous_outdoor_space_area_m2', 'in_hn_zone']."
+            )
 
-    uprns_df = pl.from_pandas(
+    # Convert building geometry to WKB format before converting to Polars DataFrame
+    tech_gdf["building_geometry"] = tech_gdf["building_geometry"].to_wkb()
+
+    tech_df = pl.from_pandas(
         pd.DataFrame(
-            uprns_gdf[
+            tech_gdf[
                 [
                     "UPRN",
                     "assigned_tech",
@@ -226,7 +246,7 @@ def identify_df_building_most_suitable_tech(
     # Create df with set of most suitable tech per building footprint
     solutions_per_footprint_df = (
         # Aggregate at building footprint level to identify the set of most suitable tech for properties within the same building
-        uprns_df.group_by("building_geometry")
+        tech_df.group_by("building_geometry")
         # Calculate the median outdoor space and percentage of properties with outdoor space data for each building footprint
         # to inform the decision on assigning a unique solution for each building
         .agg(
