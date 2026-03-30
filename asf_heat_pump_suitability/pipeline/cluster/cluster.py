@@ -448,7 +448,6 @@ if __name__ == "__main__":
     args = parse_arguments()
     tech_gdf = (
         gpd.read_parquet(args.tech_gdf)
-        .rename(columns={"building_geometry": "geometry"})
         .set_geometry("geometry")
         .to_crs(config["constant"]["target_crs"])
     )
