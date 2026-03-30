@@ -389,7 +389,7 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
 
 def identify_most_suitable_tech_uprn_and_building(
     local_authorities: str, save: bool
-) -> None:
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Main function to identify the most suitable tech for each UPRN and building in the specified local authority or authorities.
 
@@ -398,6 +398,11 @@ def identify_most_suitable_tech_uprn_and_building(
     Args:
         local_authorities (str): Local authority or authorities.
         save (bool): Whether to save outputs to S3.
+
+    Returns:
+        tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]: A tuple containing:
+            - GeoDataFrame with UPRN-level most suitable tech and decision tree path.
+            - GeoDataFrame with building footprint-level most suitable tech.
     """
 
     building_footprints = load_gdf_os_openmap_local_layer(
@@ -457,6 +462,8 @@ def identify_most_suitable_tech_uprn_and_building(
         solutions_per_footprint_gdf.to_parquet(
             f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_building_most_suitable_tech.parquet"
         )
+
+    return uprns_gdf, solutions_per_footprint_gdf
 
 
 if __name__ == "__main__":
