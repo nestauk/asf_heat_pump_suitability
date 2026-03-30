@@ -34,6 +34,7 @@ from asf_heat_pump_suitability.getters.load_tree_input import (
 )
 from asf_heat_pump_suitability import config
 
+OUTDOOR_SPACE_THRESHOLD_M2 = config["constant"]["outdoor_space_threshold_m2"]
 TECH_TYPES = config["constant"]["tech_types"]
 
 
@@ -155,7 +156,7 @@ def identify_dict_most_suitable_tech(
                     "assigned_tech": f"{TECH_TYPES['individual']} or {TECH_TYPES['heat_network']}",
                     "decision_tree_path": "Not in block of flats. Unknown outdoor space in city centre",
                 }
-            elif outdoor_space > 70:
+            elif outdoor_space > OUTDOOR_SPACE_THRESHOLD_M2.get("within_hn_zone"):
                 return {
                     "assigned_tech": TECH_TYPES["individual"],
                     "decision_tree_path": "3. not in blocks of flats, in city centre, large outdoor space",
@@ -171,7 +172,7 @@ def identify_dict_most_suitable_tech(
                     "assigned_tech": f"{TECH_TYPES['individual']} or {TECH_TYPES['networked']}",
                     "decision_tree_path": "Not in block of flats. Unknown outdoor space not in city centre/ HN zone",
                 }
-            elif outdoor_space > 30:
+            elif outdoor_space > OUTDOOR_SPACE_THRESHOLD_M2.get("outside_hn_zone"):
                 return {
                     "assigned_tech": TECH_TYPES["individual"],
                     "decision_tree_path": "5. not in blocks of flats, not in city centre/ HN zone, large outdoor space",
