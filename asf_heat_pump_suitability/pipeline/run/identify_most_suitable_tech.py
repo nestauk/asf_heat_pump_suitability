@@ -24,7 +24,6 @@ import pandas as pd
 import polars as pl
 import geopandas as gpd
 import argparse
-from shapely import wkb
 
 # local imports
 from asf_heat_pump_suitability.pipeline.transform.uprns import generate_gdf_uprn_coords
