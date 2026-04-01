@@ -63,35 +63,6 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_df_uprn_data(local_authorities: str) -> gpd.GeoDataFrame:
-    """
-    Loads UPRN level data with relevant features for the decision tree, including:
-    - whether the UPRN is in a block of flats
-    - maximum contiguous outdoor space area in metres squared
-    - whether the UPRN is in a city centre or planned HN zone
-
-    Creates new column `in_city_centre_or_hn_zone` which indicates whether the UPRN is in the city centre or in a planned HN zone.
-
-    Args:
-        local_authorities (str): Local authority or authorities.
-
-    Returns:
-        gpd.GeoDataFrame: GeoDataFrame with UPRNs and respective features.
-    """
-
-    uprns_with_features = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_with_features.parquet"
-    )
-    uprns_with_features = generate_gdf_uprn_coords(df=uprns_with_features)
-
-    # TODO: move this to add_features.py
-    uprns_with_features["in_city_centre_or_hn_zone"] = (
-        uprns_with_features["in_city_centre"] | uprns_with_features["in_hn_zone"]
-    )
-
-    return uprns_with_features
-
-
 def extend_gdf_building_footprints(
     gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
@@ -387,7 +358,10 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
 
 
 def identify_most_suitable_tech_uprn_and_building(
-    local_authorities: str, save: bool
+    local_authorities: str,
+    building_footprints_gdf: gpd.GeoDataFrame,
+    uprns_gdf: gpd.GeoDataFrame,
+    save: bool,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Main function to identify the most suitable tech for each UPRN and building in the specified local authority or authorities.
@@ -396,6 +370,8 @@ def identify_most_suitable_tech_uprn_and_building(
 
     Args:
         local_authorities (str): Local authority or authorities.
+        building_footprints_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
+        uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
         save (bool): Whether to save outputs to S3.
 
     Returns:
@@ -403,14 +379,9 @@ def identify_most_suitable_tech_uprn_and_building(
             - GeoDataFrame with UPRN-level most suitable tech and decision tree path.
             - GeoDataFrame with building footprint-level most suitable tech.
     """
-
-    building_footprints = load_gdf_os_openmap_local_layer(
-        layer="building",
-        grid_squares=config["constant"][local_authorities]["grid_squares"],
+    uprns_gdf = extend_gdf_building_footprints(
+        gdf=uprns_gdf, buildings_gdf=building_footprints_gdf
     )
-
-    uprns_gdf = load_df_uprn_data(local_authorities)
-    uprns_gdf = extend_gdf_building_footprints(uprns_gdf, building_footprints)
 
     # Identify most suitable tech for each UPRN
     decision_tree_outputs = uprns_gdf.apply(
@@ -455,4 +426,26 @@ if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
 
-    identify_most_suitable_tech_uprn_and_building(local_authorities, args.save)
+    # TODO: create getters for footprints & uprns in future
+    building_footprints_gdf = load_gdf_os_openmap_local_layer(
+        layer="building",
+        grid_squares=config["constant"][local_authorities]["grid_squares"],
+    )
+
+    uprns_with_features_df = pl.read_parquet(
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_with_features.parquet"
+    )
+    uprns_with_features_gdf = generate_gdf_uprn_coords(df=uprns_with_features_df)
+
+    # TODO: move this to add_features.py
+    uprns_with_features_gdf["in_city_centre_or_hn_zone"] = (
+        uprns_with_features_gdf["in_city_centre"]
+        | uprns_with_features_gdf["in_hn_zone"]
+    )
+
+    identify_most_suitable_tech_uprn_and_building(
+        local_authorities=local_authorities,
+        building_footprints_gdf=building_footprints_gdf,
+        uprns_gdf=uprns_with_features_gdf,
+        save=args.save,
+    )
