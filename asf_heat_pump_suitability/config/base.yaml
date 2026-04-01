@@ -88,8 +88,8 @@ constant:
     grid_squares: "ST"
   target_crs: 27700 # British National Grid
   outdoor_space_threshold_m2:
-    within_hn_zone: 30
-    outside_hn_zone: 70
+    within_hn_zone: 70
+    outside_hn_zone: 30
   tech_types:
     individual: "Individual solution"
     networked: "Networked heat pump"

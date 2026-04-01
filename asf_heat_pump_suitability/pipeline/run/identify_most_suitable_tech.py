@@ -317,10 +317,10 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
     - Else if the set of solutions contains "Networked heat pump", assign "Networked heat pump".
     - Else if the set of solutions contains "Communal", assign "Communal"
     - Else if the set of solutions contains both "Individual heat pump" and "Networked heat pump", assign:
-        - "Individual heat pump" if at least 50% of properties in the building footprint have outdoor space data available and the median outdoor space area is greater than 30m2
+        - "Individual heat pump" if at least 50% of properties in the building footprint have outdoor space data available and the median outdoor space area is greater than threshold defined for properties outside HN zones/ city centres
         - "Networked heat pump" otherwise
     - Else if the set of solutions contains both "Individual heat pump" and "District heat network", assign:
-        - "Individual heat pump" if at least 50% of properties in the building footprint have outdoor space data available and the median outdoor space area is greater than 70m2
+        - "Individual heat pump" if at least 50% of properties in the building footprint have outdoor space data available and the median outdoor space area is greater than threshold defined for properties within HN zones/ city centres
         - "District heat network" otherwise
     - Else, assign "Unexpected combination of solutions in building footprint"
 
@@ -356,7 +356,8 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
                 pl.when(
                     (pl.col("perc_properties_available_outdoor_space_data") >= 50)
                     & (
-                        pl.col("median_contiguous_outdoor_space_area_m2") > 30
+                        pl.col("median_contiguous_outdoor_space_area_m2")
+                        > OUTDOOR_SPACE_THRESHOLD_M2.get("outside_hn_zone")
                     )  # Using your column name from previous step
                 )
                 .then(pl.lit(TECH_TYPES["individual"]))
@@ -370,7 +371,10 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
             .then(
                 pl.when(
                     (pl.col("perc_properties_available_outdoor_space_data") >= 50)
-                    & (pl.col("median_contiguous_outdoor_space_area_m2") > 70)
+                    & (
+                        pl.col("median_contiguous_outdoor_space_area_m2")
+                        > OUTDOOR_SPACE_THRESHOLD_M2.get("within_hn_zone")
+                    )
                 )
                 .then(pl.lit(TECH_TYPES["individual"]))
                 .otherwise(pl.lit(TECH_TYPES["heat_network"]))
