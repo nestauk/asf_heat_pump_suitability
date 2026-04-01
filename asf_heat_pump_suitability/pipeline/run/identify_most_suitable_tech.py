@@ -413,10 +413,14 @@ def identify_most_suitable_tech_uprn_and_building(
 
     if save:
         uprns_gdf.to_parquet(
-            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
+            config["output"]["uprns_with_most_suitable_tech"].format(
+                local_authorities=local_authorities
+            )
         )
         solutions_per_footprint_gdf.to_parquet(
-            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_building_most_suitable_tech.parquet"
+            config["output"]["buildings_most_suitable_tech"].format(
+                local_authorities=local_authorities
+            )
         )
 
     return uprns_gdf, solutions_per_footprint_gdf
@@ -433,7 +437,9 @@ if __name__ == "__main__":
     )
 
     uprns_with_features_df = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_with_features.parquet"
+        config["output"]["uprns_with_features"].format(
+            local_authority=local_authorities
+        )
     )
     uprns_with_features_gdf = generate_gdf_uprn_coords(df=uprns_with_features_df)
 
