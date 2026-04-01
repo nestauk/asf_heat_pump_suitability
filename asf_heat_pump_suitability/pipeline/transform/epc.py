@@ -1,3 +1,5 @@
+"""Functions to clean and process features in the EPC register data."""
+
 import polars as pl
 from typing import List, Optional
 
@@ -13,7 +15,7 @@ def extend_df_epc_features(
 
     Args:
         df (pl.DataFrame): UPRN data with one row per UPRN containing `property_type_flat` column to join new features to..
-        epc_df (pl.DataFrame): preprocessed and deduplicated EPC data from asf-daps `UPRN`, `BUILT_FORM`, and `TENURE`
+        epc_df (pl.DataFrame): preprocessed and deduplicated EPC data from asf-daps containing `UPRN`, `BUILT_FORM`, and `TENURE`
         columns.
         columns (List[str]): list of EPC columns to keep, optional. If not set, uses all columns in `epc_df`.
 

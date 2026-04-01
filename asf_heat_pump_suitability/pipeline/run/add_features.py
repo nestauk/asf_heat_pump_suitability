@@ -233,7 +233,7 @@ if __name__ == "__main__":
     )
 
     # ------------------------ #
-    # PRIORITISATION FEATURES
+    # CONTEXTUAL FEATURES
     # ------------------------ #
     # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE
     epc_df = pl.read_parquet(
