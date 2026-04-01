@@ -380,6 +380,9 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
         gdf=uprns_gdf, buildings_gdf=building_footprints_gdf
     )
 
+    print("Number of building IDs: ", uprns_gdf["ID"].nunique())
+    print("Number of building geometries: ", uprns_gdf["building_geometry"].nunique())
+
     # Identify most suitable tech for each UPRN
     decision_tree_outputs = uprns_gdf.apply(
         lambda x: identify_dict_most_suitable_tech(
@@ -412,6 +415,12 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
 
     solutions_per_footprint_gdf = gpd.GeoDataFrame(
         solutions_per_footprint_gdf, geometry="geometry", crs="EPSG:27700"
+    )
+
+    print("Number of building IDS ", solutions_per_footprint_gdf["ID"].nunique())
+    print(
+        "Number of building geometries: ",
+        solutions_per_footprint_gdf.geometry.nunique(),
     )
 
     if save:
