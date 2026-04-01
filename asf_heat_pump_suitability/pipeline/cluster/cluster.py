@@ -51,10 +51,7 @@ ANCHOR_CATEGORIES = [
 ]
 
 TECH_MAPPING = {
-    INDIVIDUAL: INDIVIDUAL,
-    HEAT_NETWORK: HEAT_NETWORK,
     N_GSHP: COMMUNAL,
-    COMMUNAL: COMMUNAL,
 }
 
 
@@ -71,7 +68,7 @@ def generate_gdf_clusters(
     Generate clusters of building footprints, where one cluster:
     - Contains buildings which are assigned the same tech type
     - Contains buildings which are not separated by physical environmental barriers
-    - Buildings within a given radius of an anchor are assigned a tech type of 'Communal solutions', unless in a district heat network.
+    - Buildings within a given radius of an anchor are assigned a tech type of 'Communal solutions', if they were assigned N-GSHP by the decision tree
 
     Args:
         buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
@@ -81,7 +78,7 @@ def generate_gdf_clusters(
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
         poi_gdf (gpd.GeoDataFrame): anchor properties dataframe taken from POI data, with point geometries
         important_buildings_gdf (gpd.GeoDataFrame): important building footprint polygons
-        radius (float): radius around anchor property within which communal solutions should be assigned
+        radius (float): radius in metres around anchor property within which communal solutions should be assigned
 
     Returns:
         gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster
@@ -441,7 +438,7 @@ def load_transform_anchor_property_gdfs(
     anchor_categories=ANCHOR_CATEGORIES,
 ) -> gpd.GeoDataFrame:
     """
-    Load data from POI and important buildings lists, select buildings using anchor proerty categoriesm, and combine the resultant dataframes
+    Load data from POI and important buildings lists, select buildings using anchor proerty categories, and combine the resultant dataframes
 
     Args:
         buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
@@ -453,7 +450,7 @@ def load_transform_anchor_property_gdfs(
     # anchor categories list is defined at start of script
 
     poi_gdf = gpd.read_file(
-        "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/poi_anchor_properties_gb.geojson"
+        config["data"]["processed"]["poi_anchor_properties"]
     ).to_crs(config["constant"]["target_crs"])
 
     important_building_gdf = load_geodata.load_gdf_os_openmap_layer(
@@ -484,14 +481,14 @@ def reassign_gdf_near_anchor_properties(
     radius: float,
 ) -> gpd.GeoDataFrame:
     """
-    Reassign building tech type to communal if within a given radius of an anchor load property, unless in district heat network
+    Reassign building tech type to communal if within a given radius of an anchor load property, if assigned N-GSHP by the decision tree
 
     Args:
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
-        radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' unless they are already assigned to district heat networks.
+        radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' if they were assigned N-GSHP by the decision tree.
     Returns:
-        gpd.GeoDataFrame: dataframe with `assigned_tech` column now reading communal if property is in radius of an anchor property, unless in district heat network.
+        gpd.GeoDataFrame: dataframe with `assigned_tech` column now reading communal if property is in radius of an anchor property, and was assigned N-GSHP by the decision tree.
     """
     # Spatial join to find nearest anchor for every building
 
@@ -501,7 +498,7 @@ def reassign_gdf_near_anchor_properties(
         max_distance=radius,
         distance_col="distance_m",
     ).drop("index_right", axis=1)
-    tech_gdf["old_tech"] = tech_gdf["assigned_tech"]
+
     # distance_m column now reads a number (distance from anchor) for all buildings within radius of anchor, and NaN for all outside of that radius
     # if distance column is not NaN (i.e. building is within the radius of an anchor), reassign tech type according to the map
     tech_gdf["assigned_tech"] = np.where(
