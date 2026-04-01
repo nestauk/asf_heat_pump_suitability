@@ -8,7 +8,7 @@ It then aggregates the most suitable tech information at building footprint leve
 
 To run the script:
 
-python asf_heat_pump_suitability/pipeline/run/identify_most_suitable_tech.py --local_authorities LOCAL_AUTHORITIES
+python asf_heat_pump_suitability/pipeline/transform/decision_tree.py --local_authorities LOCAL_AUTHORITIES
 
 LOCAL AUTHORITIES can be one of the following, as defined in the `constant` section of base.yaml:
 - plymouth
@@ -382,6 +382,19 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
 
     print("Number of building IDs: ", uprns_gdf["ID"].nunique())
     print("Number of building geometries: ", uprns_gdf["building_geometry"].nunique())
+
+    print(
+        "Number of UPRNs without building geometry: ",
+        len(uprns_gdf[uprns_gdf["building_geometry"].isnull()]),
+    )
+    print(
+        "Number of UPRNs with ID but no building geometry: ",
+        len(
+            uprns_gdf[
+                (uprns_gdf["building_geometry"].isnull()) & (uprns_gdf["ID"].notnull())
+            ]
+        ),
+    )
 
     # Identify most suitable tech for each UPRN
     decision_tree_outputs = uprns_gdf.apply(
