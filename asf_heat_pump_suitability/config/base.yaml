@@ -98,7 +98,7 @@ constant:
 
 output:
   uprns_with_features: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_with_features.parquet"
-  uprns_with_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
+  uprns_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
   buildings_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_buildings_most_suitable_tech.parquet"
   save_as:
     model:

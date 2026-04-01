@@ -417,7 +417,7 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
 
     if save:
         uprns_gdf.to_parquet(
-            config["output"]["uprns_with_most_suitable_tech"].format(
+            config["output"]["uprns_most_suitable_tech"].format(
                 local_authorities=local_authorities
             )
         )
