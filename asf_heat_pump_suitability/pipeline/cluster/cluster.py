@@ -23,8 +23,13 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
-NETWORKED = config["constant"]["tech_types"]["networked"]
-COMMUNAL = config["constant"]["tech_types"]["communal"]
+TECH_TYPES = config["constant"]["tech_types"]
+TECH_CODES = {
+    TECH_TYPES[k]: config["constant"]["tech_type_codes"][k] for k in TECH_TYPES
+}
+
+NETWORKED = TECH_TYPES["networked"]
+COMMUNAL = TECH_TYPES["communal"]
 
 
 def generate_gdf_clusters(
@@ -76,20 +81,13 @@ def generate_gdf_clusters(
         .reset_index()[["assigned_tech", "geometry"]]
     )
 
-    tech_code = {
-        "Communal solution": "COM",
-        "District heat network": "DHNZ",
-        "Individual solution": "IND",
-        "Networked heat pump": "NHP",
-    }
-
-    clusters_gdf["code"] = clusters_gdf["assigned_tech"].map(tech_code)
-
     # create an ID for each geometry that starts with the tech code and ends with a unique number, e.g. COM_1, COM_2, etc.
     clusters_gdf["cluster_id"] = clusters_gdf.groupby("assigned_tech").cumcount()
 
     clusters_gdf["cluster_id"] = (
-        clusters_gdf["code"] + "_" + (clusters_gdf["cluster_id"] + 1).astype(str)
+        clusters_gdf["assigned_tech"].map(TECH_CODES)
+        + "_"
+        + (clusters_gdf["cluster_id"] + 1).astype(str)
     )
 
     return clusters_gdf
@@ -418,7 +416,7 @@ def parse_arguments() -> argparse.Namespace:
     # TODO this is a placeholder and likely to change as the script develops
     parser.add_argument(
         "--tech_gdf",
-        help="Path to S3 file containing building footprints with their tech types assigned by the decision tree.",
+        help="Path to S3 geoparquet file containing building footprints with their tech types assigned by the decision tree.",
         type=str,
         required=True,
     )
