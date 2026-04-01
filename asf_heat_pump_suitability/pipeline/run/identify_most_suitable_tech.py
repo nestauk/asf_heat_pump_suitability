@@ -159,7 +159,7 @@ def identify_dict_most_suitable_tech(
                 }
 
 
-def identify_df_building_most_suitable_tech(
+def identify_gdf_building_most_suitable_tech(
     tech_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """
@@ -362,7 +362,7 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
     return solutions_per_footprint_df
 
 
-def identify_most_suitable_tech_uprn_and_building(
+def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     local_authorities: str,
     building_footprints_gdf: gpd.GeoDataFrame,
     uprns_gdf: gpd.GeoDataFrame,
@@ -403,7 +403,7 @@ def identify_most_suitable_tech_uprn_and_building(
     uprns_gdf = pd.concat([uprns_gdf, decision_tree_outputs], axis=1)
 
     # Identify set of most suitable tech per building
-    solutions_per_footprint_gdf = identify_df_building_most_suitable_tech(uprns_gdf)
+    solutions_per_footprint_gdf = identify_gdf_building_most_suitable_tech(uprns_gdf)
 
     # Re-assign most suitable tech to each UPRN based on decision for each building
     uprns_gdf = uprns_gdf.drop(columns=["assigned_tech"]).merge(
@@ -454,7 +454,7 @@ if __name__ == "__main__":
         | uprns_with_features_gdf["in_hn_zone"]
     )
 
-    identify_most_suitable_tech_uprn_and_building(
+    identify_gdf_tuple_most_suitable_tech_uprn_and_building(
         local_authorities=local_authorities,
         building_footprints_gdf=building_footprints_gdf,
         uprns_gdf=uprns_with_features_gdf,
