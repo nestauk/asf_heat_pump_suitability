@@ -159,9 +159,9 @@ def identify_dict_most_suitable_tech(
                 }
 
 
-def identify_gdf_building_most_suitable_tech(
+def identify_df_building_most_suitable_tech(
     tech_gdf: gpd.GeoDataFrame,
-) -> gpd.GeoDataFrame:
+) -> pl.DataFrame:
     """
     Assigns a single most suitable tech solution to each building footprint.
 
@@ -179,11 +179,11 @@ def identify_gdf_building_most_suitable_tech(
     tech_gdf (gpd.GeoDataFrame): GeoDataFrame containing UPRN-level most suitable tech. Must contain the following columns:
         * `UPRN`: Unique identifier for the property.
         * `assigned_tech`: The most suitable tech assigned by the decision tree.
-        * `building_geometry`: Geometry of the building footprint.
+        * `ID`: Unique identifier for the building footprint.
         * `max_contiguous_outdoor_space_area_m2`: Maximum contiguous outdoor space in metres squared.
 
     Returns:
-        gpd.GeoDataFrame: Building footprints with a single assigned technology.
+        pl.DataFrame: Buildings with a single assigned technology.
 
     Raises:
         ValueError: If `tech_gdf` is missing any of the required columns.
@@ -192,16 +192,13 @@ def identify_gdf_building_most_suitable_tech(
     for col in [
         "UPRN",
         "assigned_tech",
-        "building_geometry",
+        "ID",  # the building ID
         "max_contiguous_outdoor_space_area_m2",
     ]:
         if col not in tech_gdf.columns:
             raise ValueError(
-                "Input GeoDataFrame must contain the following columns: ['UPRN', 'assigned_tech', 'building_geometry', 'max_contiguous_outdoor_space_area_m2', 'in_hn_zone']."
+                "Input GeoDataFrame must contain the following columns: ['UPRN', 'assigned_tech', 'ID', 'max_contiguous_outdoor_space_area_m2', 'in_hn_zone']."
             )
-
-    # Convert building geometry to WKB format before converting to Polars DataFrame
-    tech_gdf["building_geometry"] = tech_gdf["building_geometry"].to_wkb()
 
     tech_df = pl.from_pandas(
         pd.DataFrame(
@@ -209,7 +206,7 @@ def identify_gdf_building_most_suitable_tech(
                 [
                     "UPRN",
                     "assigned_tech",
-                    "building_geometry",
+                    "ID",  # the building ID
                     "max_contiguous_outdoor_space_area_m2",
                 ]
             ]
@@ -219,7 +216,9 @@ def identify_gdf_building_most_suitable_tech(
     # Create df with set of most suitable tech per building footprint
     solutions_per_footprint_df = (
         # Aggregate at building footprint level to identify the set of most suitable tech for properties within the same building
-        tech_df.group_by("building_geometry")
+        tech_df.group_by(
+            "ID"
+        )  # grouping by building ID to aggregate to building footprint level
         # Calculate the median outdoor space and percentage of properties with outdoor space data for each building footprint
         # to inform the decision on assigning a unique solution for each building
         .agg(
@@ -256,14 +255,14 @@ def identify_gdf_building_most_suitable_tech(
         buildings_with_multiple_solutions_df
     )
     buildings_with_multiple_solutions_df = buildings_with_multiple_solutions_df.select(
-        ["building_geometry", "assigned_tech"]
+        ["ID", "assigned_tech"]
     )
 
     # For building footprints with only 1 solution, assign that solution as the unique solution for the building
     buildings_with_single_solution_df = (
         solutions_per_footprint_df.filter(pl.col("n_solutions") == 1)
         .with_columns(assigned_tech=pl.col("assigned_tech").list.get(0))
-        .select(["building_geometry", "assigned_tech"])
+        .select(["ID", "assigned_tech"])
     )
 
     # Combine the dataframes of building footprints with multiple solutions and single solution to get the final dataframe with a unique assigned solution for each building footprint
@@ -273,14 +272,8 @@ def identify_gdf_building_most_suitable_tech(
 
     # Convert back to GeoDataFrame
     solutions_per_footprint_df = solutions_per_footprint_df.to_pandas()
-    solutions_per_footprint_df["building_geometry"] = solutions_per_footprint_df[
-        "building_geometry"
-    ].apply(wkb.loads)
-    solutions_per_footprint_gdf = gpd.GeoDataFrame(
-        solutions_per_footprint_df, geometry="building_geometry", crs="EPSG:27700"
-    )
 
-    return solutions_per_footprint_gdf
+    return solutions_per_footprint_df
 
 
 def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.DataFrame:
@@ -403,17 +396,23 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     uprns_gdf = pd.concat([uprns_gdf, decision_tree_outputs], axis=1)
 
     # Identify set of most suitable tech per building
-    solutions_per_footprint_gdf = identify_gdf_building_most_suitable_tech(uprns_gdf)
+    solutions_per_footprint_df = identify_df_building_most_suitable_tech(uprns_gdf)
 
     # Re-assign most suitable tech to each UPRN based on decision for each building
     uprns_gdf = uprns_gdf.drop(columns=["assigned_tech"]).merge(
-        solutions_per_footprint_gdf[["building_geometry", "assigned_tech"]],
-        on="building_geometry",
+        solutions_per_footprint_df[["ID", "assigned_tech"]],
+        on="ID",
         how="left",
     )
 
-    solutions_per_footprint_gdf.rename(
-        columns={"building_geometry": "geometry"}, inplace=True
+    solutions_per_footprint_gdf = solutions_per_footprint_df.merge(
+        building_footprints_gdf[["ID", "geometry"]],
+        on="ID",
+        how="left",
+    )
+
+    solutions_per_footprint_gdf = gpd.GeoDataFrame(
+        solutions_per_footprint_gdf, geometry="geometry", crs="EPSG:27700"
     )
 
     if save:
