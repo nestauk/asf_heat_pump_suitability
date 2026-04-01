@@ -20,7 +20,6 @@ Use --save if you want to save the outputs to S3.
 """
 
 # package imports
-import numpy as np
 import pandas as pd
 import polars as pl
 import geopandas as gpd
@@ -206,7 +205,6 @@ def identify_df_building_most_suitable_tech(
         * `assigned_tech`: The most suitable tech assigned by the decision tree.
         * `building_geometry`: Geometry of the building footprint.
         * `max_contiguous_outdoor_space_area_m2`: Maximum contiguous outdoor space in metres squared.
-        * `in_hn_zone`: Boolean flag indicating whether the UPRN is in a heat network zone.
 
     Returns:
         gpd.GeoDataFrame: Building footprints with a single assigned technology.
@@ -220,7 +218,6 @@ def identify_df_building_most_suitable_tech(
         "assigned_tech",
         "building_geometry",
         "max_contiguous_outdoor_space_area_m2",
-        "in_hn_zone",
     ]:
         if col not in tech_gdf.columns:
             raise ValueError(
@@ -238,7 +235,6 @@ def identify_df_building_most_suitable_tech(
                     "assigned_tech",
                     "building_geometry",
                     "max_contiguous_outdoor_space_area_m2",
-                    "in_hn_zone",
                 ]
             ]
         )
@@ -261,7 +257,6 @@ def identify_df_building_most_suitable_tech(
             .drop_nulls()
             .count(),
             n_properties=pl.col("UPRN").count(),
-            building_in_hn_zone=pl.col("in_hn_zone").any(),
             n_solutions=pl.col("assigned_tech").n_unique(),
         )
     )
@@ -285,14 +280,14 @@ def identify_df_building_most_suitable_tech(
         buildings_with_multiple_solutions_df
     )
     buildings_with_multiple_solutions_df = buildings_with_multiple_solutions_df.select(
-        ["building_geometry", "assigned_tech", "building_in_hn_zone"]
+        ["building_geometry", "assigned_tech"]
     )
 
     # For building footprints with only 1 solution, assign that solution as the unique solution for the building
     buildings_with_single_solution_df = (
         solutions_per_footprint_df.filter(pl.col("n_solutions") == 1)
         .with_columns(assigned_tech=pl.col("assigned_tech").list.get(0))
-        .select(["building_geometry", "assigned_tech", "building_in_hn_zone"])
+        .select(["building_geometry", "assigned_tech"])
     )
 
     # Combine the dataframes of building footprints with multiple solutions and single solution to get the final dataframe with a unique assigned solution for each building footprint
@@ -435,24 +430,6 @@ def identify_most_suitable_tech_uprn_and_building(
         solutions_per_footprint_gdf[["building_geometry", "assigned_tech"]],
         on="building_geometry",
         how="left",
-    )
-
-    # Create new columns in uprns_gdf and solutions_per_footprint_gdf
-    # If the building is in a HN zone, assign "District heat network" as the most suitable tech, regardless of the assigned tech based on the decision tree
-    uprns_gdf["assigned_tech_hn_precedence"] = np.where(
-        uprns_gdf["in_hn_zone"], TECH_TYPES["heat_network"], uprns_gdf["assigned_tech"]
-    )
-
-    solutions_per_footprint_gdf["assigned_tech_hn_precedence"] = np.where(
-        solutions_per_footprint_gdf["building_in_hn_zone"],
-        TECH_TYPES["heat_network"],
-        solutions_per_footprint_gdf["assigned_tech"],
-    )
-
-    # Drop unecessary columns before saving outputs to S3
-    uprns_gdf = uprns_gdf.drop(columns=["in_hn_zone"])
-    solutions_per_footprint_gdf = solutions_per_footprint_gdf.drop(
-        columns=["building_in_hn_zone"]
     )
 
     solutions_per_footprint_gdf.rename(
