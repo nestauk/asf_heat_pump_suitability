@@ -86,12 +86,16 @@ constant:
       - "SJ"
       - "SK"
   target_crs: 27700 # British National Grid
-  # TODO update to new names before running the pipeline again
   tech_types:
     individual: "Individual solution"
-    N_GSHP: "Networked GSHP"
-    communal: "Communal solutions"
+    networked: "Networked heat pump"
+    communal: "Communal solution"
     heat_networks: "District heat network"
+  tech_type_codes:
+    individual: "IND"
+    networked: "NHP"
+    communal: "COM"
+    heat_networks: "DHNZ"
   ID:
     building: "ID"
 output:
