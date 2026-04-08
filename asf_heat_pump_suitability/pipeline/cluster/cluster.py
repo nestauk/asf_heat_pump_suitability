@@ -99,7 +99,7 @@ def extend_edges_gdf(
     spacing: float = 1.0,
 ) -> gpd.GeoDataFrame:
     """
-    Creates Voronoi polygons around a set of input polygons by extending interpolating additional points along polygon edges
+    Creates Voronoi polygons around a set of input polygons by interpolating additional points along polygon edges
     to extend Voronoi polygons from.
     Rewritten logic based on fieldmaps/edge-extender.
 
@@ -280,6 +280,8 @@ def load_tranform_gdf_linestring_barriers(
     Load physical barriers with (Multi)LineString geometries - major roads and railways - for the specified grid squares. A
     buffer is added around each geometry to cover the width of the road / railway.
 
+    # TODO add road types to docstring
+
     Args:
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
         Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
@@ -423,7 +425,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar_cities}; or Plymouth and 5 different local authorities {sampling_areas}. Default to all of GB",
+        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
         default="GB",
         required=False,

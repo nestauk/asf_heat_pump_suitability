@@ -159,7 +159,7 @@ def load_gdf_os_openmap_layer(
     Returns:
         gpd.GeoDataFrame: OS OpenMap Local geometries for specified layer
     """
-    if not grid_squares:
+    if not grid_squares:  # Load all of GB
         if layer == "greenspace_site":
             raise ValueError(
                 "Greenspace site not implemented for GB yet. Please select a grid square."
