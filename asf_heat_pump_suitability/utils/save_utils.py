@@ -66,8 +66,6 @@ def save_to_s3(df: pl.DataFrame | gpd.GeoDataFrame, path: str) -> None:
             with fsspec.open(path, "wb") as f:
                 df.to_file(f)
     else:
-        with fs.open(path=path, mode="wb") as f:
-            df.to_file(f)
         raise TypeError(
             f"Can only save polars.DataFrame or geopandas.GeoDataFrame, not {type(df)}"
         )
