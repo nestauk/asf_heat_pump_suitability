@@ -6,6 +6,14 @@ Contains script to add boolean flags to label residential UPRNs indicating wheth
 To run the script:
 python asf_heat_pump_suitability/pipeline/run/heat_network_city_centres.py --uprns_path path/to/residential/uprns.parquet
 
+Set the `local_authorities` parameter to:
+- `plymouth` for Plymouth only
+- `plymouth_similar` for Plymouth and 4 similar local authorities (Liverpool, Portsmouth, Southampton, Swansea)
+- `sampling_areas` for Plymouth and 5 different local authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham)
+- `greater_manchester_las` for all Greater Manchester local authorities (Bolton, Bury, Manchester, Oldham, Rochdale, Salford, Stockport, Tameside, Trafford, Wigan)
+Defaults to `GB` (all of Great Britain), but this is not yet implemented.
+
+
 where you should replace `path/to/residential/uprns.parquet` with the path to the parquet file containing residential UPRNs with X and Y coordinates.
 
 Temporary (before we scale): Set up a new local authority or group of local authorities by adding an entry to the `constant` section of the config.yaml file.
@@ -52,6 +60,7 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.getters import base_getters, load_geodata
     from asf_heat_pump_suitability.pipeline.transform import uprns
     from asf_heat_pump_suitability.pipeline.transform import (
@@ -72,7 +81,6 @@ if __name__ == "__main__":
     else:
         # Load residential OS UPRNs in Plymouth
         print(f"Loading residential UPRN dataset for {las}...")
-        uprns_path = f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}/{args.local_authorities}_residential_uprns.parquet"
         uprn_df = base_getters.load_df_from_s3(uprns_path)
         uprn_gdf = uprns.generate_gdf_uprn_coords(uprn_df)
 
@@ -105,9 +113,7 @@ if __name__ == "__main__":
         # Load spatial signature polygons
         print("Loading spatial signatures dataset...")
         spatial_signatures_gb_simplified_gdf = (
-            load_geodata.load_gdf_spatial_signatures_gb(
-                load_geodata.load_gdf_spatial_signatures_gb(detail_level="full")
-            )
+            load_geodata.load_gdf_spatial_signatures_gb(detail_level="full")
         )
 
         # Label UPRNs in city centres
