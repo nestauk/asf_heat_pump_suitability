@@ -83,11 +83,19 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import get_datasets
 
     args = parse_arguments()
+
     las = args.local_authorities.lower()
+
+    list_las = (
+        config["constant"][las]["la_names"]
+        if isinstance(config["constant"][las]["la_names"], list)
+        else [config["constant"][las]["la_names"]]
+    )
     detail_level = args.detail.lower()
     uprns_path = config["output"]["dataset"]["residential_uprns"].format(
         local_authority=las
     )
+    grid_squares = config["constant"][las]["grid_squares"]
 
     # Load UPRN data
     print(f"Loading domestic UPRNs from: {uprns_path}")
@@ -118,7 +126,7 @@ if __name__ == "__main__":
     # Load building footprint data
     # TODO scale beyond sampling areas
     building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-        layer="building", grid_squares=config["constant"][las]["grid_squares"]
+        layer="building", grid_squares=grid_squares
     )
 
     # Map UPRNs to the ID of the building they're in
@@ -159,12 +167,22 @@ if __name__ == "__main__":
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
     # Load planned heat network zone polygons and label UPRNs in HN zones (if available for the local authority)
-    try:
-        hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=las)
-    except ValueError:
-        print(
-            "No heat network zone geodata found for given Local Authority. Assuming no UPRNs are in heat network zones."
-        )
+    hn_zones_gdf = gpd.GeoDataFrame()
+    for la in list_las:
+        try:
+            hn_zones_gdf = pd.concat(
+                [
+                    hn_zones_gdf,
+                    load_geodata.load_gdf_heat_network_zones(local_authority=la),
+                ],
+                ignore_index=True,
+            )
+        except ValueError:
+            print(
+                f"No heat network zone geodata found for {la}. Assuming no UPRNs are in heat network zones in this Local Authority."
+            )
+
+    if hn_zones_gdf.empty:
         hn_zone_uprn_df = pl.from_pandas(
             uprns_gdf[["UPRN", "LAD23NM", "X_COORDINATE", "Y_COORDINATE"]]
         )
@@ -203,11 +221,6 @@ if __name__ == "__main__":
         inspire_file_names = get_datasets.load_gdf_inspire_land_parcels(
             path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EW.geojson"
         )
-        list_las = (
-            config["constant"][las]["la_names"]
-            if isinstance(config["constant"][las]["la_names"], list)
-            else [config["constant"][las]["la_names"]]
-        )
         inspire_file_names = inspire_file_names[
             inspire_file_names["LAD23NM"].isin(list_las)
         ]["inspire_file_name"].unique()
@@ -221,7 +234,7 @@ if __name__ == "__main__":
         )
 
     building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-        layer="building", grid_squares=config["constant"][las]["grid_squares"]
+        layer="building", grid_squares=grid_squares
     )
 
     # Get intersection of building footprint polygons and land polygons
