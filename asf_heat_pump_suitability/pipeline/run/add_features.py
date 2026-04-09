@@ -53,13 +53,6 @@ if __name__ == "__main__":
     import geopandas as gpd
     import pandas as pd
 
-    import warnings
-
-    # Datetime deprecation warning caused by botocore
-    warnings.filterwarnings(
-        "ignore", category=DeprecationWarning, message=".*datetime.utcnow.*"
-    )
-
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
     from asf_heat_pump_suitability.getters import (
