@@ -125,19 +125,19 @@ if __name__ == "__main__":
     # PREDICT BLOCK OF FLATS CLASSIFICATION
     # Load building footprint data
     # TODO scale beyond sampling areas
-    building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+    buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
         layer="building", grid_squares=grid_squares
     )
 
     # Map UPRNs to the ID of the building they're in
     uprn_building_id_dict = uprns.map_dict_uprns_to_building_id(
-        uprns_gdf=uprns_gdf, buildings_gdf=building_footprints_gdf, id_col="ID"
+        uprns_gdf=uprns_gdf, buildings_gdf=buildings_gdf, id_col="ID"
     )
 
     uprns_gdf["property_type_flat"] = uprns_gdf["UPRN"].isin(flat_uprns)
     # Generate features for block of flats classification model
     building_features_df = feature_engineering.generate_df_features(
-        buildings_gdf=building_footprints_gdf,
+        buildings_gdf=buildings_gdf,
         uprns_gdf=uprns_gdf,
         id_col="ID",
     )
@@ -233,14 +233,14 @@ if __name__ == "__main__":
             ignore_index=False,
         )
 
-    building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+    buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
         layer="building", grid_squares=grid_squares
     )
 
     # Get intersection of building footprint polygons and land polygons
     intersection_gdf = outdoor_space.generate_gdf_building_intersections(
         land_parcels_gdf=land_parcels_gdf,
-        building_footprints_gdf=building_footprints_gdf,
+        buildings_gdf=buildings_gdf,
     )
 
     # Get outdoor space
@@ -268,7 +268,7 @@ if __name__ == "__main__":
 
     del (
         land_parcels_gdf,
-        building_footprints_gdf,
+        buildings_gdf,
         intersection_gdf,
         outdoor_space_gdf,
         uprns_space_df,
