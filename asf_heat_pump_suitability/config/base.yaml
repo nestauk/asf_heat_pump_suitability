@@ -6,6 +6,8 @@ data:
     gb_os_openmap_local: "s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares
     grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+    # UK Points of Interest
+    UK_poi_locations: "s3://asf-heat-pump-suitability/source_data/poi_uk.gpkg"
 
     boundaries:
       # UK LA boundaries
@@ -90,10 +92,16 @@ output:
     model:
       block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"
 
+#----------------------------------------------------------------#
+# DEPRECATING
+#----------------------------------------------------------------#
+# All of the keys below are in the process of being deprecated and are likely to be moved or removed
 data_source:
+  # ONS postcode dir data
   gb_ons_postcode_dir_url: "https://www.arcgis.com/sharing/rest/content/items/487a5ba62c8b4da08f01eb3c08e304f6/data" # Aug 2023 data
   gb_ons_postcode_dir_file_path: "Data/ONSPD_AUG_2023_UK.csv" # Aug 2023 data
   UK_ons_postcode_dir: "s3://asf-heat-pump-suitability/source_data/ONSPD_AUG_2023_UK.csv"
+  # Census data
   EW_census_tenure: "s3://asf-heat-pump-suitability/source_data/2021census_2023Mar_tenure_E_W.csv"
   S_census_tenure: "s3://asf-heat-pump-suitability/source_data/2022_Scotlands_census_tenure_S.csv"
   EW_census_number_of_rooms: "s3://asf-heat-pump-suitability/source_data/2021census_Mar2023_number_of_rooms_E_W.csv"
@@ -101,24 +109,28 @@ data_source:
   EW_census_land_area: "s3://asf-heat-pump-suitability/source_data/2021_vMar2021_census_landareaKM_EW.csv"
   EW_cdrc_dwelling_age: "s3://asf-heat-pump-suitability/source_data/2015cdrc_dwelling_ages_E_W.csv"
   EW_cdrc_dwelling_age_la: "s3://asf-heat-pump-suitability/source_data_minor_edits/2015cdrc_dwelling_ages_E_W_per_la_02.parquet"
-  GB_ons_garden_space_access: "s3://asf-heat-pump-suitability/source_data/ONS_Apr2020_access_to_garden_space.xlsx"
-  GB_osopen_uprn_latlon: "s3://asf-heat-pump-suitability/source_data/osopenuprn_202405_csv.zip"
   EW_census_accommodation_type: "s3://asf-heat-pump-suitability/source_data/2021census_Mar2023_accommodation_type_E_W.csv"
   S_census_accommodation_type: "s3://asf-heat-pump-suitability/source_data/2022_Scotlands_census_accommodation_type_S.csv"
+  # Boundary data
   UK_ons_lad_bounds: "s3://asf-heat-pump-suitability/source_data/Local_Authority_Districts_December_2023_Boundaries_UK_BFE_-2600600853110041429/LAD_DEC_2023_UK_BFE.shp"
+  # Data to calculate garden size
+  GB_ons_garden_space_access: "s3://asf-heat-pump-suitability/source_data/ONS_Apr2020_access_to_garden_space.xlsx"
+  GB_osopen_uprn_latlon: "s3://asf-heat-pump-suitability/source_data/osopenuprn_202405_csv.zip"
   EW_inspire_land_extent_dir: "s3://asf-heat-pump-suitability/source_data/inspire_ew/"
   S_inspire_land_extent_dir: "s3://asf-heat-pump-suitability/source_data/inspire_scotland/"
   global_microsoft_building_footprint_links: "https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv"
+  # Feature data
   E_historic_england_conservation_areas: "s3://asf-heat-pump-suitability/source_data/Feb2025_historic_england_conservation_areas_E.geojson"
   W_welsh_gov_conservation_areas: "s3://asf-heat-pump-suitability/source_data/2022_welsh_gov_building_conservation_areas_W.gpkg"
   UK_spa_offgasgrid: "s3://asf-heat-pump-suitability/source_data/2024_vMar2024_SPA_offgaspostcode_UK.xlsx"
   E_historicengland_listed_buildings: "s3://asf-heat-pump-suitability/source_data/Jun2024_vJul2024_HistoricEngland_listedbuilding_E.gpkg"
   W_cadw_listed_buildings: "s3://asf-heat-pump-suitability/source_data/May2024_vMay2024_Cadw_listedbuilding_W.gpkg"
   S_scottish_gov_listed_buildings: "s3://asf-heat-pump-suitability/source_data/lb_scotland/Listed_Buildings.shp"
+  # Lookups and boundaries
   EW_ons_lsoa_lad_lookup: "s3://asf-heat-pump-suitability/source_data/2021_vApr2023_ons_lsoa_to_lad_lookup_EW.csv"
   S_dz_lookup: "s3://asf-heat-pump-suitability/source_data/location_lookups/2011_vDec2024_scotgov_DZ2011lookup_S.csv"
   EW_lsoa_bounds: "s3://asf-heat-pump-suitability/source_data/Lower_layer_Super_Output_Areas_2021_EW_BFE_V9_-9107090204806789093/LSOA_2021_EW_BFE_V9.shp"
-  UK_poi_locations: "s3://asf-heat-pump-suitability/source_data/poi_uk.gpkg"
+  # Grid capacity
   E_ENW_dfes_primaries: "s3://asf-heat-pump-suitability/source_data/grid_operators/ENW/dfes-2023-primary-data0.parquet"
   E_ENW_ndp_headroom: "s3://asf-heat-pump-suitability/source_data/grid_operators/ENW/ndp-pry-bsp-headroom.parquet"
   E_ENW_ndp_voronoi: "s3://asf-heat-pump-suitability/source_data/grid_operators/ENW/ndp-pry-voronoi.parquet"

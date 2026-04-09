@@ -116,3 +116,31 @@ def load_gdf_spatial_signatures_gb(
     )
 
     return gdf
+
+
+def load_gdf_poi() -> gpd.GeoDataFrame:
+    """
+    Load and process Points of Interest data. CRS EPSG 4326.
+
+    Returns:
+        gpd.GeoDataFrame: Processed POI data containing types of POI specified
+
+    Raises:
+        ValueError: If required columns are missing
+    """
+    print("Loading POI data...")
+
+    required_columns = [
+        "id",
+        "country",
+        "main_category",
+        "alternate_category",
+        "geometry",
+    ]
+    poi = gpd.read_file(
+        filename=config["data"]["geodata"]["UK_poi_locations"],
+        columns=required_columns,
+        layer="poi_uk",
+    ).to_crs("EPSG:4326")
+    print(f"POI CRS: {poi.crs}")
+    return poi
