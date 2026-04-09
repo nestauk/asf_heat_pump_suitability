@@ -12,7 +12,6 @@ To save outputs to S3, add --save flag.
 """
 
 import argparse
-from asf_heat_pump_suitability import config
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -56,9 +55,9 @@ if __name__ == "__main__":
 
     import warnings
 
+    # Datetime deprecation warning caused by botocore
     warnings.filterwarnings(
-        action="ignore",
-        message=r"datetime.datetime.utcnow\(\) is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now\(datetime.UTC\).",
+        "ignore", category=DeprecationWarning, message=".*datetime.utcnow.*"
     )
 
     from asf_heat_pump_suitability import config
@@ -101,8 +100,6 @@ if __name__ == "__main__":
     features_df = uprns_df.with_columns(
         pl.col("UPRN").is_in(flat_uprns).alias("property_type_flat")
     )
-
-    del flat_uprns
 
     # ------------------------ #
     # PREDICT BLOCK OF FLATS CLASSIFICATION
@@ -157,7 +154,7 @@ if __name__ == "__main__":
 
     # Load spatial signature polygons and label UPRNs in city centres
     spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
-        detail_level="full"
+        detail_level="simplified"
     )
     features_df = city_centres.extend_df_city_centre_labels(
         uprns_df=features_df,
