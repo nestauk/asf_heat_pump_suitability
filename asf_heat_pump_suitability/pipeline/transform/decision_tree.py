@@ -66,9 +66,7 @@ def extend_gdf_building_footprints(
     gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame
 ) -> gpd.GeoDataFrame:
     """
-    Extends the GeoDataFrame with building footprint geometries by performing a
-    spatial join to add building footprint geometry to the UPRN geodataframe based on
-    whether the UPRN point is within the building footprint polygon.
+    Extends the GeoDataFrame with the building footprint geometries the UPRNs are located within.
 
     Also creates a copy of the original UPRN geometry columns to keep both the UPRN point geometry
     and the building footprint geometry in the GeoDataFrame that results from the spatial join.
