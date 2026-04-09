@@ -84,18 +84,18 @@ if __name__ == "__main__":
 
     args = parse_arguments()
 
-    las = args.local_authorities.lower()
+    local_authorities = args.local_authorities.lower()
 
     list_las = (
-        config["constant"][las]["la_names"]
-        if isinstance(config["constant"][las]["la_names"], list)
-        else [config["constant"][las]["la_names"]]
+        config["constant"][local_authorities]["la_names"]
+        if isinstance(config["constant"][local_authorities]["la_names"], list)
+        else [config["constant"][local_authorities]["la_names"]]
     )
-    detail_level = args.detail.lower()
+    detail_level = args.detail
     uprns_path = config["output"]["dataset"]["residential_uprns"].format(
-        local_authority=las
+        local_authority=local_authorities
     )
-    grid_squares = config["constant"][las]["grid_squares"]
+    grid_squares = config["constant"][local_authorities]["grid_squares"]
 
     # Load UPRN data
     print(f"Loading domestic UPRNs from: {uprns_path}")
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     # TODO scale beyond Plymouth. This is a temporary fix to working with multiple LAs
     print("Loading land registry data...")
 
-    if las == "plymouth":
+    if local_authorities == "plymouth":
         land_parcels_gdf = gpd.read_file(
             "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
         )
@@ -286,6 +286,6 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             features_df,
             path=config["output"]["dataset"]["residential_uprns_with_features"].format(
-                local_authority=las
+                local_authority=local_authorities
             ),
         )

@@ -219,19 +219,21 @@ if __name__ == "__main__":
 
     args = parse_arguments()
 
+    local_authorities = args.local_authorities.lower()
+
     uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
 
-    if args.local_authorities.lower() == "gb":  # All of GB
+    if local_authorities == "gb":  # All of GB
         # TODO this may not work due to scaling and may require chunking of datasets.
         # TODO Adding here as placeholder to assist scaling later
         print("Creating residential UPRN dataset for all of GB...")
         grid_squares = None
     else:  # Specific local authorities (any number of LAs can be specified in config file)
-        print(f"Creating residential UPRN dataset for {args.local_authorities}...")
-        grid_squares = config["constant"][args.local_authorities]["grid_squares"]
+        print(f"Creating residential UPRN dataset for {local_authorities}...")
+        grid_squares = config["constant"][local_authorities]["grid_squares"]
         la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=config["constant"][args.local_authorities]["la_names"]
+            select_las=config["constant"][local_authorities]["la_names"]
         )
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
@@ -285,5 +287,7 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             df,
-            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{args.local_authorities}/{args.local_authorities}_residential_uprns.parquet",
+            config["output"]["dataset"]["residential_uprns"].format(
+                local_authority=local_authorities
+            ),
         )
