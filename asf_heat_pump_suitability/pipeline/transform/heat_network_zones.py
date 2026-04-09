@@ -22,15 +22,18 @@ def extend_df_heat_network_zone_bool(
     Returns:
         pl.DataFrame: UPRN dataframe with boolean `in_hn_zone` column.
     """
-    uprns_in_hnz = generate_dict_heat_network_zone_uprns(
-        uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zone_gdf
-    ).keys()
-    return uprns_df.with_columns(
-        pl.when(pl.col("UPRN").is_in(uprns_in_hnz))
-        .then(True)
-        .otherwise(False)
-        .alias("in_hn_zone")
-    )
+    if hn_zone_gdf.empty:
+        return uprns_df.with_columns(pl.lit(False).alias("in_hn_zone"))
+    else:
+        uprns_in_hnz = generate_dict_heat_network_zone_uprns(
+            uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zone_gdf
+        ).keys()
+        return uprns_df.with_columns(
+            pl.when(pl.col("UPRN").is_in(uprns_in_hnz))
+            .then(True)
+            .otherwise(False)
+            .alias("in_hn_zone")
+        )
 
 
 def generate_dict_heat_network_zone_uprns(
@@ -47,7 +50,7 @@ def generate_dict_heat_network_zone_uprns(
     Returns:
         dict: UPRNs intersecting with heat network zones and their zone IDs
     """
-    print(f"Identifying residential UPRNs in heat network zones...")
+    print("Identifying residential UPRNs in heat network zones...")
     # CRS checks and reprojection if needed
     target_crs = config["constant"]["target_crs"]
 

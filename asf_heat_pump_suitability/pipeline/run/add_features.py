@@ -170,6 +170,7 @@ if __name__ == "__main__":
     hn_zones_gdf = gpd.GeoDataFrame()
     for la in list_las:
         try:
+            # TODO: deal with the potential for different Zone ID column names in different HN zone datasets
             hn_zones_gdf = pd.concat(
                 [
                     hn_zones_gdf,
@@ -181,18 +182,6 @@ if __name__ == "__main__":
             print(
                 f"No heat network zone geodata found for {la}. Assuming no UPRNs are in heat network zones in this Local Authority."
             )
-
-    if hn_zones_gdf.empty:
-        hn_zone_uprn_df = pl.from_pandas(
-            uprns_gdf[["UPRN", "LAD23NM", "X_COORDINATE", "Y_COORDINATE"]]
-        )
-        hn_zone_uprn_df = hn_zone_uprn_df.with_columns(
-            [
-                pl.lit(False).alias("in_hn_zone"),
-                pl.lit(None, dtype=pl.String).alias("HNZoneID"),
-            ]
-        )
-        hn_zones_gdf = pl.DataFrame(hn_zone_uprn_df)
 
     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
         uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
