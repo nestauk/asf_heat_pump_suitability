@@ -60,6 +60,7 @@ def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFr
             f"No path found for heat network zone geodata in Local Authority: {local_authority}"
         )
 
+    print(f"Loading heat network zone data for {local_authority} Local Authority...")
     gdf = base_getters.get_gdf_from_gpkg_s3_path(
         path=config["data"]["geodata"]["heat_network_zones"][local_authority],
         **kwargs,
@@ -106,6 +107,7 @@ def load_gdf_spatial_signatures_gb(
             f"detail_level must be 'full' or 'simplified', not {detail_level}"
         )
 
+    print("Loading spatial signatures dataset...")
     gdf = base_getters.get_gdf_from_gpkg_s3_path(
         path=config["data"]["geodata"]["gb_spatial_signatures"][detail_level],
         **kwargs,
@@ -116,3 +118,31 @@ def load_gdf_spatial_signatures_gb(
     )
 
     return gdf
+
+
+def load_gdf_poi() -> gpd.GeoDataFrame:
+    """
+    Load and process Points of Interest data. CRS EPSG 4326.
+
+    Returns:
+        gpd.GeoDataFrame: Processed POI data containing types of POI specified
+
+    Raises:
+        ValueError: If required columns are missing
+    """
+    print("Loading POI data...")
+
+    required_columns = [
+        "id",
+        "country",
+        "main_category",
+        "alternate_category",
+        "geometry",
+    ]
+    poi = gpd.read_file(
+        filename=config["data"]["geodata"]["UK_poi_locations"],
+        columns=required_columns,
+        layer="poi_uk",
+    ).to_crs("EPSG:4326")
+    print(f"POI CRS: {poi.crs}")
+    return poi

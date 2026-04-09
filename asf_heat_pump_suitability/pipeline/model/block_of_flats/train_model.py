@@ -257,7 +257,7 @@ def extend_df_in_block_of_flats_label(
         uprns_df.with_columns(
             # Map building IDs to the UPRNs they contain
             pl.col("UPRN")
-            .replace(mapping, default=None)
+            .replace_strict(mapping, default=None)
             .alias(id_col)
         )
         # Join the predicted block of flats label to the UPRNs via the building ID

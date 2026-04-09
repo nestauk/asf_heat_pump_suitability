@@ -1,8 +1,9 @@
 """
 Script to add features to UPRNs:
 - flat / apartment property type boolean flag
-- boolean flag to indicate whether UPRN is in a block of flats
+- boolean flags to indicate whether UPRN is in a block of flats; in a heat network zone; and in a city centre
 - estimated max contiguous and total outdoor space (m2)
+- EPC-derived features of tenure; attachment type of property; and current energy rating
 
 Run:
 python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES
@@ -15,11 +16,10 @@ where LOCAL_AUTHORITIES is one of:
 - `cardiff` for Cardiff only
 You can see the full list of local authority options in the `constant` section of the config.yaml file.
 
-To save outputs to S3, add --save flag, which will save outputs to S3.
+To save outputs to S3, add --save flag.
 """
 
 import argparse
-from asf_heat_pump_suitability import config
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -54,13 +54,23 @@ if __name__ == "__main__":
 
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
-    from asf_heat_pump_suitability.getters import load_tree_input, base_getters
+    from asf_heat_pump_suitability.getters import (
+        load_tree_input,
+        base_getters,
+        load_geodata,
+    )
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
         feature_engineering,
         train_model,
     )
-    from asf_heat_pump_suitability.pipeline.transform import uprns, outdoor_space
+    from asf_heat_pump_suitability.pipeline.transform import (
+        uprns,
+        outdoor_space,
+        epc,
+        heat_network_zones,
+        city_centres,
+    )
     from asf_heat_pump_suitability.getters import get_datasets
 
     args = parse_arguments()
@@ -133,6 +143,27 @@ if __name__ == "__main__":
         id_col="ID",
     )
 
+    del uprn_building_id_dict, building_features_df, labelled_df, clf
+
+    # ------------------------ #
+    # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
+    # Load Plymouth existing heat network zone polygons and label UPRNs in HN zones
+    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=las)
+    features_df = heat_network_zones.extend_df_heat_network_zone_bool(
+        uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
+    )
+
+    # Load spatial signature polygons and label UPRNs in city centres
+    spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
+        detail_level="simplified"
+    )
+    features_df = city_centres.extend_df_city_centre_labels(
+        uprns_df=features_df,
+        uprns_gdf=uprns_gdf,
+        spatial_signatures_gdf=spatial_signatures_gdf,
+    )
+    del hn_zones_gdf, spatial_signatures_gdf
+
     # ------------------------ #
     # ESTIMATE OUTDOOR SPACE
     # TODO scale beyond Plymouth. This is a temporary fix to working with multiple LAs
@@ -195,6 +226,30 @@ if __name__ == "__main__":
         how="left",
         on="UPRN",
     )
+
+    del (
+        land_parcels_gdf,
+        building_footprints_gdf,
+        intersection_gdf,
+        outdoor_space_gdf,
+        uprns_space_df,
+    )
+
+    # ------------------------ #
+    # CONTEXTUAL FEATURES
+    # ------------------------ #
+    # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE
+    epc_df = pl.read_parquet(
+        config["data"]["epc"]["domestic"],
+        columns=["UPRN", "TENURE", "BUILT_FORM", "CURRENT_ENERGY_RATING"],
+    )
+    features_df = epc.extend_df_epc_features(
+        df=features_df,
+        epc_df=epc_df,
+        columns=["UPRN", "TENURE", "CURRENT_ENERGY_RATING"],
+    )
+
+    del epc_df
 
     # ------------------------ #
     # SAVE OUTPUTS
