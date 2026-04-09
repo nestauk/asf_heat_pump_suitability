@@ -29,7 +29,7 @@ def extend_df_city_centre_labels(
     intersects with.
 
     Args:
-        uprns_df (pl.DataFrame): dataframe with UPRNs
+        uprns_df (pl.DataFrame): dataframe with UPRNs and other desired features
         uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries
         spatial_signatures_gdf (gpd.GeoDataFrame): polygons of spatial signatures
         types (list, optional): spatial signature types assumed to be representative of city centre areas. Defaults to a list containing:
@@ -111,7 +111,7 @@ def label_gdf_city_centre_spatial_signatures_uprns(
             {
                 "geometry": "first",  # keep the point geometry
                 "type": list,  # combine types into a list
-                "in_city_centre": sum,  # sums >0 indicate UPRN in a city centre signature
+                "in_city_centre": "sum",  # sums >0 indicate UPRN in a city centre signature
             }
             # Convert city centre to boolean label
         )
