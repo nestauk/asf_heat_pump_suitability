@@ -6,6 +6,8 @@ Contains script to add boolean flags to label residential UPRNs indicating wheth
 To run the script:
 python asf_heat_pump_suitability/pipeline/run/heat_network_city_centres.py --uprns_path path/to/residential/uprns.parquet
 
+where you should replace `path/to/residential/uprns.parquet` with the path to the parquet file containing residential UPRNs with X and Y coordinates.
+
 Set the `local_authorities` parameter to:
 - `plymouth` for Plymouth only
 - `plymouth_similar` for Plymouth and 4 similar local authorities (Liverpool, Portsmouth, Southampton, Swansea)
