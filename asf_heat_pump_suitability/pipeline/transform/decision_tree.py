@@ -356,7 +356,7 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
 
 def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     local_authorities: str,
-    building_footprints_gdf: gpd.GeoDataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
     uprns_gdf: gpd.GeoDataFrame,
     save: bool,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
@@ -367,7 +367,7 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
 
     Args:
         local_authorities (str): Local authority or authorities.
-        building_footprints_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
+        buildings_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
         save (bool): Whether to save outputs to S3.
 
@@ -377,7 +377,7 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
             - GeoDataFrame with building footprint-level most suitable tech.
     """
     uprns_gdf = extend_gdf_building_footprints(
-        gdf=uprns_gdf, buildings_gdf=building_footprints_gdf
+        gdf=uprns_gdf, buildings_gdf=buildings_gdf
     )
 
     print("Number of building IDs: ", uprns_gdf["ID"].nunique())
@@ -421,7 +421,7 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     )
 
     solutions_per_footprint_gdf = solutions_per_footprint_df.merge(
-        building_footprints_gdf[["ID", "geometry"]],
+        buildings_gdf[["ID", "geometry"]],
         on="ID",
         how="left",
     )
@@ -456,7 +456,7 @@ if __name__ == "__main__":
     local_authorities = args.local_authorities
 
     # TODO: create getters for footprints & uprns in future
-    building_footprints_gdf = load_gdf_os_openmap_local_layer(
+    buildings_gdf = load_gdf_os_openmap_local_layer(
         layer="building",
         grid_squares=config["constant"][local_authorities]["grid_squares"],
     )
@@ -476,7 +476,7 @@ if __name__ == "__main__":
 
     identify_gdf_tuple_most_suitable_tech_uprn_and_building(
         local_authorities=local_authorities,
-        building_footprints_gdf=building_footprints_gdf,
+        buildings_gdf=buildings_gdf,
         uprns_gdf=uprns_with_features_gdf,
         save=args.save,
     )
