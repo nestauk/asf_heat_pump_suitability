@@ -37,6 +37,15 @@ def parse_arguments() -> argparse.Namespace:
         type=str,
         required=True,
     )
+
+    parser.add_argument(
+        "--detail",
+        help="Level of detail for spatial signatures dataset to label city centres. Takes values 'simplified' or 'full'. Defaults to 'full'.",
+        required=False,
+        default="full",
+        type=str,
+    )
+
     parser.add_argument(
         "--save",
         help="If --save is set, it saves outputs to S3.",
@@ -75,8 +84,10 @@ if __name__ == "__main__":
 
     args = parse_arguments()
     las = args.local_authorities.lower()
-    # TODO check if we want to import HNZ data separately or move code into this script.
-    uprns_path = f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{las}/{las}_residential_uprns_with_hn_zones_city_centres.parquet"
+    detail_level = args.detail.lower()
+    uprns_path = config["output"]["dataset"]["residential_uprns"].format(
+        local_authority=las
+    )
 
     # Load UPRN data
     print(f"Loading domestic UPRNs from: {uprns_path}")
@@ -147,15 +158,31 @@ if __name__ == "__main__":
 
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
-    # Load Plymouth existing heat network zone polygons and label UPRNs in HN zones
-    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=las)
+    # Load planned heat network zone polygons and label UPRNs in HN zones (if available for the local authority)
+    try:
+        hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=las)
+    except ValueError:
+        print(
+            "No heat network zone geodata found for given Local Authority. Assuming no UPRNs are in heat network zones."
+        )
+        hn_zone_uprn_df = pl.from_pandas(
+            uprns_gdf[["UPRN", "LAD23NM", "X_COORDINATE", "Y_COORDINATE"]]
+        )
+        hn_zone_uprn_df = hn_zone_uprn_df.with_columns(
+            [
+                pl.lit(False).alias("in_hn_zone"),
+                pl.lit(None, dtype=pl.String).alias("HNZoneID"),
+            ]
+        )
+        hn_zones_gdf = pl.DataFrame(hn_zone_uprn_df)
+
     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
         uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
     )
 
     # Load spatial signature polygons and label UPRNs in city centres
     spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
-        detail_level="simplified"
+        detail_level=detail_level
     )
     features_df = city_centres.extend_df_city_centre_labels(
         uprns_df=features_df,
@@ -163,7 +190,6 @@ if __name__ == "__main__":
         spatial_signatures_gdf=spatial_signatures_gdf,
     )
     del hn_zones_gdf, spatial_signatures_gdf
-
     # ------------------------ #
     # ESTIMATE OUTDOOR SPACE
     # TODO scale beyond Plymouth. This is a temporary fix to working with multiple LAs
@@ -257,5 +283,7 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             features_df,
-            path=f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{las}/{las}_with_features.parquet",
+            path=config["output"]["dataset"]["residential_uprns_with_features"].format(
+                local_authority=las
+            ),
         )
