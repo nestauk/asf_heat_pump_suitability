@@ -13,9 +13,6 @@ Set the `local_authorities` parameter to:
 - `greater_manchester_las` for all Greater Manchester local authorities (Bolton, Bury, Manchester, Oldham, Rochdale, Salford, Stockport, Tameside, Trafford, Wigan)
 Defaults to `GB` (all of Great Britain), but this is not yet implemented.
 
-
-where you should replace `path/to/residential/uprns.parquet` with the path to the parquet file containing residential UPRNs with X and Y coordinates.
-
 Temporary (before we scale): Set up a new local authority or group of local authorities by adding an entry to the `constant` section of the config.yaml file.
 
 Set --save to save the outputs to S3. By default, outputs are not saved.
