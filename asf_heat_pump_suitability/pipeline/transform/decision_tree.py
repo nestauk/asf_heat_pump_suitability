@@ -436,12 +436,12 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
 
     if save:
         uprns_gdf.to_parquet(
-            config["output"]["uprns_most_suitable_tech"].format(
+            config["output"]["dataset"]["uprns_most_suitable_tech"].format(
                 local_authorities=local_authorities
             )
         )
         solutions_per_footprint_gdf.to_parquet(
-            config["output"]["buildings_most_suitable_tech"].format(
+            config["output"]["dataset"]["buildings_most_suitable_tech"].format(
                 local_authorities=local_authorities
             )
         )
@@ -460,7 +460,7 @@ if __name__ == "__main__":
     )
 
     uprns_with_features_df = pl.read_parquet(
-        config["output"]["residential_uprns_with_features"].format(
+        config["output"]["dataset"]["residential_uprns_with_features"].format(
             local_authority=local_authorities
         )
     )

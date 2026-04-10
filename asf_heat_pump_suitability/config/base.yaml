@@ -97,14 +97,15 @@ constant:
     heat_network: "District heat network"
 
 output:
-  # Residential UPRNs and their point geometries
-  residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_residential_uprns.parquet"
-  # Residential UPRNs with all features for modelling, mapping and aggregation
-  residential_uprns_with_features: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_with_features.parquet"
-  # Residential UPRNs with their most suitable low carbon heat technology group
-  uprns_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
-  # Residential buildings with their most suitable low carbon heat technology group
-  buildings_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_buildings_most_suitable_tech.parquet"
+  dataset:
+    # Residential UPRNs and their point geometries
+    residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_residential_uprns.parquet"
+    # Residential UPRNs with all features for modelling, mapping and aggregation
+    residential_uprns_with_features: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_with_features.parquet"
+    # Residential UPRNs with their most suitable low carbon heat technology group
+    uprns_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
+    # Residential buildings with their most suitable low carbon heat technology group
+    buildings_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_buildings_most_suitable_tech.parquet"
   save_as:
     model:
       block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"
