@@ -269,7 +269,7 @@ def identify_df_building_most_suitable_tech(
     )
 
     # Convert back to GeoDataFrame
-    solutions_per_footprint_df = solutions_per_footprint_df.to_pandas()
+    solutions_per_footprint_df = solutions_per_footprint_df
 
     return solutions_per_footprint_df
 
