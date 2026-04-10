@@ -157,7 +157,7 @@ def identify_dict_most_suitable_tech(
 
 
 def identify_df_building_most_suitable_tech(
-    tech_gdf: gpd.GeoDataFrame,
+    tech_gdf: gpd.GeoDataFrame, id_col: str
 ) -> pl.DataFrame:
     """
     Assigns a single most suitable tech solution to each building footprint.
@@ -176,8 +176,9 @@ def identify_df_building_most_suitable_tech(
     tech_gdf (gpd.GeoDataFrame): GeoDataFrame containing UPRN-level most suitable tech. Must contain the following columns:
         * `UPRN`: Unique identifier for the property.
         * `assigned_tech`: The most suitable tech assigned by the decision tree.
-        * `ID`: Unique identifier for the building footprint.
+        * `id_col`: Unique identifier for the building footprint.
         * `max_contiguous_outdoor_space_area_m2`: Maximum contiguous outdoor space in metres squared.
+    id_col (str): The name of the column in `tech_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
 
     Returns:
         pl.DataFrame: Buildings with a single assigned technology.
@@ -189,12 +190,12 @@ def identify_df_building_most_suitable_tech(
     for col in [
         "UPRN",
         "assigned_tech",
-        "ID",  # the building ID
+        id_col,  # the building ID
         "max_contiguous_outdoor_space_area_m2",
     ]:
         if col not in tech_gdf.columns:
             raise ValueError(
-                "Input GeoDataFrame must contain the following columns: ['UPRN', 'assigned_tech', 'ID', 'max_contiguous_outdoor_space_area_m2', 'in_hn_zone']."
+                f"Input GeoDataFrame must contain the following columns: ['UPRN', 'assigned_tech', '{id_col}', 'max_contiguous_outdoor_space_area_m2', 'in_hn_zone']."
             )
 
     tech_df = pl.from_pandas(
@@ -203,7 +204,7 @@ def identify_df_building_most_suitable_tech(
                 [
                     "UPRN",
                     "assigned_tech",
-                    "ID",  # the building ID
+                    id_col,  # the building ID
                     "max_contiguous_outdoor_space_area_m2",
                 ]
             ]
@@ -214,7 +215,7 @@ def identify_df_building_most_suitable_tech(
     solutions_per_footprint_df = (
         # Aggregate at building footprint level to identify the set of most suitable tech for properties within the same building
         tech_df.group_by(
-            "ID"
+            id_col
         )  # grouping by building ID to aggregate to building footprint level
         # Calculate the median outdoor space and percentage of properties with outdoor space data for each building footprint
         # to inform the decision on assigning a unique solution for each building
@@ -252,14 +253,14 @@ def identify_df_building_most_suitable_tech(
         buildings_with_multiple_solutions_df
     )
     buildings_with_multiple_solutions_df = buildings_with_multiple_solutions_df.select(
-        ["ID", "assigned_tech"]
+        [id_col, "assigned_tech"]
     )
 
     # For building footprints with only 1 solution, assign that solution as the unique solution for the building
     buildings_with_single_solution_df = (
         solutions_per_footprint_df.filter(pl.col("n_solutions") == 1)
         .with_columns(assigned_tech=pl.col("assigned_tech").list.get(0))
-        .select(["ID", "assigned_tech"])
+        .select([id_col, "assigned_tech"])
     )
 
     # Combine the dataframes of building footprints with multiple solutions and single solution to get the final dataframe with a unique assigned solution for each building footprint
@@ -409,7 +410,9 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     uprns_gdf = pd.concat([uprns_gdf, decision_tree_outputs], axis=1)
 
     # Identify set of most suitable tech per building
-    solutions_per_footprint_df = identify_df_building_most_suitable_tech(uprns_gdf)
+    solutions_per_footprint_df = identify_df_building_most_suitable_tech(
+        uprns_gdf, "ID"
+    )
 
     # Re-assign most suitable tech to each UPRN based on decision for each building
     uprns_gdf = uprns_gdf.drop(columns=["assigned_tech"]).merge(
