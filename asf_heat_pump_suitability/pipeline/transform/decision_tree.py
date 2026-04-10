@@ -460,7 +460,7 @@ if __name__ == "__main__":
     )
 
     uprns_with_features_df = pl.read_parquet(
-        config["output"]["uprns_with_features"].format(
+        config["output"]["residential_uprns_with_features"].format(
             local_authority=local_authorities
         )
     )
