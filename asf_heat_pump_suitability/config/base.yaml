@@ -92,7 +92,9 @@ constant:
 
 output:
   dataset:
+    # Residential UPRNs and their point geometries
     residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_residential_uprns.parquet"
+    # Residential UPRNs with all features for modelling, mapping and aggregation
     residential_uprns_with_features: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_with_features.parquet"
   save_as:
     model:
