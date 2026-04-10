@@ -16,6 +16,8 @@ where LOCAL_AUTHORITIES is one of:
 - `cardiff` for Cardiff only
 You can see the full list of local authority options in the `constant` section of the config.yaml file.
 
+Set -- `--detail "simplified"` to use simplified spatial signature polygons to label city centres. The default is "full" which uses the fully detailed spatial signatures framework.
+
 To save outputs to S3, add --save flag.
 """
 
@@ -101,13 +103,7 @@ if __name__ == "__main__":
     print(f"Loading domestic UPRNs from: {uprns_path}")
     uprns_df = pl.read_parquet(
         uprns_path,
-        columns=[
-            "UPRN",
-            "X_COORDINATE",
-            "Y_COORDINATE",
-            "in_hn_zone",
-            "in_city_centre",
-        ],
+        columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
     )
 
     # Get geopoints of UPRNs
@@ -166,7 +162,8 @@ if __name__ == "__main__":
 
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
-    # Load planned heat network zone polygons and label UPRNs in HN zones (if available for the local authority)
+
+    # Load planned heat network zone polygons (if available for the local authority/local authorities)
     hn_zones_gdf = gpd.GeoDataFrame()
     for la in list_las:
         try:
@@ -181,6 +178,17 @@ if __name__ == "__main__":
         except ValueError:
             print(
                 f"No heat network zone geodata found for {la}. Assuming no UPRNs are in heat network zones in this Local Authority."
+            )
+
+    # Check if data is available for all LAs in the list, and if not, check if there is data for the whole set of LAs (e.g. Greater Manchester as a whole instead of individual LAs)
+    if len(list_las) > 0 and hn_zones_gdf.empty:
+        try:
+            hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
+                local_authority=local_authorities
+            )
+        except ValueError:
+            print(
+                f"No heat network zone geodata found for {local_authorities}. Assuming no UPRNs are in heat network zones in this group of Local Authorities."
             )
 
     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
