@@ -63,33 +63,28 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def extend_gdf_building_footprints(
-    gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame
+    gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame, id_col: str
 ) -> gpd.GeoDataFrame:
     """
     Extends the GeoDataFrame with the building footprint geometries the UPRNs are located within.
 
-    Also creates a copy of the original UPRN geometry columns to keep both the UPRN point geometry
-    and the building footprint geometry in the GeoDataFrame that results from the spatial join.
-
     Args:
         gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
         buildings_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
+        id_col (str): The name of the column in `buildings_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
 
     Returns:
         gpd.GeoDataFrame: GeoDataFrame with building footprint polygons added.
     """
-    # Creates a copy of the UPRN and building geometry column to keep after the spatial join
-    gdf["uprn_geometry"] = gdf.geometry
+    # Creates a copy of the building geometry column to keep after the spatial join
     buildings_gdf["building_geometry"] = buildings_gdf["geometry"]
 
-    # Spatial join to add building footprints geometry to the UPRN geodataframe
-    # based on whether the UPRN point is within the building footprint polygon
-    gdf = gdf.sjoin(
-        buildings_gdf[["geometry", "building_geometry"]],
+    # Extend the UPRN GeoDataFrame with building footprints geometry using id_col
+    gdf = gdf.merge(
+        buildings_gdf[[id_col, "building_geometry"]],
         how="left",
-        predicate="within",
-    ).drop(columns=["index_right"])
-
+        on=id_col,
+    )
     return gdf
 
 
@@ -158,7 +153,7 @@ def identify_dict_most_suitable_tech(
 
 def identify_df_building_most_suitable_tech(
     tech_gdf: gpd.GeoDataFrame, id_col: str
-) -> pl.DataFrame:
+) -> pd.DataFrame:
     """
     Assigns a single most suitable tech solution to each building footprint.
 
@@ -181,7 +176,7 @@ def identify_df_building_most_suitable_tech(
     id_col (str): The name of the column in `tech_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
 
     Returns:
-        pl.DataFrame: Buildings with a single assigned technology.
+        pd.DataFrame: Buildings with a single assigned technology.
 
     Raises:
         ValueError: If `tech_gdf` is missing any of the required columns.
@@ -268,8 +263,8 @@ def identify_df_building_most_suitable_tech(
         [buildings_with_multiple_solutions_df, buildings_with_single_solution_df]
     )
 
-    # Convert back to GeoDataFrame
-    solutions_per_footprint_df = solutions_per_footprint_df
+    # Convert back to Pandas df to be merged to GeoDataFrames in the next steps of the pipeline
+    solutions_per_footprint_df = solutions_per_footprint_df.to_pandas()
 
     return solutions_per_footprint_df
 
@@ -356,6 +351,7 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
 def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     local_authorities: str,
     buildings_gdf: gpd.GeoDataFrame,
+    id_col: str,
     uprns_gdf: gpd.GeoDataFrame,
     save: bool,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
@@ -367,6 +363,7 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     Args:
         local_authorities (str): Local authority or authorities.
         buildings_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
+        id_col (str): The name of the column in `buildings_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
         save (bool): Whether to save outputs to S3.
 
@@ -376,10 +373,10 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
             - GeoDataFrame with building footprint-level most suitable tech.
     """
     uprns_gdf = extend_gdf_building_footprints(
-        gdf=uprns_gdf, buildings_gdf=buildings_gdf
+        gdf=uprns_gdf, buildings_gdf=buildings_gdf, id_col=id_col
     )
 
-    print("Number of building IDs: ", uprns_gdf["ID"].nunique())
+    print("Number of building IDs: ", uprns_gdf[id_col].nunique())
     print("Number of building geometries: ", uprns_gdf["building_geometry"].nunique())
 
     print(
@@ -387,10 +384,15 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
         len(uprns_gdf[uprns_gdf["building_geometry"].isnull()]),
     )
     print(
+        "Number of UPRNs without building ID: ",
+        len(uprns_gdf[uprns_gdf[id_col].isnull()]),
+    )
+    print(
         "Number of UPRNs with ID but no building geometry: ",
         len(
             uprns_gdf[
-                (uprns_gdf["building_geometry"].isnull()) & (uprns_gdf["ID"].notnull())
+                (uprns_gdf["building_geometry"].isnull())
+                & (uprns_gdf[id_col].notnull())
             ]
         ),
     )
@@ -411,19 +413,19 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
 
     # Identify set of most suitable tech per building
     solutions_per_footprint_df = identify_df_building_most_suitable_tech(
-        uprns_gdf, "ID"
+        uprns_gdf, id_col
     )
 
     # Re-assign most suitable tech to each UPRN based on decision for each building
     uprns_gdf = uprns_gdf.drop(columns=["assigned_tech"]).merge(
-        solutions_per_footprint_df[["ID", "assigned_tech"]],
-        on="ID",
+        solutions_per_footprint_df[[id_col, "assigned_tech"]],
+        on=id_col,
         how="left",
     )
 
     solutions_per_footprint_gdf = solutions_per_footprint_df.merge(
-        buildings_gdf[["ID", "geometry"]],
-        on="ID",
+        buildings_gdf[[id_col, "geometry"]],
+        on=id_col,
         how="left",
     )
 
@@ -431,7 +433,7 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
         solutions_per_footprint_gdf, geometry="geometry", crs="EPSG:27700"
     )
 
-    print("Number of building IDS ", solutions_per_footprint_gdf["ID"].nunique())
+    print("Number of building IDS ", solutions_per_footprint_gdf[id_col].nunique())
     print(
         "Number of building geometries: ",
         solutions_per_footprint_gdf.geometry.nunique(),
@@ -478,6 +480,7 @@ if __name__ == "__main__":
     identify_gdf_tuple_most_suitable_tech_uprn_and_building(
         local_authorities=local_authorities,
         buildings_gdf=buildings_gdf,
+        id_col="ID",
         uprns_gdf=uprns_with_features_gdf,
         save=args.save,
     )
