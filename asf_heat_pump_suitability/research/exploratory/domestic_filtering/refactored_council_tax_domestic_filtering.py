@@ -3,8 +3,10 @@ from typing import List
 import geopandas as gpd
 import pandas as pd
 import polars as pl
+import numpy as np
+import shapely
 
-from sklearn.metrics import roc_auc_score, roc_curve
+from sklearn.metrics import roc_auc_score, roc_curve, matthews_corrcoef
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import (
@@ -30,6 +32,7 @@ def transform_gdf_council_tax(df: pd.DataFrame) -> gpd.GeoDataFrame:
     """
     # Remove empty UPRN and coordinate rows
     df = df[(df["UPRN"] != "") & (df["EASTING"] != "") & (df["NORTHING"] != "")]
+    df["UPRN"] = df["UPRN"].astype("int64")
 
     return gpd.GeoDataFrame(
         df,
@@ -179,51 +182,68 @@ def label_gdf_buildings_domestic_bool(
     uprn_gdf: gpd.GeoDataFrame,
     council_tax_gdf: gpd.GeoDataFrame,
     pipeline_gdf: gpd.GeoDataFrame,
+    boundary: shapely.Polygon | shapely.MultiPolygon,
 ):
+    bounded_buildings_gdf = buildings_gdf[
+        buildings_gdf["geometry"].intersects(boundary)
+    ]
+
     # Label actual domestic buildings (buildings containing at least one domestic UPRN)
-    labelled_gdf = buildings_gdf.sjoin(
-        council_tax_gdf[["UPRN", "geometry"]], how="left", predicate="contains"
+    actual_domestic_df = (
+        bounded_buildings_gdf.sjoin(
+            council_tax_gdf[["UPRN", "geometry"]], how="inner", predicate="contains"
+        )
+        .drop(columns="index_right")
+        .groupby("ID")
+        .agg(actual_UPRN_count=("UPRN", "count"))
+        .reset_index()
     )
-    labelled_gdf["actual_domestic"] = ~labelled_gdf["UPRN"].isna()
 
     # Label current pipeline predictions for domestic buildings
-    labelled_gdf = labelled_gdf.drop(columns=["UPRN", "index_right"]).sjoin(
-        pipeline_gdf[["UPRN", "geometry"]], how="left", predicate="contains"
-    )
-    labelled_gdf["predicted_domestic"] = ~labelled_gdf["UPRN"].isna()
-
-    # Join all UPRNs to buildings
-    labelled_gdf = (
-        labelled_gdf.drop(columns=["UPRN", "index_right"])
-        .sjoin(uprn_gdf[["UPRN", "geometry"]], how="left", predicate="contains")
+    predicted_domestic_df = (
+        bounded_buildings_gdf.sjoin(
+            pipeline_gdf[["UPRN", "geometry"]], how="inner", predicate="contains"
+        )
         .drop(columns="index_right")
+        .groupby("ID")
+        .agg(predicted_UPRN_count=("UPRN", "count"))
+        .reset_index()
+    )
+
+    # Join all UPRNs to buildings - retain only buildings with UPRNs
+    buildings_of_interest_df = (
+        (
+            bounded_buildings_gdf.sjoin(
+                uprn_gdf[["UPRN", "geometry"]], how="inner", predicate="contains"
+            )
+        )
+        .drop(columns="index_right")
+        .groupby("ID")
+        .agg(total_UPRN_count=("UPRN", "count"))
+        .reset_index()
     )
 
     # Get data per building
-    labelled_gdf = (
-        labelled_gdf.groupby("ID")
-        .agg(
-            actual_UPRN_count=("actual_domestic", "count"),
-            predicted_UPRN_count=("predicted_domestic", "count"),
-            total_UPRN_count=("UPRN", "nunique"),
-            actual_domestic=(
-                "actual_domestic",
-                "max",
-            ),  # Retain 1 for domestic buildings and 0 for non-domestic
-            predicted_domestic=("predicted_domestic", "max"),
-            geometry=("geometry", "first"),
-        )
-        .drop_duplicates(subset="ID")
-        .astype(
-            {
-                # Cast 0 and 1 values to boolean
-                "actual_domestic": "bool",
-                "predicted_domestic": "bool",
-            }
-        )
+    labelled_df = (
+        buildings_of_interest_df.merge(actual_domestic_df, how="left", on="ID")
+        .merge(predicted_domestic_df, how="left", on="ID")
+        .fillna({"actual_UPRN_count": 0, "predicted_UPRN_count": 0})
     )
 
-    return gpd.GeoDataFrame(labelled_gdf, geometry="geometry", crs="EPSG:27700")
+    labelled_df["actual_domestic"] = np.where(
+        labelled_df["actual_UPRN_count"] > 0, True, False
+    )
+    labelled_df["predicted_domestic"] = np.where(
+        labelled_df["predicted_UPRN_count"] > 0, True, False
+    )
+
+    return gpd.GeoDataFrame(
+        labelled_df.merge(
+            bounded_buildings_gdf[["ID", "geometry"]], how="inner", on="ID"
+        ),
+        geometry="geometry",
+        crs="EPSG:27700",
+    )
 
 
 def generate_gdf_features_for_filtering(
@@ -244,7 +264,8 @@ def generate_gdf_features_for_filtering(
         labelled_gdf["footprint_area_m2"] / labelled_gdf["total_UPRN_count"]
     )
 
-    return labelled_gdf
+    print("Replacing infinite value features with -100...")
+    return labelled_gdf.replace(np.inf, -100)
 
 
 def generate_df_threshold_evaluation(labelled_df: pl.DataFrame, features: List[str]):
@@ -269,23 +290,33 @@ def generate_df_threshold_evaluation(labelled_df: pl.DataFrame, features: List[s
         by="youdens", descending=True
     )
 
+    n_removed_mislabeled_buildings = {
+        threshold: labelled_df.filter(
+            (pl.col(best_feature) < threshold),
+            ~pl.col("actual_domestic"),
+            pl.col("predicted_domestic"),
+        ).height
+        for threshold in youdens_df["threshold"]
+    }
+
     n_removed_mislabeled_buildings_df = pl.DataFrame(
         {
-            threshold: labelled_df.filter(
-                (pl.col(best_feature) < threshold),
-                ~pl.col("actual_domestic"),
-                pl.col("predicted_domestic"),
-            ).height
-            for threshold in youdens_df["threshold"]
+            "threshold": n_removed_mislabeled_buildings.keys(),
+            "N_removed_mislabeled_domestic": n_removed_mislabeled_buildings.values(),
         }
     )
 
+    n_removed_true_domestic_buildings = {
+        threshold: labelled_df.filter(
+            (pl.col(best_feature) < threshold), pl.col("actual_domestic")
+        ).height
+        for threshold in youdens_df["threshold"]
+    }
+
     n_removed_true_domestic_buildings_df = pl.DataFrame(
         {
-            threshold: labelled_df.filter(
-                (pl.col(best_feature) < threshold), pl.col("actual_domestic")
-            ).height
-            for threshold in youdens_df["threshold"]
+            "threshold": n_removed_true_domestic_buildings.keys(),
+            "N_removed_true_domestic": n_removed_true_domestic_buildings.values(),
         }
     )
 
@@ -365,6 +396,7 @@ if __name__ == "__main__":
         uprn_gdf=uprns_gdf,
         council_tax_gdf=council_tax_uprns_gdf,
         pipeline_gdf=pipeline_domestic_uprns_gdf,
+        boundary=plymouth_boundary,
     )
 
     # Generate a set of basic features
