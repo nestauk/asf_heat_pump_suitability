@@ -438,7 +438,7 @@ def load_transform_anchor_property_gdfs(
     anchor_categories=ANCHOR_CATEGORIES,
 ) -> gpd.GeoDataFrame:
     """
-    Load data from POI and important buildings lists, select buildings using anchor proerty categories, and combine the resultant dataframes
+    Load data from POI and important buildings lists, select buildings using anchor property categories, and combine the resultant dataframes
 
     Args:
         buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
