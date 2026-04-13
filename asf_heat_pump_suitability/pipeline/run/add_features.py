@@ -266,7 +266,6 @@ if __name__ == "__main__":
 
     del (
         land_parcels_gdf,
-        buildings_gdf,
         intersection_gdf,
         outdoor_space_gdf,
         uprns_space_df,
