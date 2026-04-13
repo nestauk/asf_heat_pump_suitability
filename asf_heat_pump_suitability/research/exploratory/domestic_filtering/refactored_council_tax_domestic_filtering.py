@@ -1,15 +1,20 @@
+from typing import List
+
 import geopandas as gpd
 import pandas as pd
 import polars as pl
+
+from sklearn.metrics import roc_auc_score, roc_curve
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import (
     base_getters,
     load_tree_input,
     load_boundaries,
+    load_geodata,
 )
 from asf_heat_pump_suitability.pipeline.transform import uprns
-from asf_heat_pump_suitability.utils import mapping_utils
+from asf_heat_pump_suitability.utils import mapping_utils, plotting_utils
 
 
 def transform_gdf_council_tax(df: pd.DataFrame) -> gpd.GeoDataFrame:
@@ -77,10 +82,11 @@ def calculate_dict_building_diffs_per_dataset(
     buildings_gdf: gpd.GeoDataFrame,
 ):
     council_buildings_gdf = buildings_gdf.sjoin(
-        council_tax_gdf, how="inner", predicate="within"
+        council_tax_gdf, how="inner", predicate="contains"
     ).drop(columns="index_right")
+
     pipeline_buildings_gdf = buildings_gdf.sjoin(
-        pipeline_gdf, how="inner", predicate="within"
+        pipeline_gdf, how="inner", predicate="contains"
     ).drop(columns="index_right")
 
     council_buildings = set(council_buildings_gdf["ID"])
@@ -123,10 +129,10 @@ def generate_gdf_erroneous_pipeline_buildings(
     buildings_gdf: gpd.GeoDataFrame,
 ):
     council_buildings_gdf = buildings_gdf.sjoin(
-        council_tax_gdf, how="inner", predicate="within"
+        council_tax_gdf, how="inner", predicate="contains"
     ).drop(columns="index_right")
     pipeline_buildings_gdf = buildings_gdf.sjoin(
-        pipeline_gdf, how="inner", predicate="within"
+        pipeline_gdf, how="inner", predicate="contains"
     ).drop(columns="index_right")
 
     council_buildings = set(council_buildings_gdf["ID"])
@@ -143,12 +149,161 @@ def generate_gdf_erroneous_pipeline_buildings(
     )
 
 
-if __name__ == "__main__":
+def generate_gdf_mixed_use_buildings(
+    council_tax_gdf: gpd.GeoDataFrame,
+    poi_gdf: gpd.GeoDataFrame,
+    important_buildings_gdf: gpd.GeoDataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
+):
+    council_buildings_gdf = buildings_gdf.sjoin(
+        council_tax_gdf, how="inner", predicate="contains"
+    ).drop(columns="index_right")
 
+    mixed_use = list(
+        council_buildings_gdf.sjoin(poi_gdf, how="inner", predicate="intersects").drop(
+            columns="index_right"
+        )
+    )
+
+    mixed_use.append(
+        council_buildings_gdf.sjoin(
+            important_buildings_gdf, how="inner", predicate="intersects"
+        ).drop(columns="index_right")
+    )
+
+    return pd.concat(mixed_use)
+
+
+def label_gdf_buildings_domestic_bool(
+    buildings_gdf: gpd.GeoDataFrame,
+    uprn_gdf: gpd.GeoDataFrame,
+    council_tax_gdf: gpd.GeoDataFrame,
+    pipeline_gdf: gpd.GeoDataFrame,
+):
+    # Label actual domestic buildings (buildings containing at least one domestic UPRN)
+    labelled_gdf = buildings_gdf.sjoin(
+        council_tax_gdf[["UPRN", "geometry"]], how="left", predicate="contains"
+    )
+    labelled_gdf["actual_domestic"] = ~labelled_gdf["UPRN"].isna()
+
+    # Label current pipeline predictions for domestic buildings
+    labelled_gdf = labelled_gdf.drop(columns=["UPRN", "index_right"]).sjoin(
+        pipeline_gdf[["UPRN", "geometry"]], how="left", predicate="contains"
+    )
+    labelled_gdf["predicted_domestic"] = ~labelled_gdf["UPRN"].isna()
+
+    # Join all UPRNs to buildings
+    labelled_gdf = (
+        labelled_gdf.drop(columns=["UPRN", "index_right"])
+        .sjoin(uprn_gdf[["UPRN", "geometry"]], how="left", predicate="contains")
+        .drop(columns="index_right")
+    )
+
+    # Get data per building
+    labelled_gdf = (
+        labelled_gdf.groupby("ID")
+        .agg(
+            actual_UPRN_count=("actual_domestic", "count"),
+            predicted_UPRN_count=("predicted_domestic", "count"),
+            total_UPRN_count=("UPRN", "nunique"),
+            actual_domestic=(
+                "actual_domestic",
+                "max",
+            ),  # Retain 1 for domestic buildings and 0 for non-domestic
+            predicted_domestic=("predicted_domestic", "max"),
+            geometry=("geometry", "first"),
+        )
+        .drop_duplicates(subset="ID")
+        .astype(
+            {
+                # Cast 0 and 1 values to boolean
+                "actual_domestic": "bool",
+                "predicted_domestic": "bool",
+            }
+        )
+    )
+
+    return gpd.GeoDataFrame(labelled_gdf, geometry="geometry", crs="EPSG:27700")
+
+
+def generate_gdf_features_for_filtering(
+    labelled_gdf,
+):
+    # Building features
+    labelled_gdf["footprint_area_m2"] = labelled_gdf.area
+    labelled_gdf["building_perimeter_m"] = labelled_gdf.length
+
+    # UPRN density measures
+    labelled_gdf["m2_per_actual_UPRN"] = (
+        labelled_gdf["footprint_area_m2"] / labelled_gdf["actual_UPRN_count"]
+    )
+    labelled_gdf["m2_per_predicted_UPRN"] = (
+        labelled_gdf["footprint_area_m2"] / labelled_gdf["predicted_UPRN_count"]
+    )
+    labelled_gdf["m2_per_total_UPRN"] = (
+        labelled_gdf["footprint_area_m2"] / labelled_gdf["total_UPRN_count"]
+    )
+
+    return labelled_gdf
+
+
+def generate_df_threshold_evaluation(labelled_df: pl.DataFrame, features: List[str]):
+
+    # Find best feature for thresholding from ROC AUC score
+    scores = {
+        feature: roc_auc_score(labelled_df["actual_domestic"], labelled_df[feature])
+        for feature in features
+    }
+    print("ROC AUC scores for each feature:")
+    print(pl.DataFrame(scores))
+    best_feature = max(scores, key=scores.get)
+    print(f"\nBest ROC AUC score: {max(scores.values())}\nBest feature: {best_feature}")
+
+    # Calculate Youden's J statistic for the selected feature
+    # sensitivity + specificity - 1 = TPR - FPR
+    fpr, tpr, thresholds = roc_curve(
+        y_true=labelled_df["actual_domestic"], y_score=labelled_df[best_feature]
+    )
+
+    youdens_df = pl.DataFrame({"youdens": tpr - fpr, "threshold": thresholds}).sort(
+        by="youdens", descending=True
+    )
+
+    n_removed_mislabeled_buildings_df = pl.DataFrame(
+        {
+            threshold: labelled_df.filter(
+                (pl.col(best_feature) < threshold),
+                ~pl.col("actual_domestic"),
+                pl.col("predicted_domestic"),
+            ).height
+            for threshold in youdens_df["threshold"]
+        }
+    )
+
+    n_removed_true_domestic_buildings_df = pl.DataFrame(
+        {
+            threshold: labelled_df.filter(
+                (pl.col(best_feature) < threshold), pl.col("actual_domestic")
+            ).height
+            for threshold in youdens_df["threshold"]
+        }
+    )
+
+    return youdens_df.join(
+        n_removed_mislabeled_buildings_df, how="left", on="threshold"
+    ).join(n_removed_true_domestic_buildings_df, how="left", on="threshold")
+
+
+if __name__ == "__main__":
+    # ------------------------------------------------------ #
     # LOAD DATASETS FOR ANALYSIS
+
+    # Council tax - ground truth
     raw_council_tax_uprns_gdf = pd.read_csv(
         config["data"]["geodata"]["council_tax_data"]["plymouth"]
     )
+
+    # Pipeline outputs
     pipeline_domestic_uprns_df = base_getters.load_df_from_s3(
         config["data"]["processed"]["plymouth_residential_uprns"]
     )
@@ -156,13 +311,26 @@ if __name__ == "__main__":
         pipeline_domestic_uprns_df
     )
 
+    # All building footprints
     buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
         layer="building", grid_squares="SX"
     )
+
+    # Non-domestic dataframes
+    # important_buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(layer="important_building", grid_squares="SX")
+    # poi_gdf = gpd.read_file()
+
+    # Plymouth boundary
     plymouth_boundary = load_boundaries.load_gdf_local_authority_boundaries(
         select_las="Plymouth"
     )["geometry"].values[0]
 
+    # All UPRNs with geometries
+    uprns_df = load_geodata.load_df_osopen_uprn()
+    uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df)
+
+    # ------------------------------------------------------ #
+    # ANALYSIS
     n_council_records = len(raw_council_tax_uprns_gdf)
     council_tax_uprns_gdf = transform_gdf_council_tax(raw_council_tax_uprns_gdf)
 
@@ -186,4 +354,37 @@ if __name__ == "__main__":
         boundary=plymouth_boundary,
         popup_col="UPRN_count",
         save_as="plymouth_false_positive_domestic_buildings",
+    )
+
+    # ------------------------------------------------------ #
+    # FIND FEATURE AND THRESHOLD TO IMPROVE FILTERING
+
+    # Label buildings with domestic / non-domestic flag
+    labelled_gdf = label_gdf_buildings_domestic_bool(
+        buildings_gdf=buildings_gdf,
+        uprn_gdf=uprns_gdf,
+        council_tax_gdf=council_tax_uprns_gdf,
+        pipeline_gdf=pipeline_domestic_uprns_gdf,
+    )
+
+    # Generate a set of basic features
+    labelled_gdf = generate_gdf_features_for_filtering(labelled_gdf)
+    labelled_df = pl.from_pandas(labelled_gdf.drop(columns="geometry"))
+    features = [
+        "total_UPRN_count",
+        "predicted_UPRN_count",
+        "footprint_area_m2",
+        "building_perimeter_m",
+        "m2_per_predicted_UPRN",
+        "m2_per_total_UPRN",
+    ]
+
+    plotting_utils.plot_feature_distribution_binary_classes(
+        df=labelled_df,
+        features=features,
+        target="actual_domestic",
+        save_as="plymouth_feature_distribution_for_domestic_vs_non_domestic_buildings",
+    )
+    results_df = generate_df_threshold_evaluation(
+        labelled_df=labelled_df, features=features
     )
