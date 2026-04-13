@@ -40,83 +40,6 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def process_df_epc_data(epc_df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Process EPC data to get relevant features for joining to UPRNs.
-
-    Args:
-        epc_df (pl.DataFrame): raw EPC dataframe
-    Returns:
-        pl.DataFrame: processed EPC dataframe with relevant features for joining to UPRNs
-    """
-    keep_cols = [
-        "UPRN",
-        "PROPERTY_TYPE",
-        "BUILT_FORM",
-        "TENURE",
-        "CURRENT_ENERGY_RATING",
-    ]
-
-    epc_df = (
-        raw_epc_df.select(keep_cols)
-        .with_columns(
-            # Remove any invalid UPRNs (i.e. those IDs which are generated in EPC preprocessing generated from concatenating building ref number and address)
-            # These are not true UPRNs that can be used in joins across other datasets
-            pl.col("UPRN")
-            .cast(pl.Float64, strict=False)
-            .cast(pl.Int64)
-            .alias("UPRN")
-        )
-        .drop_nulls(subset="UPRN")
-        .with_columns(
-            pl.col("PROPERTY_TYPE").cast(pl.String),
-            pl.col("BUILT_FORM").cast(pl.String),
-        )
-        .with_columns(
-            # Reassign enclosed terrace categories
-            pl.when(pl.col("BUILT_FORM") == "Enclosed Mid-Terrace")
-            .then(pl.lit("Mid-Terrace"))
-            .when(pl.col("BUILT_FORM") == "Enclosed End-Terrace")
-            .then(pl.lit("End-Terrace"))
-            .when(pl.col("BUILT_FORM").str.to_lowercase().is_in(["", "unknown"]))
-            .then(None)
-            .otherwise(pl.col("BUILT_FORM"))
-            .alias("ATTACHMENT")
-        )
-        .with_columns(
-            pl.col("TENURE")
-            .str.to_lowercase()
-            .replace({"": None, "unknown": None})
-            .alias("TENURE")
-        )
-    )
-
-    return epc_df
-
-
-def join_df_epc_to_uprns(
-    uprns_gdf: gpd.GeoDataFrame, epc_df: pl.DataFrame
-) -> gpd.GeoDataFrame:
-    """
-    Join processed EPC data to UPRN geodataframe.
-    Args:
-        uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs with geometry
-        epc_df (pl.DataFrame): processed EPC dataframe with relevant features for joining to UPRNs
-    Returns:
-        gpd.GeoDataFrame: UPRN geodataframe with EPC features joined
-    """
-
-    keep_cols = ["UPRN", "ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
-    uprns_gdf = uprns_gdf.merge(
-        epc_df.select(keep_cols).to_pandas(), how="left", on="UPRN"
-    )
-
-    # Only fill with Unknown for cols in keep_cols
-    uprns_gdf[keep_cols] = uprns_gdf[keep_cols].fillna("Unknown")
-
-    return uprns_gdf
-
-
 def filter_df_uprns_to_opportunity_areas(
     uprns_gdf: gpd.GeoDataFrame, areas_gdf: gpd.GeoDataFrame
 ) -> pl.DataFrame:
@@ -133,69 +56,28 @@ def filter_df_uprns_to_opportunity_areas(
         uprns_gdf.sjoin(
             areas_gdf[["cluster_id", "geometry"]], how="right", predicate="within"
         ).drop(columns=["index_left", "geometry"])
-    ).with_columns(
-        # Change attachment to flat if it is one
-        pl.when(pl.col("property_type_flat"))
-        .then(pl.lit("Flat"))
-        .otherwise(pl.col("ATTACHMENT"))
-        .alias("ATTACHMENT")
     )
 
     return opportunity_areas_df
 
 
-def calculate_df_dummy_feature_value_counts_per_opportunity_area(
-    opportunity_areas_df: pl.DataFrame,
-) -> pl.DataFrame:
-    """
-    Calculate value counts per opportunity area for relevant features.
-
-    Args:
-        opportunity_areas_df (pl.DataFrame): dataframe of UPRNs within opportunity areas with relevant features
-    Returns:
-        pl.DataFrame: dataframe with value counts per opportunity area for relevant features
-    """
-    keep_cols = ["cluster_id", "UPRN", "ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
-    dummy_cols = ["ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
-
-    # Get total UPRNs per opportunity area
-    totals_df = opportunity_areas_df.group_by("cluster_id").agg(
-        pl.col("UPRN").count().alias("n_UPRNs")
-    )
-
-    # Get value counts per feature
-    opportunity_areas_df = (
-        opportunity_areas_df.select(keep_cols)
-        .to_dummies(columns=dummy_cols)
-        .group_by("cluster_id")
-        .agg(pl.all().sum())
-        .drop("UPRN")
-    )
-
-    # Join total UPRN counts onto value counts
-    opportunity_areas_df = totals_df.join(
-        opportunity_areas_df, how="left", on="cluster_id"
-    )
-
-    return opportunity_areas_df
-
-
-def create_df_remaining_features_per_opportunity_area(
+def extend_df_contextual_features(
     opportunity_areas_df: pl.DataFrame,
     uprns_gdf: gpd.GeoDataFrame,
 ) -> pl.DataFrame:
     """
-    Create dataframe with remaining features per opportunity area:
+    Extend opportunity areas dataframe with contextual features from UPRN geodataframe, including:
+    - property type (including flats)
+    - tenure
+    - EPC rating
     - Median garden size
     - HN zone flag
     - City centre flag
-    TODO Remaining features to be added in future iterations (now set to `Unknown`):
-        - number of listed buildings
-        - number of off-gas properties
-        - proximity to coastline
-        - proximity to anchor load
-        - conservation area flag
-
+    - number of listed buildings
+    - number of off-gas properties
+    - proximity to coastline
+    - proximity to anchor load
+    - conservation area flag
 
     Args:
         opportunity_areas_df (pl.DataFrame): dataframe with value counts per opportunity area for relevant features
@@ -211,45 +93,51 @@ def create_df_remaining_features_per_opportunity_area(
         ).drop(columns=["geometry"])
     )
 
-    # Average contigous outdoor space per opportunity area
-    median_outdoor_space = uprns_df.group_by("cluster_id").agg(
+    dummy_cols = ["ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
+    # Get value counts per feature
+    dummy_contextual_feat_df = (
+        uprns_df.select(dummy_cols + ["cluster_id", "UPRN"])
+        .to_dummies(columns=dummy_cols)
+        .group_by("cluster_id")
+        .agg(pl.all().sum())
+        .drop("UPRN")
+    )
+
+    opportunity_areas_df = opportunity_areas_df.join(
+        dummy_contextual_feat_df, how="left", on="cluster_id"
+    )
+
+    contextual_feat_clusters_df = uprns_df.group_by("cluster_id").agg(
+        # median_outdoor_space
         pl.col("max_contiguous_outdoor_space_area_m2")
         .median()
-        .alias("median_outdoor_space")
-    )
-
-    # Join outdoor space to opportunity areas
-    opportunity_areas_df = opportunity_areas_df.join(
-        median_outdoor_space, how="left", on="cluster_id"
-    )
-
-    # Create HN zone and city centre flags per opportunity area - if any UPRN within the area is in a HN zone or city centre, then the whole area is flagged as being in a HN zone or city centre
-    hnz_city_centre_flags = uprns_df.group_by("cluster_id").agg(
+        .alias("median_outdoor_space"),
+        # in_hn_zone flag
         pl.when(pl.col("in_hn_zone").any())
         .then(pl.lit("Yes"))
         .otherwise(pl.lit("No"))
         .alias("in_hn_zone"),
+        # in_city_centre flag
         pl.when(pl.col("in_city_centre").any())
         .then(pl.lit("Yes"))
         .otherwise(pl.lit("No"))
         .alias("in_city_centre"),
+        # n_uprns
+        pl.col("UPRN").count().alias("n_UPRNs"),
+        # n_uprns_listed_building
+        pl.col("in_listed_building").count().alias("n_uprns_listed_building"),
+        # n_uprns_off_gas
+        pl.col("off_gas").count().alias("n_uprns_off_gas"),
+        # near_coastline flag
+        pl.col("near_coastline").any().alias("near_coastline"),
+        # near_anchor_load flag
+        pl.col("near_anchor_load").any().alias("near_anchor_load"),
+        # in_conservation_area flag
+        pl.col("in_conservation_area").any().alias("in_conservation_area"),
     )
 
     opportunity_areas_df = opportunity_areas_df.join(
-        hnz_city_centre_flags, how="left", on="cluster_id"
-    )
-
-    # TODO add remaining features - the section below is temporary
-    new_cols = [
-        "n_uprns_listed_building",
-        "n_uprns_off_gas",
-        "near_coast_line",
-        "near_anchor_load",
-        "in_conservation_area",
-    ]
-
-    opportunity_areas_df = opportunity_areas_df.with_columns(
-        [pl.lit("Unknown").alias(col) for col in new_cols]
+        contextual_feat_clusters_df, how="left", on="cluster_id"
     )
 
     return opportunity_areas_df
@@ -263,49 +151,22 @@ if __name__ == "__main__":
 
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_residential_uprns_with_features.parquet"
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_with_features.parquet"
     )
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
 
-    print(f"Loading {local_authorities} HN zone and city centre information...")
-    hnz_df = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet"
-    )
-    hnz_gdf = uprns.generate_gdf_uprn_coords(hnz_df).to_crs(epsg=27700)
-
-    uprns_gdf = uprns_gdf.merge(
-        hnz_gdf[["UPRN", "in_hn_zone", "in_city_centre"]], how="left", on="UPRN"
-    )
-
-    print("Loading deduplicated EPC data...")
-    # TODO change code so that it defaults to getting latest data
-    raw_epc_df = pl.read_parquet(
-        "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
-    )
-
     print("Loading opportunity areas...")
     areas_gdf = gpd.read_file(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_tech_polygons_with_clusterID.geojson"
+        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_tech_polygons_with_clusterID.geojson"
     ).to_crs(epsg=27700)
-
-    print("Processing EPC data...")
-    epc_df = process_df_epc_data(raw_epc_df)
-
-    print("Joining EPC data to UPRNs...")
-    uprns_gdf = join_df_epc_to_uprns(uprns_gdf, epc_df)
 
     print("Filtering to opportunity areas...")
     opportunity_areas_df = filter_df_uprns_to_opportunity_areas(
         uprns_gdf=uprns_gdf, areas_gdf=areas_gdf
     )
 
-    print("Calculate value counts per feature...")
-    opportunity_areas_df = calculate_df_dummy_feature_value_counts_per_opportunity_area(
-        opportunity_areas_df
-    )
-
     print("Calculate remaining features per opportunity area...")
-    opportunity_areas_df = create_df_remaining_features_per_opportunity_area(
+    opportunity_areas_df = extend_df_contextual_features(
         opportunity_areas_df=opportunity_areas_df, uprns_gdf=uprns_gdf
     )
 
