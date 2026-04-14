@@ -52,6 +52,7 @@ TECH_CODES = {
 
 NETWORKED = TECH_TYPES["networked"]
 COMMUNAL = TECH_TYPES["communal"]
+
 TECH_MAPPING = {NETWORKED: COMMUNAL}
 
 
@@ -88,6 +89,7 @@ def generate_gdf_clusters(
     # Create Voronoi polygons and overlay physical barriers
     for boundary in boundary_gdf["geometry"].unique():
         voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
+
         cells_gdf = overlay_gdf_physical_barriers(
             voronoi_gdf=voronoi_gdf,
             tech_gdf=tech_gdf,
@@ -120,6 +122,15 @@ def generate_gdf_clusters(
         .reset_index()[["assigned_tech", "geometry"]]
     )
 
+    # create an ID for each geometry that starts with the tech code and ends with a unique number, e.g. COM_1, COM_2, etc.
+    clusters_gdf["cluster_id"] = clusters_gdf.groupby("assigned_tech").cumcount()
+
+    clusters_gdf["cluster_id"] = (
+        clusters_gdf["assigned_tech"].map(TECH_CODES)
+        + "_"
+        + (clusters_gdf["cluster_id"] + 1).astype(str)
+    )
+
     return clusters_gdf
 
 
@@ -129,7 +140,7 @@ def extend_edges_gdf(
     spacing: float = 1.0,
 ) -> gpd.GeoDataFrame:
     """
-    Creates Voronoi polygons around a set of input polygons by extending interpolating additional points along polygon edges
+    Creates Voronoi polygons around a set of input polygons by interpolating additional points along polygon edges
     to extend Voronoi polygons from.
     Rewritten logic based on fieldmaps/edge-extender.
 
@@ -309,6 +320,8 @@ def load_tranform_gdf_linestring_barriers(
     """
     Load physical barriers with (Multi)LineString geometries - major roads and railways - for the specified grid squares. A
     buffer is added around each geometry to cover the width of the road / railway.
+
+    # TODO add road types to docstring
 
     Args:
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
@@ -528,14 +541,14 @@ def parse_arguments() -> argparse.Namespace:
     # TODO this is a placeholder and likely to change as the script develops
     parser.add_argument(
         "--tech_gdf",
-        help="Path to S3 file containing building footprints with their tech types assigned by the decision tree.",
+        help="Path to S3 geoparquet file containing building footprints with their tech types assigned by the decision tree.",
         type=str,
         required=True,
     )
 
     parser.add_argument(
         "--local_authorities",
-        help="Run script for either all of Great Britain; Plymouth only {plymouth}; or Plymouth and 4 similar local authorities {plymouth_similar_cities}; or Plymouth and 5 different local authorities {sampling_areas}. Default to all of GB",
+        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
         default="GB",
         required=False,
@@ -549,12 +562,11 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-
     args = parse_arguments()
     tech_gdf = (
-        gpd.read_file(args.tech_gdf).to_crs(config["constant"]["target_crs"])
-        # TODO rename column in original dataframe
-        .rename(columns={"1st_most_suitable_solution": "assigned_tech"})
+        gpd.read_parquet(args.tech_gdf)
+        .set_geometry("geometry")
+        .to_crs(config["constant"]["target_crs"])
     )
     grid_squares = config["constant"][args.local_authorities]["grid_squares"]
 
