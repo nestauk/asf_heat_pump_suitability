@@ -1,4 +1,5 @@
 from typing import List
+from collections import defaultdict
 
 import geopandas as gpd
 import pandas as pd
@@ -6,7 +7,7 @@ import polars as pl
 import numpy as np
 import shapely
 
-from sklearn.metrics import roc_auc_score, roc_curve, matthews_corrcoef
+from sklearn.metrics import matthews_corrcoef
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import (
@@ -32,7 +33,6 @@ def transform_gdf_council_tax(df: pd.DataFrame) -> gpd.GeoDataFrame:
     """
     # Remove empty UPRN and coordinate rows
     df = df[(df["UPRN"] != "") & (df["EASTING"] != "") & (df["NORTHING"] != "")]
-    df["UPRN"] = df["UPRN"].astype("int64")
 
     return gpd.GeoDataFrame(
         df,
@@ -269,60 +269,64 @@ def generate_gdf_features_for_filtering(
 
 
 def generate_df_threshold_evaluation(labelled_df: pl.DataFrame, features: List[str]):
+    scores = defaultdict(list)
+    y_true = labelled_df["actual_domestic"]
 
-    # Find best feature for thresholding from ROC AUC score
-    scores = {
-        feature: roc_auc_score(labelled_df["actual_domestic"], labelled_df[feature])
-        for feature in features
-    }
-    print("ROC AUC scores for each feature:")
-    print(pl.DataFrame(scores))
-    best_feature = max(scores, key=scores.get)
-    print(f"\nBest ROC AUC score: {max(scores.values())}\nBest feature: {best_feature}")
+    for feature in features:
+        max_mcc = -1.0  # MCC ranges from -1 to 1
+        best_threshold = None
 
-    # Calculate Youden's J statistic for the selected feature
-    # sensitivity + specificity - 1 = TPR - FPR
-    fpr, tpr, thresholds = roc_curve(
-        y_true=labelled_df["actual_domestic"], y_score=labelled_df[best_feature]
-    )
+        # Get unique values to test as candidate thresholds from percentile range
+        candidate_thresholds = np.percentile(
+            labelled_df.get_column(feature).drop_nulls(), range(1, 100)
+        )
 
-    youdens_df = pl.DataFrame({"youdens": tpr - fpr, "threshold": thresholds}).sort(
-        by="youdens", descending=True
-    )
+        for threshold in candidate_thresholds:
+            # Anything below the threshold is labelled domestic
+            y_pred = np.where(labelled_df[feature] <= threshold, 1, 0)
+            mcc = matthews_corrcoef(y_true, y_pred)
 
-    n_removed_mislabeled_buildings = {
-        threshold: labelled_df.filter(
-            (pl.col(best_feature) < threshold),
+            if mcc > max_mcc:
+                max_mcc = mcc
+                best_threshold = threshold
+
+        N_fp_before = labelled_df.filter(
+            ~pl.col("actual_domestic"), pl.col("predicted_domestic")
+        ).height
+
+        N_removed_false_positives = labelled_df.filter(
+            (pl.col(feature) > best_threshold),  # Above threshold i.e. not domestic
             ~pl.col("actual_domestic"),
             pl.col("predicted_domestic"),
         ).height
-        for threshold in youdens_df["threshold"]
-    }
 
-    n_removed_mislabeled_buildings_df = pl.DataFrame(
-        {
-            "threshold": n_removed_mislabeled_buildings.keys(),
-            "N_removed_mislabeled_domestic": n_removed_mislabeled_buildings.values(),
-        }
-    )
-
-    n_removed_true_domestic_buildings = {
-        threshold: labelled_df.filter(
-            (pl.col(best_feature) < threshold), pl.col("actual_domestic")
+        N_tp_before = labelled_df.filter(
+            pl.col("actual_domestic"), pl.col("predicted_domestic")
         ).height
-        for threshold in youdens_df["threshold"]
-    }
 
-    n_removed_true_domestic_buildings_df = pl.DataFrame(
-        {
-            "threshold": n_removed_true_domestic_buildings.keys(),
-            "N_removed_true_domestic": n_removed_true_domestic_buildings.values(),
-        }
-    )
+        N_removed_true_domestic = labelled_df.filter(
+            (pl.col(feature) > best_threshold),
+            pl.col("actual_domestic"),
+            pl.col("predicted_domestic"),
+        ).height
 
-    return youdens_df.join(
-        n_removed_mislabeled_buildings_df, how="left", on="threshold"
-    ).join(n_removed_true_domestic_buildings_df, how="left", on="threshold")
+        # Store the best result for this feature
+        scores["feature"].append(feature)
+        scores["best_threshold"].append(best_threshold)
+        scores["max_mcc"].append(max_mcc)
+        scores["N_removed_false_positives"].append(N_removed_false_positives)
+        scores["pc_removed_false_positives"].append(
+            N_removed_false_positives / N_fp_before * 100
+        )
+        scores["N_removed_true_positives"].append(N_removed_true_domestic)
+        scores["pc_removed_true_positives"].append(
+            N_removed_true_domestic / N_tp_before * 100
+        )
+
+    scores_df = pd.DataFrame(scores).sort_values(by="max_mcc", ascending=False)
+    print(scores_df)
+
+    return scores_df
 
 
 if __name__ == "__main__":
