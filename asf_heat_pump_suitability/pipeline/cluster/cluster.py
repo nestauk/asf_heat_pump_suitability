@@ -23,11 +23,6 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
-N_GSHP = config["constant"]["tech_types"]["N_GSHP"]
-COMMUNAL = config["constant"]["tech_types"]["communal"]
-INDIVIDUAL = config["constant"]["tech_types"]["individual"]
-HEAT_NETWORK = config["constant"]["tech_types"]["heat_networks"]
-
 ANCHOR_RADIUS = config["constant"]["anchor_radius"]
 
 ANCHOR_CATEGORIES = [
@@ -50,9 +45,14 @@ ANCHOR_CATEGORIES = [
     "Airport",
 ]
 
-TECH_MAPPING = {
-    N_GSHP: COMMUNAL,
+TECH_TYPES = config["constant"]["tech_types"]
+TECH_CODES = {
+    TECH_TYPES[k]: config["constant"]["tech_type_codes"][k] for k in TECH_TYPES
 }
+
+NETWORKED = TECH_TYPES["networked"]
+COMMUNAL = TECH_TYPES["communal"]
+TECH_MAPPING = {NETWORKED: COMMUNAL}
 
 
 def generate_gdf_clusters(
@@ -114,11 +114,13 @@ def generate_gdf_clusters(
     )
 
     # TODO add ID column for clusters
-    return (
+    clusters_gdf = (
         clusters_gdf.dissolve(by="assigned_tech")
         .explode()
         .reset_index()[["assigned_tech", "geometry"]]
     )
+
+    return clusters_gdf
 
 
 def extend_edges_gdf(
@@ -384,7 +386,7 @@ def load_transform_gdf_polygon_barriers(
 
 
 def reassign_gdf_communal_networked(
-    gdf: gpd.GeoDataFrame, n_gshp: str = N_GSHP, communal: str = COMMUNAL
+    gdf: gpd.GeoDataFrame, n_gshp: str = NETWORKED, communal: str = COMMUNAL
 ) -> gpd.GeoDataFrame:
     """
     Reassign technology type of Voronoi polygons labelled with 'Communal solutions' if they are in an island* with Voronoi polygons labelled
