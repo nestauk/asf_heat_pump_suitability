@@ -33,11 +33,67 @@ NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
 ]
 
 
+def generate_gdf_all_uprns_non_res(
+    important_building_gdf: gpd.GeoDataFrame,
+    poi_gdf: gpd.GeoDataFrame,
+    uprns_gdf: gpd.GeoDataFrame,
+    building_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """
+    Function to create dataframe of buildings from the important buildings with exactly 1 UPRN in them, and buildings from POI data with equal number of POI and UPRNs. These are unlikely to be residential buildings
+    Args:
+        important_building_gdf (gpd.GeoDataFrame): OS OpenMap Local important building footprints in area of interest
+        poi_gdf (gpd.GeoDataFrame): All Points of Interest geopoints in area of interest
+        uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries in area of interest
+        building_gdf (gpd.GeoDataFrame): all building footprints in area of interest
+    Returns:
+        gpd.GeoDataFrame: geometries of buildings which are in the important buildings list and have 1 UPRN in them, or in the POI list and have same number of UPRNs and POI
+    """
+    # join POI data to building footprints
+    poi_gdf = building_gdf.sjoin(poi_gdf, how="inner", predicate="contains").drop(
+        "index_right", axis=1
+    )
+
+    # count instances where multiple POI are located inside a building
+    poi_gdf = poi_gdf.groupby("geometry").size().reset_index(name="POI_count")
+
+    # join important buildings and POI with all UPRNs
+    important_building_gdf = important_building_gdf.sjoin(
+        uprns_gdf, how="left", predicate="contains"
+    ).drop("index_right", axis=1)
+
+    poi_gdf = poi_gdf.sjoin(uprns_gdf, how="left", predicate="contains").drop(
+        "index_right", axis=1
+    )
+
+    # find number of UPRNs per building for important buildings
+    important_building_gdf = (
+        important_building_gdf.groupby("geometry").size().reset_index(name="UPRN_count")
+    )
+    # find number of UPRNs per building for POI buildings
+    uprn_counts = poi_gdf.groupby("geometry").size().reset_index(name="UPRN_count")
+
+    # join uprn counts as a column to POI dataframe
+    poi_gdf = poi_gdf.sjoin(uprn_counts, how="left", predicate="intersects")
+
+    # select building footprints from important building data where UPRN count = 1
+    important_building_gdf = important_building_gdf.loc[
+        important_building_gdf["UPRN_count"] == 1
+    ]
+
+    # select building footprints from POI data where UPRN count = POI count
+    poi_gdf = poi_gdf.loc[poi_gdf["UPRN_count"] == poi_gdf["POI_count"]]
+
+    non_res_uprns = pd.concat([important_building_gdf, poi_gdf])
+
+    return non_res_uprns
+
+
 def generate_gdf_non_residential_buildings(
     important_building_gdf: gpd.GeoDataFrame,
     railway_station_gdf: gpd.GeoDataFrame,
+    non_domestic_poi_gdf: gpd.GeoDataFrame,
     poi_gdf: gpd.GeoDataFrame,
-    poi_unfiltered_gdf: gpd.GeoDataFrame,
     building_gdf: gpd.GeoDataFrame,
     uprns_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
@@ -49,8 +105,8 @@ def generate_gdf_non_residential_buildings(
     Args:
         important_building_gdf (gpd.GeoDataFrame): OS OpenMap Local important building footprints in area of interest
         railway_station_gdf (gpd.GeoDataFrame): OS OpenMap Local railway station point geometries in area of interest
-        poi_gdf (gpd.GeoDataFrame): non-domestic Points of Interest geopoints in area of interest
-        poi_unfiltered_gdf (gpd.GeoDataFrame): All Points of Interest geopoints in area of interest
+        non_domestic_poi_gdf (gpd.GeoDataFrame): non-domestic Points of Interest geopoints in area of interest, unlikely to be in mixed-use buildings
+        poi_gdf (gpd.GeoDataFrame): All Points of Interest geopoints in area of interest
         building_gdf (gpd.GeoDataFrame): all building footprints in area of interest
         uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries in area of interest
 
@@ -64,8 +120,8 @@ def generate_gdf_non_residential_buildings(
             {
                 important_building_gdf.crs,
                 railway_station_gdf.crs,
+                non_domestic_poi_gdf.crs,
                 poi_gdf.crs,
-                poi_unfiltered_gdf.crs,
                 building_gdf.crs,
                 uprns_gdf.crs,
             }
@@ -88,56 +144,35 @@ def generate_gdf_non_residential_buildings(
     exclude_buildings_gdf = important_building_gdf[
         important_building_gdf[col].isin(NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES)
     ]
-    poi_buildings_gdf = building_gdf.sjoin(poi_gdf, how="inner", predicate="contains")
-    poi_unfiltered_gdf = building_gdf.sjoin(
-        poi_unfiltered_gdf, how="inner", predicate="contains"
-    ).drop("index_right", axis=1)
+    non_domestic_poi_gdf = building_gdf.sjoin(
+        non_domestic_poi_gdf, how="inner", predicate="contains"
+    )
 
     # Get buildings which are railway stations (railway stations are only given as point geometries)
     railway_station_gdf = railway_station_gdf.sjoin(
         building_gdf, how="inner", predicate="within"
     )
 
-    exclude_buildings_gdf = pd.concat(
-        [
-            exclude_buildings_gdf[["geometry"]],
-            railway_station_gdf[["geometry"]],
-            poi_buildings_gdf[["geometry"]],
-        ]
-    )
-
     # creating list of buildings from all important buildings and POI data with exactly 1 UPRN in them
-
-    # join unfiltered important buildings and POI with all UPRNs
-    important_building_gdf = important_building_gdf.sjoin(
-        uprns_gdf, how="left", predicate="contains"
-    ).drop("index_right", axis=1)
-    poi_unfiltered_gdf = poi_unfiltered_gdf.sjoin(
-        uprns_gdf, how="left", predicate="contains"
-    ).drop("index_right", axis=1)
-
-    # find number of UPRNs per building
-    important_building_gdf = (
-        important_building_gdf.groupby("geometry").size().reset_index(name="UPRN_count")
+    all_uprns_non_res_gdf = generate_gdf_all_uprns_non_res(
+        important_building_gdf=important_building_gdf,
+        poi_gdf=poi_gdf,
+        uprns_gdf=uprns_gdf,
     )
-    poi_unfiltered_gdf = (
-        poi_unfiltered_gdf.groupby("geometry").size().reset_index(name="UPRN_count")
-    )
-
-    # select buildings with 1 UPRN
-    important_building_gdf = important_building_gdf.loc[
-        important_building_gdf["UPRN_count"] == 1
-    ]
-    poi_unfiltered_gdf = poi_unfiltered_gdf.loc[poi_unfiltered_gdf["UPRN_count"] == 1]
 
     # add this to list of buildings to exclude
     exclude_buildings_gdf = pd.concat(
         [
             exclude_buildings_gdf[["geometry"]],
-            important_building_gdf[["geometry"]],
-            poi_unfiltered_gdf[["geometry"]],
+            railway_station_gdf[["geometry"]],
+            non_domestic_poi_gdf[["geometry"]],
+            all_uprns_non_res_gdf[["geometry"]],
         ]
     )
+
+    # Normalize to drop duplicate building footprints
+    exclude_buildings_gdf["geometry"] = exclude_buildings_gdf.normalize()
+    exclude_buildings_gdf = exclude_buildings_gdf.drop_duplicates(subset=["geometry"])
 
     # Get locations of UPRNs in domestic EPC
     include_uprns = uprns.load_set_valid_epc_uprns(epc_type="domestic")
@@ -153,6 +188,4 @@ def generate_gdf_non_residential_buildings(
         exclude_buildings_gdf["UPRN"].isnull()
     ].drop(columns=["UPRN", "index_right"])
 
-    # Normalize to drop duplicate building footprints
-    exclude_buildings_gdf["geometry"] = exclude_buildings_gdf.normalize()
-    return exclude_buildings_gdf.drop_duplicates()
+    return exclude_buildings_gdf

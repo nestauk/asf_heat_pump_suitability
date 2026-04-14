@@ -156,7 +156,7 @@ def map_dict_uprns_to_building_id(
     max_distance: float = 1,
 ) -> dict:
     """
-    Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within or intersect with.
+    Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within or intersect with, or the nearest building < 1m away if not located within a building.
 
     Args:
         uprns_gdf (gpd.GeoDataFrame): UPRNs with geospatial point data
@@ -164,7 +164,7 @@ def map_dict_uprns_to_building_id(
         id_col (str): name of building ID column in `buildings_gdf`
         predicate (str): how to join buildings and UPRNs. Can be one of: `intersects`, which joins UPRNs with building footprints
         they intersect with, or `within` which joins UPRNs to building footprints they are located within. Default `intersects`.
-        max_distance (float): max distance (metres) from which to join EPC UPRNs to a building footprint. Default 1m.
+        max_distance (float): max distance (metres) from which to join UPRNs to a building footprint. Default 1m.
 
     Returns:
         dict: mapping of UPRNs to building IDs
@@ -172,31 +172,29 @@ def map_dict_uprns_to_building_id(
     uprns_gdf = geo_utils.verify_gdf_crs(uprns_gdf)
     buildings_gdf = geo_utils.verify_gdf_crs(buildings_gdf)
 
-    epc_residential_uprns = load_set_valid_epc_uprns(epc_type="domestic")
+    # join domestic UPRNs to either the building footprint they are located within or building < max_distance (default 1m) away. They are usually inside a building.
 
-    # set of residential UPRNs not in the domestic epc list
-    uprns_non_epc_gdf = uprns_gdf[~(uprns_gdf["UPRN"].isin(epc_residential_uprns))]
+    # first find domestic UPRNs inside buildings to speed up computation time.
+    uprns_inside_buildings = uprns_gdf.sjoin(
+        buildings_gdf, how="inner", predicate="intersects"
+    )
 
-    # set of residential UPRNs in the domestic epc list
-    epc_gdf = uprns_gdf[(uprns_gdf["UPRN"].isin(epc_residential_uprns))]
+    # find domestic UPRNs not joined to a buildings.
+    unmatched_uprns = uprns_gdf[~uprns_gdf.index.isin(uprns_inside_buildings.index)]
 
-    # join non-epc domestic UPRNs to building footprints if they are located within them
-    uprns_non_epc_gdf = (
-        uprns_non_epc_gdf.sjoin(buildings_gdf, how="inner", predicate=predicate)
+    # for these UPRNs only, find nearest building footprint < max_distance (m) away
+    nearest_buildings_uprns = unmatched_uprns.sjoin_nearest(
+        buildings_gdf, how="inner", max_distance=max_distance
+    )
+
+    # combine the two gdfs and turn into a dictionary
+    uprns_building_dict = (
+        (pd.concat([uprns_inside_buildings, nearest_buildings_uprns]))
         .set_index("UPRN")
         .to_dict()[id_col]
     )
 
-    # join epc domestic UPRNs to nearest building footprint < max_distance (default 1m) away. They are usually inside a building
-    epc_gdf = (
-        epc_gdf.sjoin_nearest(buildings_gdf, how="inner", max_distance=max_distance)
-        .set_index("UPRN")
-        .to_dict()[id_col]
-    )
-
-    return gpd.GeoDataFrame(
-        pd.concat([uprns_non_epc_gdf, epc_gdf]), crs=config["constant"]["target_crs"]
-    )
+    return uprns_building_dict
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -263,11 +261,11 @@ if __name__ == "__main__":
         ).drop(columns="index_right")
 
     poi_gdf = load_tree_input.load_gdf_poi()
-    poi_unfiltered_gdf = poi.transform_gdf_poi(
+    poi_gdf = poi.transform_gdf_poi(
         poi_gdf,
         filter_categories=None,
     )
-    poi_gdf = poi.transform_gdf_poi(
+    non_domestic_poi_gdf = poi.transform_gdf_poi(
         poi_gdf,
         filter_categories=poi.load_set_non_domestic_poi_categories(),
     )
@@ -284,8 +282,8 @@ if __name__ == "__main__":
     non_residential_buildings_gdf = (
         non_residential_entities.generate_gdf_non_residential_buildings(
             **layers,
+            non_domestic_poi_gdf=non_domestic_poi_gdf,
             poi_gdf=poi_gdf,
-            poi_unfiltered_gdf=poi_unfiltered_gdf,
             uprns_gdf=uprns_gdf,
         )
     )
