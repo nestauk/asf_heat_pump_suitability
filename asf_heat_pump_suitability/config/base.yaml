@@ -8,7 +8,9 @@ data:
     grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
     # OpenMap Green space layers for certain grid squares
     grid_square_os_openmap_greenspace: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/{square}/{square}_{layer}.shp"
-    # OpenRoad Local road data
+    # OpenRoad Local road data for GB
+    gb_os_openroad: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/oproad_essh_gb/"
+    # OpenRoad Local road data for certain grid squares
     grid_square_os_openroad: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/oproad_essh_gb/{square}_RoadLink.shp"
     boundaries:
       # UK LA boundaries
