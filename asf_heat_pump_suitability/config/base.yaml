@@ -32,7 +32,7 @@ data:
   processed:
     non_domestic_poi_categories: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/non_residential_poi_categories.csv"
     plymouth_residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet"
-    poi_anchor_properties: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/poi_anchor_properties_gb.geojson"
+    poi_anchor_properties: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/expanded_poi_anchor_properties_gb.parquet"
 
 constant:
   plymouth:
