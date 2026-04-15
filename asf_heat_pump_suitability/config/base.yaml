@@ -34,6 +34,8 @@ data:
     plymouth_residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet"
 
 constant:
+  threshold:
+    m2_per_predicted_UPRN: 261.608136 # Identified by analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py
   plymouth:
     la_names: "Plymouth"
     grid_squares: "SX"
