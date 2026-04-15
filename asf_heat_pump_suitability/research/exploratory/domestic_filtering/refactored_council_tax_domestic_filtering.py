@@ -1,3 +1,6 @@
+from pathlib import Path
+import os
+
 from typing import List
 from collections import defaultdict
 
@@ -7,7 +10,10 @@ import polars as pl
 import numpy as np
 import shapely
 
+import matplotlib.pyplot as plt
+
 from sklearn.metrics import matthews_corrcoef
+from sklearn.tree import DecisionTreeClassifier, plot_tree
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import (
@@ -269,46 +275,49 @@ def generate_gdf_features_for_filtering(
 
 
 def generate_df_threshold_evaluation(labelled_df: pl.DataFrame, features: List[str]):
+    model_df = labelled_df.filter(pl.col("predicted_domestic")).to_pandas()
     scores = defaultdict(list)
-    y_true = labelled_df["actual_domestic"]
+    y_true = model_df["actual_domestic"]
 
     for feature in features:
-        max_mcc = -1.0  # MCC ranges from -1 to 1
+        max_mcc = -1  # MCC ranges from -1 to 1
         best_threshold = None
 
         # Get unique values to test as candidate thresholds from percentile range
-        candidate_thresholds = np.percentile(
-            labelled_df.get_column(feature).drop_nulls(), range(1, 100)
-        )
+        candidate_thresholds = np.percentile(model_df[feature].dropna(), range(1, 100))
 
         for threshold in candidate_thresholds:
             # Anything below the threshold is labelled domestic
-            y_pred = np.where(labelled_df[feature] <= threshold, 1, 0)
+            y_pred = np.where(model_df[feature] <= threshold, 1, 0)
             mcc = matthews_corrcoef(y_true, y_pred)
 
             if mcc > max_mcc:
                 max_mcc = mcc
                 best_threshold = threshold
 
-        N_fp_before = labelled_df.filter(
-            ~pl.col("actual_domestic"), pl.col("predicted_domestic")
-        ).height
+        N_fp_before = len(
+            model_df[(~model_df["actual_domestic"]) & (model_df["predicted_domestic"])]
+        )
 
-        N_removed_false_positives = labelled_df.filter(
-            (pl.col(feature) > best_threshold),  # Above threshold i.e. not domestic
-            ~pl.col("actual_domestic"),
-            pl.col("predicted_domestic"),
-        ).height
+        N_removed_false_positives = len(
+            model_df[
+                (model_df[feature] > best_threshold)
+                & (~model_df["actual_domestic"])
+                & (model_df["predicted_domestic"])
+            ]
+        )
 
-        N_tp_before = labelled_df.filter(
-            pl.col("actual_domestic"), pl.col("predicted_domestic")
-        ).height
+        N_tp_before = len(
+            model_df[(model_df["actual_domestic"]) & (model_df["predicted_domestic"])]
+        )
 
-        N_removed_true_domestic = labelled_df.filter(
-            (pl.col(feature) > best_threshold),
-            pl.col("actual_domestic"),
-            pl.col("predicted_domestic"),
-        ).height
+        N_removed_true_domestic = len(
+            model_df[
+                (model_df[feature] > best_threshold)
+                & (model_df["actual_domestic"])
+                & (model_df["predicted_domestic"])
+            ]
+        )
 
         # Store the best result for this feature
         scores["feature"].append(feature)
@@ -327,6 +336,68 @@ def generate_df_threshold_evaluation(labelled_df: pl.DataFrame, features: List[s
     print(scores_df)
 
     return scores_df
+
+
+def plot_folium_threshold_effect_on_labelling(boundary, labelled_gdf, threshold):
+    # Still erroneously labelled as domestic
+    still_mislabelled_gdf = labelled_gdf[
+        (labelled_gdf["m2_per_predicted_UPRN"] <= threshold)
+        & (~labelled_gdf["actual_domestic"])
+    ]
+
+    # Newly correctly removed
+    correctly_removed_gdf = labelled_gdf[
+        (labelled_gdf["m2_per_predicted_UPRN"] > threshold)
+        & (~labelled_gdf["actual_domestic"])
+    ]
+
+    # Newly falsely removed
+    falsely_removed_gdf = labelled_gdf[
+        (labelled_gdf["m2_per_predicted_UPRN"] > threshold)
+        & (labelled_gdf["actual_domestic"])
+    ]
+
+    gdfs = {
+        "False positives": still_mislabelled_gdf,
+        "True negatives": correctly_removed_gdf,
+        "False negatives": falsely_removed_gdf,
+    }
+
+    colours = {
+        "False positives": "red",
+        "True negatives": "yellow",
+        "False negatives": "blue",
+    }
+
+    mapping_utils.plot_folium_polygon_map(
+        boundary=boundary,
+        gdf_dict=gdfs,
+        colour_mapping=colours,
+        popup_col="m2_per_predicted_UPRN",
+        save_as="plymouth_threshold_effect_on_labelling",
+    )
+
+
+def train_model_decision_tree_classifier(
+    labelled_df: pl.DataFrame, features: List[str], save_as: str
+):
+    model_df = labelled_df.filter(pl.col("predicted_domestic")).to_pandas()
+    clf = DecisionTreeClassifier(max_leaf_nodes=5, class_weight=None)
+    clf.fit(model_df[features], model_df["actual_domestic"])
+    print(
+        f"Matthew's Correlation Coefficient of Decision Tree Classifier: {matthews_corrcoef(model_df['actual_domestic'], clf.predict(model_df[features]))}"
+    )
+
+    fig, ax = plt.subplots(figsize=(10, 10))
+    plot_tree(clf, feature_names=features, class_names=True, ax=ax)
+
+    if save_as:
+        PROJECT_DIR = Path(__file__).resolve().parents[2]
+        file_path = os.path.join(PROJECT_DIR, "outputs", "figures", f"{save_as}.png")
+        plt.savefig(file_path)
+    plt.close(fig)
+
+    return clf
 
 
 if __name__ == "__main__":
@@ -385,8 +456,9 @@ if __name__ == "__main__":
         buildings_gdf=buildings_gdf,
     )
     mapping_utils.plot_folium_polygon_map(
-        polygon_gdf=false_positives_gdf,
         boundary=plymouth_boundary,
+        gdf_dict={"False positives": false_positives_gdf},
+        colour_mapping={"False positives": "red"},
         popup_col="UPRN_count",
         save_as="plymouth_false_positive_domestic_buildings",
     )
@@ -423,4 +495,16 @@ if __name__ == "__main__":
     )
     results_df = generate_df_threshold_evaluation(
         labelled_df=labelled_df, features=features
+    )
+    threshold = results_df[results_df["max_mcc"] == results_df["max_mcc"].max()][
+        "best_threshold"
+    ].values[0]
+    plot_folium_threshold_effect_on_labelling(
+        boundary=plymouth_boundary, labelled_gdf=labelled_gdf, threshold=threshold
+    )
+
+    clf = train_model_decision_tree_classifier(
+        labelled_df=labelled_df,
+        features=features,
+        save_as="plymouth_decision_tree_nobalance",
     )
