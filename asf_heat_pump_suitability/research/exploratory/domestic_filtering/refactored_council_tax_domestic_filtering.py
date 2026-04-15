@@ -278,8 +278,7 @@ def generate_gdf_features_for_filtering(
     return labelled_gdf
 
 
-def generate_df_threshold_evaluation(labelled_df: pl.DataFrame, features: List[str]):
-    model_df = labelled_df.filter(pl.col("predicted_domestic")).to_pandas()
+def generate_df_threshold_evaluation(model_df: pd.DataFrame, features: List[str]):
     scores = defaultdict(list)
     y_true = model_df["actual_domestic"]
 
@@ -383,9 +382,8 @@ def plot_folium_threshold_effect_on_labelling(boundary, labelled_gdf, threshold)
 
 
 def train_model_decision_tree_classifier(
-    labelled_df: pl.DataFrame, features: List[str], save_as: str
+    model_df: pd.DataFrame, features: List[str], save_as: str
 ):
-    model_df = labelled_df.filter(pl.col("predicted_domestic")).to_pandas()
     clf = DecisionTreeClassifier(max_leaf_nodes=5, class_weight=None)
     clf.fit(model_df[features], model_df["actual_domestic"])
     print(
@@ -484,7 +482,7 @@ if __name__ == "__main__":
 
     # Generate a set of basic features
     features_gdf = generate_gdf_features_for_filtering(labelled_gdf)
-    features_df = pl.from_pandas(features_gdf.drop(columns="geometry"))
+    features_df = features_gdf.drop(columns="geometry")
     features = [
         "total_UPRN_count",
         "predicted_UPRN_count",
@@ -497,14 +495,14 @@ if __name__ == "__main__":
     ]
 
     plotting_utils.plot_feature_distribution_binary_classes(
-        df=features_df.filter(pl.col("predicted_domestic")),
+        df=pl.from_pandas(features_df),
         features=features,
         target="actual_domestic",
         save_as="plymouth_feature_distribution_for_domestic_vs_non_domestic_buildings",
         density=True,
     )
     results_df = generate_df_threshold_evaluation(
-        labelled_df=features_df, features=features
+        model_df=features_df, features=features
     )
     threshold = results_df[results_df["max_mcc"] == results_df["max_mcc"].max()][
         "best_threshold"
@@ -514,7 +512,7 @@ if __name__ == "__main__":
     )
 
     clf = train_model_decision_tree_classifier(
-        labelled_df=features_df,
+        model_df=features_df,
         features=features,
         save_as="plymouth_decision_tree_nobalance",
     )
