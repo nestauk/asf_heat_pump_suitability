@@ -341,29 +341,49 @@ def generate_df_threshold_evaluation(model_df: pd.DataFrame, features: List[str]
     return scores_df
 
 
-def plot_folium_threshold_effect_on_labelling(boundary, labelled_gdf, threshold):
+def plot_folium_threshold_effect_on_labelling(
+    boundary, labelled_gdf, threshold, uprns_gdf
+):
+    # Get domestic EPC UPRNs and join to the building footprints to identify buildings containing domestic EPC records
+    epc_uprns = uprns.load_set_valid_epc_uprns(epc_type="domestic")
+    epc_gdf = uprns_gdf[uprns_gdf["UPRN"].isin(epc_uprns)][["UPRN", "geometry"]]
+    labelled_gdf = (
+        labelled_gdf.sjoin(epc_gdf, how="left", predicate="contains")
+        .drop_duplicates(subset="ID")
+        .astype({"UPRN": "bool"})
+    )
+
+    # Remove buildings containing a domestic EPC as these will be retained regardless of threshold
+    labelled_gdf = labelled_gdf[~labelled_gdf["UPRN"]]
+
     # Still erroneously labelled as domestic
-    still_mislabelled_gdf = labelled_gdf[
+    false_positives_gdf = labelled_gdf[
+        # Below the non-domestic threshold - predicted domestic
         (labelled_gdf["m2_per_predicted_UPRN"] <= threshold)
+        # No council tax record - true not domestic
         & (~labelled_gdf["actual_domestic"])
     ]
 
     # Newly correctly removed
-    correctly_removed_gdf = labelled_gdf[
+    true_negatives_gdf = labelled_gdf[
+        # Reached the non-domestic threshold - predicted non-domestic
         (labelled_gdf["m2_per_predicted_UPRN"] > threshold)
+        # No council tax record - true not domestic
         & (~labelled_gdf["actual_domestic"])
     ]
 
     # Newly falsely removed
-    falsely_removed_gdf = labelled_gdf[
+    false_negatives_gdf = labelled_gdf[
+        # Reached the non-domestic threshold - predicted non-domestic
         (labelled_gdf["m2_per_predicted_UPRN"] > threshold)
+        # Council tax record - true domestic
         & (labelled_gdf["actual_domestic"])
     ]
 
     gdfs = {
-        "False positives": still_mislabelled_gdf,
-        "True negatives": correctly_removed_gdf,
-        "False negatives": falsely_removed_gdf,
+        "False positives": false_positives_gdf,
+        "True negatives": true_negatives_gdf,
+        "False negatives": false_negatives_gdf,
     }
 
     colours = {
@@ -477,7 +497,8 @@ if __name__ == "__main__":
         boundary=plymouth_boundary,
     )
 
-    # We're only interested in buildings we've predicted to be containing domestic because the threshold will be applied after the current pipeline
+    # We're only interested in buildings we've predicted to be containing domestic
+    # This is because threshold will be applied AFTER the current pipeline
     labelled_gdf = labelled_gdf[labelled_gdf["predicted_domestic"]].copy()
 
     # Generate a set of basic features
@@ -494,6 +515,7 @@ if __name__ == "__main__":
         "m2_per_total_UPRN",
     ]
 
+    # Plot distribution of the features for each class
     plotting_utils.plot_feature_distribution_binary_classes(
         df=pl.from_pandas(features_df),
         features=features,
@@ -501,16 +523,20 @@ if __name__ == "__main__":
         save_as="plymouth_feature_distribution_for_domestic_vs_non_domestic_buildings",
         density=True,
     )
-    results_df = generate_df_threshold_evaluation(
+
+    # Find best thresholds for each feature
+    thresholds_df = generate_df_threshold_evaluation(
         model_df=features_df, features=features
     )
-    threshold = results_df[results_df["max_mcc"] == results_df["max_mcc"].max()][
-        "best_threshold"
-    ].values[0]
+    threshold = thresholds_df[
+        thresholds_df["max_mcc"] == thresholds_df["max_mcc"].max()
+    ]["best_threshold"].values[0]
+
     plot_folium_threshold_effect_on_labelling(
         boundary=plymouth_boundary, labelled_gdf=labelled_gdf, threshold=threshold
     )
 
+    # Sense check results with basic decision tree classifier
     clf = train_model_decision_tree_classifier(
         model_df=features_df,
         features=features,
