@@ -316,8 +316,18 @@ def generate_df_threshold_evaluation(model_df: pd.DataFrame, features: List[str]
     return scores_df
 
 
+def extract_tuple_best_feature_threshold(df):
+    # Get best threshold overall
+    threshold = df[df["max_mcc"] == df["max_mcc"].max()]["best_threshold"].values[0]
+
+    # Get best feature
+    feature = df[df["max_mcc"] == df["max_mcc"].max()]["feature"].values[0]
+
+    return (feature, threshold)
+
+
 def plot_folium_threshold_effect_on_labelling(
-    boundary, labelled_gdf, threshold, uprns_gdf
+    boundary, labelled_gdf, feature, threshold, uprns_gdf
 ):
     # Get domestic EPC UPRNs and join to the building footprints to identify buildings containing domestic EPC records
     epc_uprns = uprns.load_set_valid_epc_uprns(epc_type="domestic")
@@ -334,7 +344,7 @@ def plot_folium_threshold_effect_on_labelling(
     # Still erroneously labelled as domestic
     false_positives_gdf = labelled_gdf[
         # Below the non-domestic threshold - predicted domestic
-        (labelled_gdf["m2_per_predicted_UPRN"] <= threshold)
+        (labelled_gdf[feature] <= threshold)
         # No council tax record - true not domestic
         & (~labelled_gdf["actual_domestic"])
     ]
@@ -342,7 +352,7 @@ def plot_folium_threshold_effect_on_labelling(
     # Newly correctly removed
     true_negatives_gdf = labelled_gdf[
         # Reached the non-domestic threshold - predicted non-domestic
-        (labelled_gdf["m2_per_predicted_UPRN"] > threshold)
+        (labelled_gdf[feature] > threshold)
         # No council tax record - true not domestic
         & (~labelled_gdf["actual_domestic"])
     ]
@@ -350,7 +360,7 @@ def plot_folium_threshold_effect_on_labelling(
     # Newly falsely removed
     false_negatives_gdf = labelled_gdf[
         # Reached the non-domestic threshold - predicted non-domestic
-        (labelled_gdf["m2_per_predicted_UPRN"] > threshold)
+        (labelled_gdf[feature] > threshold)
         # Council tax record - true domestic
         & (labelled_gdf["actual_domestic"])
     ]
@@ -371,7 +381,7 @@ def plot_folium_threshold_effect_on_labelling(
         boundary=boundary,
         gdf_dict=gdfs,
         colour_mapping=colours,
-        popup_col="m2_per_predicted_UPRN",
+        popup_col=feature,
         save_as="plymouth_threshold_effect_on_labelling",
     )
 
@@ -419,10 +429,6 @@ if __name__ == "__main__":
         layer="building", grid_squares="SX"
     )
 
-    # Non-domestic dataframes
-    # important_buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(layer="important_building", grid_squares="SX")
-    # poi_gdf = gpd.read_file()
-
     # Plymouth boundary
     plymouth_boundary = load_boundaries.load_gdf_local_authority_boundaries(
         select_las="Plymouth"
@@ -432,8 +438,9 @@ if __name__ == "__main__":
     uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df)
 
-    # ------------------------------------------------------ #
-    # ANALYSIS
+    # ------------------------------------------------------------------- #
+    # ANALYSIS - COMPARISON OF CURRENT PIPELINE WITH COUNCIL TAX DATA
+    # ------------------------------------------------------------------- #
     n_council_records = len(raw_council_tax_uprns_gdf)
     council_tax_uprns_gdf = transform_gdf_council_tax(raw_council_tax_uprns_gdf)
 
@@ -462,7 +469,7 @@ if __name__ == "__main__":
 
     # ------------------------------------------------------ #
     # FIND FEATURE AND THRESHOLD TO IMPROVE FILTERING
-
+    # ------------------------------------------------------ #
     # Label buildings with domestic / non-domestic flag
     labelled_gdf = label_gdf_buildings_domestic_bool(
         buildings_gdf=buildings_gdf,
@@ -503,12 +510,17 @@ if __name__ == "__main__":
     thresholds_df = generate_df_threshold_evaluation(
         model_df=features_df, features=features
     )
-    threshold = thresholds_df[
-        thresholds_df["max_mcc"] == thresholds_df["max_mcc"].max()
-    ]["best_threshold"].values[0]
 
+    # Get best feature and threshold
+    feature, threshold = extract_tuple_best_feature_threshold(thresholds_df)
+
+    # Plot effect of threshold on the final labelling in the pipeline
     plot_folium_threshold_effect_on_labelling(
-        boundary=plymouth_boundary, labelled_gdf=labelled_gdf, threshold=threshold
+        boundary=plymouth_boundary,
+        labelled_gdf=labelled_gdf,
+        feature=feature,
+        threshold=threshold,
+        uprns_gdf=uprns_gdf,
     )
 
     # Sense check results with basic decision tree classifier
