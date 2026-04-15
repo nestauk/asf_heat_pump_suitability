@@ -158,31 +158,6 @@ def generate_gdf_erroneous_pipeline_buildings(
     )
 
 
-def generate_gdf_mixed_use_buildings(
-    council_tax_gdf: gpd.GeoDataFrame,
-    poi_gdf: gpd.GeoDataFrame,
-    important_buildings_gdf: gpd.GeoDataFrame,
-    buildings_gdf: gpd.GeoDataFrame,
-):
-    council_buildings_gdf = buildings_gdf.sjoin(
-        council_tax_gdf, how="inner", predicate="contains"
-    ).drop(columns="index_right")
-
-    mixed_use = list(
-        council_buildings_gdf.sjoin(poi_gdf, how="inner", predicate="intersects").drop(
-            columns="index_right"
-        )
-    )
-
-    mixed_use.append(
-        council_buildings_gdf.sjoin(
-            important_buildings_gdf, how="inner", predicate="intersects"
-        ).drop(columns="index_right")
-    )
-
-    return pd.concat(mixed_use)
-
-
 def label_gdf_buildings_domestic_bool(
     buildings_gdf: gpd.GeoDataFrame,
     uprn_gdf: gpd.GeoDataFrame,
