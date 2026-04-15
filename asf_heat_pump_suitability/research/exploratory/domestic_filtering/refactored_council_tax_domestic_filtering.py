@@ -260,9 +260,14 @@ def generate_gdf_features_for_filtering(
     labelled_gdf["building_perimeter_m"] = labelled_gdf.length
 
     # UPRN density measures
-    labelled_gdf["m2_per_actual_UPRN"] = (
-        labelled_gdf["footprint_area_m2"] / labelled_gdf["actual_UPRN_count"]
+    labelled_gdf["predicted_UPRN_per_m2"] = (
+        labelled_gdf["predicted_UPRN_count"] / labelled_gdf["footprint_area_m2"]
     )
+    labelled_gdf["total_UPRN_per_m2"] = (
+        labelled_gdf["total_UPRN_count"] / labelled_gdf["footprint_area_m2"]
+    )
+
+    # UPRN density measures
     labelled_gdf["m2_per_predicted_UPRN"] = (
         labelled_gdf["footprint_area_m2"] / labelled_gdf["predicted_UPRN_count"]
     )
@@ -270,8 +275,7 @@ def generate_gdf_features_for_filtering(
         labelled_gdf["footprint_area_m2"] / labelled_gdf["total_UPRN_count"]
     )
 
-    print("Replacing infinite value features with -100...")
-    return labelled_gdf.replace(np.inf, -100)
+    return labelled_gdf
 
 
 def generate_df_threshold_evaluation(labelled_df: pl.DataFrame, features: List[str]):
@@ -392,7 +396,7 @@ def train_model_decision_tree_classifier(
     plot_tree(clf, feature_names=features, class_names=True, ax=ax)
 
     if save_as:
-        PROJECT_DIR = Path(__file__).resolve().parents[2]
+        PROJECT_DIR = Path(__file__).resolve().parents[4]
         file_path = os.path.join(PROJECT_DIR, "outputs", "figures", f"{save_as}.png")
         plt.savefig(file_path)
     plt.close(fig)
@@ -475,26 +479,32 @@ if __name__ == "__main__":
         boundary=plymouth_boundary,
     )
 
+    # We're only interested in buildings we've predicted to be containing domestic because the threshold will be applied after the current pipeline
+    labelled_gdf = labelled_gdf[labelled_gdf["predicted_domestic"]].copy()
+
     # Generate a set of basic features
-    labelled_gdf = generate_gdf_features_for_filtering(labelled_gdf)
-    labelled_df = pl.from_pandas(labelled_gdf.drop(columns="geometry"))
+    features_gdf = generate_gdf_features_for_filtering(labelled_gdf)
+    features_df = pl.from_pandas(features_gdf.drop(columns="geometry"))
     features = [
         "total_UPRN_count",
         "predicted_UPRN_count",
         "footprint_area_m2",
         "building_perimeter_m",
+        "predicted_UPRN_per_m2",
+        "total_UPRN_per_m2",
         "m2_per_predicted_UPRN",
         "m2_per_total_UPRN",
     ]
 
     plotting_utils.plot_feature_distribution_binary_classes(
-        df=labelled_df,
+        df=features_df.filter(pl.col("predicted_domestic")),
         features=features,
         target="actual_domestic",
         save_as="plymouth_feature_distribution_for_domestic_vs_non_domestic_buildings",
+        density=True,
     )
     results_df = generate_df_threshold_evaluation(
-        labelled_df=labelled_df, features=features
+        labelled_df=features_df, features=features
     )
     threshold = results_df[results_df["max_mcc"] == results_df["max_mcc"].max()][
         "best_threshold"
@@ -504,7 +514,7 @@ if __name__ == "__main__":
     )
 
     clf = train_model_decision_tree_classifier(
-        labelled_df=labelled_df,
+        labelled_df=features_df,
         features=features,
         save_as="plymouth_decision_tree_nobalance",
     )
