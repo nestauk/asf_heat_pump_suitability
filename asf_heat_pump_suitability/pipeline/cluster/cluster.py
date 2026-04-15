@@ -290,23 +290,15 @@ def load_tranform_gdf_linestring_barriers(
         gpd.GeoDataFrame: physical barriers with (Multi)LineString geometries
     """
     # Linestrings
-    roads_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="road", grid_squares=grid_squares
-    )
+    roads_gdf = load_geodata.load_gdf_os_openroad(grid_squares=grid_squares)
+
     railways_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="railway_track", grid_squares=grid_squares
     )
 
-    barrier_road_types = [
-        "A Road" "B Road, Collapsed Dual Carriageway",
-        "Minor Road, Collapsed Dual Carriageway",
-        "Primary Road, Collapsed Dual Carriageway",
-        "Motorway",
-        "Motorway, Collapsed Dual Carriageway",
-        "A Road, Collapsed Dual Carriageway",
-    ]
+    barrier_road_types = ["A Road", "Motorway"]
 
-    barrier_roads_gdf = roads_gdf[roads_gdf["CLASSIFICA"].isin(barrier_road_types)]
+    barrier_roads_gdf = roads_gdf[roads_gdf["class"].isin(barrier_road_types)]
 
     line_overlays = [barrier_roads_gdf, railways_gdf]
     line_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in line_overlays])
