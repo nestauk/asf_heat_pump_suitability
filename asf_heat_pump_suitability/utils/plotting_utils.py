@@ -1,4 +1,5 @@
 import math
+
 import matplotlib.pyplot as plt
 import polars as pl
 from typing import List
@@ -29,3 +30,6 @@ def plot_feature_distribution_binary_classes(
         PROJECT_DIR = Path(__file__).resolve().parents[2]
         file_path = os.path.join(PROJECT_DIR, "outputs", "figures", f"{save_as}.png")
         fig.savefig(file_path)
+        plt.close(fig)
+    else:
+        return fig
