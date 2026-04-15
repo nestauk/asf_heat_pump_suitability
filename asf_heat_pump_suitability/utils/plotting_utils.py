@@ -8,7 +8,11 @@ import os
 
 
 def plot_feature_distribution_binary_classes(
-    df: pl.DataFrame, features: List[str], target: str, save_as: str
+    df: pl.DataFrame,
+    features: List[str],
+    target: str,
+    save_as: str,
+    density=False,
 ):
     nrows = 3
     ncols = math.ceil(len(features) / nrows)
@@ -16,8 +20,10 @@ def plot_feature_distribution_binary_classes(
     fig, axs = plt.subplots(nrows, ncols, figsize=(15, 8))
 
     for ax, feature in zip(axs.ravel(), features):
-        ax.hist(df.filter(pl.col(target))[feature], bins=40, alpha=0.5)
-        ax.hist(df.filter(~pl.col(target))[feature], bins=40, alpha=0.5)
+        ax.hist(df.filter(pl.col(target))[feature], bins=40, alpha=0.5, density=density)
+        ax.hist(
+            df.filter(~pl.col(target))[feature], bins=40, alpha=0.5, density=density
+        )
         ax.set_title(feature)
 
     target_label = target.replace("_", " ").title()
