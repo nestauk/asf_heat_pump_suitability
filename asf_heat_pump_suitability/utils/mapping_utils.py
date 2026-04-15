@@ -62,7 +62,21 @@ def plot_folium_polygon_map(
     return m
 
 
-def _plot_folium_polygons(m, map_gdf, popup_col, colour):
+def _plot_folium_polygons(
+    m: folium.Map, map_gdf: gpd.GeoDataFrame, popup_col: str, colour: str
+) -> folium.Map:
+    """
+    Plot polygons on a folium map.
+
+    Args:
+        m (folium.Map): map object to plot on
+        map_gdf (gpd.GeoDataFrame): GeoDataFrame containing (Multi)Polygons to plot.
+        popup_col (str): name of column containing information for popup. Optional.
+        colour (str): colour of polygons to plot
+
+    Returns:
+        folium.Map
+    """
     # Plot polygons with pop up info
     if popup_col:
         for _, r in map_gdf.iterrows():

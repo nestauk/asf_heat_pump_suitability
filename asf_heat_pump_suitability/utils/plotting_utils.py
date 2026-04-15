@@ -11,9 +11,22 @@ def plot_feature_distribution_binary_classes(
     df: pl.DataFrame,
     features: List[str],
     target: str,
-    save_as: str,
-    density=False,
-):
+    save_as: str = None,
+    density: bool = False,
+) -> plt.Figure:
+    """
+    Plot histograms of distribution of features across binary classes.
+
+    Args:
+        df (pl.DataFrame): dataframe containing feature data and class information
+        features (List[str]): features to plot
+        target (str): binary class
+        save_as (str): file name to save as. Saves a local png file copy to /outputs/figures/. Optional.
+        density (bool): set to `True` to normalize histogram across classes. Default False.
+
+    Returns:
+        plt.Figure
+    """
     nrows = 3
     ncols = math.ceil(len(features) / nrows)
 
