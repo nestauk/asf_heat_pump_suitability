@@ -199,20 +199,31 @@ def _generate_gdf_non_domestic_buildings_by_density(
     _buildings_gdf = buildings_gdf.sjoin(
         domestic_uprns_gdf[["UPRN", "geometry"]], how="inner", predicate="contains"
     ).drop(columns="index_right")
+
     # Get building area
-    _buildings_gdf["building_area_m2"] = _buildings_gdf.area
+    _buildings_gdf["footprint_area_m2"] = _buildings_gdf.area
+
     # Get predicted domestic UPRN count per building
     _buildings_gdf = (
         _buildings_gdf.groupby(id_col)
-        .agg(predicted_UPRN_count=("UPRN", "count"))
+        .agg(
+            predicted_UPRN_count=("UPRN", "count"),
+            footprint_area_m2=("footprint_area_m2", "first"),
+            geometry=("geometry", "first"),
+        )
         .reset_index()
     )
+
     # Calculate density measure
     _buildings_gdf["m2_per_predicted_UPRN"] = (
         _buildings_gdf["footprint_area_m2"] / _buildings_gdf["predicted_UPRN_count"]
     )
     # Return buildings with density measure above threshold
-    return _buildings_gdf[_buildings_gdf["m2_per_predicted_UPRN"] > threshold].copy()
+    return gpd.GeoDataFrame(
+        _buildings_gdf[_buildings_gdf["m2_per_predicted_UPRN"] > threshold].copy(),
+        geometry="geometry",
+        crs=27700,
+    )
 
 
 def map_dict_uprns_to_building_id(
