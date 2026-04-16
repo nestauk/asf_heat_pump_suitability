@@ -333,6 +333,7 @@ if __name__ == "__main__":
         uprn_gdf=uprns_gdf,
         buildings_gdf=layers["building_gdf"],
         non_residential_buildings_gdf=non_residential_buildings_gdf,
+        local_authority=args.local_authorities.lower(),
     )
 
     # Save residential UPRNs to S3
