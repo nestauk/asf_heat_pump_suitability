@@ -177,7 +177,7 @@ def _generate_gdf_non_domestic_buildings_by_density(
     domestic_uprns_gdf: gpd.GeoDataFrame,
     buildings_gdf: gpd.GeoDataFrame,
     id_col: str,
-    threshold: float = config["threshold"]["m2_per_predicted_UPRN"],
+    threshold: float = config["constant"]["threshold"]["m2_per_predicted_UPRN"],
 ) -> gpd.GeoDataFrame:
     """
     Generate a GeoDataFrame containing footprints of buildings which contain a UPRN predicted to be domestic and have a
