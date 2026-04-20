@@ -52,13 +52,15 @@ def filter_df_uprns_to_opportunity_areas(
     Returns:
         pl.DataFrame: filtered UPRN dataframe with only UPRNs within opportunity areas
     """
+    print("len uprns before filtering:", len(uprns_gdf))
+    print("len opportunity areas:", len(areas_gdf))
     # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with opportunity area geodataframe
     uprns_df = pl.from_pandas(
         uprns_gdf.sjoin(
-            areas_gdf[["cluster_id", "geometry"]], how="left", predicate="within"
+            areas_gdf[["cluster_id", "geometry"]], how="right", predicate="within"
         ).drop(columns=["geometry"])
     )
-
+    print("len uprns after filtering to opportunity areas:", len(uprns_df))
     return uprns_df
 
 
@@ -201,7 +203,7 @@ if __name__ == "__main__":
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
 
     print("Loading opportunity areas...")
-    areas_gdf = gpd.read_file(
+    opportunity_areas_gdf = gpd.read_file(
         config["output"]["dataset"]["clusters_tech"].format(
             local_authority=local_authorities
         )
@@ -209,12 +211,12 @@ if __name__ == "__main__":
 
     print("Filtering to opportunity areas...")
     uprns_df = filter_df_uprns_to_opportunity_areas(
-        uprns_gdf=uprns_gdf, areas_gdf=areas_gdf
+        uprns_gdf=uprns_gdf, areas_gdf=opportunity_areas_gdf
     )
 
     print("Calculate remaining features per opportunity area...")
     opportunity_areas_df = extend_df_contextual_features(
-        opportunity_areas_df=pl.from_pandas(areas_gdf[["cluster_id"]]),
+        opportunity_areas_df=pl.from_pandas(opportunity_areas_gdf[["cluster_id"]]),
         uprns_df=uprns_df,
     )
 
@@ -223,7 +225,7 @@ if __name__ == "__main__":
 
     if args.save:
         opportunity_areas_df = opportunity_areas_df.to_pandas().merge(
-            areas_gdf[["cluster_id", "geometry"]],
+            opportunity_areas_gdf[["cluster_id", "geometry"]],
             how="left",
             on="cluster_id",
         )
