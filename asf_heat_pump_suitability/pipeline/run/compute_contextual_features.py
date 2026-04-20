@@ -41,23 +41,25 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def filter_df_uprns_to_opportunity_areas(
-    uprns_gdf: gpd.GeoDataFrame, areas_gdf: gpd.GeoDataFrame
+    uprns_gdf: gpd.GeoDataFrame, opportunity_areas_gdf: gpd.GeoDataFrame
 ) -> pl.DataFrame:
     """
     Filter UPRN geodataframe to only those which are within opportunity areas.
 
     Args:
         uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs with geometry and EPC features
-        areas_gdf (gpd.GeoDataFrame): geodataframe of opportunity areas with geometry and cluster_id
+        opportunity_areas_gdf (gpd.GeoDataFrame): geodataframe of opportunity areas with geometry and cluster_id
     Returns:
         pl.DataFrame: filtered UPRN dataframe with only UPRNs within opportunity areas
     """
     print("len uprns before filtering:", len(uprns_gdf))
-    print("len opportunity areas:", len(areas_gdf))
+    print("len opportunity areas:", len(opportunity_areas_gdf))
     # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with opportunity area geodataframe
     uprns_df = pl.from_pandas(
         uprns_gdf.sjoin(
-            areas_gdf[["cluster_id", "geometry"]], how="right", predicate="within"
+            opportunity_areas_gdf[["cluster_id", "geometry"]],
+            how="right",
+            predicate="within",
         ).drop(columns=["geometry"])
     )
     print("len uprns after filtering to opportunity areas:", len(uprns_df))
@@ -211,7 +213,7 @@ if __name__ == "__main__":
 
     print("Filtering to opportunity areas...")
     uprns_df = filter_df_uprns_to_opportunity_areas(
-        uprns_gdf=uprns_gdf, areas_gdf=opportunity_areas_gdf
+        uprns_gdf=uprns_gdf, opportunity_areas_gdf=opportunity_areas_gdf
     )
 
     print("Calculate remaining features per opportunity area...")
