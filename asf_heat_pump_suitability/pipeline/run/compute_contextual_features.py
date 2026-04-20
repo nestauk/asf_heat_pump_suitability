@@ -75,8 +75,8 @@ def extend_df_contextual_features(
     - City centre flag
     - number of listed buildings
     - number of off-gas properties
-    - proximity to coastline
-    - proximity to anchor load
+    - proximity to coastline flag
+    - proximity to anchor load flag
     - conservation area flag
 
     Args:
