@@ -123,7 +123,7 @@ def extend_df_contextual_features(
         .otherwise(pl.lit("No"))
         .alias("in_city_centre"),
         # n_uprns
-        pl.col("UPRN").count().alias("n_UPRNs"),
+        pl.col("UPRN").n_unique().alias("n_UPRNs"),
         # n_uprns_listed_building
         pl.col("in_listed_building").count().alias("n_uprns_listed_building"),
         # n_uprns_off_gas
