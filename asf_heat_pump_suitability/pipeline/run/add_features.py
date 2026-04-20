@@ -177,7 +177,7 @@ if __name__ == "__main__":
             )
         except ValueError:
             print(
-                f"No heat network zone geodata found for {la}. Assuming no UPRNs are in heat network zones in this Local Authority."
+                f"No heat network zone geodata found for {la}. All UPRNs will be labelled as 'outside heat network zone' in this Local Authority."
             )
 
     # Check if data is available for all LAs in the list, and if not, check if there is data for the whole set of LAs (e.g. Greater Manchester as a whole instead of individual LAs)
