@@ -163,8 +163,9 @@ if __name__ == "__main__":
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
 
-    # Load planned heat network zone polygons (if available for the local authority/local authorities)
+    # Load planned heat network zone polygons
     hn_zones_gdf = gpd.GeoDataFrame()
+    # Check if heat network zone geodata is available for each LA in the list, and if so, load it and concatenate it to a single geodataframe.
     for la in list_las:
         try:
             # TODO: deal with the potential for different Zone ID column names in different HN zone datasets
@@ -180,15 +181,15 @@ if __name__ == "__main__":
                 f"No heat network zone geodata found for {la}. All UPRNs will be labelled as 'outside heat network zone' in this Local Authority."
             )
 
-    # Check if data is available for all LAs in the list, and if not, check if there is data for the whole set of LAs (e.g. Greater Manchester as a whole instead of individual LAs)
-    if len(list_las) > 0 and hn_zones_gdf.empty:
+        # If hn_zones_gdf is empty after attempting to load for each LA individually, try loading a combined HN zone geodataframe for the whole list of LAs
+        # (this is because for some groups of LAs, e.g. Greater Manchester Combined Authority, there is only a combined HN zone geodataframe and no individual ones).
         try:
             hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
                 local_authority=local_authorities
             )
         except ValueError:
             print(
-                f"No heat network zone geodata found for {local_authorities}. Assuming no UPRNs are in heat network zones in this group of Local Authorities."
+                f"No heat network zone geodata found for {local_authorities}. All UPRNs will be labelled as 'outside heat network zone' in this group of Local Authorities."
             )
 
     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
