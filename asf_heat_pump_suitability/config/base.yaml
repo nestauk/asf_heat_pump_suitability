@@ -98,6 +98,10 @@ output:
     residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_residential_uprns.parquet"
     # Residential UPRNs with all features for modelling, mapping and aggregation
     residential_uprns_with_features: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_with_features.parquet"
+    # Opportunity areas/clusters with most suitable tech and cluster ID
+    clusters_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_tech_polygons_with_clusterID.geojson"
+    # Opportunity areas with with most suitable tech, cluster ID, contextual data
+    clusters_tech_contextual_info: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_cluster_contextual_features.geojson"
   save_as:
     model:
       block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"

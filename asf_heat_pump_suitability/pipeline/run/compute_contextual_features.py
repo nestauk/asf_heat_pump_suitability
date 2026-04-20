@@ -145,19 +145,24 @@ def extend_df_contextual_features(
 
 if __name__ == "__main__":
     from asf_heat_pump_suitability.pipeline.transform import uprns
+    from asf_heat_pump_suitability import config
 
     args = parse_arguments()
     local_authorities = args.local_authorities
 
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_with_features.parquet"
+        config["output"]["dataset"]["residential_uprns_with_features"].format(
+            local_authority=local_authorities
+        )
     )
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
 
     print("Loading opportunity areas...")
     areas_gdf = gpd.read_file(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_tech_polygons_with_clusterID.geojson"
+        config["output"]["dataset"]["clusters_tech"].format(
+            local_authority=local_authorities
+        )
     ).to_crs(epsg=27700)
 
     print("Filtering to opportunity areas...")
@@ -186,6 +191,8 @@ if __name__ == "__main__":
         ).to_crs(epsg=4326)
 
         opportunity_areas_df.to_file(
-            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_cluster_contextual_features.geojson",
+            config["output"]["dataset"]["clusters_tech_contextual_info"].format(
+                local_authority=local_authorities
+            ),
             driver="GeoJSON",
         )
