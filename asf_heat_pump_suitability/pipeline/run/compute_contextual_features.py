@@ -52,18 +52,19 @@ def filter_df_uprns_to_opportunity_areas(
     Returns:
         pl.DataFrame: filtered UPRN dataframe with only UPRNs within opportunity areas
     """
-    opportunity_areas_df = pl.from_pandas(
+    # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with opportunity area geodataframe
+    uprns_df = pl.from_pandas(
         uprns_gdf.sjoin(
-            areas_gdf[["cluster_id", "geometry"]], how="right", predicate="within"
-        ).drop(columns=["index_left", "geometry"])
+            areas_gdf[["cluster_id", "geometry"]], how="left", predicate="within"
+        ).drop(columns=["geometry"])
     )
 
-    return opportunity_areas_df
+    return uprns_df
 
 
 def extend_df_contextual_features(
     opportunity_areas_df: pl.DataFrame,
-    uprns_gdf: gpd.GeoDataFrame,
+    uprns_df: pl.DataFrame,
 ) -> pl.DataFrame:
     """
     Extend opportunity areas dataframe with contextual features from UPRN geodataframe, including:
@@ -80,18 +81,11 @@ def extend_df_contextual_features(
     - conservation area flag
 
     Args:
-        opportunity_areas_df (pl.DataFrame): dataframe with value counts per opportunity area for relevant features
-        uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs with geometry and relevant features
+        opportunity_areas_df (pl.DataFrame): dataframe of opportunity areas with cluster_id
+        uprns_df (pl.DataFrame): dataframe of UPRNs with relevant features
     Returns:
         pl.DataFrame: dataframe with remaining features per opportunity area
     """
-
-    # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with opportunity area geodataframe
-    uprns_df = pl.from_pandas(
-        uprns_gdf.sjoin(
-            areas_gdf[["cluster_id", "geometry"]], how="left", predicate="within"
-        ).drop(columns=["geometry"])
-    )
 
     dummy_cols = ["ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
     # Get value counts per feature
@@ -103,41 +97,89 @@ def extend_df_contextual_features(
         .drop("UPRN")
     )
 
+    # Keep only the columns that start with the dummy column prefixes, e.g. "ATTACHMENT_", "TENURE_", "CURRENT_ENERGY_RATING_"
+    dummy_cols_to_keep = [
+        col
+        for col in dummy_contextual_feat_df.columns
+        if any(col.startswith(prefix) for prefix in dummy_cols)
+    ]
+    dummy_contextual_feat_df = dummy_contextual_feat_df.select(
+        ["cluster_id"] + dummy_cols_to_keep
+    )
+
+    # lower case column names
+    dummy_contextual_feat_df = dummy_contextual_feat_df.rename(
+        {
+            col: col.lower().replace(" ", "_").replace("-", "_")
+            for col in dummy_contextual_feat_df.columns
+            if col != "cluster_id"
+        }
+    )
+
     opportunity_areas_df = opportunity_areas_df.join(
         dummy_contextual_feat_df, how="left", on="cluster_id"
     )
 
-    contextual_feat_clusters_df = uprns_df.group_by("cluster_id").agg(
-        # median_outdoor_space
-        pl.col("max_contiguous_outdoor_space_area_m2")
-        .median()
-        .alias("median_outdoor_space_m2"),
-        # in_hn_zone flag
-        pl.when(pl.col("in_hn_zone").any())
-        .then(pl.lit("Yes"))
-        .otherwise(pl.lit("No"))
-        .alias("in_hn_zone"),
-        # in_city_centre flag
-        pl.when(pl.col("in_city_centre").any())
-        .then(pl.lit("Yes"))
-        .otherwise(pl.lit("No"))
-        .alias("in_city_centre"),
-        # n_uprns
-        pl.col("UPRN").n_unique().alias("n_UPRNs"),
-        # n_uprns_listed_building
-        pl.col("in_listed_building").sum().alias("n_uprns_in_listed_building"),
-        # n_uprns_off_gas
-        pl.col("off_gas").sum().alias("n_uprns_off_gas"),
-        # near_coastline flag
-        pl.col("near_coastline").any().alias("within_1500m_of_coastline"),
-        # near_anchor_load flag
-        pl.col("near_anchor_load").any().alias("near_anchor_load"),
-        # in_conservation_area flag
-        pl.col("in_conservation_area").any().alias("in_conservation_area"),
+    contextual_feat_clusters_df = (
+        uprns_df.group_by("cluster_id")
+        .agg(
+            # median_outdoor_space
+            pl.col("max_contiguous_outdoor_space_area_m2")
+            .median()
+            .alias("median_outdoor_space_m2"),
+            # in_hn_zone flag
+            pl.when(pl.col("in_hn_zone").any())
+            .then(True)
+            .otherwise(False)
+            .alias("in_hn_zone"),
+            # in_city_centre flag
+            pl.when(pl.col("in_city_centre").any())
+            .then(True)
+            .otherwise(False)
+            .alias("in_city_centre"),
+            # n_uprns
+            pl.col("UPRN").n_unique().alias("n_UPRNs"),
+            # n_uprns_listed_building
+            pl.col("in_listed_building").sum().alias("n_uprns_in_listed_building"),
+            # n_uprns_off_gas
+            pl.col("off_gas").sum().alias("n_uprns_off_gas"),
+            # near_coastline flag
+            pl.col("near_coastline").any().alias("within_1500m_of_coastline"),
+            # near_anchor_load flag
+            pl.col("near_anchor_load").any().alias("near_anchor_load"),
+            # in_conservation_area flag
+            pl.col("in_conservation_area").any().alias("in_conservation_area"),
+        )
+        .select(
+            [
+                "cluster_id",
+                "median_outdoor_space_m2",
+                "in_hn_zone",
+                "in_city_centre",
+                "n_UPRNs",
+                "n_uprns_in_listed_building",
+                "n_uprns_off_gas",
+                "within_1500m_of_coastline",
+                "near_anchor_load",
+                "in_conservation_area",
+            ]
+        )
     )
 
     opportunity_areas_df = opportunity_areas_df.join(
         contextual_feat_clusters_df, how="left", on="cluster_id"
+    )
+
+    # Add percentages used for sorting & filtering in the tool
+    # owner occupied, social rented, private rented percentages
+    tenure_cols = [
+        col for col in dummy_contextual_feat_df.columns if col.startswith("tenure_")
+    ]
+    opportunity_areas_df = opportunity_areas_df.with_columns(
+        [
+            (pl.col(col) / pl.col("n_UPRNs") * 100).alias("perc_" + col)
+            for col in tenure_cols
+        ]
     )
 
     return opportunity_areas_df
@@ -166,13 +208,14 @@ if __name__ == "__main__":
     ).to_crs(epsg=27700)
 
     print("Filtering to opportunity areas...")
-    opportunity_areas_df = filter_df_uprns_to_opportunity_areas(
+    uprns_df = filter_df_uprns_to_opportunity_areas(
         uprns_gdf=uprns_gdf, areas_gdf=areas_gdf
     )
 
     print("Calculate remaining features per opportunity area...")
     opportunity_areas_df = extend_df_contextual_features(
-        opportunity_areas_df=opportunity_areas_df, uprns_gdf=uprns_gdf
+        opportunity_areas_df=pl.from_pandas(areas_gdf[["cluster_id"]]),
+        uprns_df=uprns_df,
     )
 
     print("Remove clusters without any UPRNs within them...")
