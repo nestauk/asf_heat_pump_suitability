@@ -125,9 +125,9 @@ def extend_df_contextual_features(
         # n_uprns
         pl.col("UPRN").n_unique().alias("n_UPRNs"),
         # n_uprns_listed_building
-        pl.col("in_listed_building").count().alias("n_uprns_listed_building"),
+        pl.col("in_listed_building").sum().alias("n_uprns_in_listed_building"),
         # n_uprns_off_gas
-        pl.col("off_gas").count().alias("n_uprns_off_gas"),
+        pl.col("off_gas").sum().alias("n_uprns_off_gas"),
         # near_coastline flag
         pl.col("near_coastline").any().alias("within_1500m_of_coastline"),
         # near_anchor_load flag
