@@ -111,7 +111,7 @@ def extend_df_contextual_features(
         # median_outdoor_space
         pl.col("max_contiguous_outdoor_space_area_m2")
         .median()
-        .alias("median_outdoor_space"),
+        .alias("median_outdoor_space_m2"),
         # in_hn_zone flag
         pl.when(pl.col("in_hn_zone").any())
         .then(pl.lit("Yes"))
