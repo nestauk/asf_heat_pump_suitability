@@ -129,7 +129,7 @@ def extend_df_contextual_features(
         # n_uprns_off_gas
         pl.col("off_gas").count().alias("n_uprns_off_gas"),
         # near_coastline flag
-        pl.col("near_coastline").any().alias("near_coastline"),
+        pl.col("near_coastline").any().alias("within_1500m_of_coastline"),
         # near_anchor_load flag
         pl.col("near_anchor_load").any().alias("near_anchor_load"),
         # in_conservation_area flag
