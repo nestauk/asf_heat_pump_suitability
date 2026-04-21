@@ -283,13 +283,15 @@ if __name__ == "__main__":
             "BUILT_FORM",
             "CURRENT_ENERGY_RATING",
             "SOLAR_WATER_HEATING_FLAG",
+            "PHOTO_SUPPLY",
             "ENERGY_CONSUMPTION_CURRENT",
-            "ENERGY_CONSUMPTION_POTENTIAL",
         ],
     )
 
     # Add column to indicate whether EPC data is available for the property, to distinguish between False and unknown for features derived from EPC data
     epc_df = epc_df.with_columns(pl.lit(True).alias("epc_data_available"))
+
+    print(epc_df["SOLAR_WATER_HEATING_FLAG"].value_counts())
 
     features_df = epc.extend_df_epc_features(
         df=features_df,
@@ -301,19 +303,14 @@ if __name__ == "__main__":
             "CURRENT_ENERGY_RATING",
             "SOLAR_WATER_HEATING_FLAG",
             "ENERGY_CONSUMPTION_CURRENT",
-            "ENERGY_CONSUMPTION_POTENTIAL",
+            "PHOTO_SUPPLY",
         ],
     )
 
-    features_df = features_df.with_columns(
-        pl.col("SOLAR_WATER_HEATING_FLAG")
-        .replace({"unknown": None})
-        .alias("SOLAR_WATER_HEATING_FLAG")
-    )
-
-    print(features_df["SOLAR_WATER_HEATING_FLAG"].value_counts())
+    print(features_df["has_solar_pv"].value_counts())
     print(features_df["ENERGY_CONSUMPTION_CURRENT"].mean())
-    print(features_df["ENERGY_CONSUMPTION_POTENTIAL"].mean())
+
+    print(features_df)
 
     epc_with_geometries_df = epc_df.join(
         features_df.select(
@@ -431,38 +428,25 @@ if __name__ == "__main__":
         protected_areas,
     )
 
-    # import boto3
+    import boto3
 
-    # s3_client = boto3.client('s3')
+    s3_client = boto3.client("s3")
 
-    # bucket_name = 'asf-heat-pump-suitability'
-    # prefix = 'local_heat_planning/inputs/geodata/NSUL_DEC_2025/'
+    bucket_name = "asf-heat-pump-suitability"
+    prefix = "local_heat_planning/inputs/geodata/NSUL_DEC_2025/"
 
-    # response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-    # files = [
-    #     f"s3://{bucket_name}/{obj['Key']}"
-    #     for obj in response.get('Contents', [])
-    #     if obj['Key'].endswith('.csv')
-    # ]
+    response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+    files = [
+        f"s3://{bucket_name}/{obj['Key']}"
+        for obj in response.get("Contents", [])
+        if obj["Key"].endswith(".csv")
+    ]
 
-    # uprn_to_country_df = pd.concat([pd.read_csv(file, usecols=["UPRN", "PCDS", "ctry25cd"]) for file in files], ignore_index=True)
+    uprn_to_country_df = pd.concat(
+        [pd.read_csv(file, usecols=["UPRN", "PCDS", "ctry25cd"]) for file in files],
+        ignore_index=True,
+    )
 
-    uprn_to_country_df = pd.DataFrame()
-    import os
-
-    folder_path = "/Users/anasofiapinto/Downloads/NSUL_DEC_2025/Data"
-    files = [f for f in os.listdir(folder_path) if f.endswith(".csv")]
-    for file in files:
-        uprn_to_country_df = pd.concat(
-            [
-                uprn_to_country_df,
-                pd.read_csv(
-                    os.path.join(folder_path, file),
-                    usecols=["UPRN", "PCDS", "ctry25cd"],
-                ),
-            ],
-            ignore_index=True,
-        )
     uprn_to_country_df["COUNTRY"] = (
         uprn_to_country_df["ctry25cd"]
         .str[0]
