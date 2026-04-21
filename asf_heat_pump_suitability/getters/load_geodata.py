@@ -234,6 +234,7 @@ def load_gdf_os_openroad(
         gdfs = []
 
         for file in files:
+            print(f"\nLoading OS OpenRoad file: {file}")
             gdfs.append(gpd.read_file(file))
 
         gdf = pd.concat(gdfs)
