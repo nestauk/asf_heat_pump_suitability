@@ -153,7 +153,7 @@ class CalculateGardenSizeFlow(FlowSpec):
                 # Get intersection of building footprint polygons and land polygons
                 intersection_gdf = outdoor_space.generate_gdf_building_intersections(
                     land_parcels_gdf=land_parcels_gdf,
-                    building_gdf=building_footprints_gdf,
+                    buildings_gdf=building_footprints_gdf,
                 )
 
                 # Get garden size
