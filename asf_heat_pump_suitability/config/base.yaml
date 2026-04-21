@@ -32,6 +32,8 @@ data:
   processed:
     non_domestic_poi_categories: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/non_residential_poi_categories.csv"
     plymouth_residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet"
+    # POI anchor properties. A broad category list of potential anchors was created, then Gemini was prompted to look through all possible POI building categories to find those that fit into/ were another way of wording the broad categories.
+    # The anchor property list was then created by selecting POI buildings with a building category in the final list from Gemini.
     poi_anchor_properties: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/expanded_poi_anchor_properties_gb.parquet"
 
 constant:
