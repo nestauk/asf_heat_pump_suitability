@@ -7,7 +7,6 @@ Contains a script to produce clusters from building footprint polygons with assi
 python asf_heat_pump_suitability/pipeline/cluster/cluster.py
 
 Required args:
---tech_gdf path to geospatial file containing building footprints labelled with assigned tech type
 --local_authorities to specify which local authority / authorities to run the script for
 --save - Set to save output GeoDataFrame to S3.
 """
@@ -417,14 +416,6 @@ def parse_arguments() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser()
 
-    # TODO this is a placeholder and likely to change as the script develops
-    parser.add_argument(
-        "--tech_gdf",
-        help="Path to S3 geoparquet file containing building footprints with their tech types assigned by the decision tree.",
-        type=str,
-        required=True,
-    )
-
     parser.add_argument(
         "--local_authorities",
         help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
@@ -443,7 +434,11 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_arguments()
     tech_gdf = (
-        gpd.read_parquet(args.tech_gdf)
+        gpd.read_parquet(
+            config["output"]["dataset"]["buildings_most_suitable_tech"].format(
+                local_authorities=args.local_authorities
+            )
+        )
         .set_geometry("geometry")
         .to_crs(config["constant"]["target_crs"])
     )
@@ -472,7 +467,7 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             clusters_gdf,
-            config["output"]["save_as"]["tech_clusters"].format(
+            config["output"]["dataset"]["tech_clusters"].format(
                 local_authorities=args.local_authorities
             ),
         )
