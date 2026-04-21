@@ -124,7 +124,10 @@ def load_gdf_os_openmap_layer(
     layer: str, grid_squares: Optional[List[str]] = None, **kwargs
 ) -> gpd.GeoDataFrame:
     """
-    Load specified OS OpenMap Local or Greenspace layer for Great Britain or optionally for a specific grid square. CRS British National Grid (27700).
+    Load specified OS OpenMap Local or Greenspace layer for Great Britain or optionally for a specific grid square.
+    CRS British National Grid (27700).
+
+    Find full list of green space sites here: https://docs.os.uk/os-downloads/products/land-and-terrain-portfolio/os-open-greenspace/os-open-greenspace-technical-specification/code-lists/functionvalue#code-list-functionvalue
 
     Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
 
