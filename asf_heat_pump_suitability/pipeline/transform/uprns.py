@@ -180,7 +180,7 @@ def map_dict_uprns_to_building_id(
     )
 
     # find domestic UPRNs not joined to a buildings.
-    unmatched_uprns = uprns_gdf[~uprns_gdf.index.isin(uprns_inside_buildings.index)]
+    unmatched_uprns = uprns_gdf[~uprns_gdf["UPRN"].isin(uprns_inside_buildings)]
 
     # for these UPRNs only, find nearest building footprint < max_distance (m) away
     nearest_buildings_uprns = unmatched_uprns.sjoin_nearest(

@@ -6,6 +6,7 @@ import geopandas as gpd
 import pandas as pd
 
 from asf_heat_pump_suitability.pipeline.transform import uprns
+from asf_heat_pump_suitability import config
 
 # TODO these may need refinement for large cities where overlap with residential is possible
 NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
@@ -33,7 +34,7 @@ NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
 ]
 
 
-def generate_gdf_all_uprns_non_res(
+def _generate_gdf_fully_commercial_buildings(
     important_building_gdf: gpd.GeoDataFrame,
     poi_gdf: gpd.GeoDataFrame,
     uprns_gdf: gpd.GeoDataFrame,
@@ -50,31 +51,58 @@ def generate_gdf_all_uprns_non_res(
         gpd.GeoDataFrame: geometries of buildings which are in the important buildings list and have 1 UPRN in them, or in the POI list and have same number of UPRNs and POI
     """
     # join POI data to building footprints
-    poi_gdf = building_gdf.sjoin(poi_gdf, how="inner", predicate="contains").drop(
-        "index_right", axis=1
-    )
+    poi_buildings_gdf = building_gdf.sjoin(
+        poi_gdf, how="inner", predicate="contains"
+    ).drop("index_right", axis=1)
 
-    # count instances where multiple POI are located inside a building
-    poi_gdf = poi_gdf.groupby("geometry").size().reset_index(name="POI_count")
+    # count instances where multiple POI are located inside a building and convert result to gdf
+    poi_buildings_df = (
+        poi_buildings_gdf.groupby("ID")
+        .agg(POI_count=("ID", "count"), geometry=("geometry", "first"))
+        .reset_index()
+    )
+    poi_buildings_gdf = gpd.GeoDataFrame(
+        poi_buildings_df,
+        geometry=poi_buildings_df["geometry"],
+        crs=config["constant"]["target_crs"],
+    )
 
     # join important buildings and POI with all UPRNs
     important_building_gdf = important_building_gdf.sjoin(
         uprns_gdf, how="left", predicate="contains"
     ).drop("index_right", axis=1)
 
-    poi_gdf = poi_gdf.sjoin(uprns_gdf, how="left", predicate="contains").drop(
-        "index_right", axis=1
+    poi_buildings_gdf = poi_buildings_gdf.sjoin(
+        uprns_gdf, how="left", predicate="contains"
+    ).drop("index_right", axis=1)
+
+    # find number of UPRNs per building for important buildings and convert result to gdf
+    important_building_df = (
+        important_building_gdf.groupby("ID")
+        .agg(UPRN_count=("UPRN", "count"), geometry=("geometry", "first"))
+        .reset_index()
+    )
+    important_building_gdf = gpd.GeoDataFrame(
+        important_building_df,
+        geometry=important_building_df["geometry"],
+        crs=config["constant"]["target_crs"],
     )
 
-    # find number of UPRNs per building for important buildings
-    important_building_gdf = (
-        important_building_gdf.groupby("geometry").size().reset_index(name="UPRN_count")
+    # find number of UPRNs per building for POI buildings and convert result to gdf
+    poi_buildings_df = (
+        poi_buildings_gdf.groupby("ID")
+        .agg(
+            UPRN_count=("UPRN", "count"),
+            POI_count=("POI_count", "first"),
+            geometry=("geometry", "first"),
+        )
+        .reset_index()
     )
-    # find number of UPRNs per building for POI buildings
-    uprn_counts = poi_gdf.groupby("geometry").size().reset_index(name="UPRN_count")
-
-    # join uprn counts as a column to POI dataframe
-    poi_gdf = poi_gdf.sjoin(uprn_counts, how="left", predicate="intersects")
+    poi_buildings_gdf = gpd.GeoDataFrame(
+        poi_buildings_df,
+        geometry=poi_buildings_df["geometry"],
+        crs=config["constant"]["target_crs"],
+    )
 
     # select building footprints from important building data where UPRN count = 1
     important_building_gdf = important_building_gdf.loc[
@@ -82,11 +110,16 @@ def generate_gdf_all_uprns_non_res(
     ]
 
     # select building footprints from POI data where UPRN count = POI count
-    poi_gdf = poi_gdf.loc[poi_gdf["UPRN_count"] == poi_gdf["POI_count"]]
+    poi_buildings_gdf = poi_buildings_gdf.loc[
+        poi_buildings_gdf["UPRN_count"] == poi_buildings_gdf["POI_count"]
+    ]
 
-    non_res_uprns = pd.concat([important_building_gdf, poi_gdf])
+    # concat gdfs and keep only geometry column
+    non_domestic_buildings_gdf = pd.concat(
+        [important_building_gdf[["geometry"]], poi_buildings_gdf[["geometry"]]]
+    )
 
-    return non_res_uprns
+    return non_domestic_buildings_gdf
 
 
 def generate_gdf_non_residential_buildings(
@@ -153,11 +186,12 @@ def generate_gdf_non_residential_buildings(
         building_gdf, how="inner", predicate="within"
     )
 
-    # creating list of buildings from all important buildings and POI data with exactly 1 UPRN in them
-    all_uprns_non_res_gdf = generate_gdf_all_uprns_non_res(
+    # creating list of buildings from all important buildings and POI data with exactly 1 UPRN in them- these are likely to be fully commercial units
+    fully_commercial_buildings_gdf = _generate_gdf_fully_commercial_buildings(
         important_building_gdf=important_building_gdf,
         poi_gdf=poi_gdf,
         uprns_gdf=uprns_gdf,
+        building_gdf=building_gdf,
     )
 
     # add this to list of buildings to exclude
@@ -166,7 +200,7 @@ def generate_gdf_non_residential_buildings(
             exclude_buildings_gdf[["geometry"]],
             railway_station_gdf[["geometry"]],
             non_domestic_poi_gdf[["geometry"]],
-            all_uprns_non_res_gdf[["geometry"]],
+            fully_commercial_buildings_gdf[["geometry"]],
         ]
     )
 
