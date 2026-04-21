@@ -239,7 +239,7 @@ if __name__ == "__main__":
             predicate="intersects",
         ).drop(columns="index_right")
 
-    poi_gdf = load_tree_input.load_gdf_poi()
+    poi_gdf = load_geodata.load_gdf_poi()
     poi_gdf = poi.transform_gdf_poi(
         poi_gdf,
         filter_categories=poi.load_set_non_domestic_poi_categories(),

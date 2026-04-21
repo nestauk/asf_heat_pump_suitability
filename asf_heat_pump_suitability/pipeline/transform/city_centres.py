@@ -17,16 +17,54 @@ CITY_CENTRE_TYPES = [  # TODO: confirm types with scaling
 ]
 
 
-def label_gdf_city_centre_spatial_signatures_uprns(
-    uprn_gdf: gpd.GeoDataFrame,
+def extend_df_city_centre_labels(
+    uprns_df: pl.DataFrame,
+    uprns_gdf: gpd.GeoDataFrame,
     spatial_signatures_gdf: gpd.GeoDataFrame,
     types: list = CITY_CENTRE_TYPES,
 ) -> pl.DataFrame:
     """
+    Add boolean `in_city_centre` column to UPRN dataframe to indicate whether UPRN is in a city centre or not based on
+    Spatial Signature type. Also adds `spatial_signature_types` column containing the spatial signature type(s) the UPRN
+    intersects with.
+
+    Args:
+        uprns_df (pl.DataFrame): dataframe with UPRNs and other desired features
+        uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries
+        spatial_signatures_gdf (gpd.GeoDataFrame): polygons of spatial signatures
+        types (list, optional): spatial signature types assumed to be representative of city centre areas. Defaults to a list containing:
+            - "Hyper concentrated urbanity"
+            - "Concentrated urbanity"
+            - "Metropolitan urbanity"
+            - "Regional urbanity"
+            - "Local urbanity"
+            - "Dense urban neighbourhoods"
+
+    Returns:
+        pl.DataFrame: UPRN dataframe with boolean `in_city_centre` column and `spatial_signature_types` column.
+    """
+    labelled_uprn_gdf = label_gdf_city_centre_spatial_signatures_uprns(
+        uprns_gdf=uprns_gdf, spatial_signatures_gdf=spatial_signatures_gdf, types=types
+    )
+
+    labelled_uprn_df = pl.from_pandas(
+        labelled_uprn_gdf.drop(columns="geometry")
+    ).select(["UPRN", "spatial_signature_types", "in_city_centre"])
+
+    # TODO add tests to check that there are no nulls
+    return uprns_df.join(labelled_uprn_df, how="left", on="UPRN")
+
+
+def label_gdf_city_centre_spatial_signatures_uprns(
+    uprns_gdf: gpd.GeoDataFrame,
+    spatial_signatures_gdf: gpd.GeoDataFrame,
+    types: list = CITY_CENTRE_TYPES,
+) -> gpd.GeoDataFrame:
+    """
     Labels UPRNs that are located within a city centre based on its matched Spatial Signature type.
 
     Args:
-        uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be labelled
+        uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be labelled
         spatial_signatures_gdf (gpd.GeoDataFrame): polygons of spatial signatures
         types (list, optional): spatial signature types assumed to be representative of city centre areas. Defaults to a list containing:
             - "Hyper concentrated urbanity"
@@ -40,12 +78,12 @@ def label_gdf_city_centre_spatial_signatures_uprns(
         pl.DataFrame: input UPRNs labelled with spatial signature identifiers and booleans indicating that they are located within
             a city centre spatial signature type
     """
-
+    print(f"Identifying residential UPRNs in city centre areas...")
     # CRS checks and reprojection if needed
     target_crs = config["constant"]["target_crs"]
 
-    if uprn_gdf.crs != target_crs:
-        uprn_gdf = uprn_gdf.to_crs(target_crs)
+    if uprns_gdf.crs != target_crs:
+        uprns_gdf = uprns_gdf.to_crs(target_crs)
         print(f"uprn_gdf reprojected to target CRS: {target_crs}")
 
     if spatial_signatures_gdf.crs != target_crs:
@@ -53,25 +91,27 @@ def label_gdf_city_centre_spatial_signatures_uprns(
         print(f"spatial_signatures_gdf reprojected to target CRS: {target_crs}")
 
     # Spatial join for labelling UPRN with signature type
-    labelled_uprn_gdf = uprn_gdf.sjoin(
-        spatial_signatures_gdf[["geometry", "type"]],
-        how="left",
-        predicate="intersects",  # include properties intersecting spatial signature cell boundary
-    ).drop(columns="index_right")
+    labelled_uprn_gdf = (
+        uprns_gdf[["UPRN", "geometry"]]
+        .sjoin(
+            spatial_signatures_gdf[["geometry", "type"]],
+            how="left",
+            predicate="intersects",  # include properties intersecting spatial signature cell boundary
+        )
+        .drop(columns="index_right")
+    )
 
     # Add city centre boolean label
     labelled_uprn_gdf["in_city_centre"] = labelled_uprn_gdf["type"].isin(types)
 
     # Combine multiple matches into a single row per UPRN
-    uprn_columns = [col for col in uprn_gdf.columns if col != "geometry"]
     labelled_uprn_gdf = (
         labelled_uprn_gdf.groupby("UPRN", as_index=False)
         .agg(
             {
-                **{col: "first" for col in uprn_columns},  # keep original UPRN columns
                 "geometry": "first",  # keep the point geometry
                 "type": list,  # combine types into a list
-                "in_city_centre": sum,  # sums >0 indicate UPRN in a city centre signature
+                "in_city_centre": "sum",  # sums >0 indicate UPRN in a city centre signature
             }
             # Convert city centre to boolean label
         )
@@ -84,9 +124,4 @@ def label_gdf_city_centre_spatial_signatures_uprns(
         False
     )
 
-    # Return as polars df without geometry
-    labelled_uprn_df = pl.from_pandas(
-        labelled_uprn_gdf.drop(columns="geometry")
-    ).rename({"type": "spatial_signature_types"})
-
-    return labelled_uprn_df
+    return labelled_uprn_gdf.rename(columns={"type": "spatial_signature_types"})
