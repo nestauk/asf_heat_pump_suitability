@@ -9,6 +9,7 @@ python asf_heat_pump_suitability/pipeline/cluster/cluster.py
 Required args:
 --tech_gdf path to geospatial file containing building footprints labelled with assigned tech type
 --local_authorities to specify which local authority / authorities to run the script for
+--save - Set to save output GeoDataFrame to S3.
 """
 
 from typing import Optional, List
@@ -66,6 +67,7 @@ def generate_gdf_clusters(
             line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
         )
+        # TODO No reassignment based on neighbouring cells - TBC if wanted by user testing
         # gdfs.append(reassign_gdf_communal_networked(cells_gdf))
         gdfs.append(cells_gdf)
 
