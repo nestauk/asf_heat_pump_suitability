@@ -396,43 +396,6 @@ if __name__ == "__main__":
 
     print(features_df["off_gas"].value_counts())
 
-    # Add near anchor load boolean flag
-    from asf_heat_pump_suitability.pipeline.transform import anchor_loads
-    from asf_heat_pump_suitability.getters import load_geodata
-
-    poi_gdf = gpd.read_file(
-        config["data"]["processed"]["poi_anchor_properties"]
-    ).to_crs(config["constant"]["target_crs"])
-
-    important_building_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="important_building", grid_squares=grid_squares
-    )
-
-    important_building_gdf = important_building_gdf[
-        important_building_gdf["CLASSIFICA"].isin(anchor_loads.ANCHOR_CATEGORIES)
-    ]
-
-    # add building footprint data to POI anchor properties so geometry isn't just a point
-    anchors_with_footprint = (
-        buildings_gdf.sjoin(poi_gdf, how="inner", predicate="contains")
-    ).drop("index_right", axis=1)
-
-    # add POI and important building lists together and remove duplicate buildings. Keep only common columns
-    anchor_gdf = pd.concat(
-        [anchors_with_footprint, important_building_gdf], join="inner"
-    )
-    anchor_gdf["geometry"] = anchor_gdf.normalize()
-    anchor_gdf = anchor_gdf.drop_duplicates(["geometry"])
-    anchor_gdf["near_anchor_load"] = True
-
-    uprns_gdf = uprns_gdf.sjoin(anchor_gdf, how="left", predicate="within")
-
-    features_df = features_df.join(
-        pl.from_pandas(uprns_gdf[["UPRN", "near_anchor_load"]]),
-        how="left",
-        on="UPRN",
-    ).with_columns(pl.col("near_anchor_load").fill_null(False))
-
     # Add near coastline boolean flag
     coast_gdf = gpd.read_file(
         "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
