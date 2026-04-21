@@ -132,17 +132,14 @@ def extend_df_solar_pv_flag(df: pl.DataFrame) -> pl.DataFrame:
     Create new `has_solar_pv` column indicating presence of photovoltaic panels on a property based on `PHOTO_SUPPLY` column.
 
     Args:
-        df (pl.DataFrame): EPC dataset with `PHOTO_SUPPLY` and `SOLAR_WATER_HEATING_FLAG` columns.
+        df (pl.DataFrame): EPC dataset with `PHOTO_SUPPLY` column.
 
     Returns:
         pl.DataFrame: EPC data with new `has_solar_pv` column.
     """
-    has_pv = (pl.col("PHOTO_SUPPLY") > 0) | (
-        pl.col("SOLAR_WATER_HEATING_FLAG") == "True"
-    )
-    no_pv = (pl.col("PHOTO_SUPPLY") == 0) | (
-        pl.col("SOLAR_WATER_HEATING_FLAG") == "False"
-    )
+    has_pv = pl.col("PHOTO_SUPPLY") > 0
+    no_pv = pl.col("PHOTO_SUPPLY") == 0
+
     return df.with_columns(
         pl.when(has_pv)
         .then(True)
@@ -150,4 +147,30 @@ def extend_df_solar_pv_flag(df: pl.DataFrame) -> pl.DataFrame:
         .then(False)
         .otherwise(None)
         .alias("has_solar_pv")
-    ).drop(["PHOTO_SUPPLY", "SOLAR_WATER_HEATING_FLAG"])
+    )
+
+
+def extend_df_is_solar_powered(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Create new `is_solar_powered` column indicating whether a property is solar powered based on `PHOTO_SUPPLY` and `SOLAR_WATER_HEATING_FLAG` columns.
+    It flags property as solar powered if it has either photovoltaic panels or solar water heating.
+
+    Args:
+        df (pl.DataFrame): EPC dataset with `PHOTO_SUPPLY` and `SOLAR_WATER_HEATING_FLAG` columns.
+
+    Returns:
+        pl.DataFrame: EPC data with new `is_solar_powered` column.
+    """
+    has_solar_water_heating = pl.col("SOLAR_WATER_HEATING_FLAG") == "True"
+    no_solar_water_heating = pl.col("SOLAR_WATER_HEATING_FLAG") == "False"
+    has_pv = pl.col("PHOTO_SUPPLY") > 0
+    no_pv = pl.col("PHOTO_SUPPLY") == 0
+
+    return df.with_columns(
+        pl.when(has_pv | has_solar_water_heating)
+        .then(True)
+        .when(no_pv & no_solar_water_heating)
+        .then(False)
+        .otherwise(None)
+        .alias("is_solar_powered")
+    )
