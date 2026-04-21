@@ -1,8 +1,6 @@
 import polars as pl
 import geopandas as gpd
 import os
-import pandas as pd
-from typing import Optional, List
 
 from osbng import grids
 
