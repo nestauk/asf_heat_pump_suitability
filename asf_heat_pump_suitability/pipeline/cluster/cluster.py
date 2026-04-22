@@ -82,7 +82,8 @@ def generate_gdf_clusters(
         .reset_index()[["assigned_tech", "geometry"]]
     )
 
-    # create an ID for each geometry that starts with the tech code and ends with a unique number, e.g. COM_1, COM_2, etc.
+    # Create an ID for each geometry that starts with the tech code and ends with a unique number
+    # e.g. COM_1, COM_2, etc.
     clusters_gdf["cluster_id"] = clusters_gdf.groupby("assigned_tech").cumcount()
 
     clusters_gdf["cluster_id"] = (
@@ -98,6 +99,7 @@ def extend_edges_gdf(
     gdf: gpd.GeoDataFrame,
     boundary: shapely.Polygon | shapely.MultiPolygon,
     spacing: float = 1.0,
+    buffer: float = 20.0,
 ) -> gpd.GeoDataFrame:
     """
     Creates Voronoi polygons around a set of input polygons by interpolating additional points along polygon edges
@@ -153,7 +155,7 @@ def extend_edges_gdf(
     coords = MultiPoint(points_gdf.geometry.tolist())
 
     print("Computing Voronoi diagram...")
-    # Compute Voronoi polygons up to specified boundary
+    # Compute Voronoi polygons up to specified boundary, create one Voronoi cell per point
     voronoi_collection = shapely.voronoi_polygons(coords, extend_to=boundary)
 
     # Convert to a geodataframe
@@ -162,19 +164,47 @@ def extend_edges_gdf(
     print(
         "Joining Voronois to original building footprints and dissolving per footprint..."
     )
-    # Join the points to the Voronoi cells and dissolve to get one polygon per building ID
+    # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
     voronoi_gdf = (
         voronoi_gdf.sjoin(points_gdf, how="inner", predicate="contains")
         .dissolve(by=id_col)
         .reset_index()
     ).clip(boundary)
 
+    # Clip Voronoi cells to a max buffer
+    print("Clip Voronoi cells to maximum buffer...")
+    clipped_voronoi_gdf = _clip_gdf_voronoi_cells_polygon_buffer(
+        polygon_gdf=gdf, voronoi_gdf=voronoi_gdf, buffer=buffer, id_col=id_col
+    )
+
+    # Return Voronoi cell geometries per building with original building ID
     return gpd.GeoDataFrame(
         gdf.drop(columns=["geometry"])
-        .merge(voronoi_gdf, how="inner", on=id_col)
+        .merge(clipped_voronoi_gdf, how="inner", on=id_col)
         .drop(columns=["index_right", id_col]),
         geometry="geometry",
         crs=gdf.crs,
+    )
+
+
+def _clip_gdf_voronoi_cells_polygon_buffer(
+    polygon_gdf: gpd.GeoDataFrame,
+    voronoi_gdf: gpd.GeoDataFrame,
+    buffer: float,
+    id_col: str,
+) -> gpd.GeoDataFrame:
+    """ """
+    # Create a buffered polygon for all polygons
+    buffered_gdf = polygon_gdf[[id_col, "geometry"]].copy()
+    buffered_gdf["geometry"] = buffered_gdf.geometry.buffer(buffer)
+
+    # Clip Voronoi cells to the defined buffer area if they are larger than it by calculating intersections
+    clipped_gdf = voronoi_gdf.overlay(buffered_gdf, how="intersection")
+    # Filter clipped cells (intersections) to ensure each polygon's Voronoi cell is clipped only by its own buffer
+    return (
+        clipped_gdf[clipped_gdf[f"{id_col}_1"] == clipped_gdf[f"{id_col}_2"]]
+        .drop(columns=[f"{id_col}_2"])
+        .rename(columns={f"{id_col}_1": id_col})
     )
 
 
@@ -243,7 +273,7 @@ def _handle_gdf_fragmented_cells(
         [cells_gdf["geometry"].buffer(-0.01), tech_gdf["geometry"].buffer(-0.01)]
     ).unary_union
 
-    # Explode union
+    # Explode union to get one unionised polygon per building
     union_gdf = gpd.GeoDataFrame(
         geometry=gpd.GeoSeries(union).explode(index_parts=False),
         crs=config["constant"]["target_crs"],
@@ -252,7 +282,7 @@ def _handle_gdf_fragmented_cells(
     # Add 1cm buffer back so that dissolving works later
     union_gdf["geometry"] = union_gdf["geometry"].buffer(0.01)
 
-    # Retain original unionised cell geometry
+    # Retain original unionised cell geometry - this will be the final geometry per building unless it's missing
     union_gdf["unionised_geometry"] = union_gdf["geometry"]
 
     # Join unionised cells back to original buildings
