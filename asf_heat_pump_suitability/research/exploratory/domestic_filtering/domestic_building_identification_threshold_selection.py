@@ -1,3 +1,19 @@
+"""
+Exploratory script to test different features and thresholds within that feature to improve the pipeline to identify
+buildings containing domestic UPRNs.
+
+The script uses council tax data from Plymouth as a ground truth of domestic UPRNs to compare against and uses the
+existing domestic identification pipeline outputs (as of 22 Apr 2026) as a baseline to improve upon. The aim of the
+exploration is to remove more true non-domestic buildings from our predicted domestic dataset.
+
+The analysis explores using ROC AUC score and Youden's J statistic; and Matthew's correlation coefficient (MCC) to identify
+a feature and threshold. MCC was selected for final feature and threshold selection due to being a more robust metric
+for highly imbalanced classification problems (seen here). MCC results for a single feature are compared to a
+decision tree classifier with multiple input features to validate results. Although performance of the decision tree
+classifier is slightly better, the single feature selected by MCC analysis was selected for pipeline improvement in
+alpha testing due to explainability and time constraints for more thorough evaluation of the classifier.
+"""
+
 from pathlib import Path
 import os
 
@@ -13,7 +29,7 @@ import shapely
 import matplotlib.pyplot as plt
 import folium
 
-from sklearn.metrics import matthews_corrcoef
+from sklearn.metrics import roc_auc_score, roc_curve, matthews_corrcoef
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 
 from asf_heat_pump_suitability import config
@@ -170,7 +186,7 @@ def generate_gdf_domestic_modelling_features(
     return labelled_gdf
 
 
-def generate_df_threshold_evaluation(
+def generate_df_threshold_evaluation_mcc(
     model_df: pd.DataFrame, features: List[str]
 ) -> pd.DataFrame:
     """
@@ -256,6 +272,87 @@ def generate_df_threshold_evaluation(
     print(scores_df)
 
     return scores_df
+
+
+def generate_df_threshold_evaluation_roc_auc(
+    model_df: pd.DataFrame, features: List[str]
+) -> pl.DataFrame:
+    """
+    For each feature in `features`, calculate the ROC AUC score for that feature for binary classification of buildings
+    into 'contains domestic' or not. Select the feature with the highest score, then calculate Youden's J statistic for
+    candidate thresholds for that feature. The best threshold is selected by maximising for Youden's J statistic.
+
+    Args:
+        model_df (pd.DataFrame): dataframe with target variable and all features of interest
+        features (List[str]): features of interest
+
+    Returns:
+        pl.DataFrame: best feature with Youden's J statistic for each threshold tested with some summary statistics
+    """
+    # Find best feature for thresholding from ROC AUC score
+    scores = {
+        feature: roc_auc_score(model_df["actual_domestic"], model_df[feature])
+        for feature in features
+    }
+    print("ROC AUC scores for each feature:")
+    print(pl.DataFrame(scores))
+    best_feature = max(scores, key=scores.get)
+    print(f"\nBest ROC AUC score: {max(scores.values())}\nBest feature: {best_feature}")
+
+    # Calculate ROC curve and Youden's J statistic for the selected feature
+    # sensitivity + specificity - 1 == TPR - FPR
+    fpr, tpr, thresholds = roc_curve(
+        y_true=model_df["actual_domestic"], y_score=model_df[best_feature]
+    )
+    youdens_df = pl.DataFrame({"youdens": tpr - fpr, "threshold": thresholds}).sort(
+        by="youdens", descending=True
+    )
+
+    # Number of true non-domestic buildings removed which were mislabelled by pipeline as domestic
+    n_removed_mislabeled_buildings = {
+        threshold: len(
+            model_df[
+                # Buildings below the selected threshold are classed as non-domestic
+                (model_df[best_feature] > threshold)
+                & (~model_df["actual_domestic"])
+                & (model_df["predicted_domestic"])
+            ]
+        )
+        for threshold in youdens_df["threshold"]
+    }
+    n_removed_mislabeled_buildings_df = pl.DataFrame(
+        {
+            "threshold": n_removed_mislabeled_buildings.keys(),
+            "N_removed_false_positives": n_removed_mislabeled_buildings.values(),
+        }
+    )
+
+    # Number of true domestic buildings removed by threshold
+    n_removed_true_domestic_buildings = {
+        threshold: len(
+            model_df[
+                # Buildings below the selected threshold are classed as non-domestic
+                (model_df[best_feature] < threshold)
+                & (model_df["actual_domestic"])
+            ]
+        )
+        for threshold in youdens_df["threshold"]
+    }
+
+    n_removed_true_domestic_buildings_df = pl.DataFrame(
+        {
+            "threshold": n_removed_true_domestic_buildings.keys(),
+            "N_removed_true_positives": n_removed_true_domestic_buildings.values(),
+        }
+    )
+
+    # Return results with summary statistics about buildings removed
+    youdens_df = youdens_df.join(
+        n_removed_mislabeled_buildings_df, how="left", on="threshold"
+    ).join(n_removed_true_domestic_buildings_df, how="left", on="threshold")
+
+    print(youdens_df)
+    return youdens_df
 
 
 def extract_tuple_best_feature_threshold(df: pd.DataFrame) -> tuple:
@@ -397,7 +494,7 @@ if __name__ == "__main__":
 
     # Pipeline outputs
     pipeline_domestic_uprns_df = base_getters.load_df_from_s3(
-        config["data"]["processed"]["plymouth_residential_uprns"]
+        "s3://asf-heat-pump-suitability/local_heat_planning/static/domestic_identification/plymouth_residential_uprns.parquet"
     )
     pipeline_domestic_uprns_gdf = uprns.generate_gdf_uprn_coords(
         pipeline_domestic_uprns_df
@@ -456,13 +553,18 @@ if __name__ == "__main__":
         density=True,
     )
 
-    # Find best thresholds for each feature
-    thresholds_df = generate_df_threshold_evaluation(
+    # Find best thresholds for each feature using MCC
+    mcc_thresholds_df = generate_df_threshold_evaluation_mcc(
+        model_df=features_df, features=features
+    )
+
+    # Find best thresholds for each feature using ROC AUC score and Youden's J statistic
+    youdens_thresholds_df = generate_df_threshold_evaluation_roc_auc(
         model_df=features_df, features=features
     )
 
     # Get best feature and threshold
-    feature, threshold = extract_tuple_best_feature_threshold(thresholds_df)
+    feature, threshold = extract_tuple_best_feature_threshold(mcc_thresholds_df)
 
     # Plot effect of threshold on the final labelling in the pipeline
     plot_folium_threshold_effect_on_labelling(
