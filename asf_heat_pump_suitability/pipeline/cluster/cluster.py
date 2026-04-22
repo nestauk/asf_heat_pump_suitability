@@ -110,6 +110,7 @@ def extend_edges_gdf(
         gdf (gpd.GeoDataFrame): polygons to create Voronoi polygons around.
         boundary (shapely.Polygon | shapely.MultiPolygon): boundary to clip Voronoi polygons to.
         spacing (float): Distance in metres to space interpolating points along polygon edges. Default 1.
+        buffer (float): buffer (in metres) around polygons in `gdf` to clip the Voronoi cells to. Default 20.
 
     Returns:
         gpd.GeoDataFrame: Voronoi polygons around the original input polygons. One row per original polygon.
@@ -193,7 +194,18 @@ def _clip_gdf_voronoi_cells_polygon_buffer(
     buffer: float,
     id_col: str,
 ) -> gpd.GeoDataFrame:
-    """ """
+    """
+    Clip Voronoi cells to a specified buffer distance around the original polygons in `polygon_gdf`.
+
+    Args:
+        polygon_gdf (gpd.GeoDataFrame): polygons to create Voronoi polygons around.
+        voronoi_gdf (gpd.GeoDataFrame): Voronoi cells created around the polygons in `polygon_gdf`.
+        buffer (float): buffer (in metres) around polygons in `polygon_gdf` to clip the Voronoi cells to. Default 20.
+        id_col (str): name of unique ID column in `polygon_gdf`.
+
+    Returns:
+        gpd.GeoDataFrame: clipped Voronoi cells
+    """
     # Create a buffered polygon for all polygons
     buffered_gdf = polygon_gdf[[id_col, "geometry"]].copy()
     buffered_gdf["geometry"] = buffered_gdf.geometry.buffer(buffer)
