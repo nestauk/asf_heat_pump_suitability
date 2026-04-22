@@ -340,16 +340,20 @@ def load_tranform_gdf_linestring_barriers(
         layer="railway_track", grid_squares=grid_squares
     )
 
-    barrier_road_types = [
-        "A Road" "B Road, Collapsed Dual Carriageway",
-        "Minor Road, Collapsed Dual Carriageway",
-        "Primary Road, Collapsed Dual Carriageway",
-        "Motorway",
-        "Motorway, Collapsed Dual Carriageway",
-        "A Road, Collapsed Dual Carriageway",
-    ]
+    # TODO selecting certain road types makes the clusters very large - needs revisiting
+    # barrier_road_types = [
+    #     "A Road", "B Road, Collapsed Dual Carriageway",
+    #     "Minor Road, Collapsed Dual Carriageway",
+    #     "Primary Road, Collapsed Dual Carriageway",
+    #     "Motorway",
+    #     "Motorway, Collapsed Dual Carriageway",
+    #     "A Road, Collapsed Dual Carriageway",
+    # ]
+    #
+    # barrier_roads_gdf = roads_gdf[roads_gdf["CLASSIFICA"].isin(barrier_road_types)]
 
-    barrier_roads_gdf = roads_gdf[roads_gdf["CLASSIFICA"].isin(barrier_road_types)]
+    # Use all roads
+    barrier_roads_gdf = roads_gdf.copy()
 
     line_overlays = [barrier_roads_gdf, railways_gdf]
     line_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in line_overlays])
@@ -507,9 +511,14 @@ if __name__ == "__main__":
     )
 
     if args.save:
+        # Simplify geometry for file size to tolerance of 5m
+        tolerance = 5
+        clusters_gdf["geometry"] = clusters_gdf["geometry"].simplify(
+            tolerance=tolerance
+        )
         save_utils.save_to_s3(
             clusters_gdf,
             config["output"]["dataset"]["tech_clusters"].format(
-                local_authorities=args.local_authorities
+                local_authorities=args.local_authorities, tolerance=tolerance
             ),
         )
