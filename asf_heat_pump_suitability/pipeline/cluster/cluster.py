@@ -266,8 +266,8 @@ def _handle_gdf_fragmented_cells(
     during overlaying the physical barriers.
 
     E.g. a physical barrier can bisect the Voronoi cell or remove parts of the Voronoi cell. This can result in a single
-    building footprint becoming joined to multiple cell fragments. This handles the fragments by retaining the largest
-    intersecting fragment for the Voronoi, and discarding the rest.
+    building footprint becoming joined to multiple cell fragments. This handles the fragments by retaining and unioning
+    all the fragments which intersect with the original polygon.
 
     Also retains the building footprint geometry for any domestic buildings which no longer have a Voronoi cell (due to
     overlay operation).
