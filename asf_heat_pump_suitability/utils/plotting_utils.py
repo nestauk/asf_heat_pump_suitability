@@ -32,12 +32,18 @@ def plot_feature_distribution_binary_classes(
 
     fig, axs = plt.subplots(nrows, ncols, figsize=(15, 8))
 
+    if density:
+        y_label = "Density"
+    else:
+        y_label = "Count"
+
     for ax, feature in zip(axs.ravel(), features):
         ax.hist(df.filter(pl.col(target))[feature], bins=40, alpha=0.5, density=density)
         ax.hist(
             df.filter(~pl.col(target))[feature], bins=40, alpha=0.5, density=density
         )
         ax.set_title(feature)
+        ax.set_ylabel(y_label)
 
     target_label = target.replace("_", " ").title()
 
