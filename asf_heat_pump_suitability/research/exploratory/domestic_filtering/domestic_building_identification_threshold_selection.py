@@ -84,7 +84,8 @@ def label_gdf_buildings_domestic_bool(
         boundary (shapely.Polygon | shapely.MultiPolygon): boundary of area of interest.
 
     Returns:
-        gpd.GeoDataFrame: buildings in area of interest labelled with actual and predicted domestic UPRN counts and boolean
+        gpd.GeoDataFrame: buildings in area of interest labelled with total UPRN, actual and predicted domestic UPRN
+        counts and boolean flags for actual and predicted building containing domestic
     """
     # Select buildings in area of interest
     bounded_buildings_gdf = buildings_gdf[
@@ -175,7 +176,7 @@ def generate_gdf_domestic_modelling_features(
         labelled_gdf["total_UPRN_count"] / labelled_gdf["footprint_area_m2"]
     )
 
-    # UPRN density measures
+    # Area per UPRN measures
     labelled_gdf["m2_per_predicted_UPRN"] = (
         labelled_gdf["footprint_area_m2"] / labelled_gdf["predicted_UPRN_count"]
     )
@@ -400,11 +401,13 @@ def plot_folium_threshold_effect_on_labelling(
     labelled_gdf = (
         labelled_gdf.sjoin(epc_gdf, how="left", predicate="contains")
         .drop_duplicates(subset="ID")
+        .fillna(False)
         .astype({"UPRN": "bool"})
+        .rename(columns={"UPRN": "contains_domestic_EPC"})
     )
 
-    # Remove buildings containing a domestic EPC as these will be retained regardless of threshold
-    labelled_gdf = labelled_gdf[~labelled_gdf["UPRN"]]
+    # Remove buildings containing a domestic EPC from gdf as these will be retained regardless of threshold
+    labelled_gdf = labelled_gdf[~labelled_gdf["contains_domestic_EPC"]]
 
     # Still erroneously labelled as domestic
     false_positives_gdf = labelled_gdf[
