@@ -310,32 +310,12 @@ if __name__ == "__main__":
     print(features_df["has_solar_pv"].value_counts())
     print(features_df["ENERGY_CONSUMPTION_CURRENT"].mean())
 
-    print(features_df)
-
-    epc_with_geometries_df = epc_df.join(
-        features_df.select(
-            [
-                pl.col("UPRN").cast(pl.Utf8),  # Cast to String to match epc_df
-                "X_COORDINATE",
-                "Y_COORDINATE",
-            ]
-        ),
-        how="left",
-        on="UPRN",
-    )
-
     # Add listed building boolean flag
     from asf_heat_pump_suitability.pipeline.prepare_features import listed_buildings
 
     uprns_listed_buildings_df = listed_buildings.generate_df_epc_listed_buildings(
-        epc_df=epc_with_geometries_df
+        epc_df=features_df[["UPRN", "X_COORDINATE", "Y_COORDINATE"]],
     ).with_columns(pl.lit(True).alias("in_listed_building"))
-
-    from asf_heat_pump_suitability.pipeline.transform.epc import retain_df_valid_uprns
-
-    uprns_listed_buildings_df = retain_df_valid_uprns(
-        uprns_listed_buildings_df, drop=True
-    )
 
     features_df = features_df.join(
         uprns_listed_buildings_df.select(["UPRN", "in_listed_building"]),
@@ -405,7 +385,6 @@ if __name__ == "__main__":
     coast_gdf = coast_gdf.set_geometry("simplified_geometry")
     coast_gdf["near_coastline"] = True
 
-    uprns_gdf.drop(columns=["index_right"], inplace=True)
     uprns_gdf = uprns_gdf.sjoin(
         coast_gdf[["near_coastline", "simplified_geometry"]],
         how="left",
@@ -465,16 +444,18 @@ if __name__ == "__main__":
     uprns_conservation_areas_df = (
         protected_areas.load_transform_df_uprn_in_protected_area(gdf=uprns_gdf)
     )
+    print(uprns_conservation_areas_df.columns)
+    print(uprns_conservation_areas_df)
 
-    uprns_conservation_areas_df = uprns_conservation_areas_df.with_columns(
-        pl.lit(True).alias("in_conservation_area")
+    features_df = (
+        features_df.join(
+            uprns_conservation_areas_df.select(["UPRN", "in_protected_area"]),
+            how="left",
+            on="UPRN",
+        )
+        .with_columns(pl.col("in_protected_area").fill_null(False))
+        .rename({"in_protected_area": "in_conservation_area"})
     )
-
-    features_df = features_df.join(
-        uprns_conservation_areas_df.select(["UPRN", "in_conservation_area"]),
-        how="left",
-        on="UPRN",
-    ).with_columns(pl.col("in_conservation_area").fill_null(False))
 
     print(features_df["in_conservation_area"].value_counts())
 
