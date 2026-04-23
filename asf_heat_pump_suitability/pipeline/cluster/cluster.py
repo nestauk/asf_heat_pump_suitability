@@ -23,6 +23,28 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
+ANCHOR_RADIUS = config["constant"]["anchor_radius"]
+
+ANCHOR_CATEGORIES = [
+    "Primary Education",
+    "Museum",
+    "Library",
+    "Further Education",
+    "Secondary Education",
+    "Fire Station",
+    "Sports And Leisure Centre",
+    "Hospital",
+    "Higher or University Education",
+    "Special Needs Education",
+    "Medical Care Accommodation",
+    "Non State Primary Education",
+    "Non State Secondary Education",
+    "Art Gallery",
+    "Police Station",
+    "Hospice",
+    "Airport",
+]
+
 TECH_TYPES = config["constant"]["tech_types"]
 TECH_CODES = {
     TECH_TYPES[k]: config["constant"]["tech_type_codes"][k] for k in TECH_TYPES
@@ -31,6 +53,8 @@ TECH_CODES = {
 NETWORKED = TECH_TYPES["networked"]
 COMMUNAL = TECH_TYPES["communal"]
 
+TECH_MAPPING = {NETWORKED: COMMUNAL}
+
 
 def generate_gdf_clusters(
     buildings_gdf: gpd.GeoDataFrame,
@@ -38,11 +62,14 @@ def generate_gdf_clusters(
     tech_gdf: gpd.GeoDataFrame,
     line_overlay_gdf: gpd.GeoDataFrame,
     polygon_overlay_gdf: gpd.GeoDataFrame,
+    combined_anchor_gdf: gpd.GeoDataFrame,
+    radius: float,
 ) -> gpd.GeoDataFrame:
     """
     Generate clusters of building footprints, where one cluster:
     - Contains buildings which are assigned the same tech type
     - Contains buildings which are not separated by physical environmental barriers
+    - Buildings within a given radius of an anchor are assigned a tech type of 'Communal solutions', if they were assigned N-GSHP by the decision tree
 
     Args:
         buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
@@ -50,6 +77,9 @@ def generate_gdf_clusters(
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries to separate clusters by.
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
+        poi_gdf (gpd.GeoDataFrame): anchor properties dataframe taken from POI data, with point geometries
+        important_buildings_gdf (gpd.GeoDataFrame): important building footprint polygons
+        radius (float): radius in metres around anchor property within which communal solutions should be assigned
 
     Returns:
         gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster
@@ -76,6 +106,17 @@ def generate_gdf_clusters(
     else:
         clusters_gdf = gdfs[0]
 
+    # anchor property tech reassignment
+    reassigned_gdf = reassign_gdf_near_anchor_properties(
+        tech_gdf=tech_gdf,
+        combined_anchor_gdf=combined_anchor_gdf,
+        radius=radius,
+    )
+    clusters_gdf["assigned_tech"] = clusters_gdf.ID.map(
+        reassigned_gdf.set_index("ID").to_dict()["assigned_tech"]
+    )
+
+    # TODO add ID column for clusters
     clusters_gdf = (
         clusters_gdf.dissolve(by="assigned_tech")
         .explode()
@@ -453,6 +494,88 @@ def reassign_gdf_communal_networked(
     )
 
 
+def load_transform_anchor_property_gdfs(
+    buildings_gdf: gpd.GeoDataFrame,
+    grid_squares: Optional[List[str]],
+    anchor_categories=ANCHOR_CATEGORIES,
+) -> gpd.GeoDataFrame:
+    """
+    Load data from POI and important buildings lists, select buildings using anchor property categories, and combine the resultant dataframes
+
+    Args:
+        buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
+        grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
+        Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
+        anchor_categories (Optional[List[str]]): list of anchor properties to filter important buildings list by. Defaults to ANCHOR_CATEGORIES
+    """
+    # select anchors out of important building gdf using anchor_categories list
+    # anchor categories list is defined at start of script
+
+    poi_gdf = gpd.read_file(
+        config["data"]["processed"]["poi_anchor_properties"]
+    ).to_crs(config["constant"]["target_crs"])
+
+    important_building_gdf = load_geodata.load_gdf_os_openmap_layer(
+        layer="important_building", grid_squares=grid_squares
+    )
+
+    important_building_gdf = important_building_gdf[
+        important_building_gdf["CLASSIFICA"].isin(anchor_categories)
+    ]
+
+    # add building footprint data to POI anchor properties so geometry isn't just a point
+    anchors_with_footprint = (
+        buildings_gdf.sjoin(poi_gdf, how="inner", predicate="contains")
+    ).drop("index_right", axis=1)
+
+    # add POI and important building lists together and remove duplicate buildings. Keep only common columns
+    combined_anchor_gdf = pd.concat(
+        [anchors_with_footprint, important_building_gdf], join="inner"
+    )
+    combined_anchor_gdf["geometry"] = combined_anchor_gdf.normalize()
+    combined_anchor_gdf = combined_anchor_gdf.drop_duplicates(["geometry"])
+    return combined_anchor_gdf
+
+
+def reassign_gdf_near_anchor_properties(
+    tech_gdf: gpd.GeoDataFrame,
+    combined_anchor_gdf: gpd.GeoDataFrame,
+    radius: float,
+) -> gpd.GeoDataFrame:
+    """
+    Reassign building tech type to communal if within a given radius of an anchor load property, if assigned N-GSHP by the decision tree
+
+    Args:
+        tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
+        radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' if they were assigned N-GSHP by the decision tree.
+    Returns:
+        gpd.GeoDataFrame: dataframe with `assigned_tech` column now reading communal if property is in radius of an anchor property, and was assigned N-GSHP by the decision tree.
+    """
+    # Spatial join to find nearest anchor for every building
+
+    tech_gdf = tech_gdf.sjoin_nearest(
+        combined_anchor_gdf[["geometry"]],
+        how="left",
+        max_distance=radius,
+        distance_col="distance_m",
+    ).drop("index_right", axis=1)
+
+    # distance_m column now reads a number (distance from anchor) for all buildings within radius of anchor, and NaN for all outside of that radius
+    # if distance column is not NaN (i.e. building is within the radius of an anchor), reassign tech type according to the map
+    tech_gdf["assigned_tech"] = np.where(
+        tech_gdf["distance_m"].notna(),
+        tech_gdf["assigned_tech"].replace(TECH_MAPPING),
+        tech_gdf["assigned_tech"],
+    )
+    # add column with True if near anchor, False if not
+    tech_gdf["within_{radius}m_from_anchor_property"] = np.where(
+        (tech_gdf["distance_m"]).notna(), True, False
+    )
+    tech_gdf = tech_gdf.drop("distance_m", axis=1)
+    return tech_gdf
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
@@ -501,6 +624,10 @@ if __name__ == "__main__":
     line_overlay_gdf = load_tranform_gdf_linestring_barriers(grid_squares)
     polygon_overlay_gdf = load_transform_gdf_polygon_barriers(grid_squares)
 
+    combined_anchor_gdf = load_transform_anchor_property_gdfs(
+        buildings_gdf=buildings_gdf, grid_squares=grid_squares
+    )
+
     # Generate clusters
     clusters_gdf = generate_gdf_clusters(
         buildings_gdf=buildings_gdf,
@@ -508,6 +635,8 @@ if __name__ == "__main__":
         tech_gdf=tech_gdf,
         line_overlay_gdf=line_overlay_gdf,
         polygon_overlay_gdf=polygon_overlay_gdf,
+        combined_anchor_gdf=combined_anchor_gdf,
+        radius=ANCHOR_RADIUS,
     )
 
     if args.save:

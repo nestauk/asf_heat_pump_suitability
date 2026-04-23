@@ -34,6 +34,7 @@ data:
   processed:
     non_domestic_poi_categories: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/non_residential_poi_categories.csv"
     plymouth_residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet"
+    poi_anchor_properties: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/poi_anchor_properties_gb.geojson"
 
 constant:
   plymouth:
@@ -99,6 +100,8 @@ constant:
     networked: "Networked heat pump"
     communal: "Communal solution"
     heat_networks: "District heat network"
+  # radius in metres around anchor properties within which we are reassigning N-GSHP to communal
+  anchor_radius: 50
   tech_type_codes:
     individual: "IND"
     networked: "NHP"
