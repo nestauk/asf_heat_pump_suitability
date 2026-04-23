@@ -378,10 +378,13 @@ if __name__ == "__main__":
     coast_gdf = gpd.read_file(
         "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
     )
+    coast_gdf = gpd.GeoDataFrame(
+        geometry=[coast_gdf.geometry.union_all()], crs=coast_gdf.crs
+    )
 
     # Simplify coastline boundaries by 150m and buffer by 1500m to create a 'near coastline' area
     coast_gdf["simplified_geometry"] = coast_gdf["geometry"].apply(
-        lambda x: x.simplify(tolerance=150).buffer(1500)
+        lambda x: x.boundary.simplify(tolerance=150).buffer(1500)
     )
     coast_gdf = coast_gdf.set_geometry("simplified_geometry")
     coast_gdf["near_coastline"] = True
