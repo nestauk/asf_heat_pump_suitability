@@ -26,23 +26,21 @@ from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 ANCHOR_RADIUS = config["constant"]["anchor_radius"]
 
 ANCHOR_CATEGORIES = [
+    "Medical Care Accommodation",
     "Primary Education",
-    "Museum",
-    "Library",
     "Further Education",
     "Secondary Education",
-    "Fire Station",
     "Sports And Leisure Centre",
     "Hospital",
     "Higher or University Education",
-    "Special Needs Education",
-    "Medical Care Accommodation",
-    "Non State Primary Education",
     "Non State Secondary Education",
-    "Art Gallery",
-    "Police Station",
-    "Hospice",
     "Airport",
+    "Library",
+    "Special Needs Education",
+    "Non State Primary Education",
+    "Art Gallery",
+    "Museum",
+    "Hospice",
 ]
 
 TECH_TYPES = config["constant"]["tech_types"]
