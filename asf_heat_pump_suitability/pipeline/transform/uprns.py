@@ -108,7 +108,11 @@ def filter_gdf_domestic_uprns(
     """
     Filter UPRNs to domestic UPRNs only by retaining UPRNs which appear in domestic EPC register, OR are located within
     a building footprint AND are not in the commercial EPC register and / or a building type that is unlikely to contain
-    residential properties, e.g. hospital, train station, museum etc.
+    residential properties, e.g. hospital, train station, museum etc, AND (for Plymouth only) are in a building with
+    `m2_per_predicted_UPRN` below a defined threshold.
+
+    See analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py for
+    threshold selection for Plymouth.
 
     Args:
         uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be filtered.
@@ -184,12 +188,14 @@ def _generate_gdf_non_domestic_buildings_by_density(
     """
     Generate a GeoDataFrame containing footprints of buildings which contain a UPRN predicted to be domestic and have a
     `m2_per_predicted_UPRN` value above the defined threshold. The aim of this function is to remove some of the true
-    non-domestic buildings mislabelled as domestic by removing those with large building footprints and low UPRN density.
+    non-domestic buildings mislabelled as domestic by removing those with large building footprints and low UPRN density,
+    unless they contain a UPRN with a domestic EPC record.
+
     The threshold selected as default (set in config) was determined through analysis that can be found in
     asf_heat_pump_suitability/research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py
 
     Args:
-        domestic_uprns_gdf (gpd.GeoDataFrame): UPRNs which are assumed to represent domestic properties with their point geometries.
+        domestic_uprns_gdf (gpd.GeoDataFrame): UPRNs which are predicted by the pipeline to represent domestic properties with their point geometries.
         buildings_gdf (gpd.GeoDataFrame): all building footprints in area of interest.
         epc_uprns (str): UPRNs with a domestic EPC record.
         id_col (str): name of ID column in `buildings_gdf`. Defaults to ID column defined in config.
