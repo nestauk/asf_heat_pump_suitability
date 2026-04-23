@@ -126,8 +126,8 @@ def generate_gdf_outdoor_space(
         # Group land extent intersections by their ID to get the largest part per parcel
         land_minus_buildings_parts.groupby("NATIONALCADASTRALREFERENCE")
         .agg(
-            max_contiguous_outdoor_space_area_m2=("outdoor_space_area_m2", max),
-            total_outdoor_space_area_m2=("outdoor_space_area_m2", sum),
+            max_contiguous_outdoor_space_area_m2=("outdoor_space_area_m2", "max"),
+            total_outdoor_space_area_m2=("outdoor_space_area_m2", "sum"),
         )
         .reset_index(
             # Drop duplicates in case there are multiple max values

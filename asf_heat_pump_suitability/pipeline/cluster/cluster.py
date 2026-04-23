@@ -7,8 +7,8 @@ Contains a script to produce clusters from building footprint polygons with assi
 python asf_heat_pump_suitability/pipeline/cluster/cluster.py
 
 Required args:
---tech_gdf path to geospatial file containing building footprints labelled with assigned tech type
 --local_authorities to specify which local authority / authorities to run the script for
+--save - Set to save output GeoDataFrame to S3.
 """
 
 from typing import Optional, List
@@ -23,6 +23,28 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
+ANCHOR_RADIUS = config["constant"]["anchor_radius"]
+
+ANCHOR_CATEGORIES = [
+    "Primary Education",
+    "Museum",
+    "Library",
+    "Further Education",
+    "Secondary Education",
+    "Fire Station",
+    "Sports And Leisure Centre",
+    "Hospital",
+    "Higher or University Education",
+    "Special Needs Education",
+    "Medical Care Accommodation",
+    "Non State Primary Education",
+    "Non State Secondary Education",
+    "Art Gallery",
+    "Police Station",
+    "Hospice",
+    "Airport",
+]
+
 TECH_TYPES = config["constant"]["tech_types"]
 TECH_CODES = {
     TECH_TYPES[k]: config["constant"]["tech_type_codes"][k] for k in TECH_TYPES
@@ -31,6 +53,8 @@ TECH_CODES = {
 NETWORKED = TECH_TYPES["networked"]
 COMMUNAL = TECH_TYPES["communal"]
 
+TECH_MAPPING = {NETWORKED: COMMUNAL}
+
 
 def generate_gdf_clusters(
     buildings_gdf: gpd.GeoDataFrame,
@@ -38,11 +62,14 @@ def generate_gdf_clusters(
     tech_gdf: gpd.GeoDataFrame,
     line_overlay_gdf: gpd.GeoDataFrame,
     polygon_overlay_gdf: gpd.GeoDataFrame,
+    combined_anchor_gdf: gpd.GeoDataFrame,
+    radius: float,
 ) -> gpd.GeoDataFrame:
     """
     Generate clusters of building footprints, where one cluster:
     - Contains buildings which are assigned the same tech type
     - Contains buildings which are not separated by physical environmental barriers
+    - Buildings within a given radius of an anchor are assigned a tech type of 'Communal solutions', if they were assigned N-GSHP by the decision tree
 
     Args:
         buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
@@ -50,6 +77,9 @@ def generate_gdf_clusters(
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries to separate clusters by.
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
+        poi_gdf (gpd.GeoDataFrame): anchor properties dataframe taken from POI data, with point geometries
+        important_buildings_gdf (gpd.GeoDataFrame): important building footprint polygons
+        radius (float): radius in metres around anchor property within which communal solutions should be assigned
 
     Returns:
         gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster
@@ -66,6 +96,7 @@ def generate_gdf_clusters(
             line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
         )
+        # TODO No reassignment based on neighbouring cells - TBC if wanted by user testing
         # gdfs.append(reassign_gdf_communal_networked(cells_gdf))
         gdfs.append(cells_gdf)
 
@@ -75,13 +106,25 @@ def generate_gdf_clusters(
     else:
         clusters_gdf = gdfs[0]
 
+    # anchor property tech reassignment
+    reassigned_gdf = reassign_gdf_near_anchor_properties(
+        tech_gdf=tech_gdf,
+        combined_anchor_gdf=combined_anchor_gdf,
+        radius=radius,
+    )
+    clusters_gdf["assigned_tech"] = clusters_gdf.ID.map(
+        reassigned_gdf.set_index("ID").to_dict()["assigned_tech"]
+    )
+
+    # TODO add ID column for clusters
     clusters_gdf = (
         clusters_gdf.dissolve(by="assigned_tech")
         .explode()
         .reset_index()[["assigned_tech", "geometry"]]
     )
 
-    # create an ID for each geometry that starts with the tech code and ends with a unique number, e.g. COM_1, COM_2, etc.
+    # Create an ID for each geometry that starts with the tech code and ends with a unique number
+    # e.g. COM_1, COM_2, etc.
     clusters_gdf["cluster_id"] = clusters_gdf.groupby("assigned_tech").cumcount()
 
     clusters_gdf["cluster_id"] = (
@@ -97,6 +140,7 @@ def extend_edges_gdf(
     gdf: gpd.GeoDataFrame,
     boundary: shapely.Polygon | shapely.MultiPolygon,
     spacing: float = 1.0,
+    buffer: float = 20.0,
 ) -> gpd.GeoDataFrame:
     """
     Creates Voronoi polygons around a set of input polygons by interpolating additional points along polygon edges
@@ -107,6 +151,7 @@ def extend_edges_gdf(
         gdf (gpd.GeoDataFrame): polygons to create Voronoi polygons around.
         boundary (shapely.Polygon | shapely.MultiPolygon): boundary to clip Voronoi polygons to.
         spacing (float): Distance in metres to space interpolating points along polygon edges. Default 1.
+        buffer (float): buffer (in metres) around polygons in `gdf` to clip the Voronoi cells to. Default 20.
 
     Returns:
         gpd.GeoDataFrame: Voronoi polygons around the original input polygons. One row per original polygon.
@@ -152,7 +197,7 @@ def extend_edges_gdf(
     coords = MultiPoint(points_gdf.geometry.tolist())
 
     print("Computing Voronoi diagram...")
-    # Compute Voronoi polygons up to specified boundary
+    # Compute Voronoi polygons up to specified boundary, create one Voronoi cell per point
     voronoi_collection = shapely.voronoi_polygons(coords, extend_to=boundary)
 
     # Convert to a geodataframe
@@ -161,19 +206,58 @@ def extend_edges_gdf(
     print(
         "Joining Voronois to original building footprints and dissolving per footprint..."
     )
-    # Join the points to the Voronoi cells and dissolve to get one polygon per building ID
+    # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
     voronoi_gdf = (
         voronoi_gdf.sjoin(points_gdf, how="inner", predicate="contains")
         .dissolve(by=id_col)
         .reset_index()
     ).clip(boundary)
 
+    # Clip Voronoi cells to a max buffer
+    print("Clip Voronoi cells to maximum buffer...")
+    clipped_voronoi_gdf = _clip_gdf_voronoi_cells_polygon_buffer(
+        polygon_gdf=gdf, voronoi_gdf=voronoi_gdf, buffer=buffer, id_col=id_col
+    )
+
+    # Return Voronoi cell geometries per building with original building ID
     return gpd.GeoDataFrame(
         gdf.drop(columns=["geometry"])
-        .merge(voronoi_gdf, how="inner", on=id_col)
+        .merge(clipped_voronoi_gdf, how="inner", on=id_col)
         .drop(columns=["index_right", id_col]),
         geometry="geometry",
         crs=gdf.crs,
+    )
+
+
+def _clip_gdf_voronoi_cells_polygon_buffer(
+    polygon_gdf: gpd.GeoDataFrame,
+    voronoi_gdf: gpd.GeoDataFrame,
+    buffer: float,
+    id_col: str,
+) -> gpd.GeoDataFrame:
+    """
+    Clip Voronoi cells to a specified buffer distance around the original polygons in `polygon_gdf`.
+
+    Args:
+        polygon_gdf (gpd.GeoDataFrame): polygons to create Voronoi polygons around.
+        voronoi_gdf (gpd.GeoDataFrame): Voronoi cells created around the polygons in `polygon_gdf`.
+        buffer (float): buffer (in metres) around polygons in `polygon_gdf` to clip the Voronoi cells to. Default 20.
+        id_col (str): name of unique ID column in `polygon_gdf`.
+
+    Returns:
+        gpd.GeoDataFrame: clipped Voronoi cells
+    """
+    # Create a buffered polygon for all polygons
+    buffered_gdf = polygon_gdf[[id_col, "geometry"]].copy()
+    buffered_gdf["geometry"] = buffered_gdf.geometry.buffer(buffer)
+
+    # Clip Voronoi cells to the defined buffer area if they are larger than it by calculating intersections
+    clipped_gdf = voronoi_gdf.overlay(buffered_gdf, how="intersection")
+    # Filter clipped cells (intersections) to ensure each polygon's Voronoi cell is clipped only by its own buffer
+    return (
+        clipped_gdf[clipped_gdf[f"{id_col}_1"] == clipped_gdf[f"{id_col}_2"]]
+        .drop(columns=[f"{id_col}_2"])
+        .rename(columns={f"{id_col}_1": id_col})
     )
 
 
@@ -223,8 +307,8 @@ def _handle_gdf_fragmented_cells(
     during overlaying the physical barriers.
 
     E.g. a physical barrier can bisect the Voronoi cell or remove parts of the Voronoi cell. This can result in a single
-    building footprint becoming joined to multiple cell fragments. This handles the fragments by retaining the largest
-    intersecting fragment for the Voronoi, and discarding the rest.
+    building footprint becoming joined to multiple cell fragments. This handles the fragments by retaining and unioning
+    all the fragments which intersect with the original polygon.
 
     Also retains the building footprint geometry for any domestic buildings which no longer have a Voronoi cell (due to
     overlay operation).
@@ -242,7 +326,7 @@ def _handle_gdf_fragmented_cells(
         [cells_gdf["geometry"].buffer(-0.01), tech_gdf["geometry"].buffer(-0.01)]
     ).unary_union
 
-    # Explode union
+    # Explode union to get one unionised polygon per building
     union_gdf = gpd.GeoDataFrame(
         geometry=gpd.GeoSeries(union).explode(index_parts=False),
         crs=config["constant"]["target_crs"],
@@ -251,7 +335,7 @@ def _handle_gdf_fragmented_cells(
     # Add 1cm buffer back so that dissolving works later
     union_gdf["geometry"] = union_gdf["geometry"].buffer(0.01)
 
-    # Retain original unionised cell geometry
+    # Retain original unionised cell geometry - this will be the final geometry per building unless it's missing
     union_gdf["unionised_geometry"] = union_gdf["geometry"]
 
     # Join unionised cells back to original buildings
@@ -398,6 +482,88 @@ def reassign_gdf_communal_networked(
     )
 
 
+def load_transform_anchor_property_gdfs(
+    buildings_gdf: gpd.GeoDataFrame,
+    grid_squares: Optional[List[str]],
+    anchor_categories=ANCHOR_CATEGORIES,
+) -> gpd.GeoDataFrame:
+    """
+    Load data from POI and important buildings lists, select buildings using anchor property categories, and combine the resultant dataframes
+
+    Args:
+        buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
+        grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
+        Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
+        anchor_categories (Optional[List[str]]): list of anchor properties to filter important buildings list by. Defaults to ANCHOR_CATEGORIES
+    """
+    # select anchors out of important building gdf using anchor_categories list
+    # anchor categories list is defined at start of script
+
+    poi_gdf = gpd.read_file(
+        config["data"]["processed"]["poi_anchor_properties"]
+    ).to_crs(config["constant"]["target_crs"])
+
+    important_building_gdf = load_geodata.load_gdf_os_openmap_layer(
+        layer="important_building", grid_squares=grid_squares
+    )
+
+    important_building_gdf = important_building_gdf[
+        important_building_gdf["CLASSIFICA"].isin(anchor_categories)
+    ]
+
+    # add building footprint data to POI anchor properties so geometry isn't just a point
+    anchors_with_footprint = (
+        buildings_gdf.sjoin(poi_gdf, how="inner", predicate="contains")
+    ).drop("index_right", axis=1)
+
+    # add POI and important building lists together and remove duplicate buildings. Keep only common columns
+    combined_anchor_gdf = pd.concat(
+        [anchors_with_footprint, important_building_gdf], join="inner"
+    )
+    combined_anchor_gdf["geometry"] = combined_anchor_gdf.normalize()
+    combined_anchor_gdf = combined_anchor_gdf.drop_duplicates(["geometry"])
+    return combined_anchor_gdf
+
+
+def reassign_gdf_near_anchor_properties(
+    tech_gdf: gpd.GeoDataFrame,
+    combined_anchor_gdf: gpd.GeoDataFrame,
+    radius: float,
+) -> gpd.GeoDataFrame:
+    """
+    Reassign building tech type to communal if within a given radius of an anchor load property, if assigned N-GSHP by the decision tree
+
+    Args:
+        tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
+        radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' if they were assigned N-GSHP by the decision tree.
+    Returns:
+        gpd.GeoDataFrame: dataframe with `assigned_tech` column now reading communal if property is in radius of an anchor property, and was assigned N-GSHP by the decision tree.
+    """
+    # Spatial join to find nearest anchor for every building
+
+    tech_gdf = tech_gdf.sjoin_nearest(
+        combined_anchor_gdf[["geometry"]],
+        how="left",
+        max_distance=radius,
+        distance_col="distance_m",
+    ).drop("index_right", axis=1)
+
+    # distance_m column now reads a number (distance from anchor) for all buildings within radius of anchor, and NaN for all outside of that radius
+    # if distance column is not NaN (i.e. building is within the radius of an anchor), reassign tech type according to the map
+    tech_gdf["assigned_tech"] = np.where(
+        tech_gdf["distance_m"].notna(),
+        tech_gdf["assigned_tech"].replace(TECH_MAPPING),
+        tech_gdf["assigned_tech"],
+    )
+    # add column with True if near anchor, False if not
+    tech_gdf["within_{radius}m_from_anchor_property"] = np.where(
+        (tech_gdf["distance_m"]).notna(), True, False
+    )
+    tech_gdf = tech_gdf.drop("distance_m", axis=1)
+    return tech_gdf
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
@@ -406,14 +572,6 @@ def parse_arguments() -> argparse.Namespace:
         argparse.Namespace: populated `Namespace`
     """
     parser = argparse.ArgumentParser()
-
-    # TODO this is a placeholder and likely to change as the script develops
-    parser.add_argument(
-        "--tech_gdf",
-        help="Path to S3 geoparquet file containing building footprints with their tech types assigned by the decision tree.",
-        type=str,
-        required=True,
-    )
 
     parser.add_argument(
         "--local_authorities",
@@ -433,7 +591,11 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_arguments()
     tech_gdf = (
-        gpd.read_parquet(args.tech_gdf)
+        gpd.read_parquet(
+            config["output"]["dataset"]["buildings_most_suitable_tech"].format(
+                local_authorities=args.local_authorities
+            )
+        )
         .set_geometry("geometry")
         .to_crs(config["constant"]["target_crs"])
     )
@@ -450,6 +612,10 @@ if __name__ == "__main__":
     line_overlay_gdf = load_tranform_gdf_linestring_barriers(grid_squares)
     polygon_overlay_gdf = load_transform_gdf_polygon_barriers(grid_squares)
 
+    combined_anchor_gdf = load_transform_anchor_property_gdfs(
+        buildings_gdf=buildings_gdf, grid_squares=grid_squares
+    )
+
     # Generate clusters
     clusters_gdf = generate_gdf_clusters(
         buildings_gdf=buildings_gdf,
@@ -457,12 +623,19 @@ if __name__ == "__main__":
         tech_gdf=tech_gdf,
         line_overlay_gdf=line_overlay_gdf,
         polygon_overlay_gdf=polygon_overlay_gdf,
+        combined_anchor_gdf=combined_anchor_gdf,
+        radius=ANCHOR_RADIUS,
     )
 
     if args.save:
+        # Simplify geometry for file size to tolerance of 5m
+        tolerance = 5
+        clusters_gdf["geometry"] = clusters_gdf["geometry"].simplify(
+            tolerance=tolerance
+        )
         save_utils.save_to_s3(
             clusters_gdf,
-            config["output"]["save_as"]["tech_clusters"].format(
-                local_authorities=args.local_authorities
+            config["output"]["dataset"]["tech_clusters"].format(
+                local_authorities=args.local_authorities, tolerance=tolerance
             ),
         )
