@@ -292,19 +292,45 @@ def generate_df_threshold_evaluation_roc_auc(
     """
     # Find best feature for thresholding from ROC AUC score
     scores = {
-        feature: roc_auc_score(model_df["actual_domestic"], model_df[feature])
-        for feature in features
+        "feature": features,
+        "score": [
+            roc_auc_score(model_df["actual_domestic"], model_df[feature])
+            for feature in features
+        ],
     }
+    scores_df = pl.DataFrame(scores).with_columns(
+        pl.when(pl.col("score") < 0.5)
+        .then(1 - pl.col("score"))
+        .otherwise(pl.col("score"))
+        .alias("score"),
+        pl.when(pl.col("score") < 0.5)
+        .then(pl.lit("less_than"))
+        .otherwise(pl.lit("greater_than"))
+        .alias("direction_of_threshold"),
+    )
+
     print("ROC AUC scores for each feature:")
-    print(pl.DataFrame(scores))
-    best_feature = max(scores, key=scores.get)
-    print(f"\nBest ROC AUC score: {max(scores.values())}\nBest feature: {best_feature}")
+    print(scores_df)
+
+    best_score = scores_df.filter(pl.col("score") == pl.max("score"))
+    best_feature = best_score["feature"][0]
+    direction = best_score["direction_of_threshold"][0]
+    print(
+        f"\nBest ROC AUC score: {best_score['score'][0]}\nBest feature: {best_feature}"
+    )
 
     # Calculate ROC curve and Youden's J statistic for the selected feature
     # sensitivity + specificity - 1 == TPR - FPR
-    fpr, tpr, thresholds = roc_curve(
-        y_true=model_df["actual_domestic"], y_score=model_df[best_feature]
-    )
+    if direction == "greater_than":
+        fpr, tpr, thresholds = roc_curve(
+            y_true=model_df["actual_domestic"], y_score=model_df[best_feature]
+        )
+
+    else:
+        fpr, tpr, thresholds = roc_curve(
+            y_true=~model_df["actual_domestic"], y_score=model_df[best_feature]
+        )
+
     youdens_df = pl.DataFrame({"youdens": tpr - fpr, "threshold": thresholds}).sort(
         by="youdens", descending=True
     )
