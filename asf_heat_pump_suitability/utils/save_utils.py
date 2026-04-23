@@ -1,5 +1,7 @@
+import fsspec
 import s3fs
 import polars as pl
+import geopandas as gpd
 import logging
 import boto3
 from sklearn.base import BaseEstimator
@@ -22,30 +24,50 @@ def save_model_to_pkl_s3(model: BaseEstimator, path: str) -> None:
     print(f"Saved model to {path}")
 
 
-def save_to_s3(df: pl.DataFrame, path: str) -> None:
+def save_to_s3(df: pl.DataFrame | gpd.GeoDataFrame, path: str) -> None:
     """
-    Save dataframe as parquet file to S3.
+    Save polars.DataFrame as parquet or csv file to S3, or save geopandas.GeoDataFrame as geoparquet, geojson, or other
+    specified file type to S3.
 
     Args:
-        df (pl.DataFrame): dataframe
+        df (pl.DataFrame | gpd.GeoDataFrame): dataframe or geodataframe
         path (str): path to S3 destination
 
     Returns:
         None
+
+    Raises:
+        ValueError: if file type not allowed
+        TypeError: if `df` argument is not a polars.DataFrame or a geopandas.GeoDataFrame
     """
     logging.info(f"Saving file to {path}")
     file_type = path.split(".")[-1]
     fs = s3fs.S3FileSystem()
-    if file_type == "parquet":
-        with fs.open(path=path, mode="wb") as f:
-            df.write_parquet(f)
-    elif file_type == "csv":
-        with fs.open(path=path, mode="wb") as f:
-            df.write_csv(f)
+    if isinstance(df, pl.DataFrame):
+        if file_type == "parquet":
+            with fs.open(path=path, mode="wb") as f:
+                df.write_parquet(f)
+        elif file_type == "csv":
+            with fs.open(path=path, mode="wb") as f:
+                df.write_csv(f)
+        else:
+            raise ValueError(
+                "Save to S3 can only save polars DataFrames .parquet or .csv file types."
+                "Please ensure the `path` argument contains one of these file types."
+            )
+    elif isinstance(df, gpd.GeoDataFrame):
+        if file_type == "parquet":
+            df.to_parquet(path)
+        elif file_type == "geojson":
+            df = df.to_crs(epsg=4326)
+            with fsspec.open(path, "w") as f:
+                f.write(df.to_json(drop_id=True))
+        else:
+            with fsspec.open(path, "wb") as f:
+                df.to_file(f)
     else:
-        raise ValueError(
-            "Save to S3 can only save .parquet or .csv file types."
-            "Please ensure the `path` argument contains one of these file types."
+        raise TypeError(
+            f"Can only save polars.DataFrame or geopandas.GeoDataFrame, not {type(df)}"
         )
 
 
