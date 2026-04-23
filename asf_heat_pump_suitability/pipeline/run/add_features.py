@@ -383,9 +383,10 @@ if __name__ == "__main__":
     )
 
     # Simplify coastline boundaries by 150m and buffer by 1500m to create a 'near coastline' area
-    coast_gdf["simplified_geometry"] = coast_gdf["geometry"].apply(
-        lambda x: x.boundary.simplify(tolerance=150).buffer(1500)
-    )
+    coast_gdf["simplified_geometry"] = coast_gdf.geometry.boundary.simplify(
+        tolerance=150
+    ).buffer(1500)
+
     coast_gdf = coast_gdf.set_geometry("simplified_geometry")
     coast_gdf["near_coastline"] = True
 
