@@ -250,7 +250,11 @@ def _clip_gdf_voronoi_cells_polygon_buffer(
     # Create a buffered polygon for all polygons
     buffered_gdf = polygon_gdf[[id_col, "geometry"]].copy()
     buffered_gdf["geometry"] = buffered_gdf.geometry.buffer(
-        buffer, join_style=2, mitre_limit=2
+        # Use mitre join_style which reduces densification of corner vertices when buffering
+        buffer,
+        join_style=2,
+        mitre_limit=2,
+        # Simplify with a tolerance of 1mm to remove vertices which are extremely close together
     ).simplify(0.001)
 
     # Clip Voronoi cells to the defined buffer area if they are larger than it by calculating intersections
