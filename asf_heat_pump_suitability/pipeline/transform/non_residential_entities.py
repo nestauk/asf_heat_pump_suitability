@@ -6,7 +6,6 @@ import geopandas as gpd
 import pandas as pd
 
 from asf_heat_pump_suitability.pipeline.transform import uprns
-from asf_heat_pump_suitability import config
 
 # TODO these may need refinement for large cities where overlap with residential is possible
 NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
@@ -34,7 +33,7 @@ NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
 ]
 
 
-def _generate_gdf_fully_commercial_buildings(
+def _generate_gdf_fully_non_domestic_buildings(
     important_building_gdf: gpd.GeoDataFrame,
     poi_gdf: gpd.GeoDataFrame,
     uprns_gdf: gpd.GeoDataFrame,
@@ -45,7 +44,7 @@ def _generate_gdf_fully_commercial_buildings(
     Args:
         important_building_gdf (gpd.GeoDataFrame): OS OpenMap Local important building footprints in area of interest
         poi_gdf (gpd.GeoDataFrame): All Points of Interest geopoints in area of interest
-        uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries in area of interest
+        uprns_gdf (gpd.GeoDataFrame): all UPRNs with point geometries in area of interest
         building_gdf (gpd.GeoDataFrame): all building footprints in area of interest
     Returns:
         gpd.GeoDataFrame: geometries of buildings which are in the important buildings list and have 1 UPRN in them, or in the POI list and have same number of UPRNs and POI
@@ -64,7 +63,7 @@ def _generate_gdf_fully_commercial_buildings(
     poi_buildings_gdf = gpd.GeoDataFrame(
         poi_buildings_df,
         geometry=poi_buildings_df["geometry"],
-        crs=config["constant"]["target_crs"],
+        crs=poi_buildings_gdf.crs,
     )
 
     # join important buildings and POI with all UPRNs
@@ -85,7 +84,7 @@ def _generate_gdf_fully_commercial_buildings(
     important_building_gdf = gpd.GeoDataFrame(
         important_building_df,
         geometry=important_building_df["geometry"],
-        crs=config["constant"]["target_crs"],
+        crs=important_building_gdf.crs,
     )
 
     # find number of UPRNs per building for POI buildings and convert result to gdf
@@ -101,7 +100,7 @@ def _generate_gdf_fully_commercial_buildings(
     poi_buildings_gdf = gpd.GeoDataFrame(
         poi_buildings_df,
         geometry=poi_buildings_df["geometry"],
-        crs=config["constant"]["target_crs"],
+        crs=poi_buildings_gdf.crs,
     )
 
     # select building footprints from important building data where UPRN count = 1
@@ -111,7 +110,7 @@ def _generate_gdf_fully_commercial_buildings(
 
     # select building footprints from POI data where UPRN count = POI count
     poi_buildings_gdf = poi_buildings_gdf.loc[
-        poi_buildings_gdf["UPRN_count"] == poi_buildings_gdf["POI_count"]
+        poi_buildings_gdf["UPRN_count"] <= poi_buildings_gdf["POI_count"]
     ]
 
     # concat gdfs and keep only geometry column
@@ -141,7 +140,7 @@ def generate_gdf_non_residential_buildings(
         non_domestic_poi_gdf (gpd.GeoDataFrame): non-domestic Points of Interest geopoints in area of interest, unlikely to be in mixed-use buildings
         poi_gdf (gpd.GeoDataFrame): All Points of Interest geopoints in area of interest
         building_gdf (gpd.GeoDataFrame): all building footprints in area of interest
-        uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries in area of interest
+        uprns_gdf (gpd.GeoDataFrame): all UPRNs with point geometries in area of interest
 
     Returns:
         gpd.GeoDataFrame: geometries of buildings which are unlikely to contain residential properties
@@ -187,7 +186,7 @@ def generate_gdf_non_residential_buildings(
     )
 
     # creating list of buildings from all important buildings and POI data with exactly 1 UPRN in them- these are likely to be fully commercial units
-    fully_commercial_buildings_gdf = _generate_gdf_fully_commercial_buildings(
+    fully_non_domestic_buildings_gdf = _generate_gdf_fully_non_domestic_buildings(
         important_building_gdf=important_building_gdf,
         poi_gdf=poi_gdf,
         uprns_gdf=uprns_gdf,
@@ -200,7 +199,7 @@ def generate_gdf_non_residential_buildings(
             exclude_buildings_gdf[["geometry"]],
             railway_station_gdf[["geometry"]],
             non_domestic_poi_gdf[["geometry"]],
-            fully_commercial_buildings_gdf[["geometry"]],
+            fully_non_domestic_buildings_gdf[["geometry"]],
         ]
     )
 
