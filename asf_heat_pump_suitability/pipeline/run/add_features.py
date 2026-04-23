@@ -6,7 +6,17 @@ Script to add features to UPRNs:
 - EPC-derived features of tenure; attachment type of property; and current energy rating
 
 Run:
-python asf_heat_pump_suitability/pipeline/run/add_features.py --uprns path/to/domestic/UPRNs.parquet
+python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES
+
+where LOCAL_AUTHORITIES is one of:
+- `plymouth` for Plymouth only
+- `plymouth_similar` for Plymouth and 4 similar local authorities (Liverpool, Portsmouth, Southampton, Swansea)
+- `sampling_areas` for Plymouth and 5 different local authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham)
+- `greater_manchester_las` for all Greater Manchester local authorities (Bolton, Bury, Manchester, Oldham, Rochdale, Salford, Stockport, Tameside, Trafford, Wigan)
+- `cardiff` for Cardiff only
+You can see the full list of local authority options in the `constant` section of the config.yaml file.
+
+Set -- `--detail "simplified"` to use simplified spatial signature polygons to label city centres. The default is "full" which uses the fully detailed spatial signatures framework.
 
 To save outputs to S3, add --save flag.
 """
@@ -23,20 +33,21 @@ def parse_arguments() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser()
 
-    # TODO this is a placeholder and likely to change as the script develops
-    parser.add_argument(
-        "--uprns",
-        help="Path to domestic UPRN dataset with X and Y coordinates in parquet.",
-        type=str,
-        required=True,
-    )
-
     parser.add_argument(
         "--local_authorities",
         help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
         required=True,
     )
+
+    parser.add_argument(
+        "--detail",
+        help="Level of detail for spatial signatures dataset to label city centres. Takes values 'simplified' or 'full'. Defaults to 'full'.",
+        required=False,
+        default="full",
+        type=str,
+    )
+
     parser.add_argument(
         "--save",
         help="If --save is set, it saves outputs to S3.",
@@ -48,7 +59,6 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    import os
     import polars as pl
     import geopandas as gpd
     import pandas as pd
@@ -75,12 +85,25 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import get_datasets
 
     args = parse_arguments()
-    las = args.local_authorities.lower()
+
+    local_authorities = args.local_authorities.lower()
+
+    list_las = (
+        config["constant"][local_authorities]["la_names"]
+        if isinstance(config["constant"][local_authorities]["la_names"], list)
+        else [config["constant"][local_authorities]["la_names"]]
+    )
+    detail_level = args.detail
+    uprns_path = config["output"]["dataset"]["residential_uprns"].format(
+        local_authority=local_authorities
+    )
+    grid_squares = config["constant"][local_authorities]["grid_squares"]
 
     # Load UPRN data
-    print(f"Loading domestic UPRNs from: {args.uprns}")
+    print(f"Loading domestic UPRNs from: {uprns_path}")
     uprns_df = pl.read_parquet(
-        args.uprns, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
+        uprns_path,
+        columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
     )
 
     # Get geopoints of UPRNs
@@ -98,19 +121,19 @@ if __name__ == "__main__":
     # PREDICT BLOCK OF FLATS CLASSIFICATION
     # Load building footprint data
     # TODO scale beyond sampling areas
-    building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-        layer="building", grid_squares="SX"
+    buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+        layer="building", grid_squares=grid_squares
     )
 
     # Map UPRNs to the ID of the building they're in
     uprn_building_id_dict = uprns.map_dict_uprns_to_building_id(
-        uprns_gdf=uprns_gdf, buildings_gdf=building_footprints_gdf, id_col="ID"
+        uprns_gdf=uprns_gdf, buildings_gdf=buildings_gdf, id_col="ID"
     )
 
     uprns_gdf["property_type_flat"] = uprns_gdf["UPRN"].isin(flat_uprns)
     # Generate features for block of flats classification model
     building_features_df = feature_engineering.generate_df_features(
-        buildings_gdf=building_footprints_gdf,
+        buildings_gdf=buildings_gdf,
         uprns_gdf=uprns_gdf,
         id_col="ID",
     )
@@ -139,15 +162,43 @@ if __name__ == "__main__":
 
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
-    # Load Plymouth existing heat network zone polygons and label UPRNs in HN zones
-    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=las)
+
+    # Load planned heat network zone polygons
+    hn_zones_gdf = gpd.GeoDataFrame()
+    # Check if heat network zone geodata is available for each LA in the list, and if so, load it and concatenate it to a single geodataframe.
+    for la in list_las:
+        try:
+            # TODO: deal with the potential for different Zone ID column names in different HN zone datasets
+            hn_zones_gdf = pd.concat(
+                [
+                    hn_zones_gdf,
+                    load_geodata.load_gdf_heat_network_zones(local_authority=la),
+                ],
+                ignore_index=True,
+            )
+        except ValueError:
+            print(
+                f"No heat network zone geodata found for {la}. All UPRNs will be labelled as 'outside heat network zone' in this Local Authority."
+            )
+
+        # If hn_zones_gdf is empty after attempting to load for each LA individually, try loading a combined HN zone geodataframe for the whole list of LAs
+        # (this is because for some groups of LAs, e.g. Greater Manchester Combined Authority, there is only a combined HN zone geodataframe and no individual ones).
+        try:
+            hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
+                local_authority=local_authorities
+            )
+        except ValueError:
+            print(
+                f"No heat network zone geodata found for {local_authorities}. All UPRNs will be labelled as 'outside heat network zone' in this group of Local Authorities."
+            )
+
     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
         uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
     )
 
     # Load spatial signature polygons and label UPRNs in city centres
     spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
-        detail_level="simplified"
+        detail_level=detail_level
     )
     features_df = city_centres.extend_df_city_centre_labels(
         uprns_df=features_df,
@@ -155,13 +206,12 @@ if __name__ == "__main__":
         spatial_signatures_gdf=spatial_signatures_gdf,
     )
     del hn_zones_gdf, spatial_signatures_gdf
-
     # ------------------------ #
     # ESTIMATE OUTDOOR SPACE
     # TODO scale beyond Plymouth. This is a temporary fix to working with multiple LAs
     print("Loading land registry data...")
 
-    if las == "plymouth":
+    if local_authorities == "plymouth":
         land_parcels_gdf = gpd.read_file(
             "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
         )
@@ -170,7 +220,7 @@ if __name__ == "__main__":
             path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EW.geojson"
         )
         inspire_file_names = inspire_file_names[
-            inspire_file_names["LAD23NM"].isin(config["constant"][las]["la_names"])
+            inspire_file_names["LAD23NM"].isin(list_las)
         ]["inspire_file_name"].unique()
 
         land_parcels_gdf = pd.concat(
@@ -181,14 +231,14 @@ if __name__ == "__main__":
             ignore_index=False,
         )
 
-    building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-        layer="building", grid_squares=config["constant"][las]["grid_squares"]
+    buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+        layer="building", grid_squares=grid_squares
     )
 
     # Get intersection of building footprint polygons and land polygons
     intersection_gdf = outdoor_space.generate_gdf_building_intersections(
         land_parcels_gdf=land_parcels_gdf,
-        building_footprints_gdf=building_footprints_gdf,
+        buildings_gdf=buildings_gdf,
     )
 
     # Get outdoor space
@@ -216,7 +266,7 @@ if __name__ == "__main__":
 
     del (
         land_parcels_gdf,
-        building_footprints_gdf,
+        buildings_gdf,
         intersection_gdf,
         outdoor_space_gdf,
         uprns_space_df,
@@ -244,5 +294,7 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             features_df,
-            path=f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{os.path.basename(args.uprns).split('.')[0]}_with_features.parquet",
+            path=config["output"]["dataset"]["residential_uprns_with_features"].format(
+                local_authority=local_authorities
+            ),
         )

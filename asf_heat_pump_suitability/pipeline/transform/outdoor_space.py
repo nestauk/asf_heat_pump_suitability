@@ -33,7 +33,7 @@ def match_series_files_land_building(
 
 def generate_gdf_building_intersections(
     land_parcels_gdf: gpd.GeoDataFrame,
-    building_footprints_gdf: gpd.GeoDataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
     outbuilding_size: int = 30,
     s_building_prop: float = 0.45,
     min_intersection: float = 15,
@@ -54,7 +54,7 @@ def generate_gdf_building_intersections(
 
     Args:
         land_parcels_gdf (gpd.GeoDataFrame): land parcel polygons
-        building_footprints_gdf (gpd.GeoDataFrame): building footprint polygons
+        buildings_gdf (gpd.GeoDataFrame): building footprint polygons
         outbuilding_size (int): max area (m2) of building footprints assumed to be outbuildings. Default 30m2 - the average size of a double garage.
         s_building_prop (float): minimum proportion of buildings smaller than outbuilding_size. Default 45%.
         min_intersection (float): minimum area (m2) of intersection of buildings larger than outbuilding_size (metres squared). Default 15m2 - the minimum size for a building intersection to be considered a genuine building.
@@ -62,11 +62,11 @@ def generate_gdf_building_intersections(
     Returns:
         gpd.GeoDataFrame: polygon intersections of land parcel polygons and building footprint polygons
     """
-    building_footprints_gdf["building_area_m2"] = building_footprints_gdf.area
+    buildings_gdf["building_area_m2"] = buildings_gdf.area
 
     gdf = gpd.overlay(
         land_parcels_gdf,
-        building_footprints_gdf,
+        buildings_gdf,
         how="intersection",
         keep_geom_type=False,
     )
