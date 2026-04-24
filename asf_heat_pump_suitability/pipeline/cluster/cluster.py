@@ -602,19 +602,22 @@ def parse_arguments() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = parse_arguments()
+    local_authorities = args.local_authorities
+    list_las = config["constant"][local_authorities]["la_names"]
+
     tech_gdf = (
         gpd.read_parquet(
             config["output"]["dataset"]["buildings_most_suitable_tech"].format(
-                local_authorities=args.local_authorities
+                local_authorities=local_authorities
             )
         )
         .set_geometry("geometry")
         .to_crs(config["constant"]["target_crs"])
     )
-    grid_squares = config["constant"][args.local_authorities]["grid_squares"]
+    grid_squares = config["constant"][local_authorities]["grid_squares"]
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        select_las=config["constant"][args.local_authorities]["la_names"]
+        select_las=config["constant"][local_authorities]["la_names"]
     )
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares
@@ -638,6 +641,20 @@ if __name__ == "__main__":
         combined_anchor_gdf=combined_anchor_gdf,
         radius=ANCHOR_RADIUS,
     )
+
+    # Add heat network zones to clusters_gdf, if they exist
+    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
+        local_authority=local_authorities
+    )
+    if len(hn_zones_gdf) > 0:
+        id_col = [col for col in hn_zones_gdf.columns if "ID" in col][0]
+        hn_zones_gdf = hn_zones_gdf.rename(columns={id_col: "cluster_id"}).assign(
+            assigned_tech="DESNZ_HNZ",
+            cluster_id=lambda df: "DESNZ_HNZ_"
+            + df["cluster_id"].astype(str).str.replace("-", "_"),
+        )[["cluster_id", "geometry"]]
+
+        clusters_gdf = pd.concat([clusters_gdf, hn_zones_gdf], ignore_index=True)
 
     if args.save:
         # Simplify geometry for file size to tolerance of 5m
