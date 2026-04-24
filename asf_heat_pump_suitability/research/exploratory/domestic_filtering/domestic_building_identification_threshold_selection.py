@@ -168,14 +168,6 @@ def generate_gdf_domestic_modelling_features(
     labelled_gdf["footprint_area_m2"] = labelled_gdf.area
     labelled_gdf["building_perimeter_m"] = labelled_gdf.length
 
-    # UPRN density measures
-    labelled_gdf["predicted_UPRN_per_m2"] = (
-        labelled_gdf["predicted_UPRN_count"] / labelled_gdf["footprint_area_m2"]
-    )
-    labelled_gdf["total_UPRN_per_m2"] = (
-        labelled_gdf["total_UPRN_count"] / labelled_gdf["footprint_area_m2"]
-    )
-
     # Area per UPRN measures
     labelled_gdf["m2_per_predicted_UPRN"] = (
         labelled_gdf["footprint_area_m2"] / labelled_gdf["predicted_UPRN_count"]
@@ -230,29 +222,42 @@ def generate_df_threshold_evaluation_mcc(
             y_pred = np.where(model_df[feature] <= threshold, 1, 0)
             mcc = matthews_corrcoef(y_true, y_pred)
 
-            if mcc > max_mcc:
-                max_mcc = mcc
+            # Check absolute MCC to account for thresholds that predict the reverse
+            if abs(mcc) > max_mcc:
+                max_mcc = abs(mcc)
                 best_threshold = threshold
+                # Positive MCC means anything below threshold labelled domestic
+                if mcc > 0:
+                    direction = "domestic_below_threshold"
+                # Positive MCC means anything above threshold labelled domestic
+                else:
+                    direction = "domestic_above_threshold"
+
+        _model_df = model_df.copy()
+        if direction == "domestic_below_threshold":
+            _model_df["new_predicted_domestic"] = _model_df[feature] <= best_threshold
+        else:
+            _model_df["new_predicted_domestic"] = _model_df[feature] > best_threshold
 
         # Calculate the number of false positives that are removed using best threshold
         N_removed_false_positives = len(
-            model_df[
-                # Reached threshold for non-domestic: labelled non-domestic
-                (model_df[feature] > best_threshold)
+            _model_df[
+                # Labelled non-domestic
+                (~_model_df["new_predicted_domestic"])
                 # Original pipeline mislabelled as domestic
-                & (~model_df["actual_domestic"])
-                & (model_df["predicted_domestic"])
+                & (~_model_df["actual_domestic"])
+                & (_model_df["predicted_domestic"])
             ]
         )
 
         # Calculate the number of true positives that are removed using best threshold
         N_removed_true_domestic = len(
-            model_df[
-                # Reached threshold for non-domestic: labelled non-domestic
-                (model_df[feature] > best_threshold)
+            _model_df[
+                # Labelled non-domestic
+                (~_model_df["new_predicted_domestic"])
                 # Original pipeline correctly identified as domestic
-                & (model_df["actual_domestic"])
-                & (model_df["predicted_domestic"])
+                & (_model_df["actual_domestic"])
+                & (_model_df["predicted_domestic"])
             ]
         )
 
@@ -260,6 +265,7 @@ def generate_df_threshold_evaluation_mcc(
         scores["feature"].append(feature)
         scores["best_threshold"].append(best_threshold)
         scores["max_mcc"].append(max_mcc)
+        scores["direction"].append(direction)
         scores["N_removed_false_positives"].append(N_removed_false_positives)
         scores["pc_removed_false_positives"].append(
             N_removed_false_positives / N_fp_before * 100
@@ -382,7 +388,7 @@ def generate_df_threshold_evaluation_roc_auc(
     return youdens_df
 
 
-def extract_tuple_best_feature_threshold(df: pd.DataFrame) -> tuple:
+def extract_tuple_best_feature_threshold(df: pd.DataFrame) -> dict:
     """
     Exract the best feature and corresponding threshold for implementation by maximising for Matthew's Correlation Coefficient.
 
@@ -392,13 +398,18 @@ def extract_tuple_best_feature_threshold(df: pd.DataFrame) -> tuple:
     Returns:
         tuple: feature name and best threshold value
     """
+    best_row = df[df["max_mcc"] == df["max_mcc"].max()]
+
     # Get best threshold overall
-    threshold = df[df["max_mcc"] == df["max_mcc"].max()]["best_threshold"].values[0]
+    threshold = best_row["best_threshold"].values[0]
 
     # Get best feature
-    feature = df[df["max_mcc"] == df["max_mcc"].max()]["feature"].values[0]
+    feature = best_row["feature"].values[0]
 
-    return feature, threshold
+    # Get best direction
+    direction = best_row["direction"].values[0]
+
+    return {"feature": feature, "threshold": threshold, "direction": direction}
 
 
 def plot_folium_threshold_effect_on_labelling(
@@ -407,6 +418,7 @@ def plot_folium_threshold_effect_on_labelling(
     feature: str,
     threshold: float,
     uprns_gdf: gpd.GeoDataFrame,
+    domestic_below_threshold: bool = True,
 ) -> folium.Map:
     """
     Plot a folium map to show the effects on building-level labelling of implementing the best feature and threshold combination in the domestic
@@ -415,8 +427,9 @@ def plot_folium_threshold_effect_on_labelling(
     Args:
         labelled_gdf (gpd.GeoDataFrame): buildings in area of interest labelled with actual and predicted domestic UPRN counts and boolean.
         feature (str): name of feature to implement threshold in
-        threshold (float): threshold above which buildings are classed as non-domestic
+        threshold (float): threshold for binary classification of buildings as domestic or non-domestic
         uprns_gdf (gpd.GeoDataFrame): all UPRNs in area of interest and their corresponding point geometries
+        domestic_below_threshold (str): set to False if buildings greater than the specified threshold should be labelled domestic.
 
     Returns:
         folium.Map
@@ -432,29 +445,34 @@ def plot_folium_threshold_effect_on_labelling(
         .rename(columns={"UPRN": "contains_domestic_EPC"})
     )
 
+    if domestic_below_threshold:
+        labelled_gdf["new_predicted_domestic"] = labelled_gdf[feature] <= threshold
+    else:
+        labelled_gdf["new_predicted_domestic"] = labelled_gdf[feature] > threshold
+
     # Remove buildings containing a domestic EPC from gdf as these will be retained regardless of threshold
     labelled_gdf = labelled_gdf[~labelled_gdf["contains_domestic_EPC"]]
 
     # Still erroneously labelled as domestic
     false_positives_gdf = labelled_gdf[
-        # Below the non-domestic threshold - predicted domestic
-        (labelled_gdf[feature] <= threshold)
+        # Predicted domestic
+        (labelled_gdf["new_predicted_domestic"])
         # No council tax record - true not domestic
         & (~labelled_gdf["actual_domestic"])
     ]
 
     # Newly correctly removed
     true_negatives_gdf = labelled_gdf[
-        # Reached the non-domestic threshold - predicted non-domestic
-        (labelled_gdf[feature] > threshold)
+        # Predicted non-domestic
+        (~labelled_gdf["new_predicted_domestic"])
         # No council tax record - true not domestic
         & (~labelled_gdf["actual_domestic"])
     ]
 
     # Newly falsely removed
     false_negatives_gdf = labelled_gdf[
-        # Reached the non-domestic threshold - predicted non-domestic
-        (labelled_gdf[feature] > threshold)
+        # Predicted non-domestic
+        (~labelled_gdf["new_predicted_domestic"])
         # Council tax record - true domestic
         & (labelled_gdf["actual_domestic"])
     ]
@@ -567,8 +585,6 @@ if __name__ == "__main__":
         "predicted_UPRN_count",
         "footprint_area_m2",
         "building_perimeter_m",
-        "predicted_UPRN_per_m2",
-        "total_UPRN_per_m2",
         "m2_per_predicted_UPRN",
         "m2_per_total_UPRN",
     ]
@@ -592,15 +608,15 @@ if __name__ == "__main__":
         model_df=features_df, features=features
     )
 
-    # Get best feature and threshold
-    feature, threshold = extract_tuple_best_feature_threshold(mcc_thresholds_df)
+    # Get best feature, threshold, and direction
+    best_combo = extract_tuple_best_feature_threshold(mcc_thresholds_df)
 
     # Plot effect of threshold on the final labelling in the pipeline
     plot_folium_threshold_effect_on_labelling(
         boundary=plymouth_boundary,
         labelled_gdf=labelled_gdf,
-        feature=feature,
-        threshold=threshold,
+        feature=best_combo["feature"],
+        threshold=best_combo["threshold"],
         uprns_gdf=uprns_gdf,
     )
 
