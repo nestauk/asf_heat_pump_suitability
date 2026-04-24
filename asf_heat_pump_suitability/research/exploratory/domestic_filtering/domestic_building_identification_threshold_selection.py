@@ -341,6 +341,7 @@ def generate_df_threshold_evaluation_roc_auc(
         by="youdens", descending=True
     )
 
+    # TODO - fix the direction of the thresholds here
     # Number of true non-domestic buildings removed which were mislabelled by pipeline as domestic
     n_removed_mislabeled_buildings = {
         threshold: len(
