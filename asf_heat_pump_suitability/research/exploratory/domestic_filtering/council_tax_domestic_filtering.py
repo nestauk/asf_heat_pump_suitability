@@ -247,9 +247,23 @@ plot_buildings(
 
 # %%
 # join council tax data to building footprints. These are all buildings with at least one comfirmed domestic property
+"""
 council_with_buildings = building_footprints_gdf.sjoin(
     council_tax_gdf, how="inner", predicate="contains"
 ).drop("index_right", axis=1)
+"""
+
+# %%
+# joining council tax points to nearest building < 3m away
+# for some reason using the max_distance parameter causes an error here so using this manual workaround for now
+council_with_buildings = council_tax_gdf.sjoin_nearest(
+    building_footprints_gdf, how="inner", distance_col="dist"
+)
+council_with_buildings = council_with_buildings[council_with_buildings["dist"] <= 3]
+council_with_buildings = council_with_buildings.drop(["index_right", "dist"], axis=1)
+
+# %%
+council_with_buildings
 
 # %%
 # aggregate features by building ID
@@ -364,9 +378,10 @@ def plot_pipeline_mixed_buildings(
                 "fillOpacity": 0.3,
             },
         )
-        folium.Popup(f"pipeline UPRNs: {r['pipeline_UPRN_count']}").add_to(geo_j)
-        folium.Popup(f"domestic UPRNs: {r['council_UPRN_count']}").add_to(geo_j)
-        folium.Popup(f"total UPRNs: {r['total_UPRN_count']}").add_to(geo_j)
+        folium.Popup(
+            f"pipeline UPRNs: {r['pipeline_UPRN_count']} <br> domestic UPRNs: {r['council_UPRN_count']} <br> total UPRNs: {r['total_UPRN_count']}",
+            max_width=200,
+        ).add_to(geo_j)
         geo_j.add_to(m)
 
     return m
@@ -451,6 +466,7 @@ def plot_wrong_uprn_count(
                     "fillOpacity": 0.3,
                 },
             )
+
         if r["pipeline_UPRN_count"] < r["council_UPRN_count"]:
             geo_j = folium.GeoJson(
                 data=geo_j,
@@ -460,6 +476,9 @@ def plot_wrong_uprn_count(
                     "fillOpacity": 0.3,
                 },
             )
+        folium.Popup(
+            f"pipeline UPRNs minus council tax UPRNs: {r['UPRN_difference']}"
+        ).add_to(geo_j)
         geo_j.add_to(m)
     return m
 
@@ -468,6 +487,61 @@ def plot_wrong_uprn_count(
 # blue = we are identifying more UPRNs than in council tax data
 # red = we are identifying fewer UPRNs than in council tax data
 plot_wrong_uprn_count(wrong_uprn_number, la_boundaries_gdf)
+
+# %%
+import branca.colormap as cm
+
+
+def plot_heat_map_wrong_uprn_count(
+    buildings_gdf: gpd.GeoDataFrame, boundary_gdf: gpd.GeoDataFrame
+):
+    """
+    Plot the building footprint polygons where we are identiifying the wrong number of UPRNs (not including cases where the whole building is wrong)
+
+    Args:
+        residential_buildings_gdf (gpd.GeoDataFrame): dataframe of buildings assigned as residential, joined to building footprint polygons
+        boundary_gdf (gpd.GeoDataFrame): dataframe with LA boundaries
+        area (float): area per UPRN above which you want to plot
+
+    Returns Folium map
+    """
+    buildings_gdf_4326 = buildings_gdf.to_crs(epsg=4326)
+    # Get centre of boundary to centre map
+    boundary_4326 = boundary_gdf.to_crs(epsg=4326)["geometry"].values[0]
+    centre_map = shapely.get_coordinates(boundary_4326.centroid)
+
+    # Create map
+    m = folium.Map(
+        location=[centre_map[0][1], centre_map[0][0]],
+        zoom_start=15,
+        tiles="esri_worldimagery",
+    )
+
+    # Plot building footprints
+    min = np.min(buildings_gdf_4326["UPRN_difference"])
+    max = np.max(buildings_gdf_4326["UPRN_difference"])
+    colours = cm.linear.YlOrRd_03.scale(min, max)
+    for _, r in buildings_gdf_4326.iterrows():
+        sim_geo = gpd.GeoSeries(r["geometry"])
+        geo_j = sim_geo.to_json()
+        geo_j = folium.GeoJson(
+            data=geo_j,
+            style_function=lambda x, colour=colours(r["UPRN_difference"]): {
+                "fillColor": colour,
+                "weight": 0.1,
+                "fillOpacity": 0.7,
+            },
+        )
+        folium.Popup(
+            f"pipeline UPRNs minus council tax UPRNs: {r['UPRN_difference']}"
+        ).add_to(geo_j)
+        geo_j.add_to(m)
+    return m
+
+
+# %%
+# heat map of UPRN difference
+plot_heat_map_wrong_uprn_count(wrong_uprn_number, la_boundaries_gdf)
 
 # %% [markdown]
 # ## Identify features to classify as domestic / non-domestic
