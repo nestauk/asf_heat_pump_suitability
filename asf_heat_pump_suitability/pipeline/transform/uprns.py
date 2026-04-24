@@ -98,24 +98,32 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
     return set(df["UPRN"])
 
 
-def filter_gdf_residential_uprns(
+def filter_gdf_domestic_uprns(
     uprn_gdf: gpd.GeoDataFrame,
     buildings_gdf: gpd.GeoDataFrame,
     non_residential_buildings_gdf: gpd.GeoDataFrame,
+    local_authority: str,
+    id_col: str = config["constant"]["id"]["building"],
 ) -> gpd.GeoDataFrame:
     """
-    Filter UPRNs to residential UPRNs only by retaining UPRNs which appear in domestic EPC register, OR are located within
+    Filter UPRNs to domestic UPRNs only by retaining UPRNs which appear in domestic EPC register, OR are located within
     a building footprint AND are not in the commercial EPC register and / or a building type that is unlikely to contain
-    residential properties, e.g. hospital, train station, museum etc.
+    residential properties, e.g. hospital, train station, museum etc, AND (for Plymouth only) are in a building with
+    `m2_per_predicted_UPRN` below a defined threshold.
+
+    See analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py for
+    threshold selection for Plymouth.
 
     Args:
-        uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be filtered
-        building_gdf (gpd.GeoDataFrame): all building footprints in area of interest
+        uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be filtered.
+        buildings_gdf (gpd.GeoDataFrame): all building footprints in area of interest.
         non_residential_buildings_gdf (gpd.GeoDataFrame): polygons of buildings which are unlikely to contain residential
-        properties
+        properties.
+        local_authority (str): name of local authority the domestic UPRNs are being identified for.
+        id_col (str): name of ID column in `buildings_gdf`. Defaults to ID column defined in config.
 
     Returns:
-        gpd.GeoDataFrame: UPRNs which are assumed to represent residential properties with their point geometries
+        gpd.GeoDataFrame: UPRNs which are assumed to represent domestic properties with their point geometries
     """
     print("Filtering to residential UPRNs...")
     # Find UPRNs which are in the non-residential buildings
@@ -134,17 +142,104 @@ def filter_gdf_residential_uprns(
     )
 
     # Get valid residential UPRNs
-    epc_residential_uprns = load_set_valid_epc_uprns(epc_type="domestic")
+    domestic_epc_uprns = load_set_valid_epc_uprns(epc_type="domestic")
 
-    return uprn_gdf[
+    domestic_uprn_gdf = uprn_gdf[
         (
             # Filter to UPRNs which are in buildings AND not in non-residential UPRNs list
             (~uprn_gdf["UPRN"].isin(non_residential_uprns))
             & (uprn_gdf["UPRN"].isin(uprns_in_buildings))
         )
         # Or UPRNs which are in domestic EPC register
-        | (uprn_gdf["UPRN"].isin(epc_residential_uprns))
+        | (uprn_gdf["UPRN"].isin(domestic_epc_uprns))
     ]
+
+    # TODO this could be updated to a classification model and scaled
+    # This triggers for Plymouth only as the threshold density was calculated from Plymouth data only
+    if local_authority.lower() == "plymouth":
+        # Identify large buildings with low UPRN density which will be labelled non-domestic
+        non_domestic_buildings_gdf = _generate_gdf_non_domestic_buildings_by_density(
+            domestic_uprns_gdf=domestic_uprn_gdf,
+            buildings_gdf=buildings_gdf,
+            epc_uprns=domestic_epc_uprns,
+            id_col=id_col,
+        )
+
+        # Remove UPRNs in these buildings from the domestic subset
+        non_domestic_uprns = set(
+            uprn_gdf.sjoin(
+                non_domestic_buildings_gdf, how="inner", predicate="intersects"
+            )["UPRN"]
+        )
+
+        return domestic_uprn_gdf[~domestic_uprn_gdf["UPRN"].isin(non_domestic_uprns)]
+
+    else:
+        return domestic_uprn_gdf
+
+
+def _generate_gdf_non_domestic_buildings_by_density(
+    domestic_uprns_gdf: gpd.GeoDataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
+    epc_uprns: set,
+    id_col: str,
+    threshold: float = config["constant"]["threshold"]["m2_per_predicted_UPRN"],
+) -> gpd.GeoDataFrame:
+    """
+    Generate a GeoDataFrame containing footprints of buildings which contain a UPRN predicted to be domestic and have a
+    `m2_per_predicted_UPRN` value above the defined threshold. The aim of this function is to remove some of the true
+    non-domestic buildings mislabelled as domestic by removing those with large building footprints and low UPRN density,
+    unless they contain a UPRN with a domestic EPC record.
+
+    The threshold selected as default (set in config) was determined through analysis that can be found in
+    asf_heat_pump_suitability/research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py
+
+    Args:
+        domestic_uprns_gdf (gpd.GeoDataFrame): UPRNs which are predicted by the pipeline to represent domestic properties with their point geometries.
+        buildings_gdf (gpd.GeoDataFrame): all building footprints in area of interest.
+        epc_uprns (str): UPRNs with a domestic EPC record.
+        id_col (str): name of ID column in `buildings_gdf`. Defaults to ID column defined in config.
+        threshold (float): threshold for `m2_per_predicted_UPRN` above which a building is considered to be non-domestic.
+
+    Returns:
+        gpd.GeoDataFrame: footprints of buildings containing predicted domestic UPRNs but likely to be non-domestic
+    """
+    # Join predicted domestic UPRNs to buildings
+    _buildings_gdf = buildings_gdf.sjoin(
+        domestic_uprns_gdf[["UPRN", "geometry"]], how="inner", predicate="contains"
+    ).drop(columns="index_right")
+
+    # Identify EPC UPRNs
+    _buildings_gdf["domestic_epc"] = _buildings_gdf["UPRN"].isin(epc_uprns)
+
+    # Get building area
+    _buildings_gdf["footprint_area_m2"] = _buildings_gdf.area
+
+    # Get predicted domestic UPRN count per building
+    _buildings_gdf = (
+        _buildings_gdf.groupby(id_col)
+        .agg(
+            contains_epc=("domestic_epc", "max"),
+            predicted_UPRN_count=("UPRN", "count"),
+            footprint_area_m2=("footprint_area_m2", "first"),
+            geometry=("geometry", "first"),
+        )
+        .reset_index()
+    )
+
+    # Remove buildings containing a domestic EPC record
+    _buildings_gdf = _buildings_gdf[~_buildings_gdf["contains_epc"]]
+
+    # Calculate density measure
+    _buildings_gdf["m2_per_predicted_UPRN"] = (
+        _buildings_gdf["footprint_area_m2"] / _buildings_gdf["predicted_UPRN_count"]
+    )
+    # Return buildings with density measure above threshold
+    return gpd.GeoDataFrame(
+        _buildings_gdf[_buildings_gdf["m2_per_predicted_UPRN"] > threshold].copy(),
+        geometry="geometry",
+        crs=27700,
+    )
 
 
 def map_dict_uprns_to_building_id(
@@ -262,16 +357,17 @@ if __name__ == "__main__":
         )
     )
 
-    # Filter UPRNs to assumed residential only
-    residential_uprns_gdf = filter_gdf_residential_uprns(
+    # Filter UPRNs to assumed domestic only
+    domestic_uprns_gdf = filter_gdf_domestic_uprns(
         uprn_gdf=uprns_gdf,
         buildings_gdf=layers["building_gdf"],
         non_residential_buildings_gdf=non_residential_buildings_gdf,
+        local_authority=args.local_authorities.lower(),
     )
 
     # Save residential UPRNs to S3
     df = pl.from_pandas(
-        residential_uprns_gdf[
+        domestic_uprns_gdf[
             [
                 "UPRN",
                 "X_COORDINATE",
