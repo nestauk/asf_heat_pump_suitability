@@ -18,13 +18,13 @@ from pathlib import Path
 import os
 
 from typing import List
-from collections import defaultdict
 
 import geopandas as gpd
 import pandas as pd
 import polars as pl
 import numpy as np
 import shapely
+import operator
 
 import matplotlib.pyplot as plt
 import folium
@@ -196,7 +196,7 @@ def generate_df_threshold_evaluation_mcc(
         pd.DataFrame: best threshold and corresponding MCC for each feature with some summary statistics
     """
     # Create empty dict to collect scores and other summary information for each feature
-    scores = defaultdict(list)
+    scores = []
     y_true = model_df["actual_domestic"]
 
     # Calculate current number of false positives (true: non-domestic, pred: domestic)
@@ -228,54 +228,48 @@ def generate_df_threshold_evaluation_mcc(
                 best_threshold = threshold
                 # Positive MCC means anything below threshold labelled domestic
                 if mcc > 0:
-                    direction = "domestic_below_threshold"
+                    direction = "non_domestic_above_threshold"
                 # Positive MCC means anything above threshold labelled domestic
                 else:
                     direction = "domestic_above_threshold"
 
-        _model_df = model_df.copy()
-        if direction == "domestic_below_threshold":
-            _model_df["new_predicted_domestic"] = _model_df[feature] <= best_threshold
-        else:
-            _model_df["new_predicted_domestic"] = _model_df[feature] > best_threshold
+        # Define the operators based on direction
+        # If 'non_domestic_above_threshold', buildings > threshold are non-domestic
+        non_domestic_op = (
+            operator.gt if direction == "non_domestic_above_threshold" else operator.le
+        )
+        new_predicted_non_domestic = non_domestic_op(model_df[feature], best_threshold)
 
-        # Calculate the number of false positives that are removed using best threshold
-        N_removed_false_positives = len(
-            _model_df[
-                # Labelled non-domestic
-                (~_model_df["new_predicted_domestic"])
-                # Original pipeline mislabelled as domestic
-                & (~_model_df["actual_domestic"])
-                & (_model_df["predicted_domestic"])
-            ]
+        # Store the results for each feature
+        scores.append(
+            {
+                "feature": feature,
+                "best_threshold": best_threshold,
+                "max_mcc": max_mcc,
+                "direction": direction,
+                "N_removed_false_positives": (
+                    new_predicted_non_domestic
+                    & ~model_df["actual_domestic"]
+                    & model_df["predicted_domestic"]
+                ).sum(),
+                "N_removed_true_positives": (
+                    new_predicted_non_domestic
+                    & model_df["actual_domestic"]
+                    & model_df["predicted_domestic"]
+                ).sum(),
+            }
         )
 
-        # Calculate the number of true positives that are removed using best threshold
-        N_removed_true_domestic = len(
-            _model_df[
-                # Labelled non-domestic
-                (~_model_df["new_predicted_domestic"])
-                # Original pipeline correctly identified as domestic
-                & (_model_df["actual_domestic"])
-                & (_model_df["predicted_domestic"])
-            ]
-        )
+    scores_df = pd.DataFrame(scores)
+    scores_df["pc_removed_false_positives"] = (
+        scores_df["N_removed_false_positives"] / N_fp_before
+    ) * 100
+    scores_df["pc_removed_true_positives"] = (
+        scores_df["N_removed_true_positives"] / N_tp_before
+    ) * 100
+    scores_df = scores_df.sort_values(by="max_mcc", ascending=False)
 
-        # Store the best result for this feature
-        scores["feature"].append(feature)
-        scores["best_threshold"].append(best_threshold)
-        scores["max_mcc"].append(max_mcc)
-        scores["direction"].append(direction)
-        scores["N_removed_false_positives"].append(N_removed_false_positives)
-        scores["pc_removed_false_positives"].append(
-            N_removed_false_positives / N_fp_before * 100
-        )
-        scores["N_removed_true_positives"].append(N_removed_true_domestic)
-        scores["pc_removed_true_positives"].append(
-            N_removed_true_domestic / N_tp_before * 100
-        )
-
-    scores_df = pd.DataFrame(scores).sort_values(by="max_mcc", ascending=False)
+    print("Best MCC results for each feature...")
     print(scores_df)
 
     return scores_df
@@ -296,95 +290,100 @@ def generate_df_threshold_evaluation_roc_auc(
     Returns:
         pl.DataFrame: best feature with Youden's J statistic for each threshold tested with some summary statistics
     """
-    # Find best feature for thresholding from ROC AUC score
-    scores = {
-        "feature": features,
-        "score": [
-            roc_auc_score(model_df["actual_domestic"], model_df[feature])
-            for feature in features
-        ],
-    }
-    scores_df = pl.DataFrame(scores).with_columns(
-        pl.when(pl.col("score") < 0.5)
-        .then(1 - pl.col("score"))
-        .otherwise(pl.col("score"))
-        .alias("score"),
-        pl.when(pl.col("score") < 0.5)
-        .then(pl.lit("less_than"))
-        .otherwise(pl.lit("greater_than"))
-        .alias("direction_of_threshold"),
-    )
-
+    # Find best features for thresholding from ROC AUC score
+    feature_results = []
+    for feature in features:
+        score = roc_auc_score(model_df["actual_domestic"], model_df[feature])
+        reversed_score = score < 0.5
+        feature_results.append(
+            {
+                "feature": feature,
+                "score": (1 - score) if reversed_score else score,
+                "direction": (
+                    "non_domestic_above_threshold"
+                    if reversed_score
+                    else "domestic_above_threshold"
+                ),
+            }
+        )
     print("ROC AUC scores for each feature:")
-    print(scores_df)
+    print(pd.DataFrame(feature_results))
 
-    best_score = scores_df.filter(pl.col("score") == pl.max("score"))
-    best_feature = best_score["feature"][0]
-    direction = best_score["direction_of_threshold"][0]
+    # Find the best score from all features and return the feature and direction
+    best = max(feature_results, key=lambda x: x["score"])
+    best_feature, direction = best["feature"], best["direction"]
     print(
-        f"\nBest ROC AUC score: {best_score['score'][0]}\nBest feature: {best_feature}"
+        f"Best ROC AUC score: ({best['score']:.4f})\nBest feature: {best_feature}\nDirection: {direction}"
     )
 
     # Calculate ROC curve and Youden's J statistic for the selected feature
-    # sensitivity + specificity - 1 == TPR - FPR
-    if direction == "greater_than":
-        fpr, tpr, thresholds = roc_curve(
-            y_true=model_df["actual_domestic"], y_score=model_df[best_feature]
-        )
+    # Flip the actuals class if the direction is non_domestic_above_threshold to ensure TPR/FPR align with the logic
+    y_true = (
+        model_df["actual_domestic"]
+        if direction == "domestic_above_threshold"
+        else ~model_df["actual_domestic"]
+    )
+    fpr, tpr, thresholds = roc_curve(y_true, model_df[best_feature])
 
-    else:
-        fpr, tpr, thresholds = roc_curve(
-            y_true=~model_df["actual_domestic"], y_score=model_df[best_feature]
-        )
-
-    youdens_df = pl.DataFrame({"youdens": tpr - fpr, "threshold": thresholds}).sort(
+    youdens_df = pl.DataFrame({"threshold": thresholds, "youdens": tpr - fpr}).sort(
         by="youdens", descending=True
     )
 
-    # TODO - fix the direction of the thresholds here
+    # Define the operators based on direction
+    # If 'non_domestic_above_threshold', buildings > threshold are non-domestic
+    non_domestic_op = (
+        operator.gt if direction == "non_domestic_above_threshold" else operator.le
+    )
+
+    model_df = pl.from_pandas(
+        model_df[[best_feature, "actual_domestic", "predicted_domestic"]]
+    )
+
+    # Calculate counts for each threshold
     # Number of true non-domestic buildings removed which were mislabelled by pipeline as domestic
     n_removed_mislabeled_buildings = {
-        threshold: len(
-            model_df[
-                # Buildings below the selected threshold are classed as non-domestic
-                (model_df[best_feature] > threshold)
-                & (~model_df["actual_domestic"])
-                & (model_df["predicted_domestic"])
-            ]
-        )
+        threshold: (
+            # Newly predicted non-domestic buildings
+            non_domestic_op(model_df[best_feature], threshold)
+            # True non-domestic originally labelled as domestic
+            & ~model_df["actual_domestic"]
+            & model_df["predicted_domestic"]
+        ).sum()
         for threshold in youdens_df["threshold"]
     }
-    n_removed_mislabeled_buildings_df = pl.DataFrame(
-        {
-            "threshold": n_removed_mislabeled_buildings.keys(),
-            "N_removed_false_positives": n_removed_mislabeled_buildings.values(),
-        }
-    )
 
-    # Number of true domestic buildings removed by threshold
+    # Number of true domestic buildings removed which were correctly labelled by pipeline as domestic
     n_removed_true_domestic_buildings = {
-        threshold: len(
-            model_df[
-                # Buildings below the selected threshold are classed as non-domestic
-                (model_df[best_feature] < threshold)
-                & (model_df["actual_domestic"])
-            ]
-        )
+        threshold: (
+            # Newly predicted non-domestic buildings
+            non_domestic_op(model_df[best_feature], threshold)
+            # True domestic originally labelled as domestic
+            & model_df["actual_domestic"]
+            & model_df["predicted_domestic"]
+        ).sum()
         for threshold in youdens_df["threshold"]
     }
 
-    n_removed_true_domestic_buildings_df = pl.DataFrame(
-        {
-            "threshold": n_removed_true_domestic_buildings.keys(),
-            "N_removed_true_positives": n_removed_true_domestic_buildings.values(),
-        }
+    youdens_df = youdens_df.with_columns(
+        [
+            # Map summary statistics to each threshold
+            pl.col("threshold")
+            .replace(n_removed_mislabeled_buildings)
+            .alias("N_removed_false_positives"),
+            pl.col("threshold")
+            .replace(n_removed_true_domestic_buildings)
+            .alias("N_removed_true_positives"),
+        ]
+    ).select(
+        [
+            "youdens",
+            "threshold",
+            "N_removed_false_positives",
+            "N_removed_true_positives",
+        ]
     )
 
-    # Return results with summary statistics about buildings removed
-    youdens_df = youdens_df.join(
-        n_removed_mislabeled_buildings_df, how="left", on="threshold"
-    ).join(n_removed_true_domestic_buildings_df, how="left", on="threshold")
-
+    print(f"Youden's score for each threshold tested for {best_feature}...")
     print(youdens_df)
     return youdens_df
 
@@ -419,7 +418,7 @@ def plot_folium_threshold_effect_on_labelling(
     feature: str,
     threshold: float,
     uprns_gdf: gpd.GeoDataFrame,
-    domestic_below_threshold: bool = True,
+    non_domestic_above_threshold: bool = True,
 ) -> folium.Map:
     """
     Plot a folium map to show the effects on building-level labelling of implementing the best feature and threshold combination in the domestic
@@ -430,7 +429,7 @@ def plot_folium_threshold_effect_on_labelling(
         feature (str): name of feature to implement threshold in
         threshold (float): threshold for binary classification of buildings as domestic or non-domestic
         uprns_gdf (gpd.GeoDataFrame): all UPRNs in area of interest and their corresponding point geometries
-        domestic_below_threshold (str): set to False if buildings greater than the specified threshold should be labelled domestic.
+        non_domestic_above_threshold (str): set to False if buildings greater than the specified threshold should be labelled domestic.
 
     Returns:
         folium.Map
@@ -446,7 +445,7 @@ def plot_folium_threshold_effect_on_labelling(
         .rename(columns={"UPRN": "contains_domestic_EPC"})
     )
 
-    if domestic_below_threshold:
+    if non_domestic_above_threshold:
         labelled_gdf["new_predicted_domestic"] = labelled_gdf[feature] <= threshold
     else:
         labelled_gdf["new_predicted_domestic"] = labelled_gdf[feature] > threshold
