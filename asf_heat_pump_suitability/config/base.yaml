@@ -41,6 +41,13 @@ data:
     poi_anchor_properties: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/poi_anchor_properties_gb.geojson"
 
 constant:
+  id:
+    building: "ID"
+  threshold:
+    m2_per_predicted_UPRN: 261.608136 # Identified by analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py
+    outdoor_space_threshold_m2:
+      within_hn_zone: 70
+      outside_hn_zone: 30
   plymouth:
     la_names: "Plymouth"
     grid_squares: "SX"
@@ -96,9 +103,6 @@ constant:
     la_names: "Cardiff"
     grid_squares: "ST"
   target_crs: 27700 # British National Grid
-  outdoor_space_threshold_m2:
-    within_hn_zone: 70
-    outside_hn_zone: 30
   tech_types:
     individual: "Individual solution"
     networked: "Networked heat pump"

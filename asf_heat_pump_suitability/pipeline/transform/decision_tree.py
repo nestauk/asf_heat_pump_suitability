@@ -32,7 +32,9 @@ from asf_heat_pump_suitability.getters.load_tree_input import (
 )
 from asf_heat_pump_suitability import config
 
-OUTDOOR_SPACE_THRESHOLD_M2 = config["constant"]["outdoor_space_threshold_m2"]
+OUTDOOR_SPACE_THRESHOLD_M2 = config["constant"]["threshold"][
+    "outdoor_space_threshold_m2"
+]
 TECH_TYPES = config["constant"]["tech_types"]
 
 
