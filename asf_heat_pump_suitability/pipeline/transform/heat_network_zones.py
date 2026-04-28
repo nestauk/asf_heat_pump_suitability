@@ -63,19 +63,20 @@ def generate_dict_heat_network_zone_uprns(
         print(f"hn_zone_gdf reprojected to target CRS: {target_crs}")
 
     # Assume first column with `ID` substring is the zone ID column
-    id_col = [col for col in hn_zone_gdf.columns if "ID" in col][0]
-    print(f"Using Heat Network Zone {id_col} column as ID")
+    if "HNZoneID" not in hn_zone_gdf.columns:
+        id_col = [col for col in hn_zone_gdf.columns if "ID" in col][0]
+        print(f"Using Heat Network Zone {id_col} column as ID")
+        hn_zone_gdf = hn_zone_gdf.rename(columns={id_col: "HNZoneID"})
 
     # Spatial join for labelling UPRNs
     labelled_uprn_gdf = (
         uprns_gdf[["UPRN", "geometry"]]
         .sjoin(
-            hn_zone_gdf[[id_col, "geometry"]],
+            hn_zone_gdf[["HNZoneID", "geometry"]],
             how="inner",
             predicate="intersects",  # include properties intersecting heat network zone boundary
         )
         .drop(columns="index_right")
-        .rename(columns={id_col: "HNZoneID"})
     )
 
     return labelled_uprn_gdf.set_index("UPRN").to_dict()["HNZoneID"]
