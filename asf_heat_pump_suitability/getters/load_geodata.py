@@ -79,41 +79,43 @@ def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFr
         gdf["HNZoneID"] = gdf[id_col]
         print(f"Using Heat Network Zone {id_col} column as ID")
     except (ValueError, KeyError):
-        print(f"No heat network zone geodata found for {local_authority}.")
+        # Get list of LAs (e.g. for `greater_manchester_las` this means getting a list of all individual LAs) to attempt
+        # loading heat network zone geodata for each LA individually if no geodata found for the whole group of LAs.
+        list_las = config["constant"][local_authority]["la_names"]
+        list_las = list_las if isinstance(list_las, list) else [list_las]
 
-    # Get list of LAs (e.g. for `greater_manchester_las` this means getting a list of all individual LAs) to attempt
-    # loading heat network zone geodata for each LA individually if no geodata found for the whole group of LAs.
-    list_las = config["constant"][local_authority]["la_names"]
-    list_las = list_las if isinstance(list_las, list) else [list_las]
-
-    # If gdf is still empty and `local_authority` represents a group of LAs
-    if gdf.empty and len(list_las) > 1:
-        # Check if heat network zone geodata is available for each LA in the list, and if so, load it and concatenate
-        # it to a single geodataframe.
-        for la in list_las:
-            try:
-                gdf = pd.concat(
-                    [
-                        gdf,
-                        base_getters.get_gdf_from_gpkg_s3_path(
-                            path=config["data"]["geodata"]["heat_network_zones"][la],
-                            **kwargs,
-                        ),
-                    ],
-                    ignore_index=True,
-                )
-                # Deal with different ID column names in different geodataframes by renaming the ID column to "ZoneID"
-                id_col = [col for col in gdf.columns if "ID" in col][0]
-                gdf["HNZoneID"] = gdf[id_col]
-                print(f"Using Heat Network Zone {id_col} column as ID")
-            except (ValueError, KeyError):
-                print(f"No heat network zone geodata found for Local Authority: {la}.")
-
-    if len(gdf) > 0:
-        gdf.set_geometry("geometry", inplace=True)
-        print(
-            f"Heat network zone geodataframe successfully loaded for {local_authority} with CRS {gdf.crs}."
-        )
+        # If gdf is still empty and `local_authority` represents a group of LAs
+        if gdf.empty and len(list_las) > 1:
+            # Check if heat network zone geodata is available for each LA in the list, and if so, load it and concatenate
+            # it to a single geodataframe.
+            for la in list_las:
+                try:
+                    gdf = pd.concat(
+                        [
+                            gdf,
+                            base_getters.get_gdf_from_gpkg_s3_path(
+                                path=config["data"]["geodata"]["heat_network_zones"][
+                                    la
+                                ],
+                                **kwargs,
+                            ),
+                        ],
+                        ignore_index=True,
+                    )
+                    # Deal with different ID column names in different geodataframes by renaming the ID column to "ZoneID"
+                    id_col = [col for col in gdf.columns if "ID" in col][0]
+                    gdf["HNZoneID"] = gdf[id_col]
+                    print(f"Using Heat Network Zone {id_col} column as ID")
+                except (ValueError, KeyError):
+                    print(
+                        f"No heat network zone geodata found for Local Authority: {la}."
+                    )
+    finally:
+        if len(gdf) > 0:
+            gdf.set_geometry("geometry", inplace=True)
+            print(
+                f"Heat network zone geodataframe successfully loaded for {local_authority} with CRS {gdf.crs}."
+            )
     return gdf
 
 
