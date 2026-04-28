@@ -29,12 +29,12 @@ def generate_df_epc_listed_buildings(
     return pl.concat(dfs, how="vertical")
 
 
-def transform_gdf_listed_buildings(nation: str) -> gpd.GeoDataFrame:
+def transform_gdf_listed_buildings(nation: str = "GB") -> gpd.GeoDataFrame:
     """
     Load and transform listed buildings polygons dataset for specified nation.
 
     Args:
-        nation (str): nation to load listed buildings data for. Options: "England"; "Scotland"; "Wales".
+        nation (str): nation to load listed buildings data for. Options: "England"; "Scotland"; "Wales"; "GB". Defaults to "GB" which loads data for all Great Britain.
 
     Returns:
         gpd.GeoDataFrame: listed buildings dataset for specified nation with grade and geometry columns.

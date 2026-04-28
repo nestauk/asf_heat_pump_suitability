@@ -289,9 +289,6 @@ if __name__ == "__main__":
         ],
     )
 
-    # Add column to indicate whether EPC data is available for the property, to distinguish between False and unknown for features derived from EPC data
-    epc_df = epc_df.with_columns(pl.lit(True).alias("epc_data_available"))
-
     print(epc_df["SOLAR_WATER_HEATING_FLAG"].value_counts())
 
     features_df = epc.extend_df_epc_features(
@@ -299,7 +296,6 @@ if __name__ == "__main__":
         epc_df=epc_df,
         columns=[
             "UPRN",
-            "epc_data_available",
             "TENURE",
             "CURRENT_ENERGY_RATING",
             "SOLAR_WATER_HEATING_FLAG",
@@ -312,28 +308,47 @@ if __name__ == "__main__":
     print(features_df["ENERGY_CONSUMPTION_CURRENT"].mean())
 
     # Add listed building boolean flag
-    from asf_heat_pump_suitability.pipeline.prepare_features import listed_buildings
+    from asf_heat_pump_suitability.pipeline.prepare_features import (
+        listed_buildings,
+    )
 
-    uprns_listed_buildings_df = listed_buildings.generate_df_epc_listed_buildings(
-        epc_df=features_df[["UPRN", "X_COORDINATE", "Y_COORDINATE"]],
-    ).with_columns(pl.lit(True).alias("in_listed_building"))
+    listed_buildings_gdf = listed_buildings.transform_gdf_listed_buildings(nation="GB")
+
+    listed_polygons = listed_buildings_gdf[
+        listed_buildings_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])
+    ]
+    listed_points = listed_buildings_gdf[
+        listed_buildings_gdf.geometry.type.isin(["Point", "MultiPoint"])
+    ]
+
+    # Join for Polygons: We want buildings that touch/overlap listed polygons
+    joined_polys = gpd.sjoin(
+        buildings_gdf, listed_polygons, how="inner", predicate="intersects"
+    )
+
+    # Join for Points: We want buildings that contain the listed points
+    joined_pts = gpd.sjoin(
+        buildings_gdf, listed_points, how="inner", predicate="contains"
+    )
+
+    joined = pd.concat([joined_polys, joined_pts], ignore_index=True)
+
+    uprns_gdf = gpd.sjoin(
+        uprns_gdf,
+        joined[["geometry", "listed_building"]],
+        how="left",
+        predicate="intersects",
+    ).fillna({"listed_building": False})
 
     features_df = features_df.join(
-        uprns_listed_buildings_df.select(["UPRN", "in_listed_building"]),
+        pl.from_pandas(uprns_gdf[["UPRN", "listed_building"]]),
         how="left",
         on="UPRN",
-    )
-    # Fill any UPRNs not in the listed buildings dataset with False (i.e. not listed) if they're in the EPC dataset, and with Null if they're not in the EPC dataset (i.e. unknown)
-    features_df = features_df.with_columns(
-        pl.when(pl.col("in_listed_building").is_null() & ~pl.col("epc_data_available"))
-        .then(False)
-        .otherwise(None)
-        .alias("in_listed_building")
-    )
+    ).rename({"listed_building": "in_listed_building"})
 
     print(features_df["in_listed_building"].value_counts())
 
-    del epc_df, uprns_listed_buildings_df
+    del listed_buildings_gdf
 
     # Add number of off-gas properties
     # Source: https://www.xoserve.com/help-centre/supply-points-metering/supply-point-administration-spa/
