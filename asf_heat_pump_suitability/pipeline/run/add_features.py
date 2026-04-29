@@ -232,10 +232,6 @@ if __name__ == "__main__":
             ignore_index=False,
         )
 
-    buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-        layer="building", grid_squares=grid_squares
-    )
-
     # Get intersection of building footprint polygons and land polygons
     intersection_gdf = outdoor_space.generate_gdf_building_intersections(
         land_parcels_gdf=land_parcels_gdf,
@@ -275,7 +271,7 @@ if __name__ == "__main__":
     # ------------------------ #
     # CONTEXTUAL FEATURES
     # ------------------------ #
-    # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE, SOLAR PV and HEAT DEMAND
+    # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE, SOLAR PV info, ESTIMATED CURRENT ENERGY CONSUMPTION and POSTCODE
     epc_df = pl.read_parquet(
         config["data"]["epc"]["domestic"],
         columns=[
@@ -286,6 +282,7 @@ if __name__ == "__main__":
             "SOLAR_WATER_HEATING_FLAG",
             "PHOTO_SUPPLY",
             "ENERGY_CONSUMPTION_CURRENT",
+            "POSTCODE",
         ],
     )
 
@@ -301,6 +298,7 @@ if __name__ == "__main__":
             "SOLAR_WATER_HEATING_FLAG",
             "ENERGY_CONSUMPTION_CURRENT",
             "PHOTO_SUPPLY",
+            "POSTCODE",
         ],
     )
 
@@ -335,16 +333,16 @@ if __name__ == "__main__":
 
     uprns_gdf = gpd.sjoin(
         uprns_gdf,
-        joined[["geometry", "listed_building"]],
+        joined[["geometry", "in_listed_building"]],
         how="left",
         predicate="intersects",
-    ).fillna({"listed_building": False})
+    ).fillna({"in_listed_building": False})
 
     features_df = features_df.join(
-        pl.from_pandas(uprns_gdf[["UPRN", "listed_building"]]),
+        pl.from_pandas(uprns_gdf[["UPRN", "in_listed_building"]]),
         how="left",
         on="UPRN",
-    ).rename({"listed_building": "in_listed_building"})
+    )
 
     print(features_df["in_listed_building"].value_counts())
 
@@ -363,17 +361,45 @@ if __name__ == "__main__":
     )
     code_point_df["POSTCODE"] = code_point_df["postcode"].str.replace(" ", "")
 
+    # create dictionary mapping between ID and POSTCODE when POSTCODE is not null
+    id_postcode_mapping_df = features_df.filter(
+        pl.col("POSTCODE").is_not_null()
+    ).select(["ID", "POSTCODE"])
+    id_postcode_mapping_dict = dict(
+        zip(id_postcode_mapping_df["ID"], id_postcode_mapping_df["POSTCODE"])
+    )
+    postcodes_df = features_df.select(["UPRN", "ID", "POSTCODE"])
+
+    postcodes_df["POSTCODE"] = postcodes_df["ID"].map(id_postcode_mapping_dict)
+
+    uprns_no_postcode_gdf = uprns_gdf[
+        uprns_gdf["UPRN"].isin(
+            postcodes_df.filter(pl.col("POSTCODE").is_null())[["UPRN"]].to_pandas()[
+                "UPRN"
+            ]
+        )
+    ]
+
     nearest_postcode_df = pl.from_pandas(
-        uprns_gdf.sjoin_nearest(
+        uprns_no_postcode_gdf.sjoin_nearest(
             code_point_df[["POSTCODE", "geometry"]],
             how="left",
-            max_distance=1000,
+            max_distance=250,  # 250 metres to be conservative
             distance_col="distance_to_postcode_m",  # distance in metres
         ).drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
     )
 
+    uprn_postcode_map_df = pl.concat(
+        [
+            postcodes_df.filter(pl.col("POSTCODE").is_not_null()).select(
+                ["UPRN", "POSTCODE"]
+            ),
+            nearest_postcode_df.select(["UPRN", "POSTCODE"]),
+        ],
+        how="vertical",
+    )
     # Label all UPRNs with on/off gas where possible
-    off_gas_df = nearest_postcode_df.with_columns(
+    off_gas_df = uprn_postcode_map_df.with_columns(
         # Label postcodes according to on/off gas
         pl.when(pl.col("POSTCODE").is_in(off_gas_list))
         .then(True)
@@ -382,7 +408,7 @@ if __name__ == "__main__":
     ).select(["UPRN", "off_gas"])
 
     features_df = features_df.join(
-        off_gas_df.select(["UPRN", "off_gas"]),
+        off_gas_df,
         how="left",
         on="UPRN",
     )
@@ -398,11 +424,12 @@ if __name__ == "__main__":
     )
 
     # Simplify coastline boundaries by 150m and buffer by 1500m to create a 'near coastline' area
-    coast_gdf["simplified_geometry"] = coast_gdf.geometry.boundary.simplify(
-        tolerance=150
-    ).buffer(1500)
+    coast_gdf["simplified_geometry"] = (
+        coast_gdf.geometry.boundary.simplify(tolerance=150)
+        .buffer(1500)
+        .set_geometry("simplified_geometry")
+    )
 
-    coast_gdf = coast_gdf.set_geometry("simplified_geometry")
     coast_gdf["near_coastline"] = True
 
     uprns_gdf = uprns_gdf.sjoin(
@@ -457,13 +484,20 @@ if __name__ == "__main__":
             }
         )
     )
-    uprns_gdf = uprns_gdf.merge(
-        uprn_to_country_df[["UPRN", "COUNTRY"]], on="UPRN", how="left"
-    ).drop(columns=["index_right"])
+
+    uprn_to_country_dict = dict(
+        zip(uprn_to_country_df["UPRN"], uprn_to_country_df["COUNTRY"])
+    )
+    uprns_gdf["COUNTRY"] = uprns_gdf["UPRN"].map(uprn_to_country_dict)
+
+    # uprns_gdf = uprns_gdf.merge(
+    #     uprn_to_country_df[["UPRN", "COUNTRY"]], on="UPRN", how="left"
+    # ).drop(columns=["index_right"])
 
     uprns_conservation_areas_df = (
         protected_areas.load_transform_df_uprn_in_protected_area(gdf=uprns_gdf)
     )
+
     print(uprns_conservation_areas_df.columns)
     print(uprns_conservation_areas_df)
 
