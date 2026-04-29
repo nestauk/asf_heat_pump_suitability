@@ -245,6 +245,8 @@ def load_gdf_os_openroad(
         gdf = pd.concat(gdfs)
 
     return gdf
+
+
 def load_gdf_poi() -> gpd.GeoDataFrame:
     """
     Load and process Points of Interest data. CRS EPSG 4326.
