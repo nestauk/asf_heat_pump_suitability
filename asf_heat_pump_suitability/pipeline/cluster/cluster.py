@@ -383,9 +383,9 @@ def load_tranform_gdf_linestring_barriers(
         layer="railway_track", grid_squares=grid_squares
     )
 
-    barrier_road_types = ["A Road", "B Road", "Motorway"]
+    barrier_road_types = ["A Road", "B Road", "Motorway", "Minor Road", "Local Road"]
 
-    barrier_roads_gdf = roads_gdf[roads_gdf["class"].isin(barrier_road_types)]
+    barrier_roads_gdf = roads_gdf[roads_gdf["function"].isin(barrier_road_types)]
 
     line_overlays = [barrier_roads_gdf, railways_gdf]
     line_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in line_overlays])
