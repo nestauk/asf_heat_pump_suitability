@@ -249,7 +249,13 @@ def _clip_gdf_voronoi_cells_polygon_buffer(
     """
     # Create a buffered polygon for all polygons
     buffered_gdf = polygon_gdf[[id_col, "geometry"]].copy()
-    buffered_gdf["geometry"] = buffered_gdf.geometry.buffer(buffer)
+    buffered_gdf["geometry"] = buffered_gdf.geometry.buffer(
+        # Use mitre join_style which reduces densification of corner vertices when buffering
+        buffer,
+        join_style=2,
+        mitre_limit=2,
+        # Simplify with a tolerance of 1mm to remove vertices which are extremely close together
+    ).simplify(0.001)
 
     # Clip Voronoi cells to the defined buffer area if they are larger than it by calculating intersections
     clipped_gdf = voronoi_gdf.overlay(buffered_gdf, how="intersection")
@@ -320,28 +326,25 @@ def _handle_gdf_fragmented_cells(
     Returns:
         gpd.GeoDataFrame: domestic building cells with overlapping physical barriers removed and cell fragments handled
     """
-    # Reduce the polygons by 1cm to avoid unions of touching cells
-    # Then union cells with building footprints
-    union = pd.concat(
-        [cells_gdf["geometry"].buffer(-0.01), tech_gdf["geometry"].buffer(-0.01)]
-    ).unary_union
+    # Add a temporary ID for each building
+    id_col = "_internal_building_id"
+    tech_gdf[id_col] = np.arange(len(tech_gdf))
+    cols = [id_col, "geometry"]
 
-    # Explode union to get one unionised polygon per building
-    union_gdf = gpd.GeoDataFrame(
-        geometry=gpd.GeoSeries(union).explode(index_parts=False),
-        crs=config["constant"]["target_crs"],
+    # Keep only cell fragments that intersect with a building and label with the ID of the building
+    cells_gdf = cells_gdf.sjoin(
+        tech_gdf[cols], how="inner", predicate="intersects"
+    ).drop(columns=["index_right"])
+
+    # Dissolve building footprints and their cell fragments together
+    union_gdf = (
+        pd.concat([cells_gdf[cols], tech_gdf[cols]])
+        .dissolve(by=id_col)
+        .rename(columns={"geometry": "unionised_geometry"})
     )
-
-    # Add 1cm buffer back so that dissolving works later
-    union_gdf["geometry"] = union_gdf["geometry"].buffer(0.01)
-
-    # Retain original unionised cell geometry - this will be the final geometry per building unless it's missing
-    union_gdf["unionised_geometry"] = union_gdf["geometry"]
 
     # Join unionised cells back to original buildings
-    cells_gdf = tech_gdf.sjoin(union_gdf, how="left", predicate="intersects").drop(
-        columns=["index_right"]
-    )
+    cells_gdf = tech_gdf.merge(union_gdf, how="left", on=id_col)
 
     # If building is missing a Voronoi cell (due to overlay operation), then assign it the building footprint geometry
     # This happens in some edge cases
@@ -351,9 +354,9 @@ def _handle_gdf_fragmented_cells(
 
     # Keep the Voronoi cell geometries, filled with building footprints
     return (
-        cells_gdf.drop(columns="geometry")
+        cells_gdf.drop(columns=["geometry", id_col])
         .rename(columns={"unionised_geometry": "geometry"})
-        .set_geometry("geometry", crs=config["constant"]["target_crs"])
+        .set_geometry("geometry", crs=cells_gdf.crs)
     )
 
 
@@ -374,27 +377,15 @@ def load_tranform_gdf_linestring_barriers(
         gpd.GeoDataFrame: physical barriers with (Multi)LineString geometries
     """
     # Linestrings
-    roads_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="road", grid_squares=grid_squares
-    )
+    roads_gdf = load_geodata.load_gdf_os_openroad(grid_squares=grid_squares)
+
     railways_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="railway_track", grid_squares=grid_squares
     )
 
-    # TODO selecting certain road types makes the clusters very large - needs revisiting
-    # barrier_road_types = [
-    #     "A Road", "B Road, Collapsed Dual Carriageway",
-    #     "Minor Road, Collapsed Dual Carriageway",
-    #     "Primary Road, Collapsed Dual Carriageway",
-    #     "Motorway",
-    #     "Motorway, Collapsed Dual Carriageway",
-    #     "A Road, Collapsed Dual Carriageway",
-    # ]
-    #
-    # barrier_roads_gdf = roads_gdf[roads_gdf["CLASSIFICA"].isin(barrier_road_types)]
+    barrier_road_types = ["A Road", "B Road", "Motorway", "Minor Road", "Local Road"]
 
-    # Use all roads
-    barrier_roads_gdf = roads_gdf.copy()
+    barrier_roads_gdf = roads_gdf[roads_gdf["function"].isin(barrier_road_types)]
 
     line_overlays = [barrier_roads_gdf, railways_gdf]
     line_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in line_overlays])

@@ -3,6 +3,7 @@ import geopandas as gpd
 import os
 import pandas as pd
 from typing import Optional, List
+import s3fs
 
 from osbng import grids
 
@@ -265,6 +266,46 @@ def load_gdf_os_openmap_layer(
         id_col = "ID" if "ID" in gdf.columns else "id"
 
         return gdf.drop_duplicates(subset=[id_col, "geometry"])
+
+
+def load_gdf_os_openroad(
+    grid_squares: Optional[List[str]] = None, **kwargs
+) -> gpd.GeoDataFrame:
+    """
+    Load road link data from OS OpenRoad for Great Britain or optionally for a specific grid square (or list of grid squares). CRS British National Grid (27700).
+    Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
+
+    Args:
+        grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded. Default None to load whole GB.
+        **kwargs for geopandas.read_file()
+    Returns:
+        gpd.GeoDataFrame: OS OpenRoad linestrings for specified grid squares.
+    """
+    if not grid_squares:
+        fs = s3fs.S3FileSystem()
+        file_path = config["data"]["geodata"]["gb_os_openroad"]
+        files = fs.glob(f"{file_path}*_RoadLink.shp")
+        gdfs = []
+        for file in files:
+            print(f"\nLoading OS OpenRoad file: {file}")
+            gdfs.append(gpd.read_file(f"s3://{file}"))
+
+        gdf = pd.concat(gdfs)
+    else:
+        file_path = config["data"]["geodata"]["grid_square_os_openroad"]
+        if not isinstance(grid_squares, List):
+            grid_squares = [grid_squares]
+        files = [file_path.format(square=code) for code in grid_squares]
+
+        gdfs = []
+
+        for file in files:
+            print(f"\nLoading OS OpenRoad file: {file}")
+            gdfs.append(gpd.read_file(file))
+
+        gdf = pd.concat(gdfs)
+
+    return gdf
 
 
 def load_gdf_poi() -> gpd.GeoDataFrame:
