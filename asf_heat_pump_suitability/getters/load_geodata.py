@@ -75,9 +75,8 @@ def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFr
         )
         # Assume first column with `ID` substring is the zone ID column
         # Note original ID column retained in case of erroneous ID assignment
-        id_col = [col for col in gdf.columns if "ID" in col][0]
-        gdf["HNZoneID"] = gdf[id_col]
-        print(f"Using Heat Network Zone {id_col} column as ID")
+        gdf = _extend_gdf_hn_zone_id(gdf)
+
     except (ValueError, KeyError):
         # Get list of LAs (e.g. for `greater_manchester_las` this means getting a list of all individual LAs) to attempt
         # loading heat network zone geodata for each LA individually if no geodata found for the whole group of LAs.
@@ -103,9 +102,7 @@ def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFr
                         ignore_index=True,
                     )
                     # Deal with different ID column names in different geodataframes by renaming the ID column to "ZoneID"
-                    id_col = [col for col in gdf.columns if "ID" in col][0]
-                    gdf["HNZoneID"] = gdf[id_col]
-                    print(f"Using Heat Network Zone {id_col} column as ID")
+                    gdf = _extend_gdf_hn_zone_id(gdf)
                 except (ValueError, KeyError):
                     print(
                         f"No heat network zone geodata found for Local Authority: {la}."
@@ -116,6 +113,25 @@ def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFr
             print(
                 f"Heat network zone geodataframe successfully loaded for {local_authority} with CRS {gdf.crs}."
             )
+    return gdf
+
+
+def _extend_gdf_hn_zone_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Add `HNZoneID` column to heat network geodataframe using existing ID columns.
+
+    Args:
+        gdf (gpd.GeoDataFrame): heat network zones
+
+    Returns:
+        gpd.GeoDataFrame: heat network zones with `HNZoneID` column
+    """
+    id_cols = [col for col in gdf.columns if "ID" in col]
+    id_col = id_cols[0]
+    print(f"Using Heat Network Zone {id_col} column as ID. Other options: {id_cols}")
+
+    gdf = gdf.rename(columns={id_col: f"original_{id_col}"})
+    gdf["HNZoneID"] = gdf[id_col]
     return gdf
 
 
