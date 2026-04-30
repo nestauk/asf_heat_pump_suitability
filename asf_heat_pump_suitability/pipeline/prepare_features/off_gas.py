@@ -92,11 +92,6 @@ def extend_df_off_gas(
         ).drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
     )
 
-    print(
-        "Number of UPRNs with POSTCODE after step 2:",
-        nearest_postcode_df.filter(pl.col("POSTCODE").is_not_null()).shape[0],
-    )
-
     # Step 3: Combine UPRNs with known postcodes and nearest postcodes
     uprn_postcode_map_df = pl.concat(
         [
@@ -122,11 +117,6 @@ def extend_df_off_gas(
         off_gas_df,
         how="left",
         on="UPRN",
-    )
-
-    print(
-        "Number of UPRNs with off_gas flag:",
-        features_df.filter(pl.col("off_gas").is_not_null()).shape[0],
     )
 
     return features_df

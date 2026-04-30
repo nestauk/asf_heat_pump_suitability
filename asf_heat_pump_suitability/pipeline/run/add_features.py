@@ -318,54 +318,16 @@ if __name__ == "__main__":
         listed_buildings_gdf=listed_buildings_gdf,
     )
 
-    # listed_polygons = listed_buildings_gdf[
-    #     listed_buildings_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])
-    # ]
-    # listed_points = listed_buildings_gdf[
-    #     listed_buildings_gdf.geometry.type.isin(["Point", "MultiPoint"])
-    # ]
-
-    # # Join for Polygons: We want buildings that touch/overlap listed polygons
-    # joined_polys = gpd.sjoin(
-    #     buildings_gdf, listed_polygons, how="inner", predicate="intersects"
-    # )
-
-    # # Join for Points: We want buildings that contain the listed points
-    # joined_pts = gpd.sjoin(
-    #     buildings_gdf, listed_points, how="inner", predicate="contains"
-    # )
-
-    # joined = pd.concat([joined_polys, joined_pts], ignore_index=True)
-
-    # uprns_gdf = gpd.sjoin(
-    #     uprns_gdf,
-    #     joined[["geometry", "in_listed_building"]],
-    #     how="left",
-    #     predicate="intersects",
-    # ).fillna({"in_listed_building": False})
-
-    # features_df = features_df.join(
-    #     pl.from_pandas(uprns_gdf[["UPRN", "in_listed_building"]]),
-    #     how="left",
-    #     on="UPRN",
-    # )
-
     print(features_df["in_listed_building"].value_counts())
 
     del listed_buildings_gdf
 
     # Add number of off-gas properties
-    # Source: https://www.xoserve.com/help-centre/supply-points-metering/supply-point-administration-spa/
     from asf_heat_pump_suitability.pipeline.prepare_features import (
         off_gas,
     )
 
     off_gas_list = off_gas.process_off_gas_data()
-    # code_point_df = gpd.read_file(
-    #     config["data"]["geodata"]["gb_code_point_data"],
-    #     layers="codepoint",
-    # )
-    # code_point_df["POSTCODE"] = code_point_df["postcode"].str.replace(" ", "")
 
     code_point_df = load_geodata.load_code_point_data()
 
@@ -378,67 +340,7 @@ if __name__ == "__main__":
         max_distance_m=500,  # to be conservative
     )
 
-    #  # create dictionary mapping between ID and POSTCODE when POSTCODE is not null
-    # id_postcode_mapping_df = (
-    #     features_df.filter(pl.col("POSTCODE").is_not_null())
-    #     .select(["ID", "POSTCODE"])
-    #     .rename({"POSTCODE": "MAPPED_POSTCODE"})
-    # )
-
-    # postcodes_df = (
-    #     features_df.select(["UPRN", "ID"])
-    #     .join(id_postcode_mapping_df, on="ID", how="left")
-    #     .rename({"MAPPED_POSTCODE": "POSTCODE"})
-    # )
-
-    # missing_uprns = postcodes_df.filter(pl.col("POSTCODE").is_null()).get_column("UPRN")
-
-    # uprns_no_postcode_gdf = uprns_gdf[uprns_gdf["UPRN"].isin(missing_uprns)]
-
-    # nearest_postcode_df = pl.from_pandas(
-    #     uprns_no_postcode_gdf.drop(columns="index_right")
-    #     .sjoin_nearest(
-    #         code_point_df[["POSTCODE", "geometry"]],
-    #         how="left",
-    #         max_distance=500,  # 500 metres to be conservative
-    #         distance_col="distance_to_postcode_m",  # distance in metres
-    #     )
-    #     .drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
-    # )
-
-    # uprn_postcode_map_df = pl.concat(
-    #     [
-    #         postcodes_df.filter(pl.col("POSTCODE").is_not_null()).select(
-    #             ["UPRN", "POSTCODE"]
-    #         ),
-    #         nearest_postcode_df.select(["UPRN", "POSTCODE"]),
-    #     ],
-    #     how="vertical",
-    # )
-    # # Label all UPRNs with on/off gas where possible
-    # off_gas_df = uprn_postcode_map_df.with_columns(
-    #     # Label postcodes according to on/off gas
-    #     pl.when(pl.col("POSTCODE").is_in(off_gas_list))
-    #     .then(True)
-    #     .otherwise(False)
-    #     .alias("off_gas")
-    # ).select(["UPRN", "off_gas"])
-
-    # features_df = features_df.join(
-    #     off_gas_df,
-    #     how="left",
-    #     on="UPRN",
-    # )
-
     print(features_df["off_gas"].value_counts())
-
-    # Add near coastline boolean flag
-    # coast_gdf = gpd.read_file(
-    #     config["data"]["geodata"]["gb_coast_boundaries"],
-    # )
-    # coast_gdf = gpd.GeoDataFrame(
-    #     geometry=[coast_gdf.geometry.union_all()], crs=coast_gdf.crs
-    # )
 
     coast_gdf = load_geodata.load_gb_coast_boundaries()
 
@@ -451,25 +353,6 @@ if __name__ == "__main__":
         distance_threshold_m=1500,
         simplify_tolerance_m=150,
     )
-
-    #  # Simplify coastline boundaries by 150m and buffer by 1500m to create a 'near coastline' area
-    # coast_gdf["simplified_geometry"] = coast_gdf.geometry.boundary.simplify(
-    #     tolerance=150
-    # ).buffer(1500)
-    # coast_gdf.set_geometry("simplified_geometry", inplace=True)
-    # coast_gdf["within_1500m_coastline"] = True
-
-    # uprns_gdf = uprns_gdf.drop(columns="index_right").sjoin(
-    #     coast_gdf[["within_1500m_coastline", "simplified_geometry"]],
-    #     how="left",
-    #     predicate="within",
-    # )
-
-    # features_df = features_df.join(
-    #     pl.from_pandas(uprns_gdf[["UPRN", "within_1500m_coastline"]]),
-    #     how="left",
-    #     on="UPRN",
-    # ).with_columns(pl.col("within_1500m_coastline").fill_null(False))
 
     print(features_df["within_1500m_coastline"].value_counts())
 
