@@ -60,6 +60,7 @@ def extend_df_listed_building_bool(
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with point geometries for each UPRN.
         buildings_gdf (gpd.GeoDataFrame): GeoDataFrame of building footprints with geometry column.
         listed_buildings_gdf (gpd.GeoDataFrame): GeoDataFrame of listed buildings with geometry column.
+            Can be point or polygon geometries.
 
     Returns:
         pl.DataFrame: input features_df with new boolean column `in_listed_building` indicating whether UPRN is in a listed building.
@@ -70,21 +71,21 @@ def extend_df_listed_building_bool(
     # Identify listed buildings that have polygon geoemetries
     listed_polygons_gdf = listed_buildings_gdf[
         listed_buildings_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])
-    ]
+    ][["geometry", "in_listed_building"]]
 
     # Identify listed buildings that have point geometries
     listed_points_gdf = listed_buildings_gdf[
         listed_buildings_gdf.geometry.type.isin(["Point", "MultiPoint"])
-    ]
+    ][["geometry", "in_listed_building"]]
 
     # Join for polygons: We want buildings that touch/overlap listed building polygons
-    joined_polys_gdf = gpd.sjoin(
-        buildings_gdf, listed_polygons_gdf, how="inner", predicate="intersects"
+    joined_polys_gdf = buildings_gdf.sjoin(
+        listed_polygons_gdf, how="inner", predicate="intersects"
     )
 
     # Join for points: We want buildings that contain the listed building points
-    joined_pts_gdf = gpd.sjoin(
-        buildings_gdf, listed_points_gdf, how="inner", predicate="contains"
+    joined_pts_gdf = buildings_gdf.sjoin(
+        listed_points_gdf, how="inner", predicate="contains"
     )
 
     # Combine joined polygons and points
@@ -92,8 +93,7 @@ def extend_df_listed_building_bool(
 
     # Spatial join UPRNs with listed buildings to label UPRNs in listed buildings.
     uprns_gdf = (
-        gpd.sjoin(
-            uprns_gdf,
+        uprns_gdf.sjoin(
             joined_gdf[["geometry", "in_listed_building"]],
             how="left",
             predicate="intersects",
