@@ -48,4 +48,4 @@ def extend_df_near_coastline_bool(
         on="UPRN",
     ).with_columns(pl.col(f"within_{distance_threshold_m}m_coastline").fill_null(False))
 
-    return features_df.select(["UPRN", f"within_{distance_threshold_m}m_coastline"])
+    return features_df

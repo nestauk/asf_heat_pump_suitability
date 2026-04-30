@@ -369,11 +369,13 @@ if __name__ == "__main__":
 
     code_point_df = load_geodata.load_code_point_data()
 
+    print(features_df.columns)
     features_df = off_gas.extend_df_off_gas(
         features_df=features_df,
         uprns_gdf=uprns_gdf,
         code_point_df=code_point_df,
         off_gas_list=off_gas_list,
+        max_distance_m=500,  # to be conservative
     )
 
     #  # create dictionary mapping between ID and POSTCODE when POSTCODE is not null

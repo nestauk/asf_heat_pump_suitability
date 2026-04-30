@@ -175,4 +175,4 @@ def extend_df_protected_area_bool(
         # .rename({"in_protected_area": "in_conservation_area"})
     )
 
-    return features_df.select(["UPRN", "in_protected_area"])
+    return features_df

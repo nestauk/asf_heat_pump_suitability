@@ -36,6 +36,7 @@ def extend_df_off_gas(
     uprns_gdf: gpd.GeoDataFrame,
     code_point_df: gpd.GeoDataFrame,
     off_gas_list: list,
+    max_distance_m: int = 500,
 ) -> pl.DataFrame:
     """
     Add boolean column to features_df indicating whether UPRN is in an off-gas postcode.
@@ -45,6 +46,7 @@ def extend_df_off_gas(
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with point geometries for each UPRN.
         code_point_df (gpd.GeoDataFrame): GeoDataFrame of postcode centroids with geometry column and POSTCODE column.
         off_gas_list (list): list of postcodes that are off-gas.
+        max_distance_m (int): maximum distance in metres to assume a UPRN is associated with a postcode if it doesn't have its own postcode. Defaults to 500 metres.
 
     Returns:
         pl.DataFrame: input features_df with new boolean column `off_gas` indicating whether UPRN is in an off-gas postcode.
@@ -68,7 +70,12 @@ def extend_df_off_gas(
         .rename({"MAPPED_POSTCODE": "POSTCODE"})
     )
 
-    # Step 2: Use EPC postcode of nearest UPRN / nearest code point as a last resort within a specified distance.
+    print(
+        "Number of UPRNs with POSTCODE after step 1:",
+        postcodes_df.filter(pl.col("POSTCODE").is_not_null()).shape[0],
+    )
+
+    # Step 2: Use EPC postcode of nearest code point within a specified distance
     uprns_missing_postcode_df = postcodes_df.filter(
         pl.col("POSTCODE").is_null()
     ).get_column("UPRN")
@@ -80,9 +87,14 @@ def extend_df_off_gas(
         uprns_missing_postcode_gdf.sjoin_nearest(
             code_point_df[["POSTCODE", "geometry"]],
             how="left",
-            max_distance=500,  # 500 metres to be conservative
+            max_distance=max_distance_m,  # maximum distance in metres
             distance_col="distance_to_postcode_m",  # distance in metres
         ).drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
+    )
+
+    print(
+        "Number of UPRNs with POSTCODE after step 2:",
+        nearest_postcode_df.filter(pl.col("POSTCODE").is_not_null()).shape[0],
     )
 
     # Step 3: Combine UPRNs with known postcodes and nearest postcodes
@@ -112,4 +124,9 @@ def extend_df_off_gas(
         on="UPRN",
     )
 
-    return features_df.select(["UPRN", "off_gas"])
+    print(
+        "Number of UPRNs with off_gas flag:",
+        features_df.filter(pl.col("off_gas").is_not_null()).shape[0],
+    )
+
+    return features_df

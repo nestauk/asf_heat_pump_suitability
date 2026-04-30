@@ -109,7 +109,7 @@ def extend_df_listed_building_bool(
         on="UPRN",
     )
 
-    return features_df.select(["UPRN", "in_listed_building"])
+    return features_df
 
 
 def chunk_sjoin_df_epc_listed_buildings(
