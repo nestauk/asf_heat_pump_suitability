@@ -300,9 +300,6 @@ if __name__ == "__main__":
         ],
     )
 
-    print(features_df["has_solar_pv"].value_counts())
-    print(features_df["ENERGY_CONSUMPTION_CURRENT"].mean())
-
     # Add listed building boolean flag
     from asf_heat_pump_suitability.pipeline.prepare_features import (
         listed_buildings,
@@ -318,8 +315,6 @@ if __name__ == "__main__":
         listed_buildings_gdf=listed_buildings_gdf,
     )
 
-    print(features_df["in_listed_building"].value_counts())
-
     del listed_buildings_gdf
 
     # Add number of off-gas properties
@@ -329,18 +324,15 @@ if __name__ == "__main__":
 
     off_gas_list = off_gas.process_off_gas_data()
 
-    code_point_df = load_geodata.load_code_point_data()
+    code_point_gdf = load_geodata.load_gdf_code_point_data()
 
-    print(features_df.columns)
     features_df = off_gas.extend_df_off_gas(
         features_df=features_df,
         uprns_gdf=uprns_gdf,
-        code_point_df=code_point_df,
+        code_point_gdf=code_point_gdf,
         off_gas_list=off_gas_list,
         max_distance_m=500,  # to be conservative
     )
-
-    print(features_df["off_gas"].value_counts())
 
     coast_gdf = load_geodata.load_gb_coast_boundaries()
 
@@ -353,8 +345,6 @@ if __name__ == "__main__":
         distance_threshold_m=1500,
         simplify_tolerance_m=150,
     )
-
-    print(features_df["within_1500m_coastline"].value_counts())
 
     del coast_gdf
 
@@ -376,8 +366,6 @@ if __name__ == "__main__":
         features_df=features_df,
         protected_areas_df=uprns_protected_areas_df,
     )
-
-    print(features_df["in_protected_area"].value_counts())
 
     del uprns_protected_areas_df
 
