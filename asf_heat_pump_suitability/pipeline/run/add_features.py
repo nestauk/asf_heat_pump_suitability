@@ -308,39 +308,47 @@ if __name__ == "__main__":
         listed_buildings,
     )
 
+    # Load listed buildings geodataframe for Great Britain
     listed_buildings_gdf = listed_buildings.transform_gdf_listed_buildings(nation="GB")
 
-    listed_polygons = listed_buildings_gdf[
-        listed_buildings_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])
-    ]
-    listed_points = listed_buildings_gdf[
-        listed_buildings_gdf.geometry.type.isin(["Point", "MultiPoint"])
-    ]
-
-    # Join for Polygons: We want buildings that touch/overlap listed polygons
-    joined_polys = gpd.sjoin(
-        buildings_gdf, listed_polygons, how="inner", predicate="intersects"
+    features_df = listed_buildings.extend_df_listed_building_bool(
+        features_df=features_df,
+        uprns_gdf=uprns_gdf,
+        buildings_gdf=buildings_gdf,
+        listed_buildings_gdf=listed_buildings_gdf,
     )
 
-    # Join for Points: We want buildings that contain the listed points
-    joined_pts = gpd.sjoin(
-        buildings_gdf, listed_points, how="inner", predicate="contains"
-    )
+    # listed_polygons = listed_buildings_gdf[
+    #     listed_buildings_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])
+    # ]
+    # listed_points = listed_buildings_gdf[
+    #     listed_buildings_gdf.geometry.type.isin(["Point", "MultiPoint"])
+    # ]
 
-    joined = pd.concat([joined_polys, joined_pts], ignore_index=True)
+    # # Join for Polygons: We want buildings that touch/overlap listed polygons
+    # joined_polys = gpd.sjoin(
+    #     buildings_gdf, listed_polygons, how="inner", predicate="intersects"
+    # )
 
-    uprns_gdf = gpd.sjoin(
-        uprns_gdf,
-        joined[["geometry", "in_listed_building"]],
-        how="left",
-        predicate="intersects",
-    ).fillna({"in_listed_building": False})
+    # # Join for Points: We want buildings that contain the listed points
+    # joined_pts = gpd.sjoin(
+    #     buildings_gdf, listed_points, how="inner", predicate="contains"
+    # )
 
-    features_df = features_df.join(
-        pl.from_pandas(uprns_gdf[["UPRN", "in_listed_building"]]),
-        how="left",
-        on="UPRN",
-    )
+    # joined = pd.concat([joined_polys, joined_pts], ignore_index=True)
+
+    # uprns_gdf = gpd.sjoin(
+    #     uprns_gdf,
+    #     joined[["geometry", "in_listed_building"]],
+    #     how="left",
+    #     predicate="intersects",
+    # ).fillna({"in_listed_building": False})
+
+    # features_df = features_df.join(
+    #     pl.from_pandas(uprns_gdf[["UPRN", "in_listed_building"]]),
+    #     how="left",
+    #     on="UPRN",
+    # )
 
     print(features_df["in_listed_building"].value_counts())
 
