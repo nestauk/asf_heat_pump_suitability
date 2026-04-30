@@ -34,7 +34,7 @@ def extend_df_near_coastline_bool(
     coast_gdf.set_geometry("simplified_geometry", inplace=True)
     coast_gdf[f"within_{distance_threshold_m}m_coastline"] = True
 
-    uprns_gdf = uprns_gdf.drop(columns="index_right").sjoin(
+    uprns_gdf = uprns_gdf.sjoin(
         coast_gdf[[f"within_{distance_threshold_m}m_coastline", "simplified_geometry"]],
         how="left",
         predicate="within",
