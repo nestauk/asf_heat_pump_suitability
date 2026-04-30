@@ -232,13 +232,6 @@ if __name__ == "__main__":
         uprns_df=uprns_df,
     )
 
-    print("Before:", len(clusters_with_contextual_features_df))
-    print("Remove clusters without any UPRNs within them...")
-    clusters_with_contextual_features_df = clusters_with_contextual_features_df.filter(
-        pl.col("n_UPRNs") > 0
-    )
-    print("After:", len(clusters_with_contextual_features_df))
-
     if args.save:
         # Adding the geometry back to the clusters dataframe
         clusters_with_contextual_features_df = (
