@@ -49,29 +49,90 @@ def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFr
     Load GeoDataFrame with heat network zone polygons in given Local Authority.
 
     Args:
-        local_authority (str): Local Authority to load Heat Network zone polygons for.
+        local_authority (str): Local Authority or Local Authorities to load Heat Network zone polygons for.
+        e.g. `plymouth` for Plymouth Local Authority; `greater_manchester_las` for Greater Manchester Combined Authority (all 10 LAs in Greater Manchester).
+        See config/base.yaml under the `constant` key for options.
+
         **kwargs for `gpd.read_file()`
 
     Returns:
         gpd.GeoDataFrame: polygons of heat network zones in given Local Authority.
     """
 
+    # TODO: this will currently only work for HN zone files defined in config/base.yaml.
+    # We need to change this to make it work for all other HN zone files,
+    # for example by concatenating all HN zone files and checking if the geometries intersect with the local authority boundary.
+
+    gdf = gpd.GeoDataFrame()
+
+    # Local authority (e.g. `plymouth`) or group of local authorities (e.g. `greater_manchester_las`)
     local_authority = local_authority.lower()
 
-    if local_authority not in config["data"]["geodata"]["heat_network_zones"].keys():
-        raise ValueError(
-            f"No path found for heat network zone geodata in Local Authority: {local_authority}"
+    # Load heat network zone geodata for the specified local authority or group of local authorities.
+    try:
+        gdf = base_getters.get_gdf_from_gpkg_s3_path(
+            path=config["data"]["geodata"]["heat_network_zones"][local_authority],
+            **kwargs,
         )
+        # Assume first column with `ID` substring is the zone ID column
+        # Note original ID column retained in case of erroneous ID assignment
+        gdf = _extend_gdf_hn_zone_id(gdf)
 
-    print(f"Loading heat network zone data for {local_authority} Local Authority...")
-    gdf = base_getters.get_gdf_from_gpkg_s3_path(
-        path=config["data"]["geodata"]["heat_network_zones"][local_authority],
-        **kwargs,
-    )
+    except (ValueError, KeyError):
+        # Get list of LAs (e.g. for `greater_manchester_las` this means getting a list of all individual LAs) to attempt
+        # loading heat network zone geodata for each LA individually if no geodata found for the whole group of LAs.
+        list_las = config["constant"][local_authority]["la_names"]
+        list_las = list_las if isinstance(list_las, list) else [list_las]
 
-    print(
-        f"Heat network zone geodataframe successfully loaded for {local_authority} with CRS {gdf.crs}."
-    )
+        # If gdf is still empty and `local_authority` represents a group of LAs
+        if gdf.empty and len(list_las) > 1:
+            # Check if heat network zone geodata is available for each LA in the list, and if so, load it and concatenate
+            # it to a single geodataframe.
+            for la in list_las:
+                try:
+                    gdf = pd.concat(
+                        [
+                            gdf,
+                            base_getters.get_gdf_from_gpkg_s3_path(
+                                path=config["data"]["geodata"]["heat_network_zones"][
+                                    la
+                                ],
+                                **kwargs,
+                            ),
+                        ],
+                        ignore_index=True,
+                    )
+                    # Deal with different ID column names in different geodataframes by renaming the ID column to "ZoneID"
+                    gdf = _extend_gdf_hn_zone_id(gdf)
+                except (ValueError, KeyError):
+                    print(
+                        f"No heat network zone geodata found for Local Authority: {la}."
+                    )
+    finally:
+        if len(gdf) > 0:
+            gdf.set_geometry("geometry", inplace=True)
+            print(
+                f"Heat network zone geodataframe successfully loaded for {local_authority} with CRS {gdf.crs}."
+            )
+    return gdf
+
+
+def _extend_gdf_hn_zone_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Add `HNZoneID` column to heat network geodataframe using existing ID columns.
+
+    Args:
+        gdf (gpd.GeoDataFrame): heat network zones
+
+    Returns:
+        gpd.GeoDataFrame: heat network zones with `HNZoneID` column
+    """
+    id_cols = [col for col in gdf.columns if "ID" in col]
+    id_col = id_cols[0]
+    print(f"Using Heat Network Zone {id_col} column as ID. Other options: {id_cols}")
+
+    gdf = gdf.rename(columns={id_col: f"original_{id_col}"})
+    gdf["HNZoneID"] = gdf[id_col]
     return gdf
 
 
