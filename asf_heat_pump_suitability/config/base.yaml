@@ -144,7 +144,7 @@ output:
     # Buildings containing domestic UPRNs aggregated into groups of neighbouring clusters of the same tech type
     tech_clusters: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_clustered_tech_polygons_simplified_{tolerance}m.geojson"
     # Opportunity areas with with most suitable tech, cluster ID, contextual data
-    clusters_tech_contextual_info: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_clusters_contextual_features.geojson"
+    clusters_tech_contextual_info: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_clusters_contextual_features.geojson"
   save_as:
     model:
       block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"

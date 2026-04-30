@@ -86,7 +86,7 @@ def extend_df_contextual_features(
 
     Args:
         opportunity_areas_df (pl.DataFrame): dataframe of opportunity areas with cluster_id
-        uprns_df (pl.DataFrame): dataframe of UPRNs with relevant features
+        uprns_df (pl.DataFrame): dataframe of UPRNs with cluster_id and relevant features for aggregation
     Returns:
         pl.DataFrame: dataframe with remaining features per opportunity area
     """
@@ -94,11 +94,10 @@ def extend_df_contextual_features(
     dummy_cols = ["ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
     # Get value counts per feature
     dummy_contextual_feat_df = (
-        uprns_df.select(dummy_cols + ["cluster_id", "UPRN"])
+        uprns_df.select(dummy_cols + ["cluster_id"])
         .to_dummies(columns=dummy_cols)
         .group_by("cluster_id")
         .agg(pl.all().sum())
-        .drop("UPRN")
     )
 
     # Keep only the columns that start with the dummy column prefixes, e.g. "ATTACHMENT_", "TENURE_", "CURRENT_ENERGY_RATING_"
@@ -116,7 +115,6 @@ def extend_df_contextual_features(
         {
             col: col.lower().replace(" ", "_").replace("-", "_")
             for col in dummy_contextual_feat_df.columns
-            if col != "cluster_id"
         }
     )
 
@@ -148,9 +146,7 @@ def extend_df_contextual_features(
             # n_uprns_off_gas
             pl.col("off_gas").sum().alias("n_uprns_off_gas"),
             # near_coastline flag
-            pl.col("within_1500m_of_coastline")
-            .any()
-            .alias("within_1500m_of_coastline"),
+            pl.col("within_1500m_coastline").any().alias("within_1500m_coastline"),
             # near_anchor_load flag
             pl.col("near_anchor_load").any().alias("near_anchor_load"),
             # in_conservation_area flag
@@ -165,7 +161,7 @@ def extend_df_contextual_features(
                 "n_UPRNs",
                 "n_uprns_in_listed_building",
                 "n_uprns_off_gas",
-                "within_1500m_of_coastline",
+                "within_1500m_coastline",
                 "near_anchor_load",
                 "in_conservation_area",
             ]
@@ -200,7 +196,7 @@ if __name__ == "__main__":
 
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
-        config["output"]["dataset"]["tech_clusters"].format(
+        config["output"]["dataset"]["residential_uprns_with_features"].format(
             local_authority=local_authorities
         )
     )
@@ -208,9 +204,9 @@ if __name__ == "__main__":
 
     print("Loading opportunity areas...")
     opportunity_areas_gdf = gpd.read_file(
-        config["output"]["dataset"]["clusters_tech"].format(
-            local_authority=local_authorities
-        )
+        config["output"]["dataset"]["tech_clusters"].format(
+            local_authorities=args.local_authorities, tolerance=5
+        ),
     ).to_crs(epsg=27700)
 
     print("Filtering to opportunity areas...")
