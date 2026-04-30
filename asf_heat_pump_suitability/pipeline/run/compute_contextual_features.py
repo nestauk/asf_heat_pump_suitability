@@ -148,7 +148,9 @@ def extend_df_contextual_features(
             # n_uprns_off_gas
             pl.col("off_gas").sum().alias("n_uprns_off_gas"),
             # near_coastline flag
-            pl.col("near_coastline").any().alias("within_1500m_of_coastline"),
+            pl.col("within_1500m_of_coastline")
+            .any()
+            .alias("within_1500m_of_coastline"),
             # near_anchor_load flag
             pl.col("near_anchor_load").any().alias("near_anchor_load"),
             # in_conservation_area flag
@@ -198,7 +200,7 @@ if __name__ == "__main__":
 
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
-        config["output"]["dataset"]["residential_uprns_with_features"].format(
+        config["output"]["dataset"]["tech_clusters"].format(
             local_authority=local_authorities
         )
     )
