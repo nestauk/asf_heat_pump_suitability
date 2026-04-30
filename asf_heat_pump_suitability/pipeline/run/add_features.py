@@ -286,8 +286,6 @@ if __name__ == "__main__":
         ],
     )
 
-    print(epc_df["SOLAR_WATER_HEATING_FLAG"].value_counts())
-
     features_df = epc.extend_df_epc_features(
         df=features_df,
         epc_df=epc_df,
@@ -362,31 +360,31 @@ if __name__ == "__main__":
     code_point_df["POSTCODE"] = code_point_df["postcode"].str.replace(" ", "")
 
     # create dictionary mapping between ID and POSTCODE when POSTCODE is not null
-    id_postcode_mapping_df = features_df.filter(
-        pl.col("POSTCODE").is_not_null()
-    ).select(["ID", "POSTCODE"])
-    id_postcode_mapping_dict = dict(
-        zip(id_postcode_mapping_df["ID"], id_postcode_mapping_df["POSTCODE"])
+    id_postcode_mapping_df = (
+        features_df.filter(pl.col("POSTCODE").is_not_null())
+        .select(["ID", "POSTCODE"])
+        .rename({"POSTCODE": "MAPPED_POSTCODE"})
     )
-    postcodes_df = features_df.select(["UPRN", "ID", "POSTCODE"])
 
-    postcodes_df["POSTCODE"] = postcodes_df["ID"].map(id_postcode_mapping_dict)
+    postcodes_df = (
+        features_df.select(["UPRN", "ID"])
+        .join(id_postcode_mapping_df, on="ID", how="left")
+        .rename({"MAPPED_POSTCODE": "POSTCODE"})
+    )
 
-    uprns_no_postcode_gdf = uprns_gdf[
-        uprns_gdf["UPRN"].isin(
-            postcodes_df.filter(pl.col("POSTCODE").is_null())[["UPRN"]].to_pandas()[
-                "UPRN"
-            ]
-        )
-    ]
+    missing_uprns = postcodes_df.filter(pl.col("POSTCODE").is_null()).get_column("UPRN")
+
+    uprns_no_postcode_gdf = uprns_gdf[uprns_gdf["UPRN"].isin(missing_uprns)]
 
     nearest_postcode_df = pl.from_pandas(
-        uprns_no_postcode_gdf.sjoin_nearest(
+        uprns_no_postcode_gdf.drop(columns="index_right")
+        .sjoin_nearest(
             code_point_df[["POSTCODE", "geometry"]],
             how="left",
-            max_distance=250,  # 250 metres to be conservative
+            max_distance=500,  # 500 metres to be conservative
             distance_col="distance_to_postcode_m",  # distance in metres
-        ).drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
+        )
+        .drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
     )
 
     uprn_postcode_map_df = pl.concat(
@@ -424,27 +422,25 @@ if __name__ == "__main__":
     )
 
     # Simplify coastline boundaries by 150m and buffer by 1500m to create a 'near coastline' area
-    coast_gdf["simplified_geometry"] = (
-        coast_gdf.geometry.boundary.simplify(tolerance=150)
-        .buffer(1500)
-        .set_geometry("simplified_geometry")
-    )
+    coast_gdf["simplified_geometry"] = coast_gdf.geometry.boundary.simplify(
+        tolerance=150
+    ).buffer(1500)
+    coast_gdf.set_geometry("simplified_geometry", inplace=True)
+    coast_gdf["within_1500m_coastline"] = True
 
-    coast_gdf["near_coastline"] = True
-
-    uprns_gdf = uprns_gdf.sjoin(
-        coast_gdf[["near_coastline", "simplified_geometry"]],
+    uprns_gdf = uprns_gdf.drop(columns="index_right").sjoin(
+        coast_gdf[["within_1500m_coastline", "simplified_geometry"]],
         how="left",
         predicate="within",
     )
 
     features_df = features_df.join(
-        pl.from_pandas(uprns_gdf[["UPRN", "near_coastline"]]),
+        pl.from_pandas(uprns_gdf[["UPRN", "within_1500m_coastline"]]),
         how="left",
         on="UPRN",
-    ).with_columns(pl.col("near_coastline").fill_null(False))
+    ).with_columns(pl.col("within_1500m_coastline").fill_null(False))
 
-    print(features_df["near_coastline"].value_counts())
+    print(features_df["within_1500m_coastline"].value_counts())
 
     del coast_gdf
 
@@ -490,12 +486,10 @@ if __name__ == "__main__":
     )
     uprns_gdf["COUNTRY"] = uprns_gdf["UPRN"].map(uprn_to_country_dict)
 
-    # uprns_gdf = uprns_gdf.merge(
-    #     uprn_to_country_df[["UPRN", "COUNTRY"]], on="UPRN", how="left"
-    # ).drop(columns=["index_right"])
-
     uprns_conservation_areas_df = (
-        protected_areas.load_transform_df_uprn_in_protected_area(gdf=uprns_gdf)
+        protected_areas.load_transform_df_uprn_in_protected_area(
+            gdf=uprns_gdf.drop(columns="index_right")
+        )
     )
 
     print(uprns_conservation_areas_df.columns)

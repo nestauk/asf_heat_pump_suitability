@@ -41,7 +41,7 @@ def transform_gdf_listed_buildings(nation: str = "GB") -> gpd.GeoDataFrame:
     """
     gdf = get_datasets.load_gdf_listed_buildings(nation, columns=["geometry"])
     gdf = gdf.drop_duplicates(subset="geometry")
-    gdf["listed_building"] = True
+    gdf["in_listed_building"] = True
 
     return gdf
 
