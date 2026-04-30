@@ -13,6 +13,10 @@ import argparse
 import polars as pl
 import geopandas as gpd
 
+from asf_heat_pump_suitability import config
+
+ANCHOR_LOAD_RADIUS = config["constant"]["anchor_radius"]
+
 
 def parse_arguments() -> argparse.Namespace:
     """
@@ -171,7 +175,7 @@ def extend_df_contextual_features(
     # Rename column f"within_{radius}m_from_anchor_property" to f"within_{radius}m_from_anchor_load"
     clusters_df = clusters_df.rename(
         {
-            f"within_{config['constant']['anchor_radius']}m_from_anchor_property": f"within_{config['constant']['anchor_radius']}m_from_anchor_load"
+            f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_property": f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
         }
     )
 
@@ -221,19 +225,26 @@ if __name__ == "__main__":
     print(uprns_df.columns)
 
     print("Calculate remaining features per cluster...")
-    clusters_df = extend_df_contextual_features(
-        clusters_df=pl.from_pandas(clusters_gdf[["cluster_id"]]),
+    clusters_with_contextual_features_df = extend_df_contextual_features(
+        clusters_df=pl.from_pandas(
+            clusters_gdf.drop(columns="geometry")
+        ),  # drop geometry for now and use polars
         uprns_df=uprns_df,
     )
 
     print("Remove clusters without any UPRNs within them...")
-    clusters_df = clusters_df.filter(pl.col("n_UPRNs") > 0)
+    clusters_with_contextual_features_df = clusters_with_contextual_features_df.filter(
+        pl.col("n_UPRNs") > 0
+    )
 
     if args.save:
-        clusters_with_contextual_features_df = clusters_df.to_pandas().merge(
-            clusters_gdf[["cluster_id", "geometry"]],
-            how="left",
-            on="cluster_id",
+        # Adding the geometry back to the clusters dataframe
+        clusters_with_contextual_features_df = (
+            clusters_with_contextual_features_df.to_pandas().merge(
+                clusters_gdf[["cluster_id", "geometry"]],
+                how="left",
+                on="cluster_id",
+            )
         )
 
         # Saving as EPSG:4326 because we need lat/long for visualisation
