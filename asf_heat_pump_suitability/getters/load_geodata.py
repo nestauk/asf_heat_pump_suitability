@@ -3,6 +3,8 @@ import geopandas as gpd
 import os
 import pandas as pd
 from typing import Optional, List
+import boto3
+import s3fs
 
 from osbng import grids
 
@@ -122,39 +124,14 @@ def load_gdf_spatial_signatures_gb(
     return gdf
 
 
-def load_gdf_poi() -> gpd.GeoDataFrame:
-    """
-    Load and process Points of Interest data. CRS EPSG 4326.
-
-    Returns:
-        gpd.GeoDataFrame: Processed POI data containing types of POI specified
-
-    Raises:
-        ValueError: If required columns are missing
-    """
-    print("Loading POI data...")
-
-    required_columns = [
-        "id",
-        "country",
-        "main_category",
-        "alternate_category",
-        "geometry",
-    ]
-    poi = gpd.read_file(
-        filename=config["data"]["geodata"]["UK_poi_locations"],
-        columns=required_columns,
-        layer="poi_uk",
-    ).to_crs("EPSG:4326")
-    print(f"POI CRS: {poi.crs}")
-    return poi
-
-
 def load_gdf_os_openmap_layer(
     layer: str, grid_squares: Optional[List[str]] = None, **kwargs
 ) -> gpd.GeoDataFrame:
     """
-    Load specified OS OpenMap Local or Greenspace layer for Great Britain or optionally for a specific grid square. CRS British National Grid (27700).
+    Load specified OS OpenMap Local or Greenspace layer for Great Britain or optionally for a specific grid square.
+    CRS British National Grid (27700).
+
+    Find full list of green space sites here: https://docs.os.uk/os-downloads/products/land-and-terrain-portfolio/os-open-greenspace/os-open-greenspace-technical-specification/code-lists/functionvalue#code-list-functionvalue
 
     Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
 
@@ -185,6 +162,7 @@ def load_gdf_os_openmap_layer(
         'tidal_boundary',
         'tidal_water',
         'woodland'
+
     Returns:
         gpd.GeoDataFrame: OS OpenMap Local geometries for specified layer
     """
@@ -228,3 +206,147 @@ def load_gdf_os_openmap_layer(
         id_col = "ID" if "ID" in gdf.columns else "id"
 
         return gdf.drop_duplicates(subset=[id_col, "geometry"])
+
+
+def load_gdf_os_openroad(
+    grid_squares: Optional[List[str]] = None, **kwargs
+) -> gpd.GeoDataFrame:
+    """
+    Load road link data from OS OpenRoad for Great Britain or optionally for a specific grid square (or list of grid squares). CRS British National Grid (27700).
+    Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
+
+    Args:
+        grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded. Default None to load whole GB.
+        **kwargs for geopandas.read_file()
+    Returns:
+        gpd.GeoDataFrame: OS OpenRoad linestrings for specified grid squares.
+    """
+    if not grid_squares:
+        fs = s3fs.S3FileSystem()
+        file_path = config["data"]["geodata"]["gb_os_openroad"]
+        files = fs.glob(f"{file_path}*_RoadLink.shp")
+        gdfs = []
+        for file in files:
+            print(f"\nLoading OS OpenRoad file: {file}")
+            gdfs.append(gpd.read_file(f"s3://{file}"))
+
+        gdf = pd.concat(gdfs)
+    else:
+        file_path = config["data"]["geodata"]["grid_square_os_openroad"]
+        if not isinstance(grid_squares, List):
+            grid_squares = [grid_squares]
+        files = [file_path.format(square=code) for code in grid_squares]
+
+        gdfs = []
+
+        for file in files:
+            print(f"\nLoading OS OpenRoad file: {file}")
+            gdfs.append(gpd.read_file(file))
+
+        gdf = pd.concat(gdfs)
+
+    return gdf
+
+
+def load_gdf_poi() -> gpd.GeoDataFrame:
+    """
+    Load and process Points of Interest data. CRS EPSG 4326.
+
+    Returns:
+        gpd.GeoDataFrame: Processed POI data containing types of POI specified
+
+    Raises:
+        ValueError: If required columns are missing
+    """
+    print("Loading POI data...")
+
+    required_columns = [
+        "id",
+        "country",
+        "main_category",
+        "alternate_category",
+        "geometry",
+    ]
+    poi = gpd.read_file(
+        filename=config["data"]["geodata"]["UK_poi_locations"],
+        columns=required_columns,
+        layer="poi_uk",
+    ).to_crs("EPSG:4326")
+    print(f"POI CRS: {poi.crs}")
+
+    return poi
+
+
+def load_code_point_data() -> gpd.GeoDataFrame:
+    """
+    Load GB code point geodataframe for postcode lookup and clean postcode column by removing spaces.
+
+    Returns:
+        gpd.GeoDataFrame: geodataframe of GB code points with geometry and POSTCODE columns.
+    """
+    code_point_df = gpd.read_file(
+        config["data"]["geodata"]["gb_code_point_data"],
+        layers="codepoint",
+    )
+    code_point_df["POSTCODE"] = code_point_df["postcode"].str.replace(" ", "")
+    return code_point_df
+
+
+def load_gb_coast_boundaries():
+    """
+    Load GB coastline boundaries geodataframe and dissolve into a single geometry.
+    """
+
+    coast_gdf = gpd.read_file(
+        config["data"]["geodata"]["gb_coast_boundaries"],
+    )
+
+    # Dissolve coastline boundaries into a single geometry
+    coast_gdf = gpd.GeoDataFrame(
+        geometry=[coast_gdf.geometry.union_all()], crs=coast_gdf.crs
+    )
+    return coast_gdf
+
+
+def load_transform_dict_uprn_to_country_mapping() -> dict:
+    """
+    Load and transform the UPRN to country mapping data from S3.
+
+    Returns:
+        dict: A dictionary mapping UPRN to corresponding country information.
+    """
+    s3_client = boto3.client("s3")
+
+    path = config["data"]["geodata"]["gb_uprn_country_mapping"]
+    bucket_name = path.split("s3://")[1].split("/")[0]
+    prefix = path.split(f"s3://{bucket_name}/")[1]
+
+    response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+    files = [
+        f"s3://{bucket_name}/{obj['Key']}"
+        for obj in response.get("Contents", [])
+        if obj["Key"].endswith(".csv")
+    ]
+
+    uprn_to_country_df = pd.concat(
+        [pd.read_csv(file, usecols=["UPRN", "PCDS", "ctry25cd"]) for file in files],
+        ignore_index=True,
+    )
+
+    uprn_to_country_df["COUNTRY"] = (
+        uprn_to_country_df["ctry25cd"]
+        .str[0]
+        .map(
+            {
+                "E": "England",
+                "W": "Wales",
+                "S": "Scotland",
+            }
+        )
+    )
+
+    uprn_to_country_dict = dict(
+        zip(uprn_to_country_df["UPRN"], uprn_to_country_df["COUNTRY"])
+    )
+
+    return uprn_to_country_dict

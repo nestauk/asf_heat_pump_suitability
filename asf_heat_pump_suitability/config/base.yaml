@@ -6,6 +6,12 @@ data:
     gb_os_openmap_local: "s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares
     grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+    # OpenMap Green space layers for certain grid squares
+    grid_square_os_openmap_greenspace: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/{square}/{square}_{layer}.shp"
+    # OpenRoad Local road data for GB
+    gb_os_openroad: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/oproad_essh_gb/"
+    # OpenRoad Local road data for certain grid squares
+    grid_square_os_openroad: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/oproad_essh_gb/{square}_RoadLink.shp"
     # UK Points of Interest
     UK_poi_locations: "s3://asf-heat-pump-suitability/source_data/poi_uk.gpkg"
 
@@ -24,6 +30,19 @@ data:
       # UrbanGrammarAI Spatial Signatures GB detailed
       full: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB.gpkg"
 
+    # OpenMap Code Point GB data for postcode lookup
+    # TODO: move this file to a different S3 location as it's not just Plymouth data - it's GB data
+    gb_code_point_data: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/codepo_gb.gpkg"
+
+    # GB coastline boundaries
+    gb_coast_boundaries: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
+
+    # Path to folder with UPRN to country mapping files for GB
+    gb_uprn_country_mapping: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/NSUL_DEC_2025/"
+    council_tax_data:
+      # plymouth council tax data
+      plymouth: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/PLYMOUTH_CTBANDS_ONSUD_202512.csv"
+
   epc:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
     commercial: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v092025_EPC_NonDomestic_EW.csv"
@@ -35,6 +54,13 @@ data:
     poi_anchor_properties: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/poi_anchor_properties_gb.geojson"
 
 constant:
+  id:
+    building: "ID"
+  threshold:
+    m2_per_predicted_UPRN: 261.608136 # Identified by analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py
+    outdoor_space_threshold_m2:
+      within_hn_zone: 70
+      outside_hn_zone: 30
   plymouth:
     la_names: "Plymouth"
     grid_squares: "SX"
@@ -89,8 +115,21 @@ constant:
   cardiff:
     la_names: "Cardiff"
     grid_squares: "ST"
-  anchor_load_radius: 50 # threshold for proximity to anchor load properties in meters
   target_crs: 27700 # British National Grid
+  tech_types:
+    individual: "Individual solution"
+    networked: "Networked heat pump"
+    communal: "Communal solution"
+    heat_networks: "District heat network"
+  # radius in metres around anchor properties within which we are reassigning N-GSHP to communal
+  anchor_radius: 50
+  tech_type_codes:
+    individual: "IND"
+    networked: "NHP"
+    communal: "COM"
+    heat_networks: "DHNZ"
+  ID:
+    building: "ID"
 
 output:
   dataset:
@@ -102,6 +141,12 @@ output:
     clusters_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_tech_polygons_with_clusterID.geojson"
     # Opportunity areas with with most suitable tech, cluster ID, contextual data
     clusters_tech_contextual_info: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_cluster_contextual_features.geojson"
+    # Residential UPRNs with their most suitable low carbon heat technology group
+    uprns_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
+    # Residential buildings with their most suitable low carbon heat technology group
+    buildings_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_buildings_most_suitable_tech.parquet"
+    # Buildings containing domestic UPRNs aggregated into groups of neighbouring clusters of the same tech type
+    tech_clusters: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_clustered_tech_polygons_simplified_{tolerance}m.geojson"
   save_as:
     model:
       block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"

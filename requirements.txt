@@ -15,8 +15,8 @@ convertbng~=0.7
 pyogrio~=0.10
 regex~=2024.11
 xlsx2csv~=0.8
-s3fs==2022.5.0
-boto3==1.21.21
+s3fs>=2024.10.0
+boto3>=1.35.0
 tenacity~=9.1
 numpy<2.0.0
 fiona~=1.1
@@ -31,4 +31,5 @@ pyarrow
 simplekml
 smart-open~=7.3
 osbng
+libpysal
 momepy

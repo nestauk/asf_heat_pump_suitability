@@ -164,8 +164,9 @@ if __name__ == "__main__":
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
 
-    # Load planned heat network zone polygons (if available for the local authority/local authorities)
+    # Load planned heat network zone polygons
     hn_zones_gdf = gpd.GeoDataFrame()
+    # Check if heat network zone geodata is available for each LA in the list, and if so, load it and concatenate it to a single geodataframe.
     for la in list_las:
         try:
             # TODO: deal with the potential for different Zone ID column names in different HN zone datasets
@@ -178,18 +179,18 @@ if __name__ == "__main__":
             )
         except ValueError:
             print(
-                f"No heat network zone geodata found for {la}. Assuming no UPRNs are in heat network zones in this Local Authority."
+                f"No heat network zone geodata found for {la}. All UPRNs will be labelled as 'outside heat network zone' in this Local Authority."
             )
 
-    # Check if data is available for all LAs in the list, and if not, check if there is data for the whole set of LAs (e.g. Greater Manchester as a whole instead of individual LAs)
-    if len(list_las) > 0 and hn_zones_gdf.empty:
+        # If hn_zones_gdf is empty after attempting to load for each LA individually, try loading a combined HN zone geodataframe for the whole list of LAs
+        # (this is because for some groups of LAs, e.g. Greater Manchester Combined Authority, there is only a combined HN zone geodataframe and no individual ones).
         try:
             hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
                 local_authority=local_authorities
             )
         except ValueError:
             print(
-                f"No heat network zone geodata found for {local_authorities}. Assuming no UPRNs are in heat network zones in this group of Local Authorities."
+                f"No heat network zone geodata found for {local_authorities}. All UPRNs will be labelled as 'outside heat network zone' in this group of Local Authorities."
             )
 
     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
@@ -231,10 +232,6 @@ if __name__ == "__main__":
             ignore_index=False,
         )
 
-    buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-        layer="building", grid_squares=grid_squares
-    )
-
     # Get intersection of building footprint polygons and land polygons
     intersection_gdf = outdoor_space.generate_gdf_building_intersections(
         land_parcels_gdf=land_parcels_gdf,
@@ -266,7 +263,6 @@ if __name__ == "__main__":
 
     del (
         land_parcels_gdf,
-        buildings_gdf,
         intersection_gdf,
         outdoor_space_gdf,
         uprns_space_df,
@@ -275,7 +271,7 @@ if __name__ == "__main__":
     # ------------------------ #
     # CONTEXTUAL FEATURES
     # ------------------------ #
-    # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE, SOLAR PV and HEAT DEMAND
+    # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE, SOLAR PV info, ESTIMATED CURRENT ENERGY CONSUMPTION and POSTCODE
     epc_df = pl.read_parquet(
         config["data"]["epc"]["domestic"],
         columns=[
@@ -284,255 +280,106 @@ if __name__ == "__main__":
             "BUILT_FORM",
             "CURRENT_ENERGY_RATING",
             "SOLAR_WATER_HEATING_FLAG",
+            "PHOTO_SUPPLY",
             "ENERGY_CONSUMPTION_CURRENT",
-            "ENERGY_CONSUMPTION_POTENTIAL",
+            "POSTCODE",
         ],
     )
-
-    # Add column to indicate whether EPC data is available for the property, to distinguish between False and unknown for features derived from EPC data
-    epc_df = epc_df.with_columns(pl.lit(True).alias("epc_data_available"))
 
     features_df = epc.extend_df_epc_features(
         df=features_df,
         epc_df=epc_df,
         columns=[
             "UPRN",
-            "epc_data_available",
             "TENURE",
             "CURRENT_ENERGY_RATING",
             "SOLAR_WATER_HEATING_FLAG",
             "ENERGY_CONSUMPTION_CURRENT",
-            "ENERGY_CONSUMPTION_POTENTIAL",
+            "PHOTO_SUPPLY",
+            "POSTCODE",
         ],
     )
 
-    features_df = features_df.with_columns(
-        pl.col("SOLAR_WATER_HEATING_FLAG")
-        .replace({"unknown": None})
-        .alias("SOLAR_WATER_HEATING_FLAG")
-    )
-
-    print(features_df["SOLAR_WATER_HEATING_FLAG"].value_counts())
+    print(features_df["has_solar_pv"].value_counts())
     print(features_df["ENERGY_CONSUMPTION_CURRENT"].mean())
-    print(features_df["ENERGY_CONSUMPTION_POTENTIAL"].mean())
-
-    epc_with_geometries_df = epc_df.join(
-        features_df.select(
-            [
-                pl.col("UPRN").cast(pl.Utf8),  # Cast to String to match epc_df
-                "X_COORDINATE",
-                "Y_COORDINATE",
-            ]
-        ),
-        how="left",
-        on="UPRN",
-    )
 
     # Add listed building boolean flag
-    from asf_heat_pump_suitability.pipeline.prepare_features import listed_buildings
-
-    uprns_listed_buildings_df = listed_buildings.generate_df_epc_listed_buildings(
-        epc_df=epc_with_geometries_df
-    ).with_columns(pl.lit(True).alias("in_listed_building"))
-
-    from asf_heat_pump_suitability.pipeline.transform.epc import retain_df_valid_uprns
-
-    uprns_listed_buildings_df = retain_df_valid_uprns(
-        uprns_listed_buildings_df, drop=True
+    from asf_heat_pump_suitability.pipeline.prepare_features import (
+        listed_buildings,
     )
 
-    features_df = features_df.join(
-        uprns_listed_buildings_df.select(["UPRN", "in_listed_building"]),
-        how="left",
-        on="UPRN",
-    )
-    # Fill any UPRNs not in the listed buildings dataset with False (i.e. not listed) if they're in the EPC dataset, and with Null if they're not in the EPC dataset (i.e. unknown)
-    features_df = features_df.with_columns(
-        pl.when(pl.col("in_listed_building").is_null() & ~pl.col("epc_data_available"))
-        .then(False)
-        .otherwise(None)
-        .alias("in_listed_building")
+    # Load listed buildings geodataframe for Great Britain
+    listed_buildings_gdf = listed_buildings.transform_gdf_listed_buildings(nation="GB")
+
+    features_df = listed_buildings.extend_df_listed_building_bool(
+        features_df=features_df,
+        uprns_gdf=uprns_gdf,
+        buildings_gdf=buildings_gdf,
+        listed_buildings_gdf=listed_buildings_gdf,
     )
 
     print(features_df["in_listed_building"].value_counts())
 
-    del epc_df, uprns_listed_buildings_df
+    del listed_buildings_gdf
 
     # Add number of off-gas properties
-    # Source: https://www.xoserve.com/help-centre/supply-points-metering/supply-point-administration-spa/
     from asf_heat_pump_suitability.pipeline.prepare_features import (
         off_gas,
     )
 
     off_gas_list = off_gas.process_off_gas_data()
-    code_point_df = gpd.read_file(
-        "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/codepo_gb.gpkg",
-        layers="codepoint",
-    )
-    code_point_df["POSTCODE"] = code_point_df["postcode"].str.replace(" ", "")
 
-    nearest_postcode_df = pl.from_pandas(
-        uprns_gdf.sjoin_nearest(
-            code_point_df[["POSTCODE", "geometry"]],
-            how="left",
-            max_distance=1000,
-            distance_col="distance_to_postcode_m",  # distance in metres
-        ).drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
-    )
+    code_point_df = load_geodata.load_code_point_data()
 
-    # Label all UPRNs with on/off gas where possible
-    off_gas_df = nearest_postcode_df.with_columns(
-        # Label postcodes according to on/off gas
-        pl.when(pl.col("POSTCODE").is_in(off_gas_list))
-        .then(True)
-        .otherwise(False)
-        .alias("off_gas")
-    ).select(["UPRN", "off_gas"])
-
-    features_df = features_df.join(
-        off_gas_df.select(["UPRN", "off_gas"]),
-        how="left",
-        on="UPRN",
+    print(features_df.columns)
+    features_df = off_gas.extend_df_off_gas(
+        features_df=features_df,
+        uprns_gdf=uprns_gdf,
+        code_point_df=code_point_df,
+        off_gas_list=off_gas_list,
+        max_distance_m=500,  # to be conservative
     )
 
     print(features_df["off_gas"].value_counts())
 
-    # Add near anchor load boolean flag
-    from asf_heat_pump_suitability.pipeline.transform import anchor_loads
-    from asf_heat_pump_suitability.getters import load_geodata
+    coast_gdf = load_geodata.load_gb_coast_boundaries()
 
-    poi_gdf = gpd.read_file(
-        config["data"]["processed"]["poi_anchor_properties"]
-    ).to_crs(config["constant"]["target_crs"])
+    from asf_heat_pump_suitability.pipeline.transform import coast
 
-    important_building_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="important_building", grid_squares=grid_squares
+    features_df = coast.extend_df_near_coastline_bool(
+        features_df=features_df,
+        uprns_gdf=uprns_gdf,
+        coast_gdf=coast_gdf,
+        distance_threshold_m=1500,
+        simplify_tolerance_m=150,
     )
 
-    important_building_gdf = important_building_gdf[
-        important_building_gdf["CLASSIFICA"].isin(anchor_loads.ANCHOR_CATEGORIES)
-    ]
-
-    # add building footprint data to POI anchor properties so geometry isn't just a point
-    anchors_with_footprint = (
-        buildings_gdf.sjoin(poi_gdf, how="inner", predicate="contains")
-    ).drop("index_right", axis=1)
-
-    # add POI and important building lists together and remove duplicate buildings. Keep only common columns
-    anchor_gdf = pd.concat(
-        [anchors_with_footprint, important_building_gdf], join="inner"
-    )
-    anchor_gdf["geometry"] = anchor_gdf.normalize()
-    anchor_gdf = anchor_gdf.drop_duplicates(["geometry"])
-    anchor_gdf["near_anchor_load"] = True
-
-    uprns_gdf = uprns_gdf.sjoin(anchor_gdf, how="left", predicate="within")
-
-    features_df = features_df.join(
-        pl.from_pandas(uprns_gdf[["UPRN", "near_anchor_load"]]),
-        how="left",
-        on="UPRN",
-    ).with_columns(pl.col("near_anchor_load").fill_null(False))
-
-    # Add near coastline boolean flag
-    coast_gdf = gpd.read_file(
-        "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
-    )
-
-    # Simplify coastline boundaries by 150m and buffer by 1500m to create a 'near coastline' area
-    coast_gdf["simplified_geometry"] = coast_gdf["geometry"].apply(
-        lambda x: x.simplify(tolerance=150).buffer(1500)
-    )
-    coast_gdf = coast_gdf.set_geometry("simplified_geometry")
-    coast_gdf["near_coastline"] = True
-
-    uprns_gdf.drop(columns=["index_right"], inplace=True)
-    uprns_gdf = uprns_gdf.sjoin(
-        coast_gdf[["near_coastline", "simplified_geometry"]],
-        how="left",
-        predicate="within",
-    )
-
-    features_df = features_df.join(
-        pl.from_pandas(uprns_gdf[["UPRN", "near_coastline"]]),
-        how="left",
-        on="UPRN",
-    ).with_columns(pl.col("near_coastline").fill_null(False))
-
-    print(features_df["near_coastline"].value_counts())
+    print(features_df["within_1500m_coastline"].value_counts())
 
     del coast_gdf
 
     # Add conservation area boolean flag
     from asf_heat_pump_suitability.pipeline.prepare_features import (
-        off_gas,
         protected_areas,
     )
 
-    # import boto3
+    uprn_to_country_dict = load_geodata.load_transform_dict_uprn_to_country_mapping()
 
-    # s3_client = boto3.client('s3')
+    # Map UPRNs to their corresponding countries
+    uprns_gdf["COUNTRY"] = uprns_gdf["UPRN"].map(uprn_to_country_dict)
 
-    # bucket_name = 'asf-heat-pump-suitability'
-    # prefix = 'local_heat_planning/inputs/geodata/NSUL_DEC_2025/'
-
-    # response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-    # files = [
-    #     f"s3://{bucket_name}/{obj['Key']}"
-    #     for obj in response.get('Contents', [])
-    #     if obj['Key'].endswith('.csv')
-    # ]
-
-    # uprn_to_country_df = pd.concat([pd.read_csv(file, usecols=["UPRN", "PCDS", "ctry25cd"]) for file in files], ignore_index=True)
-
-    uprn_to_country_df = pd.DataFrame()
-    import os
-
-    folder_path = "/Users/anasofiapinto/Downloads/NSUL_DEC_2025/Data"
-    files = [f for f in os.listdir(folder_path) if f.endswith(".csv")]
-    for file in files:
-        uprn_to_country_df = pd.concat(
-            [
-                uprn_to_country_df,
-                pd.read_csv(
-                    os.path.join(folder_path, file),
-                    usecols=["UPRN", "PCDS", "ctry25cd"],
-                ),
-            ],
-            ignore_index=True,
-        )
-    uprn_to_country_df["COUNTRY"] = (
-        uprn_to_country_df["ctry25cd"]
-        .str[0]
-        .map(
-            {
-                "E": "England",
-                "W": "Wales",
-                "S": "Scotland",
-            }
-        )
-    )
-    uprns_gdf = uprns_gdf.merge(
-        uprn_to_country_df[["UPRN", "COUNTRY"]], on="UPRN", how="left"
-    ).drop(columns=["index_right"])
-
-    uprns_conservation_areas_df = (
-        protected_areas.load_transform_df_uprn_in_protected_area(gdf=uprns_gdf)
+    uprns_protected_areas_df = protected_areas.load_transform_df_uprn_in_protected_area(
+        gdf=uprns_gdf
     )
 
-    uprns_conservation_areas_df = uprns_conservation_areas_df.with_columns(
-        pl.lit(True).alias("in_conservation_area")
+    features_df = protected_areas.extend_df_protected_area_bool(
+        features_df=features_df,
+        protected_areas_df=uprns_protected_areas_df,
     )
 
-    features_df = features_df.join(
-        uprns_conservation_areas_df.select(["UPRN", "in_conservation_area"]),
-        how="left",
-        on="UPRN",
-    ).with_columns(pl.col("in_conservation_area").fill_null(False))
+    print(features_df["in_protected_area"].value_counts())
 
-    print(features_df["in_conservation_area"].value_counts())
-
-    del uprns_conservation_areas_df
+    del uprns_protected_areas_df
 
     # ------------------------ #
     # SAVE OUTPUTS
