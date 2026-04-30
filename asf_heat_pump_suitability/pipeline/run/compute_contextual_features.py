@@ -221,9 +221,6 @@ if __name__ == "__main__":
         uprns_gdf=uprns_gdf, clusters_gdf=clusters_gdf
     )
 
-    print(clusters_gdf.columns)
-    print(uprns_df.columns)
-
     print("Calculate remaining features per cluster...")
     clusters_with_contextual_features_df = extend_df_contextual_features(
         clusters_df=pl.from_pandas(
