@@ -388,7 +388,7 @@ def generate_df_threshold_evaluation_roc_auc(
     return youdens_df
 
 
-def extract_tuple_best_feature_threshold(df: pd.DataFrame) -> dict:
+def extract_dict_best_feature_threshold(df: pd.DataFrame) -> dict:
     """
     Exract the best feature and corresponding threshold for implementation by maximising for Matthew's Correlation Coefficient.
 
@@ -396,7 +396,7 @@ def extract_tuple_best_feature_threshold(df: pd.DataFrame) -> dict:
         df (pd.DataFrame): dataframe of features, best thresholds, and maximum MCC values
 
     Returns:
-        tuple: feature name and best threshold value
+        dict: feature name, best threshold value and direction of threshold
     """
     best_row = df[df["max_mcc"] == df["max_mcc"].max()]
 
@@ -609,7 +609,7 @@ if __name__ == "__main__":
     )
 
     # Get best feature, threshold, and direction
-    best_combo = extract_tuple_best_feature_threshold(mcc_thresholds_df)
+    best_combo = extract_dict_best_feature_threshold(mcc_thresholds_df)
 
     # Plot effect of threshold on the final labelling in the pipeline
     plot_folium_threshold_effect_on_labelling(
