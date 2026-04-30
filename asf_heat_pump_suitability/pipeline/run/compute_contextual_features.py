@@ -1,12 +1,12 @@
 """
-Script to compute contextual information for opportunity areas/clusters, e.g. property type, tenure, EPC rating, etc.
+Script to compute contextual information for clusters, e.g. property type, tenure, EPC rating, etc.
 
 Run:
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
 
 LOCAL_AUTHORITIES should be one of the options specified in base.yaml's `constant` section, e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.
 
-Add --save to save the output to S3 as a geojson with geometry and contextual features per opportunity area/cluster.
+Add --save to save the output to S3 as a geojson with geometry and contextual features per cluster.
 """
 
 import argparse
@@ -40,38 +40,38 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def filter_df_uprns_to_opportunity_areas(
-    uprns_gdf: gpd.GeoDataFrame, opportunity_areas_gdf: gpd.GeoDataFrame
+def filter_df_uprns_to_clusters(
+    uprns_gdf: gpd.GeoDataFrame, clusters_gdf: gpd.GeoDataFrame
 ) -> pl.DataFrame:
     """
-    Filter UPRN geodataframe to only those which are within opportunity areas.
+    Filter UPRN geodataframe to only those which are within clusters.
 
     Args:
         uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs with geometry and EPC features
-        opportunity_areas_gdf (gpd.GeoDataFrame): geodataframe of opportunity areas with geometry and cluster_id
+        clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
     Returns:
-        pl.DataFrame: filtered UPRN dataframe with only UPRNs within opportunity areas
+        pl.DataFrame: filtered UPRN dataframe with only UPRNs within clusters
     """
     print("len uprns before filtering:", len(uprns_gdf))
-    print("len opportunity areas:", len(opportunity_areas_gdf))
-    # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with opportunity area geodataframe
+    print("len clusters:", len(clusters_gdf))
+    # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with cluster geodataframe
     uprns_df = pl.from_pandas(
         uprns_gdf.sjoin(
-            opportunity_areas_gdf[["cluster_id", "geometry"]],
+            clusters_gdf[["cluster_id", "geometry"]],
             how="right",
             predicate="within",
         ).drop(columns=["geometry"])
     )
-    print("len uprns after filtering to opportunity areas:", len(uprns_df))
+    print("len uprns after filtering to clusters:", len(uprns_df))
     return uprns_df
 
 
 def extend_df_contextual_features(
-    opportunity_areas_df: pl.DataFrame,
+    clusters_df: pl.DataFrame,
     uprns_df: pl.DataFrame,
 ) -> pl.DataFrame:
     """
-    Extend opportunity areas dataframe with contextual features from UPRN geodataframe, including:
+    Extend clusters dataframe with contextual features from UPRN geodataframe, including:
     - property type (including flats)
     - tenure
     - EPC rating
@@ -81,14 +81,13 @@ def extend_df_contextual_features(
     - number of listed buildings
     - number of off-gas properties
     - proximity to coastline flag
-    - proximity to anchor load flag
     - conservation area flag
 
     Args:
-        opportunity_areas_df (pl.DataFrame): dataframe of opportunity areas with cluster_id
+        clusters_df (pl.DataFrame): dataframe of clusters with cluster_id
         uprns_df (pl.DataFrame): dataframe of UPRNs with cluster_id and relevant features for aggregation
     Returns:
-        pl.DataFrame: dataframe with remaining features per opportunity area
+        pl.DataFrame: dataframe with remaining features per cluster
     """
 
     dummy_cols = ["ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
@@ -118,7 +117,7 @@ def extend_df_contextual_features(
         }
     )
 
-    opportunity_areas_df = opportunity_areas_df.join(
+    clusters_df = clusters_df.join(
         dummy_contextual_feat_df, how="left", on="cluster_id"
     )
 
@@ -147,8 +146,6 @@ def extend_df_contextual_features(
             pl.col("off_gas").sum().alias("n_uprns_off_gas"),
             # near_coastline flag
             pl.col("within_1500m_coastline").any().alias("within_1500m_coastline"),
-            # near_anchor_load flag
-            pl.col("near_anchor_load").any().alias("near_anchor_load"),
             # in_conservation_area flag
             pl.col("in_conservation_area").any().alias("in_conservation_area"),
         )
@@ -162,14 +159,20 @@ def extend_df_contextual_features(
                 "n_uprns_in_listed_building",
                 "n_uprns_off_gas",
                 "within_1500m_coastline",
-                "near_anchor_load",
                 "in_conservation_area",
             ]
         )
     )
 
-    opportunity_areas_df = opportunity_areas_df.join(
+    clusters_df = clusters_df.join(
         contextual_feat_clusters_df, how="left", on="cluster_id"
+    )
+
+    # Rename column f"within_{radius}m_from_anchor_property" to f"within_{radius}m_from_anchor_load"
+    clusters_df = clusters_df.rename(
+        {
+            f"within_{config['constant']['anchor_radius']}m_from_anchor_property": f"within_{config['constant']['anchor_radius']}m_from_anchor_load"
+        }
     )
 
     # Add percentages used for sorting & filtering in the tool
@@ -177,14 +180,14 @@ def extend_df_contextual_features(
     tenure_cols = [
         col for col in dummy_contextual_feat_df.columns if col.startswith("tenure_")
     ]
-    opportunity_areas_df = opportunity_areas_df.with_columns(
+    clusters_df = clusters_df.with_columns(
         [
             (pl.col(col) / pl.col("n_UPRNs") * 100).alias("perc_" + col)
             for col in tenure_cols
         ]
     )
 
-    return opportunity_areas_df
+    return clusters_df
 
 
 if __name__ == "__main__":
@@ -203,39 +206,42 @@ if __name__ == "__main__":
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
 
     print("Loading opportunity areas...")
-    opportunity_areas_gdf = gpd.read_file(
+    clusters_gdf = gpd.read_file(
         config["output"]["dataset"]["tech_clusters"].format(
             local_authorities=args.local_authorities, tolerance=5
         ),
     ).to_crs(epsg=27700)
 
-    print("Filtering to opportunity areas...")
-    uprns_df = filter_df_uprns_to_opportunity_areas(
-        uprns_gdf=uprns_gdf, opportunity_areas_gdf=opportunity_areas_gdf
+    print("Filtering to clusters...")
+    uprns_df = filter_df_uprns_to_clusters(
+        uprns_gdf=uprns_gdf, clusters_gdf=clusters_gdf
     )
 
-    print("Calculate remaining features per opportunity area...")
-    opportunity_areas_df = extend_df_contextual_features(
-        opportunity_areas_df=pl.from_pandas(opportunity_areas_gdf[["cluster_id"]]),
+    print(clusters_gdf.columns)
+    print(uprns_df.columns)
+
+    print("Calculate remaining features per cluster...")
+    clusters_df = extend_df_contextual_features(
+        clusters_df=pl.from_pandas(clusters_gdf[["cluster_id"]]),
         uprns_df=uprns_df,
     )
 
     print("Remove clusters without any UPRNs within them...")
-    opportunity_areas_df = opportunity_areas_df.filter(pl.col("n_UPRNs") > 0)
+    clusters_df = clusters_df.filter(pl.col("n_UPRNs") > 0)
 
     if args.save:
-        opportunity_areas_df = opportunity_areas_df.to_pandas().merge(
-            opportunity_areas_gdf[["cluster_id", "geometry"]],
+        clusters_with_contextual_features_df = clusters_df.to_pandas().merge(
+            clusters_gdf[["cluster_id", "geometry"]],
             how="left",
             on="cluster_id",
         )
 
         # Saving as EPSG:4326 because we need lat/long for visualisation
-        opportunity_areas_df = gpd.GeoDataFrame(
-            opportunity_areas_df, geometry="geometry", crs="EPSG:27700"
+        clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
+            clusters_with_contextual_features_df, geometry="geometry", crs="EPSG:27700"
         ).to_crs(epsg=4326)
 
-        opportunity_areas_df.to_file(
+        clusters_with_contextual_features_gdf.to_file(
             config["output"]["dataset"]["clusters_tech_contextual_info"].format(
                 local_authority=local_authorities
             ),
