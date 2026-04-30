@@ -438,41 +438,36 @@ if __name__ == "__main__":
     #     geometry=[coast_gdf.geometry.union_all()], crs=coast_gdf.crs
     # )
 
-    def load_gb_coast_boundaries():
-        """
-        Load GB coastline boundaries geodataframe and dissolve into a single geometry.
-        """
+    coast_gdf = load_geodata.load_gb_coast_boundaries()
 
-        coast_gdf = gpd.read_file(
-            config["data"]["geodata"]["gb_coast_boundaries"],
-        )
+    from asf_heat_pump_suitability.pipeline.transform import coast
 
-        # Dissolve coastline boundaries into a single geometry
-        coast_gdf = gpd.GeoDataFrame(
-            geometry=[coast_gdf.geometry.union_all()], crs=coast_gdf.crs
-        )
-        return coast_gdf
-
-    coast_gdf = load_gb_coast_boundaries()
-
-    # Simplify coastline boundaries by 150m and buffer by 1500m to create a 'near coastline' area
-    coast_gdf["simplified_geometry"] = coast_gdf.geometry.boundary.simplify(
-        tolerance=150
-    ).buffer(1500)
-    coast_gdf.set_geometry("simplified_geometry", inplace=True)
-    coast_gdf["within_1500m_coastline"] = True
-
-    uprns_gdf = uprns_gdf.drop(columns="index_right").sjoin(
-        coast_gdf[["within_1500m_coastline", "simplified_geometry"]],
-        how="left",
-        predicate="within",
+    features_df = coast.extend_df_near_coastline_bool(
+        features_df=features_df,
+        uprns_gdf=uprns_gdf,
+        coast_gdf=coast_gdf,
+        distance_threshold_m=1500,
+        simplify_tolerance_m=150,
     )
 
-    features_df = features_df.join(
-        pl.from_pandas(uprns_gdf[["UPRN", "within_1500m_coastline"]]),
-        how="left",
-        on="UPRN",
-    ).with_columns(pl.col("within_1500m_coastline").fill_null(False))
+    #  # Simplify coastline boundaries by 150m and buffer by 1500m to create a 'near coastline' area
+    # coast_gdf["simplified_geometry"] = coast_gdf.geometry.boundary.simplify(
+    #     tolerance=150
+    # ).buffer(1500)
+    # coast_gdf.set_geometry("simplified_geometry", inplace=True)
+    # coast_gdf["within_1500m_coastline"] = True
+
+    # uprns_gdf = uprns_gdf.drop(columns="index_right").sjoin(
+    #     coast_gdf[["within_1500m_coastline", "simplified_geometry"]],
+    #     how="left",
+    #     predicate="within",
+    # )
+
+    # features_df = features_df.join(
+    #     pl.from_pandas(uprns_gdf[["UPRN", "within_1500m_coastline"]]),
+    #     how="left",
+    #     on="UPRN",
+    # ).with_columns(pl.col("within_1500m_coastline").fill_null(False))
 
     print(features_df["within_1500m_coastline"].value_counts())
 
@@ -486,34 +481,44 @@ if __name__ == "__main__":
 
     import boto3
 
-    s3_client = boto3.client("s3")
+    def load_transform_df_uprn_to_country_mapping():
+        """
+        Load and transform the UPRN to country mapping data from S3.
+        Returns:
+            pd.DataFrame: A dataframe containing UPRN and corresponding country information.
+        """
+        s3_client = boto3.client("s3")
 
-    bucket_name = "asf-heat-pump-suitability"
-    prefix = "local_heat_planning/inputs/geodata/NSUL_DEC_2025/"
+        bucket_name = "asf-heat-pump-suitability"
+        prefix = "local_heat_planning/inputs/geodata/NSUL_DEC_2025/"
 
-    response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-    files = [
-        f"s3://{bucket_name}/{obj['Key']}"
-        for obj in response.get("Contents", [])
-        if obj["Key"].endswith(".csv")
-    ]
+        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+        files = [
+            f"s3://{bucket_name}/{obj['Key']}"
+            for obj in response.get("Contents", [])
+            if obj["Key"].endswith(".csv")
+        ]
 
-    uprn_to_country_df = pd.concat(
-        [pd.read_csv(file, usecols=["UPRN", "PCDS", "ctry25cd"]) for file in files],
-        ignore_index=True,
-    )
-
-    uprn_to_country_df["COUNTRY"] = (
-        uprn_to_country_df["ctry25cd"]
-        .str[0]
-        .map(
-            {
-                "E": "England",
-                "W": "Wales",
-                "S": "Scotland",
-            }
+        uprn_to_country_df = pd.concat(
+            [pd.read_csv(file, usecols=["UPRN", "PCDS", "ctry25cd"]) for file in files],
+            ignore_index=True,
         )
-    )
+
+        uprn_to_country_df["COUNTRY"] = (
+            uprn_to_country_df["ctry25cd"]
+            .str[0]
+            .map(
+                {
+                    "E": "England",
+                    "W": "Wales",
+                    "S": "Scotland",
+                }
+            )
+        )
+
+        return uprn_to_country_df[["UPRN", "COUNTRY"]]
+
+    uprn_to_country_df = load_transform_df_uprn_to_country_mapping()
 
     uprn_to_country_dict = dict(
         zip(uprn_to_country_df["UPRN"], uprn_to_country_df["COUNTRY"])

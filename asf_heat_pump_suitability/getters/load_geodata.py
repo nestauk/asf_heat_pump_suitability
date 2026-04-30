@@ -248,3 +248,19 @@ def load_code_point_data() -> gpd.GeoDataFrame:
     )
     code_point_df["POSTCODE"] = code_point_df["postcode"].str.replace(" ", "")
     return code_point_df
+
+
+def load_gb_coast_boundaries():
+    """
+    Load GB coastline boundaries geodataframe and dissolve into a single geometry.
+    """
+
+    coast_gdf = gpd.read_file(
+        config["data"]["geodata"]["gb_coast_boundaries"],
+    )
+
+    # Dissolve coastline boundaries into a single geometry
+    coast_gdf = gpd.GeoDataFrame(
+        geometry=[coast_gdf.geometry.union_all()], crs=coast_gdf.crs
+    )
+    return coast_gdf
