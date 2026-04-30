@@ -151,7 +151,7 @@ def extend_df_contextual_features(
             # near_coastline flag
             pl.col("within_1500m_coastline").any().alias("within_1500m_coastline"),
             # in_conservation_area flag
-            pl.col("in_conservation_area").any().alias("in_conservation_area"),
+            pl.col("in_protected_area").any().alias("in_protected_area"),
         )
         .select(
             [
@@ -163,7 +163,7 @@ def extend_df_contextual_features(
                 "n_uprns_in_listed_building",
                 "n_uprns_off_gas",
                 "within_1500m_coastline",
-                "in_conservation_area",
+                "in_protected_area",
             ]
         )
     )
@@ -232,10 +232,12 @@ if __name__ == "__main__":
         uprns_df=uprns_df,
     )
 
+    print("Before:", len(clusters_with_contextual_features_df))
     print("Remove clusters without any UPRNs within them...")
     clusters_with_contextual_features_df = clusters_with_contextual_features_df.filter(
         pl.col("n_UPRNs") > 0
     )
+    print("After:", len(clusters_with_contextual_features_df))
 
     if args.save:
         # Adding the geometry back to the clusters dataframe
