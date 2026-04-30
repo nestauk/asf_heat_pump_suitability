@@ -26,6 +26,13 @@ data:
       # UrbanGrammarAI Spatial Signatures GB detailed
       full: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB.gpkg"
 
+    # OpenMap Code Point GB data for postcode lookup
+    # TODO: move this file to a different S3 location as it's not just Plymouth data - it's GB data
+    gb_code_point_data: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/codepo_gb.gpkg"
+
+    # GB coastline boundaries
+    gb_coast_boundaries: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
+
   epc:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
     commercial: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v092025_EPC_NonDomestic_EW.csv"

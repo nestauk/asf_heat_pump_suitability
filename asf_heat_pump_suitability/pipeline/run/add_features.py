@@ -361,73 +361,99 @@ if __name__ == "__main__":
     )
 
     off_gas_list = off_gas.process_off_gas_data()
-    code_point_df = gpd.read_file(
-        "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/codepo_gb.gpkg",
-        layers="codepoint",
-    )
-    code_point_df["POSTCODE"] = code_point_df["postcode"].str.replace(" ", "")
+    # code_point_df = gpd.read_file(
+    #     config["data"]["geodata"]["gb_code_point_data"],
+    #     layers="codepoint",
+    # )
+    # code_point_df["POSTCODE"] = code_point_df["postcode"].str.replace(" ", "")
 
-    # create dictionary mapping between ID and POSTCODE when POSTCODE is not null
-    id_postcode_mapping_df = (
-        features_df.filter(pl.col("POSTCODE").is_not_null())
-        .select(["ID", "POSTCODE"])
-        .rename({"POSTCODE": "MAPPED_POSTCODE"})
-    )
+    code_point_df = load_geodata.load_code_point_data()
 
-    postcodes_df = (
-        features_df.select(["UPRN", "ID"])
-        .join(id_postcode_mapping_df, on="ID", how="left")
-        .rename({"MAPPED_POSTCODE": "POSTCODE"})
+    features_df = off_gas.extend_df_off_gas(
+        features_df=features_df,
+        uprns_gdf=uprns_gdf,
+        code_point_df=code_point_df,
+        off_gas_list=off_gas_list,
     )
 
-    missing_uprns = postcodes_df.filter(pl.col("POSTCODE").is_null()).get_column("UPRN")
+    #  # create dictionary mapping between ID and POSTCODE when POSTCODE is not null
+    # id_postcode_mapping_df = (
+    #     features_df.filter(pl.col("POSTCODE").is_not_null())
+    #     .select(["ID", "POSTCODE"])
+    #     .rename({"POSTCODE": "MAPPED_POSTCODE"})
+    # )
 
-    uprns_no_postcode_gdf = uprns_gdf[uprns_gdf["UPRN"].isin(missing_uprns)]
+    # postcodes_df = (
+    #     features_df.select(["UPRN", "ID"])
+    #     .join(id_postcode_mapping_df, on="ID", how="left")
+    #     .rename({"MAPPED_POSTCODE": "POSTCODE"})
+    # )
 
-    nearest_postcode_df = pl.from_pandas(
-        uprns_no_postcode_gdf.drop(columns="index_right")
-        .sjoin_nearest(
-            code_point_df[["POSTCODE", "geometry"]],
-            how="left",
-            max_distance=500,  # 500 metres to be conservative
-            distance_col="distance_to_postcode_m",  # distance in metres
-        )
-        .drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
-    )
+    # missing_uprns = postcodes_df.filter(pl.col("POSTCODE").is_null()).get_column("UPRN")
 
-    uprn_postcode_map_df = pl.concat(
-        [
-            postcodes_df.filter(pl.col("POSTCODE").is_not_null()).select(
-                ["UPRN", "POSTCODE"]
-            ),
-            nearest_postcode_df.select(["UPRN", "POSTCODE"]),
-        ],
-        how="vertical",
-    )
-    # Label all UPRNs with on/off gas where possible
-    off_gas_df = uprn_postcode_map_df.with_columns(
-        # Label postcodes according to on/off gas
-        pl.when(pl.col("POSTCODE").is_in(off_gas_list))
-        .then(True)
-        .otherwise(False)
-        .alias("off_gas")
-    ).select(["UPRN", "off_gas"])
+    # uprns_no_postcode_gdf = uprns_gdf[uprns_gdf["UPRN"].isin(missing_uprns)]
 
-    features_df = features_df.join(
-        off_gas_df,
-        how="left",
-        on="UPRN",
-    )
+    # nearest_postcode_df = pl.from_pandas(
+    #     uprns_no_postcode_gdf.drop(columns="index_right")
+    #     .sjoin_nearest(
+    #         code_point_df[["POSTCODE", "geometry"]],
+    #         how="left",
+    #         max_distance=500,  # 500 metres to be conservative
+    #         distance_col="distance_to_postcode_m",  # distance in metres
+    #     )
+    #     .drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
+    # )
+
+    # uprn_postcode_map_df = pl.concat(
+    #     [
+    #         postcodes_df.filter(pl.col("POSTCODE").is_not_null()).select(
+    #             ["UPRN", "POSTCODE"]
+    #         ),
+    #         nearest_postcode_df.select(["UPRN", "POSTCODE"]),
+    #     ],
+    #     how="vertical",
+    # )
+    # # Label all UPRNs with on/off gas where possible
+    # off_gas_df = uprn_postcode_map_df.with_columns(
+    #     # Label postcodes according to on/off gas
+    #     pl.when(pl.col("POSTCODE").is_in(off_gas_list))
+    #     .then(True)
+    #     .otherwise(False)
+    #     .alias("off_gas")
+    # ).select(["UPRN", "off_gas"])
+
+    # features_df = features_df.join(
+    #     off_gas_df,
+    #     how="left",
+    #     on="UPRN",
+    # )
 
     print(features_df["off_gas"].value_counts())
 
     # Add near coastline boolean flag
-    coast_gdf = gpd.read_file(
-        "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
-    )
-    coast_gdf = gpd.GeoDataFrame(
-        geometry=[coast_gdf.geometry.union_all()], crs=coast_gdf.crs
-    )
+    # coast_gdf = gpd.read_file(
+    #     config["data"]["geodata"]["gb_coast_boundaries"],
+    # )
+    # coast_gdf = gpd.GeoDataFrame(
+    #     geometry=[coast_gdf.geometry.union_all()], crs=coast_gdf.crs
+    # )
+
+    def load_gb_coast_boundaries():
+        """
+        Load GB coastline boundaries geodataframe and dissolve into a single geometry.
+        """
+
+        coast_gdf = gpd.read_file(
+            config["data"]["geodata"]["gb_coast_boundaries"],
+        )
+
+        # Dissolve coastline boundaries into a single geometry
+        coast_gdf = gpd.GeoDataFrame(
+            geometry=[coast_gdf.geometry.union_all()], crs=coast_gdf.crs
+        )
+        return coast_gdf
+
+    coast_gdf = load_gb_coast_boundaries()
 
     # Simplify coastline boundaries by 150m and buffer by 1500m to create a 'near coastline' area
     coast_gdf["simplified_geometry"] = coast_gdf.geometry.boundary.simplify(

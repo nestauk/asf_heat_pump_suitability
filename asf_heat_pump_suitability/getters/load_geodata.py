@@ -233,3 +233,18 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
     print(f"POI CRS: {poi.crs}")
 
     return poi
+
+
+def load_code_point_data() -> gpd.GeoDataFrame:
+    """
+    Load GB code point geodataframe for postcode lookup and clean postcode column by removing spaces.
+
+    Returns:
+        gpd.GeoDataFrame: geodataframe of GB code points with geometry and POSTCODE columns.
+    """
+    code_point_df = gpd.read_file(
+        config["data"]["geodata"]["gb_code_point_data"],
+        layers="codepoint",
+    )
+    code_point_df["POSTCODE"] = code_point_df["postcode"].str.replace(" ", "")
+    return code_point_df
