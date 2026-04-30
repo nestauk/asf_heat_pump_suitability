@@ -8,6 +8,10 @@ data:
     grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
     # OpenMap Green space layers for certain grid squares
     grid_square_os_openmap_greenspace: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/{square}/{square}_{layer}.shp"
+    # OpenRoad Local road data for GB
+    gb_os_openroad: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/oproad_essh_gb/"
+    # OpenRoad Local road data for certain grid squares
+    grid_square_os_openroad: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/oproad_essh_gb/{square}_RoadLink.shp"
     # UK Points of Interest
     UK_poi_locations: "s3://asf-heat-pump-suitability/source_data/poi_uk.gpkg"
 
@@ -35,6 +39,9 @@ data:
 
     # Path to folder with UPRN to country mapping files for GB
     gb_uprn_country_mapping: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/NSUL_DEC_2025/"
+    council_tax_data:
+      # plymouth council tax data
+      plymouth: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/PLYMOUTH_CTBANDS_ONSUD_202512.csv"
 
   epc:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
@@ -47,6 +54,13 @@ data:
     poi_anchor_properties: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/poi_anchor_properties_gb.geojson"
 
 constant:
+  id:
+    building: "ID"
+  threshold:
+    m2_per_predicted_UPRN: 261.608136 # Identified by analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py
+    outdoor_space_threshold_m2:
+      within_hn_zone: 70
+      outside_hn_zone: 30
   plymouth:
     la_names: "Plymouth"
     grid_squares: "SX"
@@ -102,9 +116,6 @@ constant:
     la_names: "Cardiff"
     grid_squares: "ST"
   target_crs: 27700 # British National Grid
-  outdoor_space_threshold_m2:
-    within_hn_zone: 70
-    outside_hn_zone: 30
   tech_types:
     individual: "Individual solution"
     networked: "Networked heat pump"
