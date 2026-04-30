@@ -475,78 +475,26 @@ if __name__ == "__main__":
 
     # Add conservation area boolean flag
     from asf_heat_pump_suitability.pipeline.prepare_features import (
-        off_gas,
         protected_areas,
     )
 
-    import boto3
+    uprn_to_country_dict = load_geodata.load_transform_dict_uprn_to_country_mapping()
 
-    def load_transform_df_uprn_to_country_mapping():
-        """
-        Load and transform the UPRN to country mapping data from S3.
-        Returns:
-            pd.DataFrame: A dataframe containing UPRN and corresponding country information.
-        """
-        s3_client = boto3.client("s3")
-
-        bucket_name = "asf-heat-pump-suitability"
-        prefix = "local_heat_planning/inputs/geodata/NSUL_DEC_2025/"
-
-        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-        files = [
-            f"s3://{bucket_name}/{obj['Key']}"
-            for obj in response.get("Contents", [])
-            if obj["Key"].endswith(".csv")
-        ]
-
-        uprn_to_country_df = pd.concat(
-            [pd.read_csv(file, usecols=["UPRN", "PCDS", "ctry25cd"]) for file in files],
-            ignore_index=True,
-        )
-
-        uprn_to_country_df["COUNTRY"] = (
-            uprn_to_country_df["ctry25cd"]
-            .str[0]
-            .map(
-                {
-                    "E": "England",
-                    "W": "Wales",
-                    "S": "Scotland",
-                }
-            )
-        )
-
-        return uprn_to_country_df[["UPRN", "COUNTRY"]]
-
-    uprn_to_country_df = load_transform_df_uprn_to_country_mapping()
-
-    uprn_to_country_dict = dict(
-        zip(uprn_to_country_df["UPRN"], uprn_to_country_df["COUNTRY"])
-    )
+    # Map UPRNs to their corresponding countries
     uprns_gdf["COUNTRY"] = uprns_gdf["UPRN"].map(uprn_to_country_dict)
 
-    uprns_conservation_areas_df = (
-        protected_areas.load_transform_df_uprn_in_protected_area(
-            gdf=uprns_gdf.drop(columns="index_right")
-        )
+    uprns_protected_areas_df = protected_areas.load_transform_df_uprn_in_protected_area(
+        gdf=uprns_gdf
     )
 
-    print(uprns_conservation_areas_df.columns)
-    print(uprns_conservation_areas_df)
-
-    features_df = (
-        features_df.join(
-            uprns_conservation_areas_df.select(["UPRN", "in_protected_area"]),
-            how="left",
-            on="UPRN",
-        )
-        .with_columns(pl.col("in_protected_area").fill_null(False))
-        .rename({"in_protected_area": "in_conservation_area"})
+    features_df = protected_areas.extend_df_protected_area_bool(
+        features_df=features_df,
+        protected_areas_df=uprns_protected_areas_df,
     )
 
-    print(features_df["in_conservation_area"].value_counts())
+    print(features_df["in_protected_area"].value_counts())
 
-    del uprns_conservation_areas_df
+    del uprns_protected_areas_df
 
     # ------------------------ #
     # SAVE OUTPUTS

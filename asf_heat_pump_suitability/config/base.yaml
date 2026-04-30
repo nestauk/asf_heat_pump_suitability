@@ -33,6 +33,9 @@ data:
     # GB coastline boundaries
     gb_coast_boundaries: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
 
+    # Path to folder with UPRN to country mapping files for GB
+    gb_uprn_country_mapping: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/NSUL_DEC_2025/"
+
   epc:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
     commercial: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v092025_EPC_NonDomestic_EW.csv"
