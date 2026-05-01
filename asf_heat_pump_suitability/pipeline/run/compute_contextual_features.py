@@ -194,6 +194,7 @@ if __name__ == "__main__":
 
     args = parse_arguments()
     local_authorities = args.local_authorities
+    tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
@@ -206,8 +207,8 @@ if __name__ == "__main__":
     print("Loading opportunity areas...")
     clusters_gdf = gpd.read_file(
         config["output"]["dataset"]["tech_clusters"].format(
-            local_authorities=args.local_authorities,
-            tolerance=config["constant"]["clustering"]["tolerance_m"],
+            local_authorities=local_authorities,
+            tolerance_m=tolerance_m,
         ),
     ).to_crs(epsg=27700)
 
@@ -241,6 +242,7 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             clusters_with_contextual_features_gdf,
             config["output"]["dataset"]["clusters_tech_contextual_info"].format(
-                local_authority=local_authorities
+                local_authorities=local_authorities,
+                tolerance_m=tolerance_m,
             ),
         )

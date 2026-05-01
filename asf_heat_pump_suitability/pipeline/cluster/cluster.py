@@ -604,19 +604,22 @@ def parse_arguments() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = parse_arguments()
+    local_authorities = args.local_authorities
+    tolerance_m = config["constant"]["clustering"]["tolerance_m"]
+
     tech_gdf = (
         gpd.read_parquet(
             config["output"]["dataset"]["buildings_most_suitable_tech"].format(
-                local_authorities=args.local_authorities
+                local_authorities=local_authorities
             )
         )
         .set_geometry("geometry")
         .to_crs(config["constant"]["target_crs"])
     )
-    grid_squares = config["constant"][args.local_authorities]["grid_squares"]
+    grid_squares = config["constant"][local_authorities]["grid_squares"]
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        select_las=config["constant"][args.local_authorities]["la_names"]
+        select_las=config["constant"][local_authorities]["la_names"]
     )
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares
@@ -644,12 +647,12 @@ if __name__ == "__main__":
     if args.save:
         # Simplify geometry for file size using tolerance
         clusters_gdf["geometry"] = clusters_gdf["geometry"].simplify(
-            tolerance=config["constant"]["clustering"]["tolerance_m"]
+            tolerance=tolerance_m
         )
         save_utils.save_to_s3(
             clusters_gdf,
             config["output"]["dataset"]["tech_clusters"].format(
-                local_authorities=args.local_authorities,
-                tolerance=config["constant"]["clustering"]["tolerance_m"],
+                local_authorities=local_authorities,
+                tolerance_m=tolerance_m,
             ),
         )
