@@ -197,6 +197,7 @@ def extend_df_contextual_features(
 if __name__ == "__main__":
     from asf_heat_pump_suitability.pipeline.transform import uprns
     from asf_heat_pump_suitability import config
+    from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
     local_authorities = args.local_authorities
@@ -239,14 +240,13 @@ if __name__ == "__main__":
             )
         )
 
-        # Saving as EPSG:4326 because we need lat/long for visualisation
         clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
             clusters_with_contextual_features_df, geometry="geometry", crs="EPSG:27700"
-        ).to_crs(epsg=4326)
+        )
 
-        clusters_with_contextual_features_gdf.to_file(
+        save_utils.save_to_s3(
+            clusters_with_contextual_features_gdf,
             config["output"]["dataset"]["clusters_tech_contextual_info"].format(
                 local_authority=local_authorities
             ),
-            driver="GeoJSON",
         )
