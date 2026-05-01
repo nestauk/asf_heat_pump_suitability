@@ -41,6 +41,10 @@ def extend_df_off_gas(
     """
     Add boolean column to features_df indicating whether UPRN is in an off-gas postcode.
 
+    `features_df` is expected to have a `POSTCODE` column which is used to label UPRNs with on/off gas where possible.
+    For UPRNs without a postcode, the function attempts to assign a postcode based on the nearest UPRN in the same building
+    or the nearest code point within a specified distance, and then label off-gas as True/False accordingly.
+
     Args:
         features_df (pl.DataFrame): dataframe with one row per UPRN, UPRN column and POSTCODE column.
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with point geometries for each UPRN.
