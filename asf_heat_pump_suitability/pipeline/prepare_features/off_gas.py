@@ -36,6 +36,7 @@ def extend_df_off_gas(
     uprns_gdf: gpd.GeoDataFrame,
     code_point_gdf: gpd.GeoDataFrame,
     off_gas_list: list,
+    id_col: str = "ID",
     max_distance_m: int = 500,
 ) -> pl.DataFrame:
     """
@@ -46,10 +47,11 @@ def extend_df_off_gas(
     or the nearest code point within a specified distance, and then label off-gas as True/False accordingly.
 
     Args:
-        features_df (pl.DataFrame): dataframe with one row per UPRN, UPRN column and POSTCODE column.
+        features_df (pl.DataFrame): dataframe with one row per UPRN and the following columns: UPRN, POSTCODE, and id_col.
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with point geometries for each UPRN.
         code_point_gdf (gpd.GeoDataFrame): GeoDataFrame of postcode centroids with geometry column and POSTCODE column.
         off_gas_list (list): list of postcodes that are off-gas.
+        id_col (str): column name for building ID. Defaults to "ID".
         max_distance_m (int): maximum distance in metres to assume a UPRN is associated with a postcode if it doesn't have its own postcode. Defaults to 500 metres.
 
     Returns:
@@ -60,14 +62,14 @@ def extend_df_off_gas(
 
     # Step 1: Use EPC postcode of nearest UPRN in the same building if available
 
-    # create mapping between ID and POSTCODE when POSTCODE is not null
+    # create mapping between id_col (building ID) and POSTCODE when POSTCODE is not null
     id_postcode_mapping_df = features_df.filter(
         pl.col("POSTCODE").is_not_null()
-    ).select(["ID", "POSTCODE"])
+    ).select([id_col, "POSTCODE"])
 
     # Create dataframe of UPRNs with their mapped POSTCODE from the same building where available
-    postcodes_df = features_df.select(["UPRN", "ID"]).join(
-        id_postcode_mapping_df, on="ID", how="left"
+    postcodes_df = features_df.select(["UPRN", id_col]).join(
+        id_postcode_mapping_df, on=id_col, how="left"
     )
 
     print(

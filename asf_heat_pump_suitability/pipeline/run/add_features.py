@@ -331,6 +331,7 @@ if __name__ == "__main__":
         uprns_gdf=uprns_gdf,
         code_point_gdf=code_point_gdf,
         off_gas_list=off_gas_list,
+        id_col=config["constant"]["id"]["building"],
         max_distance_m=500,  # to be conservative
     )
 
