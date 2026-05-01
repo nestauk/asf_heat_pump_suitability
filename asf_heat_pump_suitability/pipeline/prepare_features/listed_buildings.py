@@ -78,6 +78,7 @@ def extend_df_listed_building_bool(
         listed_buildings_gdf.geometry.type.isin(["Point", "MultiPoint"])
     ][["geometry", "in_listed_building"]]
 
+    # TODO: we need to double check that this isn't labelling buildings which touch a listed building on one edge as 'listed'.
     # Join for polygons: We want buildings that touch/overlap listed building polygons
     joined_polys_gdf = buildings_gdf.sjoin(
         listed_polygons_gdf, how="inner", predicate="intersects"
