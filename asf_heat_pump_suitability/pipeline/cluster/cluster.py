@@ -118,9 +118,9 @@ def generate_gdf_clusters(
         reassigned_gdf.set_index("ID").to_dict()["assigned_tech"]
     )
 
-    # Add "within_{radius}m_from_anchor_property" as a column to cells_gdf
+    # Add "within_{radius}m_from_anchor_load" as a column to cells_gdf
     cells_gdf = cells_gdf.merge(
-        reassigned_gdf[["ID", f"within_{radius}m_from_anchor_property"]],
+        reassigned_gdf[["ID", f"within_{radius}m_from_anchor_load"]],
         on="ID",
         how="left",
     )
@@ -130,7 +130,7 @@ def generate_gdf_clusters(
         cells_gdf.dissolve(by="assigned_tech")
         .explode()
         .reset_index()[
-            ["assigned_tech", "geometry", f"within_{radius}m_from_anchor_property"]
+            ["assigned_tech", "geometry", f"within_{radius}m_from_anchor_load"]
         ]
     )
 
@@ -571,7 +571,7 @@ def reassign_gdf_near_anchor_properties(
         tech_gdf["assigned_tech"],
     )
     # add column with True if near anchor, False if not
-    tech_gdf[f"within_{radius}m_from_anchor_property"] = np.where(
+    tech_gdf[f"within_{radius}m_from_anchor_load"] = np.where(
         (tech_gdf["distance_m"]).notna(), True, False
     )
     tech_gdf = tech_gdf.drop("distance_m", axis=1)

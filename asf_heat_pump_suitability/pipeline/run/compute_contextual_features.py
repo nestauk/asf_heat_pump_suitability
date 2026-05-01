@@ -15,8 +15,6 @@ import geopandas as gpd
 
 from asf_heat_pump_suitability import config
 
-ANCHOR_LOAD_RADIUS = config["constant"]["anchor_radius"]
-
 
 def parse_arguments() -> argparse.Namespace:
     """
@@ -86,6 +84,8 @@ def extend_df_contextual_features(
     - number of off-gas properties
     - proximity to coastline flag
     - conservation area flag
+
+    Note that "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` column is added in the cluster.py, so not included here.
 
     Args:
         clusters_df (pl.DataFrame): dataframe of clusters with cluster_id
@@ -170,13 +170,6 @@ def extend_df_contextual_features(
 
     clusters_df = clusters_df.join(
         contextual_feat_clusters_df, how="left", on="cluster_id"
-    )
-
-    # Rename column f"within_{radius}m_from_anchor_property" to f"within_{radius}m_from_anchor_load"
-    clusters_df = clusters_df.rename(
-        {
-            f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_property": f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
-        }
     )
 
     # Add percentages used for sorting & filtering in the tool
