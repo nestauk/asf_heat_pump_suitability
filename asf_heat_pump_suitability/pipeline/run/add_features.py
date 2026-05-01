@@ -334,7 +334,7 @@ if __name__ == "__main__":
         max_distance_m=500,  # to be conservative
     )
 
-    coast_gdf = load_geodata.load_gb_coast_boundaries()
+    coast_gdf = load_geodata.load_gdf_gb_coast_boundaries()
 
     from asf_heat_pump_suitability.pipeline.transform import coast
 
