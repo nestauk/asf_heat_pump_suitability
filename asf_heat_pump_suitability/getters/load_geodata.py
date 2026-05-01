@@ -277,24 +277,34 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
     return poi
 
 
-def load_code_point_data() -> gpd.GeoDataFrame:
+def load_gdf_code_point_data() -> gpd.GeoDataFrame:
     """
     Load GB code point geodataframe for postcode lookup and clean postcode column by removing spaces.
+    (CRS: EPSG:27700)
 
     Returns:
         gpd.GeoDataFrame: geodataframe of GB code points with geometry and POSTCODE columns.
     """
-    code_point_df = gpd.read_file(
+    code_point_gdf = gpd.read_file(
         config["data"]["geodata"]["gb_code_point_data"],
         layers="codepoint",
     )
-    code_point_df["POSTCODE"] = code_point_df["postcode"].str.replace(" ", "")
-    return code_point_df
+
+    print(
+        f"GB code point geodataframe successfully loaded with CRS {code_point_gdf.crs}."
+    )
+
+    code_point_gdf["POSTCODE"] = code_point_gdf["postcode"].str.replace(" ", "")
+    return code_point_gdf
 
 
-def load_gb_coast_boundaries():
+def load_gdf_gb_coast_boundaries():
     """
     Load GB coastline boundaries geodataframe and dissolve into a single geometry.
+    (CRS: EPSG:27700)
+
+    Returns:
+        gpd.GeoDataFrame: geodataframe with single geometry of GB coastline boundaries.
     """
 
     coast_gdf = gpd.read_file(
@@ -304,6 +314,10 @@ def load_gb_coast_boundaries():
     # Dissolve coastline boundaries into a single geometry
     coast_gdf = gpd.GeoDataFrame(
         geometry=[coast_gdf.geometry.union_all()], crs=coast_gdf.crs
+    )
+
+    print(
+        f"GB coastline boundaries geodataframe successfully loaded with CRS {coast_gdf.crs}."
     )
     return coast_gdf
 
@@ -315,6 +329,8 @@ def load_transform_dict_uprn_to_country_mapping() -> dict:
     Returns:
         dict: A dictionary mapping UPRN to corresponding country information.
     """
+
+    print("Loading UPRN to country mapping...")
     s3_client = boto3.client("s3")
 
     path = config["data"]["geodata"]["gb_uprn_country_mapping"]
