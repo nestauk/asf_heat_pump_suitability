@@ -1,6 +1,5 @@
 import geopandas as gpd
 import pandas as pd
-import numpy as np
 import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import get_datasets
