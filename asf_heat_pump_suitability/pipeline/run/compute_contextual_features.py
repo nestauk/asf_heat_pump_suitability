@@ -1,5 +1,9 @@
 """
-Script to compute contextual information for clusters, e.g. property type, tenure, EPC rating, etc.
+Script to compute contextual information for clusters including:
+- Distribution of attachment types, tenure types, EPC ratings of properties within clusters
+- Median garden size of properties within clusters
+- Whether any properties within clusters are in HN zones, city centres, protected areas, off-gas, within 1500m of coastline
+- Number of properties and number of properties in listed buildings within clusters
 
 Run:
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
@@ -73,22 +77,24 @@ def extend_df_contextual_features(
     uprns_df: pl.DataFrame,
 ) -> pl.DataFrame:
     """
-    Extend clusters dataframe with contextual features from UPRN geodataframe, including:
-    - property type (including flats)
-    - tenure
-    - EPC rating
+    Extend clusters dataframe with contextual features by aggregating features at UPRN level to cluster level.
+    Contextual features added include:
+    - Attachment type distribution
+    - tenure type distribution
+    - EPC rating distribution
     - Median garden size
     - HN zone flag
     - City centre flag
-    - number of listed buildings
+    - number of properties in listed buildings
     - number of off-gas properties
-    - proximity to coastline flag
-    - conservation area flag
+    - proximity to coastline flag (within 1500m)
+    - protected area flag
 
-    Note that "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` column is added in the cluster.py, so not included here.
+    Note that "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` column is added in the cluster.py,
+    so not explicitly included here as it is a feature of the clusters_df input to this function.
 
     Args:
-        clusters_df (pl.DataFrame): dataframe of clusters with cluster_id
+        clusters_df (pl.DataFrame): dataframe of clusters with cluster_id and `within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` feature
         uprns_df (pl.DataFrame): dataframe of UPRNs with cluster_id and relevant features for aggregation
     Returns:
         pl.DataFrame: dataframe with remaining features per cluster
