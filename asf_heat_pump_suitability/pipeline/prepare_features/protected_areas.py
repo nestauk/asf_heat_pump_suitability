@@ -166,13 +166,11 @@ def extend_df_protected_area_bool(
         pl.DataFrame: Input dataframe extended with boolean column indicating whether each UPRN is within a protected area.
     """
 
-    features_df = (
-        features_df.join(
-            protected_areas_df.select(["UPRN", "in_protected_area"]),
-            how="left",
-            on="UPRN",
-        ).with_columns(pl.col("in_protected_area").fill_null(False))
-        # .rename({"in_protected_area": "in_conservation_area"})
-    )
+    features_df = features_df.join(
+        protected_areas_df.select(["UPRN", "in_protected_area"]),
+        how="left",
+        on="UPRN",
+        # TODO: double check that filling with False is appropriate in all cases
+    ).with_columns(pl.col("in_protected_area").fill_null(False))
 
     return features_df
