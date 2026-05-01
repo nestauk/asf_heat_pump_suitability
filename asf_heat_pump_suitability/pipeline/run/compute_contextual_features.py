@@ -206,7 +206,8 @@ if __name__ == "__main__":
     print("Loading opportunity areas...")
     clusters_gdf = gpd.read_file(
         config["output"]["dataset"]["tech_clusters"].format(
-            local_authorities=args.local_authorities, tolerance=5
+            local_authorities=args.local_authorities,
+            tolerance=config["constant"]["clustering"]["tolerance_m"],
         ),
     ).to_crs(epsg=27700)
 

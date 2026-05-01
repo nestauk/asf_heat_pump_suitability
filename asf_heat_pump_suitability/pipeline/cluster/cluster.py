@@ -642,14 +642,14 @@ if __name__ == "__main__":
     )
 
     if args.save:
-        # Simplify geometry for file size to tolerance of 5m
-        tolerance = 5
+        # Simplify geometry for file size using tolerance
         clusters_gdf["geometry"] = clusters_gdf["geometry"].simplify(
-            tolerance=tolerance
+            tolerance=config["constant"]["clustering"]["tolerance_m"]
         )
         save_utils.save_to_s3(
             clusters_gdf,
             config["output"]["dataset"]["tech_clusters"].format(
-                local_authorities=args.local_authorities, tolerance=tolerance
+                local_authorities=args.local_authorities,
+                tolerance=config["constant"]["clustering"]["tolerance_m"],
             ),
         )
