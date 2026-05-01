@@ -57,8 +57,14 @@ def extend_df_off_gas(
     Returns:
         pl.DataFrame: input features_df with new boolean column `off_gas` indicating whether UPRN is in an off-gas postcode.
     """
+    print("Adding off_gas feature to features_df...")
     # Step 0: Use EPC postcode for UPRNs where available
     # Done previously, as features_df already contains the EPC postcode column
+
+    print(
+        "Number of UPRNs with POSTCODE using EPC only:",
+        features_df.filter(pl.col("POSTCODE").is_not_null()).shape[0],
+    )
 
     # Step 1: Use EPC postcode of nearest UPRN in the same building if available
 
@@ -73,7 +79,7 @@ def extend_df_off_gas(
     )
 
     print(
-        "Number of UPRNs with POSTCODE after step 1:",
+        "Number of UPRNs with POSTCODE after mapping postcodes from same building:",
         postcodes_df.filter(pl.col("POSTCODE").is_not_null()).shape[0],
     )
 
@@ -103,6 +109,11 @@ def extend_df_off_gas(
             nearest_postcode_df.select(["UPRN", "POSTCODE"]),
         ],
         how="vertical",
+    )
+
+    print(
+        "Number of UPRNs with POSTCODE after adding nearest code point postcodes:",
+        uprn_postcode_map_df.filter(pl.col("POSTCODE").is_not_null()).shape[0],
     )
 
     # Step 4: Label all UPRNs with on/off gas where possible
