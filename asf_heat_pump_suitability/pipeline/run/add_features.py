@@ -1,10 +1,9 @@
 """
 Script to add features to UPRNs:
 - flat / apartment property type boolean flag
-- boolean flags to indicate whether UPRN is in a block of flats; in a heat network zone; and in a city centre
+- boolean flags to indicate whether UPRN is in a block of flats; in a heat network zone; and in a city centre; in a listed building; off-gas;near the coast; and in a protected area
 - estimated max contiguous and total outdoor space (m2)
-- EPC-derived features of tenure; attachment type of property; and current energy rating
-- TODO: Sofia still to add info
+- EPC-derived features of tenure; attachment type of property; and current energy rating, solar PV info, estimated current energy consumption.
 
 Run:
 python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES
