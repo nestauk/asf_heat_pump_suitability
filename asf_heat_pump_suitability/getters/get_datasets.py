@@ -245,6 +245,7 @@ def get_df_spa_offgasgrid() -> pl.DataFrame:
     return df
 
 
+# TODO: move function to load_geodata.py
 def load_gdf_listed_buildings(nation: str = "GB", **kwargs) -> gpd.GeoDataFrame:
     """
     Get raw Listed Buildings polygons dataset for specified nation. CRS EPSG:27700, British National Grid.

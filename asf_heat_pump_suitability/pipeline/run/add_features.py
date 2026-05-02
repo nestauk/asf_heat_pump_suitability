@@ -1,10 +1,9 @@
 """
 Script to add features to UPRNs:
 - flat / apartment property type boolean flag
-- boolean flags to indicate whether UPRN is in a block of flats; in a heat network zone; and in a city centre
+- boolean flags to indicate whether UPRN is in a block of flats; in a heat network zone; and in a city centre; in a listed building; off-gas; near the coast; and in a protected area
 - estimated max contiguous and total outdoor space (m2)
-- EPC-derived features of tenure; attachment type of property; and current energy rating
-- TODO: Sofia still to add info
+- EPC-derived features of tenure; attachment type of property; and current energy rating, solar PV info, estimated current energy consumption.
 
 Run:
 python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES
@@ -164,38 +163,15 @@ if __name__ == "__main__":
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
 
-    # Load planned heat network zone polygons
-    hn_zones_gdf = gpd.GeoDataFrame()
-    # Check if heat network zone geodata is available for each LA in the list, and if so, load it and concatenate it to a single geodataframe.
-    for la in list_las:
-        try:
-            # TODO: deal with the potential for different Zone ID column names in different HN zone datasets
-            hn_zones_gdf = pd.concat(
-                [
-                    hn_zones_gdf,
-                    load_geodata.load_gdf_heat_network_zones(local_authority=la),
-                ],
-                ignore_index=True,
-            )
-        except ValueError:
-            print(
-                f"No heat network zone geodata found for {la}. All UPRNs will be labelled as 'outside heat network zone' in this Local Authority."
-            )
-
-        # If hn_zones_gdf is empty after attempting to load for each LA individually, try loading a combined HN zone geodataframe for the whole list of LAs
-        # (this is because for some groups of LAs, e.g. Greater Manchester Combined Authority, there is only a combined HN zone geodataframe and no individual ones).
-        try:
-            hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
-                local_authority=local_authorities
-            )
-        except ValueError:
-            print(
-                f"No heat network zone geodata found for {local_authorities}. All UPRNs will be labelled as 'outside heat network zone' in this group of Local Authorities."
-            )
-
-    features_df = heat_network_zones.extend_df_heat_network_zone_bool(
-        uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
+    # Load planned heat network zone polygons (if available)
+    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
+        local_authority=local_authorities
     )
+
+    if len(hn_zones_gdf) > 0:
+        features_df = heat_network_zones.extend_df_heat_network_zone_bool(
+            uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
+        )
 
     # Load spatial signature polygons and label UPRNs in city centres
     spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
@@ -300,9 +276,6 @@ if __name__ == "__main__":
         ],
     )
 
-    print(features_df["has_solar_pv"].value_counts())
-    print(features_df["ENERGY_CONSUMPTION_CURRENT"].mean())
-
     # Add listed building boolean flag
     from asf_heat_pump_suitability.pipeline.prepare_features import (
         listed_buildings,
@@ -318,8 +291,6 @@ if __name__ == "__main__":
         listed_buildings_gdf=listed_buildings_gdf,
     )
 
-    print(features_df["in_listed_building"].value_counts())
-
     del listed_buildings_gdf
 
     # Add number of off-gas properties
@@ -329,20 +300,18 @@ if __name__ == "__main__":
 
     off_gas_list = off_gas.process_off_gas_data()
 
-    code_point_df = load_geodata.load_code_point_data()
+    code_point_gdf = load_geodata.load_gdf_code_point_data()
 
-    print(features_df.columns)
     features_df = off_gas.extend_df_off_gas(
         features_df=features_df,
         uprns_gdf=uprns_gdf,
-        code_point_df=code_point_df,
+        code_point_gdf=code_point_gdf,
         off_gas_list=off_gas_list,
+        id_col=config["constant"]["id"]["building"],
         max_distance_m=500,  # to be conservative
     )
 
-    print(features_df["off_gas"].value_counts())
-
-    coast_gdf = load_geodata.load_gb_coast_boundaries()
+    coast_gdf = load_geodata.load_gdf_gb_coast_boundaries()
 
     from asf_heat_pump_suitability.pipeline.transform import coast
 
@@ -353,8 +322,6 @@ if __name__ == "__main__":
         distance_threshold_m=1500,
         simplify_tolerance_m=150,
     )
-
-    print(features_df["within_1500m_coastline"].value_counts())
 
     del coast_gdf
 
@@ -376,8 +343,6 @@ if __name__ == "__main__":
         features_df=features_df,
         protected_areas_df=uprns_protected_areas_df,
     )
-
-    print(features_df["in_protected_area"].value_counts())
 
     del uprns_protected_areas_df
 

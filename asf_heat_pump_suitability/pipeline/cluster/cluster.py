@@ -578,6 +578,33 @@ def reassign_gdf_near_anchor_properties(
     return tech_gdf
 
 
+def append_gdf_heat_network_zone_layer(
+    clusters_gdf: gpd.GeoDataFrame, hn_zones_gdf: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """
+    Append DESNZ heat network zones to clusters geodataframe, where `assigned_tech` is 'DESNZ_HNZ'. DESNZ heat network
+    zones are also assigned unique cluster IDs by Local Authority.
+
+    Args:
+        clusters_gdf (gpd.GeoDataFrame): clusters with `assigned_tech`, `cluster_id`, and `geometry` columns.
+        hn_zones_gdf (gpd.GeoDataFrame): DESNZ heat network zones with geometries.
+
+    Returns:
+        gpd.GeoDataFrame: cluster and DESNZ heat network zone geometries
+    """
+    if len(hn_zones_gdf) > 0:
+        id_col = [col for col in hn_zones_gdf.columns if "ID" in col][0]
+        hn_zones_gdf = hn_zones_gdf.rename(columns={id_col: "cluster_id"}).assign(
+            assigned_tech="DESNZ_HNZ",
+            cluster_id=lambda df: "DESNZ_HNZ_"
+            + df["cluster_id"].astype(str).str.replace("-", "_"),
+        )[["assigned_tech", "geometry", "cluster_id"]]
+
+        return pd.concat([clusters_gdf, hn_zones_gdf], ignore_index=True)
+    else:
+        return clusters_gdf
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
@@ -606,6 +633,7 @@ if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
     tolerance_m = config["constant"]["clustering"]["tolerance_m"]
+    list_las = config["constant"][local_authorities]["la_names"]
 
     tech_gdf = (
         gpd.read_parquet(
@@ -642,6 +670,14 @@ if __name__ == "__main__":
         polygon_overlay_gdf=polygon_overlay_gdf,
         combined_anchor_gdf=combined_anchor_gdf,
         radius=ANCHOR_RADIUS,
+    )
+
+    # Add heat network zones to clusters_gdf, if they exist
+    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
+        local_authority=local_authorities
+    )
+    clusters_gdf = append_gdf_heat_network_zone_layer(
+        clusters_gdf=clusters_gdf, hn_zones_gdf=hn_zones_gdf
     )
 
     if args.save:
