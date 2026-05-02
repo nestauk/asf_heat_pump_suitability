@@ -28,7 +28,7 @@ data:
 
     heat_network_zones:
       # Plymouth Heat Network zones
-      plymouth: "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/NMR3 Heat Network Zones (Post-Ref).gpkg"
+      plymouth: "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Plymouth.gpkg"
       greater_manchester_las: "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Greater-Manchester.gpkg"
 
     gb_spatial_signatures:

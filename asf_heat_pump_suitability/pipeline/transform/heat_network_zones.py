@@ -45,7 +45,7 @@ def generate_dict_heat_network_zone_uprns(
 
     Args:
         uprns_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be labelled
-        hn_zone_gdf (gpd.GeoDataFrame): polygons of heat network zones
+        hn_zone_gdf (gpd.GeoDataFrame): polygons of heat network zones with `HNZoneID` column.
 
     Returns:
         dict: UPRNs intersecting with heat network zones and their zone IDs
@@ -62,20 +62,15 @@ def generate_dict_heat_network_zone_uprns(
         hn_zone_gdf = hn_zone_gdf.to_crs(target_crs)
         print(f"hn_zone_gdf reprojected to target CRS: {target_crs}")
 
-    # Assume first column with `ID` substring is the zone ID column
-    id_col = [col for col in hn_zone_gdf.columns if "ID" in col][0]
-    print(f"Using Heat Network Zone {id_col} column as ID")
-
     # Spatial join for labelling UPRNs
     labelled_uprn_gdf = (
         uprns_gdf[["UPRN", "geometry"]]
         .sjoin(
-            hn_zone_gdf[[id_col, "geometry"]],
+            hn_zone_gdf[["HNZoneID", "geometry"]],
             how="inner",
             predicate="intersects",  # include properties intersecting heat network zone boundary
         )
         .drop(columns="index_right")
-        .rename(columns={id_col: "HNZoneID"})
     )
 
     return labelled_uprn_gdf.set_index("UPRN").to_dict()["HNZoneID"]

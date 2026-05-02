@@ -293,7 +293,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--save",
         help="Save trained model to S3.",
-        type=bool,
         required=False,
         action="store_true",
     )
@@ -327,7 +326,7 @@ if __name__ == "__main__":
     # TODO scale beyond sampling areas
     building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
         layer="building",
-        grid_squares=config["constant"]["grid_squares"]["sampling_areas"],
+        grid_squares=config["constant"]["sampling_areas"]["grid_squares"],
     )
 
     # ------------------------ #
