@@ -106,7 +106,7 @@ def extend_df_contextual_features(
         uprns_df.select(dummy_cols + ["cluster_id"])
         .to_dummies(columns=dummy_cols)
         .group_by("cluster_id")
-        .agg(pl.all().sum())
+        .sum()
     )
 
     # Keep only the columns that start with the dummy column prefixes, e.g. "ATTACHMENT_", "TENURE_", "CURRENT_ENERGY_RATING_"
@@ -134,6 +134,10 @@ def extend_df_contextual_features(
     contextual_feat_clusters_df = (
         uprns_df.group_by("cluster_id")
         .agg(
+            # median estimated energy consumption in 12 months (in kWh/m2)
+            pl.col("ENERGY_CONSUMPTION_CURRENT")
+            .median()
+            .alias("median_estimated_energy_consumption_12_months_kwh_per_m2"),
             # median_outdoor_space
             pl.col("max_contiguous_outdoor_space_area_m2")
             .median()
@@ -161,6 +165,7 @@ def extend_df_contextual_features(
         )
         .select(
             [
+                "median_estimated_energy_consumption_12_months_kwh_per_m2",
                 "cluster_id",
                 "median_outdoor_space_m2",
                 "in_hn_zone",
