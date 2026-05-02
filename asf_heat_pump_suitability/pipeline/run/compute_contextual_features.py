@@ -3,7 +3,7 @@ Script to compute contextual information for clusters including:
 - Distribution of attachment types, tenure types, EPC ratings of properties within clusters
 - Median garden size of properties within clusters
 - Whether any properties within clusters are in HN zones, city centres, protected areas, off-gas, within 1500m of coastline
-- Number of properties and number of properties in listed buildings within clusters
+- Number of properties, number of properties in listed buildings and number of properties with solar PV
 
 Run:
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
@@ -156,6 +156,8 @@ def extend_df_contextual_features(
             pl.col("UPRN").n_unique().alias("n_UPRNs"),
             # n_uprns_listed_building
             pl.col("in_listed_building").sum().alias("n_uprns_in_listed_building"),
+            # n_uprns_solar_pv
+            pl.col("has_solar_pv").sum().alias("n_uprns_solar_pv"),
             # n_uprns_off_gas
             pl.col("off_gas").sum().alias("n_uprns_off_gas"),
             # near_coastline flag
@@ -172,6 +174,7 @@ def extend_df_contextual_features(
                 "in_city_centre",
                 "n_UPRNs",
                 "n_uprns_in_listed_building",
+                "n_uprns_solar_pv",
                 "n_uprns_off_gas",
                 "within_1500m_coastline",
                 "in_protected_area",
