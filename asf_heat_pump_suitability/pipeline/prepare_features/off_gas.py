@@ -97,6 +97,8 @@ def extend_df_off_gas(
                 how="left",
                 distance_col="distance_to_nearest_postcode_m",
             )
+            .sort_values("distance_to_nearest_postcode_m", ascending=True)
+            .drop_duplicates(subset=["UPRN_left"])
         )[["UPRN_left", id_col + "_left", "POSTCODE"]]
         .rename(columns={"UPRN_left": "UPRN", id_col + "_left": id_col})
     )
@@ -123,7 +125,10 @@ def extend_df_off_gas(
             how="left",
             max_distance=max_distance_m,  # maximum distance in metres
             distance_col="distance_to_postcode_m",  # distance in metres
-        ).drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
+        )
+        .sort_values("distance_to_nearest_postcode_m", ascending=True)
+        .drop_duplicates(subset=["UPRN"])
+        .drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
     )
 
     # Step 3: Combine UPRNs with known postcodes and nearest postcodes

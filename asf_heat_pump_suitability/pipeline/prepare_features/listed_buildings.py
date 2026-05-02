@@ -103,6 +103,14 @@ def extend_df_listed_building_bool(
         .drop(columns="index_right")
     )
 
+    # We group by UPRN and take 'any' (True if any match is True)
+    uprns_gdf = (
+        uprns_gdf.groupby("UPRN")["in_listed_building"]
+        .max()
+        .fillna(False)
+        .reset_index()
+    )
+
     # Extend features_df with listed building flag
     features_df = features_df.join(
         pl.from_pandas(uprns_gdf[["UPRN", "in_listed_building"]]),
