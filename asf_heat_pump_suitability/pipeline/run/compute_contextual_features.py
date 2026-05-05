@@ -1,7 +1,7 @@
 """
 Script to compute contextual information for clusters including:
-- Distribution of attachment types, tenure types, EPC ratings of properties within clusters
-- Median garden size of properties within clusters
+- Proportion of attachment types, tenure types, EPC ratings of properties within clusters
+- Median outdoor space of properties within clusters
 - Whether any properties within clusters are in HN zones, city centres, protected areas, off-gas, within 1500m of coastline
 - Number of properties, number of properties in listed buildings and number of properties with solar PV
 
@@ -79,10 +79,10 @@ def extend_df_contextual_features(
     """
     Extend clusters dataframe with contextual features by aggregating features at UPRN level to cluster level.
     Contextual features added include:
-    - Attachment type distribution
-    - tenure type distribution
-    - EPC rating distribution
-    - Median garden size
+    - Attachment type proportions
+    - tenure type proportions
+    - EPC rating proportions
+    - Median outdoor space
     - HN zone flag
     - City centre flag
     - number of properties in listed buildings
