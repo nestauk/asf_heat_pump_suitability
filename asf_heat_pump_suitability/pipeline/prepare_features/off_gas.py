@@ -1,7 +1,12 @@
 from typing import List
-from asf_heat_pump_suitability.getters.get_datasets import get_df_spa_offgasgrid
+
 import polars as pl
+import pandas as pd
 import geopandas as gpd
+
+from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.getters.get_datasets import get_df_spa_offgasgrid
+from asf_heat_pump_suitability.pipeline.transform import uprns
 
 
 def process_off_gas_data() -> List[str]:
@@ -166,3 +171,108 @@ def extend_df_off_gas(
     )
 
     return features_df
+
+
+def fill_df_missing_postcodes(
+    uprns_gdf: gpd.GeoDataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
+    code_point_gdf: gpd.GeoDataFrame,
+    max_distance: float = 500,
+    id_col: str = config["constant"]["id"]["building"],
+) -> pl.DataFrame:
+
+    # Assign building IDs to UPRNs
+    building_id = "_internal_building_id"
+    uprn_to_building_dict = uprns.map_dict_uprns_to_building_id(
+        uprns_gdf=uprns_gdf, buildings_gdf=buildings_gdf, id_col=id_col
+    )
+    uprns_gdf[building_id] = uprns_gdf["UPRN"].replace(uprn_to_building_dict)
+
+    # Separate UPRNs into those with and without postcodes
+    donors_gdf = uprns_gdf[uprns_gdf["POSTCODE"].notna()].copy()[
+        [building_id, "UPRN", "POSTCODE", "geometry"]
+    ]
+    recipients_gdf = uprns_gdf[uprns_gdf["POSTCODE"].isna()].copy()[
+        [building_id, "UPRN", "geometry"]
+    ]
+
+    # There will be no recipients if all UPRNs already have a postcode
+    if recipients_gdf.empty:
+        return donors_gdf
+
+    # RULE 1: Find closest UPRN WITHIN the same building
+    rule1_results = []
+
+    # Get recipients that are actually inside a building
+    in_building_recipients_gdf = recipients_gdf[recipients_gdf[building_id].notna()]
+
+    # Iterate through every building and assign the closest in-building postcode to UPRNs with no postcode
+    for b_id, recipients_in_building_gdf in in_building_recipients_gdf.groupby(
+        building_id
+    ):
+        building_donors_gdf = donors_gdf[donors_gdf[building_id] == b_id]
+
+        if not building_donors_gdf.empty:
+            # Find the nearest donor UPRN within the same building
+            nearest_postcodes_gdf = recipients_in_building_gdf.sjoin_nearest(
+                building_donors_gdf[["POSTCODE", "geometry"]],
+                how="left",
+            )
+            rule1_results.append(nearest_postcodes_gdf)
+        else:
+            # No donors in this building, they will be processed by Rule 2
+            rule1_results.append(recipients_in_building_gdf)
+
+    # Concat rule 1 results for all buildings
+    if rule1_results:
+        filled_postcodes_gdf = pd.concat(rule1_results)
+    else:  # This should only trigger if all the recipient UPRNs are located outside of building footprints
+        filled_postcodes_gdf = recipients_gdf.copy()
+
+    # RULE 2: Closest point OUTSIDE/ANYWHERE within max distance
+    # Identify new recipient UPRN subset still missing postcodes
+    recipients_gdf = filled_postcodes_gdf[
+        filled_postcodes_gdf["POSTCODE"].isna()
+    ].copy()[["UPRN", "POSTCODE", "geometry"]]
+    print(recipients_gdf.head())
+
+    # Triggered unless every UPRN received a postcode from the same building by applying rule 1
+    if not recipients_gdf.empty:
+        # Combine original UPRNs and code points into one dataframe to identify nearest postcode
+        all_donors_gdf = pd.concat(
+            [
+                donors_gdf[["POSTCODE", "geometry"]],
+                code_point_gdf.rename(columns={"postcode": "POSTCODE"})[
+                    ["POSTCODE", "geometry"]
+                ],
+            ]
+        )
+        print("\n\n")
+        print(all_donors_gdf.head())
+
+        # Join postcode from nearest UPRN or code point within specified distance
+        nearest_postcodes_gdf = recipients_gdf.sjoin_nearest(
+            all_donors_gdf[["POSTCODE", "geometry"]],
+            how="left",
+            rsuffix="_second_pass",
+            max_distance=max_distance,
+        )
+
+        print("\n\n")
+        print(nearest_postcodes_gdf.head())
+
+        # Fill postcodes missing from the first pass with the second pass
+        filled_postcodes_gdf = filled_postcodes_gdf.merge(
+            nearest_postcodes_gdf, how="left", on="UPRN"
+        )
+        filled_postcodes_gdf["POSTCODE"] = filled_postcodes_gdf["POSTCODE"].fillna(
+            filled_postcodes_gdf["POSTCODE_second_pass"]
+        )
+
+    # Concat original donors and the filled recipients
+    uprn_postcodes_gdf = pd.concat(
+        [donors_gdf[["UPRN", "POSTCODE"]], filled_postcodes_gdf[["UPRN", "POSTCODE"]]]
+    )
+
+    # If there were multiple equidistant UPRNs/code points for a single UPRN, the UPRN will have multiple postcodes
+    return pl.from_pandas(uprn_postcodes_gdf)
