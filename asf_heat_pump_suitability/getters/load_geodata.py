@@ -131,8 +131,8 @@ def _extend_gdf_hn_zone_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     id_col = id_cols[0]
     print(f"Using Heat Network Zone {id_col} column as ID. Other options: {id_cols}")
 
-    gdf = gdf.rename(columns={id_col: f"original_{id_col}"})
     gdf["HNZoneID"] = gdf[id_col]
+    gdf = gdf.rename(columns={id_col: f"original_{id_col}"})
     return gdf
 
 
