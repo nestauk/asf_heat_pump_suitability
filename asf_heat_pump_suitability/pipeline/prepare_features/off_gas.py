@@ -63,7 +63,7 @@ def extend_df_off_gas(
 
     print(
         "Number of UPRNs with POSTCODE using EPC only:",
-        features_df.filter(pl.col("POSTCODE").is_not_null()).shape[0],
+        features_df.filter(pl.col("POSTCODE").is_not_null()).height,
     )
 
     # Step 1: Use EPC postcode of nearest UPRN in the same building if available
@@ -80,7 +80,7 @@ def extend_df_off_gas(
         .set_geometry("geometry")
     )
 
-    # features_gdf will have UPRN, geometry and id_col (building ID) columns which will be used to find nearest postcode within the same building where available
+    # This gdf will have UPRN, geometry and id_col (building ID) columns which will be used to find nearest postcode within the same building where available
     features_gdf = (
         uprns_gdf[["UPRN", "geometry"]]
         .merge(features_df[[id_col, "UPRN"]].to_pandas(), on="UPRN", how="right")
@@ -110,7 +110,7 @@ def extend_df_off_gas(
 
     print(
         "Number of UPRNs with POSTCODE after mapping postcodes from same building:",
-        postcodes_df.filter(pl.col("POSTCODE").is_not_null()).shape[0],
+        postcodes_df.filter(pl.col("POSTCODE").is_not_null()).height,
     )
 
     # Step 2: Use EPC postcode of nearest code point within a specified distance
