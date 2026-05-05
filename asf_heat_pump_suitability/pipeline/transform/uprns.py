@@ -102,7 +102,7 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
         )
         # Scotland EPC data
         df_S = base_getters.load_df_from_s3(
-            config["data"]["epc"][epc_type]["S"], columns="BUILDING_REFERENCE_NUMBER"
+            config["data"]["epc"][epc_type]["S"], columns="OSG_REFERENCE_NUMBER"
         )
         before = len(df_EW) + len(df_S)
 
@@ -119,14 +119,14 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
         # Scotland
         df_S = (
             df_S.with_columns(
-                # Scotland data UPRN column is called 'BUILDING REFERENCE NUMBER'
-                pl.col("BUILDING_REFERENCE_NUMBER")
+                # Scotland data UPRN column is called 'OSG_REFERENCE_NUMBER'
+                pl.col("OSG_REFERENCE_NUMBER")
                 .cast(pl.Float64, strict=False)
                 .cast(pl.Int64)
                 .alias("UPRN")
             )
             .drop_nulls()
-            .drop("BUILDING_REFERENCE_NUMBER")
+            .drop("OSG_REFERENCE_NUMBER")
         )
 
         # Return England, Wales and Scotland EPC data together
