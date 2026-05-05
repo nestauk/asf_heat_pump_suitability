@@ -203,7 +203,7 @@ if __name__ == "__main__":
 
         land_parcels_gdf = pd.concat(
             [
-                get_datasets.load_gdf_inspire_land_parcels(path=f"s3://{file}")
+                outdoor_space.transform_gdf_land_parcels(f"s3://{file}")
                 for file in inspire_file_names
             ],
             ignore_index=False,
