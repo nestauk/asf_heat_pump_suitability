@@ -194,10 +194,11 @@ if __name__ == "__main__":
         )
     else:
         inspire_file_names = get_datasets.load_gdf_inspire_land_parcels(
-            path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EW.geojson"
+            path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EWS.geojson"
         )
         inspire_file_names = inspire_file_names[
-            inspire_file_names["LAD23NM"].isin(list_las)
+            (inspire_file_names["LAD23NM"].isin(list_las))
+            | (inspire_file_names["registration_county"].isin(list_las))
         ]["inspire_file_name"].unique()
 
         land_parcels_gdf = pd.concat(
