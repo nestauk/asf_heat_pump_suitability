@@ -97,9 +97,11 @@ def extend_df_off_gas(
                 how="left",
                 distance_col="distance_to_nearest_postcode_m",
             )
-            .sort_values("distance_to_nearest_postcode_m", ascending=True)
-            .drop_duplicates(subset=["UPRN_left"])
-        )[["UPRN_left", id_col + "_left", "POSTCODE"]]
+        )
+        .sort_values("distance_to_nearest_postcode_m", ascending=True)
+        .drop_duplicates(subset=["UPRN_left"])[
+            ["UPRN_left", id_col + "_left", "POSTCODE"]
+        ]
         .rename(columns={"UPRN_left": "UPRN", id_col + "_left": id_col})
     )
 
