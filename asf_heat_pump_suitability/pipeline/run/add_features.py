@@ -143,9 +143,7 @@ if __name__ == "__main__":
         "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet"
     )
     # Load trained block of flats classifier model
-    clf = base_getters.load_pickle(
-        config["output"]["save_as"]["model"]["block_of_flats_model"]
-    )
+    clf = base_getters.load_pickle(config["output"]["model"]["block_of_flats_model"])
     features_df = train_model.extend_df_in_block_of_flats_label(
         uprns_df=features_df,
         mapping=uprn_building_id_dict,
