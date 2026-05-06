@@ -21,7 +21,7 @@ import momepy as mm
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
-from asf_heat_pump_suitability.getters import load_tree_input, load_boundaries
+from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
 # %%
 # Load Plymouth LA boundary
@@ -464,27 +464,23 @@ dissolve_techs_and_plot_folium(
 
 # %%
 # Linestrings
-roads_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-    layer="road", grid_squares="SX"
-)
-railways_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+roads_gdf = load_geodata.load_gdf_os_openmap_layer(layer="road", grid_squares="SX")
+railways_gdf = load_geodata.load_gdf_os_openmap_layer(
     layer="railway_track", grid_squares="SX"
 )
-tidal_boundary_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+tidal_boundary_gdf = load_geodata.load_gdf_os_openmap_layer(
     layer="tidal_boundary", grid_squares="SX"
 )
 
 # Polygons
-forest_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-    layer="woodland", grid_squares="SX"
-)
+forest_gdf = load_geodata.load_gdf_os_openmap_layer(layer="woodland", grid_squares="SX")
 greenspace_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/SX/SX_GreenspaceSite.shp"
 )
 surface_water_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/SX/SX_SurfaceWater_Area.shp"
 )
-tidal_water_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+tidal_water_gdf = load_geodata.load_gdf_os_openmap_layer(
     layer="tidal_water", grid_squares="SX"
 )
 

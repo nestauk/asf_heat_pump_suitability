@@ -324,7 +324,6 @@ if __name__ == "__main__":
 
     from asf_heat_pump_suitability.getters import (
         load_geodata,
-        load_tree_input,
         load_boundaries,
     )
     from asf_heat_pump_suitability.pipeline.transform import (
@@ -369,7 +368,7 @@ if __name__ == "__main__":
 
     # Get layers required for identifying residential UPRNs
     layers = {
-        f"{layer}_gdf": load_tree_input.load_gdf_os_openmap_local_layer(
+        f"{layer}_gdf": load_geodata.load_gdf_os_openmap_layer(
             layer=layer, grid_squares=grid_squares
         )
         for layer in ["important_building", "railway_station", "building"]

@@ -17,7 +17,6 @@ from sklearn.metrics import roc_auc_score, roc_curve
 from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import (
-    load_tree_input,
     load_geodata,
     load_boundaries,
     base_getters,
@@ -29,7 +28,7 @@ council_tax_df = pd.read_csv(config["data"]["geodata"]["council_tax_data"]["plym
 pipeline_domestic_gdf = base_getters.load_df_from_s3(
     config["data"]["processed"]["plymouth_residential_uprns"]
 )
-building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+building_footprints_gdf = load_geodata.load_gdf_os_openmap_layer(
     layer="building", grid_squares="SX"
 )
 la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(

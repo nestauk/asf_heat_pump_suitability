@@ -24,11 +24,10 @@ import os
 # local imports
 from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.transform.uprns import generate_gdf_uprn_coords
-from asf_heat_pump_suitability.getters.load_tree_input import (
-    load_gdf_os_openmap_local_layer,
-)
+
 from asf_heat_pump_suitability.getters.load_geodata import (
     load_gdf_heat_network_zones,
+    load_gdf_os_openmap_layer,
 )
 from asf_heat_pump_suitability.getters import (
     load_boundaries,
@@ -114,7 +113,7 @@ gm_with_features.head()
 from asf_heat_pump_suitability import config
 
 # Loading building footprints for grid squares
-building_footprints = load_gdf_os_openmap_local_layer(
+building_footprints = load_gdf_os_openmap_layer(
     layer="building",
     grid_squares=config["constant"]["greater_manchester_las"]["grid_squares"],
 )

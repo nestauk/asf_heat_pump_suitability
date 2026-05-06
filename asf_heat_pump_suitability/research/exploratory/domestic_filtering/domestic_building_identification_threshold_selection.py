@@ -35,7 +35,6 @@ from sklearn.tree import DecisionTreeClassifier, plot_tree
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import (
     base_getters,
-    load_tree_input,
     load_boundaries,
     load_geodata,
 )
@@ -548,7 +547,7 @@ if __name__ == "__main__":
     )
 
     # All building footprints
-    buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+    buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares="SX"
     )
 

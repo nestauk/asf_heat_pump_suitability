@@ -19,7 +19,6 @@ import os
 from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import (
-    load_tree_input,
     load_geodata,
     load_boundaries,
     base_getters,
@@ -28,14 +27,14 @@ from asf_heat_pump_suitability.pipeline.transform import uprns, poi
 
 # %%
 # load datasets
-building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+building_footprints_gdf = load_geodata.load_gdf_os_openmap_layer(
     layer="building", grid_squares="SX"
 )
 
 tech_types_gdf = gpd.read_file(
     "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.geojson"
 ).to_crs(27700)
-important_buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+important_buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
     layer="important_building", grid_squares="SX"
 )
 epc_domestic_set = uprns.load_set_valid_epc_uprns(epc_type="domestic")

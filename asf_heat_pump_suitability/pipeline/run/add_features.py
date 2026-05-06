@@ -66,7 +66,6 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
     from asf_heat_pump_suitability.getters import (
-        load_tree_input,
         base_getters,
         load_geodata,
     )
@@ -121,7 +120,7 @@ if __name__ == "__main__":
     # PREDICT BLOCK OF FLATS CLASSIFICATION
     # Load building footprint data
     # TODO scale beyond sampling areas
-    buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+    buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares
     )
 
@@ -206,7 +205,7 @@ if __name__ == "__main__":
             ignore_index=False,
         )
 
-    buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+    buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares
     )
 
