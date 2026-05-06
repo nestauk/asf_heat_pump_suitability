@@ -300,7 +300,7 @@ if __name__ == "__main__":
 
     off_gas_list = off_gas.process_off_gas_data()
 
-    code_point_gdf = load_geodata.load_gdf_code_point_data()
+    code_point_gdf = load_geodata.load_gdf_code_points()
 
     features_df = off_gas.extend_df_off_gas(
         features_df=features_df,

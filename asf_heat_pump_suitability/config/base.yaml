@@ -16,7 +16,7 @@ data:
     UK_poi_locations: "s3://asf-heat-pump-suitability/source_data/poi_uk.gpkg"
     # OpenMap Code Point GB data for postcode lookup
     # TODO: move this file to a different S3 location as it's not just Plymouth data - it's GB data
-    gb_code_point_data: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/codepo_gb.gpkg"
+    gb_code_points: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/codepo_gb.gpkg"
     # GB coastline boundaries
     gb_coast_boundaries: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
     # Path to folder with UPRN to country mapping files for GB

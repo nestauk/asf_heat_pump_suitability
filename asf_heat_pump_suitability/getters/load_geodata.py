@@ -341,7 +341,7 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
     return poi
 
 
-def load_gdf_code_point_data() -> gpd.GeoDataFrame:
+def load_gdf_code_points() -> gpd.GeoDataFrame:
     """
     Load GB code point geodataframe for postcode lookup and clean postcode column by removing spaces.
     (CRS: EPSG:27700)
@@ -350,7 +350,7 @@ def load_gdf_code_point_data() -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: geodataframe of GB code points with geometry and POSTCODE columns.
     """
     code_point_gdf = gpd.read_file(
-        config["data"]["geodata"]["gb_code_point_data"],
+        config["data"]["geodata"]["gb_code_points"],
         layers="codepoint",
     )
 
