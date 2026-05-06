@@ -59,6 +59,7 @@ def save_to_s3(df: pl.DataFrame | gpd.GeoDataFrame, path: str) -> None:
         if file_type == "parquet":
             df.to_parquet(path)
         elif file_type == "geojson":
+            print("Converting CRS to EPSG:4326 and saving file as geojson...")
             df = df.to_crs(epsg=4326)
             with fsspec.open(path, "w") as f:
                 f.write(df.to_json(drop_id=True))

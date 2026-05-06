@@ -1,17 +1,23 @@
 """
-Script to compute contextual information for opportunity areas/clusters, e.g. property type, tenure, EPC rating, etc.
+Script to compute contextual information for clusters including:
+- Proportion of attachment types, tenure types, EPC ratings of properties within clusters
+- Median outdoor space of properties within clusters
+- Whether any properties within clusters are in HN zones, city centres, protected areas, off-gas, within 1500m of coastline
+- Number of properties, number of properties in listed buildings and number of properties with solar PV
 
 Run:
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
 
 LOCAL_AUTHORITIES should be one of the options specified in base.yaml's `constant` section, e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.
 
-Add --save to save the output to S3 as a geojson with geometry and contextual features per opportunity area/cluster.
+Add --save to save the output to S3 as a geojson with geometry and contextual features per cluster.
 """
 
 import argparse
 import polars as pl
 import geopandas as gpd
+
+from asf_heat_pump_suitability import config
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -40,291 +46,217 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def process_df_epc_data(epc_df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Process EPC data to get relevant features for joining to UPRNs.
-
-    Args:
-        epc_df (pl.DataFrame): raw EPC dataframe
-    Returns:
-        pl.DataFrame: processed EPC dataframe with relevant features for joining to UPRNs
-    """
-    keep_cols = [
-        "UPRN",
-        "PROPERTY_TYPE",
-        "BUILT_FORM",
-        "TENURE",
-        "CURRENT_ENERGY_RATING",
-    ]
-
-    epc_df = (
-        raw_epc_df.select(keep_cols)
-        .with_columns(
-            # Remove any invalid UPRNs (i.e. those IDs which are generated in EPC preprocessing generated from concatenating building ref number and address)
-            # These are not true UPRNs that can be used in joins across other datasets
-            pl.col("UPRN")
-            .cast(pl.Float64, strict=False)
-            .cast(pl.Int64)
-            .alias("UPRN")
-        )
-        .drop_nulls(subset="UPRN")
-        .with_columns(
-            pl.col("PROPERTY_TYPE").cast(pl.String),
-            pl.col("BUILT_FORM").cast(pl.String),
-        )
-        .with_columns(
-            # Reassign enclosed terrace categories
-            pl.when(pl.col("BUILT_FORM") == "Enclosed Mid-Terrace")
-            .then(pl.lit("Mid-Terrace"))
-            .when(pl.col("BUILT_FORM") == "Enclosed End-Terrace")
-            .then(pl.lit("End-Terrace"))
-            .when(pl.col("BUILT_FORM").str.to_lowercase().is_in(["", "unknown"]))
-            .then(None)
-            .otherwise(pl.col("BUILT_FORM"))
-            .alias("ATTACHMENT")
-        )
-        .with_columns(
-            pl.col("TENURE")
-            .str.to_lowercase()
-            .replace({"": None, "unknown": None})
-            .alias("TENURE")
-        )
-    )
-
-    return epc_df
-
-
-def join_df_epc_to_uprns(
-    uprns_gdf: gpd.GeoDataFrame, epc_df: pl.DataFrame
-) -> gpd.GeoDataFrame:
-    """
-    Join processed EPC data to UPRN geodataframe.
-    Args:
-        uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs with geometry
-        epc_df (pl.DataFrame): processed EPC dataframe with relevant features for joining to UPRNs
-    Returns:
-        gpd.GeoDataFrame: UPRN geodataframe with EPC features joined
-    """
-
-    keep_cols = ["UPRN", "ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
-    uprns_gdf = uprns_gdf.merge(
-        epc_df.select(keep_cols).to_pandas(), how="left", on="UPRN"
-    )
-
-    # Only fill with Unknown for cols in keep_cols
-    uprns_gdf[keep_cols] = uprns_gdf[keep_cols].fillna("Unknown")
-
-    return uprns_gdf
-
-
-def filter_df_uprns_to_opportunity_areas(
-    uprns_gdf: gpd.GeoDataFrame, areas_gdf: gpd.GeoDataFrame
+def filter_df_uprns_to_clusters(
+    uprns_gdf: gpd.GeoDataFrame, clusters_gdf: gpd.GeoDataFrame
 ) -> pl.DataFrame:
     """
-    Filter UPRN geodataframe to only those which are within opportunity areas.
+    Filter UPRN geodataframe to only those which are within clusters.
 
     Args:
         uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs with geometry and EPC features
-        areas_gdf (gpd.GeoDataFrame): geodataframe of opportunity areas with geometry and cluster_id
+        clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
     Returns:
-        pl.DataFrame: filtered UPRN dataframe with only UPRNs within opportunity areas
+        pl.DataFrame: filtered UPRN dataframe with only UPRNs within clusters
     """
-    opportunity_areas_df = pl.from_pandas(
-        uprns_gdf.sjoin(
-            areas_gdf[["cluster_id", "geometry"]], how="right", predicate="within"
-        ).drop(columns=["index_left", "geometry"])
-    ).with_columns(
-        # Change attachment to flat if it is one
-        pl.when(pl.col("property_type_flat"))
-        .then(pl.lit("Flat"))
-        .otherwise(pl.col("ATTACHMENT"))
-        .alias("ATTACHMENT")
-    )
-
-    return opportunity_areas_df
-
-
-def calculate_df_dummy_feature_value_counts_per_opportunity_area(
-    opportunity_areas_df: pl.DataFrame,
-) -> pl.DataFrame:
-    """
-    Calculate value counts per opportunity area for relevant features.
-
-    Args:
-        opportunity_areas_df (pl.DataFrame): dataframe of UPRNs within opportunity areas with relevant features
-    Returns:
-        pl.DataFrame: dataframe with value counts per opportunity area for relevant features
-    """
-    keep_cols = ["cluster_id", "UPRN", "ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
-    dummy_cols = ["ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
-
-    # Get total UPRNs per opportunity area
-    totals_df = opportunity_areas_df.group_by("cluster_id").agg(
-        pl.col("UPRN").count().alias("n_UPRNs")
-    )
-
-    # Get value counts per feature
-    opportunity_areas_df = (
-        opportunity_areas_df.select(keep_cols)
-        .to_dummies(columns=dummy_cols)
-        .group_by("cluster_id")
-        .agg(pl.all().sum())
-        .drop("UPRN")
-    )
-
-    # Join total UPRN counts onto value counts
-    opportunity_areas_df = totals_df.join(
-        opportunity_areas_df, how="left", on="cluster_id"
-    )
-
-    return opportunity_areas_df
-
-
-def create_df_remaining_features_per_opportunity_area(
-    opportunity_areas_df: pl.DataFrame,
-    uprns_gdf: gpd.GeoDataFrame,
-) -> pl.DataFrame:
-    """
-    Create dataframe with remaining features per opportunity area:
-    - Median garden size
-    - HN zone flag
-    - City centre flag
-    TODO Remaining features to be added in future iterations (now set to `Unknown`):
-        - number of listed buildings
-        - number of off-gas properties
-        - proximity to coastline
-        - proximity to anchor load
-        - conservation area flag
-
-
-    Args:
-        opportunity_areas_df (pl.DataFrame): dataframe with value counts per opportunity area for relevant features
-        uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs with geometry and relevant features
-    Returns:
-        pl.DataFrame: dataframe with remaining features per opportunity area
-    """
-
-    # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with opportunity area geodataframe
+    print("len uprns before filtering:", len(uprns_gdf))
+    print("len clusters:", len(clusters_gdf))
+    # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with cluster geodataframe
     uprns_df = pl.from_pandas(
         uprns_gdf.sjoin(
-            areas_gdf[["cluster_id", "geometry"]], how="left", predicate="within"
+            clusters_gdf[["cluster_id", "geometry"]],
+            how="right",
+            predicate="within",
         ).drop(columns=["geometry"])
     )
+    print("len uprns after filtering to clusters:", len(uprns_df))
+    return uprns_df
 
-    # Average contigous outdoor space per opportunity area
-    median_outdoor_space = uprns_df.group_by("cluster_id").agg(
-        pl.col("max_contiguous_outdoor_space_area_m2")
-        .median()
-        .alias("median_outdoor_space")
+
+def extend_df_contextual_features(
+    clusters_df: pl.DataFrame,
+    uprns_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """
+    Extend clusters dataframe with contextual features by aggregating features at UPRN level to cluster level.
+    Contextual features added include:
+    - Attachment type proportions
+    - tenure type proportions
+    - EPC rating proportions
+    - Median outdoor space
+    - HN zone flag
+    - City centre flag
+    - number of properties in listed buildings
+    - number of off-gas properties
+    - proximity to coastline flag (within 1500m)
+    - protected area flag
+
+    Note that "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` column is added in the cluster.py,
+    so not explicitly included here as it is a feature of the clusters_df input to this function.
+
+    Args:
+        clusters_df (pl.DataFrame): dataframe of clusters with cluster_id and `within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` feature
+        uprns_df (pl.DataFrame): dataframe of UPRNs with cluster_id and relevant features for aggregation
+    Returns:
+        pl.DataFrame: dataframe with remaining features per cluster
+    """
+
+    dummy_cols = ["ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
+    # Get value counts per feature
+    dummy_contextual_feat_df = (
+        uprns_df.select(dummy_cols + ["cluster_id"])
+        .to_dummies(columns=dummy_cols)
+        .group_by("cluster_id")
+        .sum()
     )
 
-    # Join outdoor space to opportunity areas
-    opportunity_areas_df = opportunity_areas_df.join(
-        median_outdoor_space, how="left", on="cluster_id"
-    )
-
-    # Create HN zone and city centre flags per opportunity area - if any UPRN within the area is in a HN zone or city centre, then the whole area is flagged as being in a HN zone or city centre
-    hnz_city_centre_flags = uprns_df.group_by("cluster_id").agg(
-        pl.when(pl.col("in_hn_zone").any())
-        .then(pl.lit("Yes"))
-        .otherwise(pl.lit("No"))
-        .alias("in_hn_zone"),
-        pl.when(pl.col("in_city_centre").any())
-        .then(pl.lit("Yes"))
-        .otherwise(pl.lit("No"))
-        .alias("in_city_centre"),
-    )
-
-    opportunity_areas_df = opportunity_areas_df.join(
-        hnz_city_centre_flags, how="left", on="cluster_id"
-    )
-
-    # TODO add remaining features - the section below is temporary
-    new_cols = [
-        "n_uprns_listed_building",
-        "n_uprns_off_gas",
-        "near_coast_line",
-        "near_anchor_load",
-        "in_conservation_area",
+    # Keep only the columns that start with the dummy column prefixes, e.g. "ATTACHMENT_", "TENURE_", "CURRENT_ENERGY_RATING_"
+    dummy_cols_to_keep = [
+        col
+        for col in dummy_contextual_feat_df.columns
+        if any(col.startswith(prefix) for prefix in dummy_cols)
     ]
-
-    opportunity_areas_df = opportunity_areas_df.with_columns(
-        [pl.lit("Unknown").alias(col) for col in new_cols]
+    dummy_contextual_feat_df = dummy_contextual_feat_df.select(
+        ["cluster_id"] + dummy_cols_to_keep
     )
 
-    return opportunity_areas_df
+    # lower case column names
+    dummy_contextual_feat_df = dummy_contextual_feat_df.rename(
+        {
+            col: col.lower().replace(" ", "_").replace("-", "_")
+            for col in dummy_contextual_feat_df.columns
+        }
+    )
+
+    clusters_df = clusters_df.join(
+        dummy_contextual_feat_df, how="left", on="cluster_id"
+    )
+
+    contextual_feat_clusters_df = (
+        uprns_df.group_by("cluster_id")
+        .agg(
+            # median estimated energy consumption in 12 months (in kWh/m2)
+            pl.col("ENERGY_CONSUMPTION_CURRENT")
+            .median()
+            .alias("median_estimated_energy_consumption_12_months_kwh_per_m2"),
+            # median_outdoor_space
+            pl.col("max_contiguous_outdoor_space_area_m2")
+            .median()
+            .alias("median_outdoor_space_m2"),
+            # in_hn_zone flag
+            pl.when(pl.col("in_hn_zone").any())
+            .then(True)
+            .otherwise(False)
+            .alias("in_hn_zone"),
+            # in_city_centre flag
+            pl.when(pl.col("in_city_centre").any())
+            .then(True)
+            .otherwise(False)
+            .alias("in_city_centre"),
+            # n_uprns
+            pl.col("UPRN").n_unique().alias("n_UPRNs"),
+            # n_uprns_listed_building
+            pl.col("in_listed_building").sum().alias("n_uprns_in_listed_building"),
+            # n_uprns_solar_pv
+            pl.col("has_solar_pv").sum().alias("n_uprns_solar_pv"),
+            # n_uprns_off_gas
+            pl.col("off_gas").sum().alias("n_uprns_off_gas"),
+            # near_coastline flag
+            pl.col("within_1500m_coastline").any().alias("within_1500m_coastline"),
+            # in_conservation_area flag
+            pl.col("in_protected_area").any().alias("in_protected_area"),
+        )
+        .select(
+            [
+                "median_estimated_energy_consumption_12_months_kwh_per_m2",
+                "cluster_id",
+                "median_outdoor_space_m2",
+                "in_hn_zone",
+                "in_city_centre",
+                "n_UPRNs",
+                "n_uprns_in_listed_building",
+                "n_uprns_solar_pv",
+                "n_uprns_off_gas",
+                "within_1500m_coastline",
+                "in_protected_area",
+            ]
+        )
+    )
+
+    clusters_df = clusters_df.join(
+        contextual_feat_clusters_df, how="left", on="cluster_id"
+    )
+
+    # Add percentages used for sorting & filtering in the tool
+    # owner occupied, social rented, private rented percentages
+    tenure_cols = [
+        col for col in dummy_contextual_feat_df.columns if col.startswith("tenure_")
+    ]
+    clusters_df = clusters_df.with_columns(
+        [
+            (pl.col(col) / pl.col("n_UPRNs") * 100).alias("perc_" + col)
+            for col in tenure_cols
+        ]
+    )
+
+    return clusters_df
 
 
 if __name__ == "__main__":
     from asf_heat_pump_suitability.pipeline.transform import uprns
+    from asf_heat_pump_suitability import config
+    from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
     local_authorities = args.local_authorities
+    tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_residential_uprns_with_features.parquet"
+        config["output"]["dataset"]["residential_uprns_with_features"].format(
+            local_authority=local_authorities
+        )
     )
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
 
-    print(f"Loading {local_authorities} HN zone and city centre information...")
-    hnz_df = pl.read_parquet(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_residential_uprns_with_hn_zones_city_centres.parquet"
-    )
-    hnz_gdf = uprns.generate_gdf_uprn_coords(hnz_df).to_crs(epsg=27700)
-
-    uprns_gdf = uprns_gdf.merge(
-        hnz_gdf[["UPRN", "in_hn_zone", "in_city_centre"]], how="left", on="UPRN"
-    )
-
-    print("Loading deduplicated EPC data...")
-    # TODO change code so that it defaults to getting latest data
-    raw_epc_df = pl.read_parquet(
-        "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
-    )
-
     print("Loading opportunity areas...")
-    areas_gdf = gpd.read_file(
-        f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}_tech_polygons_with_clusterID.geojson"
+    clusters_gdf = gpd.read_file(
+        config["output"]["dataset"]["tech_clusters"].format(
+            local_authorities=local_authorities,
+            tolerance_m=tolerance_m,
+        ),
     ).to_crs(epsg=27700)
 
-    print("Processing EPC data...")
-    epc_df = process_df_epc_data(raw_epc_df)
-
-    print("Joining EPC data to UPRNs...")
-    uprns_gdf = join_df_epc_to_uprns(uprns_gdf, epc_df)
-
-    print("Filtering to opportunity areas...")
-    opportunity_areas_df = filter_df_uprns_to_opportunity_areas(
-        uprns_gdf=uprns_gdf, areas_gdf=areas_gdf
+    print("Filtering to clusters...")
+    uprns_df = filter_df_uprns_to_clusters(
+        uprns_gdf=uprns_gdf, clusters_gdf=clusters_gdf
     )
 
-    print("Calculate value counts per feature...")
-    opportunity_areas_df = calculate_df_dummy_feature_value_counts_per_opportunity_area(
-        opportunity_areas_df
+    print("Calculate remaining features per cluster...")
+    clusters_with_contextual_features_df = extend_df_contextual_features(
+        clusters_df=pl.from_pandas(
+            clusters_gdf.drop(columns="geometry")
+        ),  # drop geometry for now and use polars
+        uprns_df=uprns_df,
     )
-
-    print("Calculate remaining features per opportunity area...")
-    opportunity_areas_df = create_df_remaining_features_per_opportunity_area(
-        opportunity_areas_df=opportunity_areas_df, uprns_gdf=uprns_gdf
-    )
-
-    print("Remove clusters without any UPRNs within them...")
-    opportunity_areas_df = opportunity_areas_df.filter(pl.col("n_UPRNs") > 0)
 
     if args.save:
-        opportunity_areas_df = opportunity_areas_df.to_pandas().merge(
-            areas_gdf[["cluster_id", "geometry"]],
-            how="left",
-            on="cluster_id",
+        # Adding the geometry back to the clusters dataframe
+        clusters_with_contextual_features_df = (
+            clusters_with_contextual_features_df.to_pandas().merge(
+                clusters_gdf[["cluster_id", "geometry"]],
+                how="left",
+                on="cluster_id",
+            )
         )
 
-        # Saving as EPSG:4326 because we need lat/long for visualisation
-        opportunity_areas_df = gpd.GeoDataFrame(
-            opportunity_areas_df, geometry="geometry", crs="EPSG:27700"
-        ).to_crs(epsg=4326)
+        clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
+            clusters_with_contextual_features_df, geometry="geometry", crs="EPSG:27700"
+        )
 
-        opportunity_areas_df.to_file(
-            f"s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_cluster_contextual_features.geojson",
-            driver="GeoJSON",
+        save_utils.save_to_s3(
+            clusters_with_contextual_features_gdf,
+            config["output"]["dataset"]["clusters_tech_contextual_info"].format(
+                local_authorities=local_authorities,
+                tolerance_m=tolerance_m,
+            ),
         )
