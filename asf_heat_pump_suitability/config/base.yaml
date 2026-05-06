@@ -113,6 +113,20 @@ constant:
   cardiff:
     la_names: "Cardiff"
     grid_squares: "ST"
+  dudley:
+    la_names: "Dudley"
+    grid_squares: "SO"
+  vale_of_glamorgan:
+    la_names: "Vale of Glamorgan"
+    grid_squares:
+      - "ST"
+      - "SS"
+  midlothian:
+    la_names: "Midlothian"
+    grid_squares: "NT"
+  glasgow:
+    la_names: "Glasgow City"
+    grid_squares: "NS"
   target_crs: 27700 # British National Grid
   tech_types:
     individual: "Individual solution"
