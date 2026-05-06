@@ -191,6 +191,7 @@ if __name__ == "__main__":
             "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
         )
     else:
+        # TODO: needs to be updated to enable loading for Scotland!
         inspire_file_names = get_datasets.load_gdf_inspire_land_parcels(
             path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EW.geojson"
         )

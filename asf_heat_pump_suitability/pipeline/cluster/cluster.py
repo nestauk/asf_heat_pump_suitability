@@ -86,10 +86,11 @@ def generate_gdf_clusters(
     """
     gdfs = []
 
-    # Create Voronoi polygons and overlay physical barriers
+    # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
     for boundary in boundary_gdf["geometry"].unique():
         voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
 
+        # One cell per building
         cells_gdf = overlay_gdf_physical_barriers(
             voronoi_gdf=voronoi_gdf,
             tech_gdf=tech_gdf,
@@ -100,27 +101,37 @@ def generate_gdf_clusters(
         # gdfs.append(reassign_gdf_communal_networked(cells_gdf))
         gdfs.append(cells_gdf)
 
-    # Generate final clusters
+    # Concatenate all boundary geodataframes together to get a geodataframe of all cells for the whole area of interest
     if len(gdfs) > 1:
-        clusters_gdf = pd.concat(gdfs)
+        cells_gdf = pd.concat(gdfs)
     else:
-        clusters_gdf = gdfs[0]
+        cells_gdf = gdfs[0]
 
-    # anchor property tech reassignment
+    # Tech reassignment for cells within a certain distance of anchor properties
     reassigned_gdf = reassign_gdf_near_anchor_properties(
         tech_gdf=tech_gdf,
         combined_anchor_gdf=combined_anchor_gdf,
         radius=radius,
     )
-    clusters_gdf["assigned_tech"] = clusters_gdf.ID.map(
+
+    cells_gdf["assigned_tech"] = cells_gdf.ID.map(
         reassigned_gdf.set_index("ID").to_dict()["assigned_tech"]
     )
 
-    # TODO add ID column for clusters
+    # Add "within_{radius}m_from_anchor_load" as a column to cells_gdf
+    cells_gdf = cells_gdf.merge(
+        reassigned_gdf[["ID", f"within_{radius}m_from_anchor_load"]],
+        on="ID",
+        how="left",
+    )
+
+    # Creating the clusters
     clusters_gdf = (
-        clusters_gdf.dissolve(by="assigned_tech")
+        cells_gdf.dissolve(by="assigned_tech")
         .explode()
-        .reset_index()[["assigned_tech", "geometry"]]
+        .reset_index()[
+            ["assigned_tech", "geometry", f"within_{radius}m_from_anchor_load"]
+        ]
     )
 
     # Create an ID for each geometry that starts with the tech code and ends with a unique number
@@ -560,7 +571,7 @@ def reassign_gdf_near_anchor_properties(
         tech_gdf["assigned_tech"],
     )
     # add column with True if near anchor, False if not
-    tech_gdf["within_{radius}m_from_anchor_property"] = np.where(
+    tech_gdf[f"within_{radius}m_from_anchor_load"] = np.where(
         (tech_gdf["distance_m"]).notna(), True, False
     )
     tech_gdf = tech_gdf.drop("distance_m", axis=1)
@@ -621,6 +632,7 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
+    tolerance_m = config["constant"]["clustering"]["tolerance_m"]
     list_las = config["constant"][local_authorities]["la_names"]
 
     tech_gdf = (
@@ -669,14 +681,14 @@ if __name__ == "__main__":
     )
 
     if args.save:
-        # Simplify geometry for file size to tolerance of 5m
-        tolerance = 5
+        # Simplify geometry for file size using tolerance
         clusters_gdf["geometry"] = clusters_gdf["geometry"].simplify(
-            tolerance=tolerance
+            tolerance=tolerance_m
         )
         save_utils.save_to_s3(
             clusters_gdf,
             config["output"]["dataset"]["tech_clusters"].format(
-                local_authorities=args.local_authorities, tolerance=tolerance
+                local_authorities=local_authorities,
+                tolerance_m=tolerance_m,
             ),
         )
