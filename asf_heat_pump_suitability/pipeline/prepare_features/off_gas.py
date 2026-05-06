@@ -133,7 +133,7 @@ def extend_df_off_gas(
             max_distance=max_distance_m,  # maximum distance in metres
             distance_col="distance_to_postcode_m",  # distance in metres
         )
-        .sort_values("distance_to_nearest_postcode_m", ascending=True)
+        .sort_values("distance_to_postcode_m", ascending=True)
         .drop_duplicates(subset=["UPRN"])
         .drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
     )
