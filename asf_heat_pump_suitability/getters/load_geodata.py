@@ -133,7 +133,6 @@ def _extend_gdf_hn_zone_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
     gdf["HNZoneID"] = gdf[id_col]
     gdf = gdf.rename(columns={id_col: f"original_{id_col}"})
-
     print(
         f"Using Heat Network Zone {id_col} column as ID, after renaming to HNZoneID. Other ID options: {id_cols}"
     )
@@ -341,7 +340,7 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
     return poi
 
 
-def load_gdf_code_point_data() -> gpd.GeoDataFrame:
+def load_gdf_code_points() -> gpd.GeoDataFrame:
     """
     Load GB code point geodataframe for postcode lookup and clean postcode column by removing spaces.
     (CRS: EPSG:27700)
@@ -350,7 +349,7 @@ def load_gdf_code_point_data() -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: geodataframe of GB code points with geometry and POSTCODE columns.
     """
     code_point_gdf = gpd.read_file(
-        config["data"]["geodata"]["gb_code_point_data"],
+        config["data"]["geodata"]["gb_code_points"],
         layers="codepoint",
     )
 

@@ -1,7 +1,9 @@
 from typing import List
-from asf_heat_pump_suitability.getters.get_datasets import get_df_spa_offgasgrid
+
 import polars as pl
 import geopandas as gpd
+
+from asf_heat_pump_suitability.getters.get_datasets import get_df_spa_offgasgrid
 
 
 def process_off_gas_data() -> List[str]:
@@ -63,7 +65,7 @@ def extend_df_off_gas(
 
     print(
         "Number of UPRNs with POSTCODE using EPC only:",
-        features_df.filter(pl.col("POSTCODE").is_not_null()).shape[0],
+        features_df.filter(pl.col("POSTCODE").is_not_null()).height,
     )
 
     # Step 1: Use EPC postcode of nearest UPRN in the same building if available
@@ -80,7 +82,7 @@ def extend_df_off_gas(
         .set_geometry("geometry")
     )
 
-    # features_gdf will have UPRN, geometry and id_col (building ID) columns which will be used to find nearest postcode within the same building where available
+    # This gdf will have UPRN, geometry and id_col (building ID) columns which will be used to find nearest postcode within the same building where available
     features_gdf = (
         uprns_gdf[["UPRN", "geometry"]]
         .merge(features_df[[id_col, "UPRN"]].to_pandas(), on="UPRN", how="right")
@@ -97,9 +99,11 @@ def extend_df_off_gas(
                 how="left",
                 distance_col="distance_to_nearest_postcode_m",
             )
-            .sort_values("distance_to_nearest_postcode_m", ascending=True)
-            .drop_duplicates(subset=["UPRN_left"])
-        )[["UPRN_left", id_col + "_left", "POSTCODE"]]
+        )
+        .sort_values("distance_to_nearest_postcode_m", ascending=True)
+        .drop_duplicates(subset=["UPRN_left"])[
+            ["UPRN_left", id_col + "_left", "POSTCODE"]
+        ]
         .rename(columns={"UPRN_left": "UPRN", id_col + "_left": id_col})
     )
 
@@ -108,7 +112,7 @@ def extend_df_off_gas(
 
     print(
         "Number of UPRNs with POSTCODE after mapping postcodes from same building:",
-        postcodes_df.filter(pl.col("POSTCODE").is_not_null()).shape[0],
+        postcodes_df.filter(pl.col("POSTCODE").is_not_null()).height,
     )
 
     # Step 2: Use EPC postcode of nearest code point within a specified distance
@@ -126,7 +130,7 @@ def extend_df_off_gas(
             max_distance=max_distance_m,  # maximum distance in metres
             distance_col="distance_to_postcode_m",  # distance in metres
         )
-        .sort_values("distance_to_nearest_postcode_m", ascending=True)
+        .sort_values("distance_to_postcode_m", ascending=True)
         .drop_duplicates(subset=["UPRN"])
         .drop(columns="index_right")[["UPRN", "POSTCODE", "distance_to_postcode_m"]]
     )
