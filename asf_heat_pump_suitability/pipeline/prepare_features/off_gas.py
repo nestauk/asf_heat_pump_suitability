@@ -1,12 +1,9 @@
 from typing import List
 
 import polars as pl
-import pandas as pd
 import geopandas as gpd
 
-from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters.get_datasets import get_df_spa_offgasgrid
-from asf_heat_pump_suitability.pipeline.transform import uprns
 
 
 def process_off_gas_data() -> List[str]:
