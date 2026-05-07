@@ -1,60 +1,60 @@
 data:
   geodata:
     # OpenMap UPRN with coordinates
-    uk_osopen_uprn: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/osopenuprn_202510_csv.zip"
+    uk_osopen_uprn: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_csv.zip"
     # OpenMap Local Geopackage
-    gb_os_openmap_local: "s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg"
+    gb_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares
-    grid_square_os_openmap_local: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+    grid_square_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
     # OpenMap Green space layers for certain grid squares
-    grid_square_os_openmap_greenspace: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/{square}/{square}_{layer}.shp"
+    grid_square_os_openmap_greenspace: "s3://asf-local-heat-planning-tool/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/{square}/{square}_{layer}.shp"
     # OpenRoad Local road data for GB
-    gb_os_openroad: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/oproad_essh_gb/"
+    gb_os_openroad: "s3://asf-local-heat-planning-tool/inputs/geodata/oproad_essh_gb/"
     # OpenRoad Local road data for certain grid squares
-    grid_square_os_openroad: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/oproad_essh_gb/{square}_RoadLink.shp"
+    grid_square_os_openroad: "s3://asf-local-heat-planning-tool/inputs/geodata/oproad_essh_gb/{square}_RoadLink.shp"
     # UK Points of Interest
-    UK_poi_locations: "s3://asf-heat-pump-suitability/source_data/poi_uk.gpkg"
+    UK_poi_locations: "s3://asf-local-heat-planning-tool/inputs/geodata/poi_uk.gpkg"
     # OpenMap Code Point GB data for postcode lookup
     # TODO: move this file to a different S3 location as it's not just Plymouth data - it's GB data
-    gb_code_points: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/codepo_gb.gpkg"
+    gb_code_points: "s3://asf-local-heat-planning-tool/inputs/geodata/codepo_gb.gpkg"
     # GB coastline boundaries
-    gb_coast_boundaries: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
+    gb_coast_boundaries: "s3://asf-local-heat-planning-tool/inputs/geodata/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
     # Path to folder with UPRN to country mapping files for GB
-    gb_uprn_country_mapping: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/NSUL_DEC_2025/"
+    gb_uprn_country_mapping: "s3://asf-local-heat-planning-tool/inputs/geodata/NSUL_DEC_2025/"
 
     boundaries:
       # UK LA boundaries
-      UK_ons_lad_bounds: "s3://asf-heat-pump-suitability/source_data/Local_Authority_Districts_December_2023_Boundaries_UK_BFE_-2600600853110041429/LAD_DEC_2023_UK_BFE.shp"
+      UK_ons_lad_bounds: "s3://asf-local-heat-planning-tool/inputs/geodata/Local_Authority_Districts_December_2023_Boundaries_UK_BFE_-2600600853110041429/LAD_DEC_2023_UK_BFE.shp"
 
     heat_network_zones:
       # Plymouth Heat Network zones
-      plymouth: "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Plymouth.gpkg"
-      greater_manchester_las: "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Greater-Manchester.gpkg"
+      plymouth: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_network_desnz_data/heat-network-zone-map-Plymouth.gpkg"
+      greater_manchester_las: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_network_desnz_data/heat-network-zone-map-Greater-Manchester.gpkg"
 
     gb_spatial_signatures:
       # UrbanGrammarAI Spatial Signatures GB simplified
-      simplified: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB_simplified.gpkg"
+      simplified: "s3://asf-local-heat-planning-tool/inputs/geodata/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB_simplified.gpkg"
       # UrbanGrammarAI Spatial Signatures GB detailed
-      full: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB.gpkg"
+      full: "s3://asf-local-heat-planning-tool/inputs/geodata/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB.gpkg"
 
     council_tax_data:
       # plymouth council tax data
-      plymouth: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/PLYMOUTH_CTBANDS_ONSUD_202512.csv"
+      plymouth: "s3://asf-local-heat-planning-tool/inputs/geodata/PLYMOUTH_CTBANDS_ONSUD_202512.csv"
 
     # Names of inspire file bounds for England, Wales and Scotland
-    inspire_file_names: "s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EWS.geojson"
+    inspire_file_names: "s3://asf-local-heat-planning-tool/inputs/inspire/inspire_file_bounds_EWS.geojson"
 
   epc:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
     commercial:
-      EW: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v092025_EPC_NonDomestic_EW.csv"
-      S: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/v122025_EPC_NonDomestic_S.csv"
+      EW: "s3://asf-local-heat-planning-tool/inputs/epc/v092025_EPC_NonDomestic_EW.csv"
+      S: "s3://asf-local-heat-planning-tool/inputs/epc/v122025_EPC_NonDomestic_S.csv"
 
   # Preprocessed data
   processed:
-    non_domestic_poi_categories: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/non_residential_poi_categories.csv"
-    plymouth_residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet"
-    poi_anchor_properties: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/poi_anchor_properties_gb.geojson"
+    non_domestic_poi_categories: "s3://asf-local-heat-planning-tool/inputs/processed/non_residential_poi_categories.csv"
+    plymouth_residential_uprns: "s3://asf-local-heat-planning-tool/outputs/plymouth_residential_uprns.parquet"
+    poi_anchor_properties: "s3://asf-local-heat-planning-tool/inputs/processed/poi_anchor_properties_gb.geojson"
 
 constant:
   id:
@@ -153,19 +153,19 @@ constant:
 output:
   dataset:
     # Residential UPRNs and their point geometries
-    residential_uprns: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_residential_uprns.parquet"
+    residential_uprns: "s3://asf-local-heat-planning-tool/outputs/{local_authority}/{local_authority}_residential_uprns.parquet"
     # Residential UPRNs with all features for modelling, mapping and aggregation
-    residential_uprns_with_features: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authority}/{local_authority}_with_features.parquet"
+    residential_uprns_with_features: "s3://asf-local-heat-planning-tool/outputs/{local_authority}/{local_authority}_with_features.parquet"
     # Residential UPRNs with their most suitable low carbon heat technology group
-    uprns_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
+    uprns_most_suitable_tech: "s3://asf-local-heat-planning-tool/outputs/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
     # Residential buildings with their most suitable low carbon heat technology group
-    buildings_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_buildings_most_suitable_tech.parquet"
+    buildings_most_suitable_tech: "s3://asf-local-heat-planning-tool/outputs/{local_authorities}/{local_authorities}_buildings_most_suitable_tech.parquet"
     # Buildings containing domestic UPRNs aggregated into groups of neighbouring clusters of the same tech type
-    tech_clusters: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_clustered_tech_polygons_simplified_{tolerance_m}m.geojson"
+    tech_clusters: "s3://asf-local-heat-planning-tool/outputs/{local_authorities}/{local_authorities}_clustered_tech_polygons_simplified_{tolerance_m}m.geojson"
     # Opportunity areas with most suitable tech, cluster ID, contextual data
-    clusters_tech_contextual_info: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_clusters_contextual_features_{tolerance_m}m.geojson"
+    clusters_tech_contextual_info: "s3://asf-local-heat-planning-tool/outputs/{local_authorities}/{local_authorities}_clusters_contextual_features_{tolerance_m}m.geojson"
   model:
-    block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"
+    block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_building_classifier.pkl"
 
 #----------------------------------------------------------------#
 # DEPRECATING
