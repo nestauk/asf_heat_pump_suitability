@@ -359,6 +359,8 @@ def load_gdf_inspire_land_parcels(path: str, **kwargs) -> gpd.GeoDataFrame:
     gdf = gpd.read_file(path, engine="pyogrio", **kwargs)
 
     return gdf
+
+
 def load_gdf_code_points() -> gpd.GeoDataFrame:
     """
     Load GB code point geodataframe for postcode lookup and clean postcode column by removing spaces.
