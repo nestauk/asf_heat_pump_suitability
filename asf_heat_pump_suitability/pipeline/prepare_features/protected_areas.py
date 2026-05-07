@@ -1,6 +1,5 @@
 import geopandas as gpd
 import pandas as pd
-import numpy as np
 import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import get_datasets
@@ -149,3 +148,28 @@ def generate_df_conservation_area_data_availability(
     )
 
     return df
+
+
+def extend_df_protected_area_bool(
+    features_df: pl.DataFrame,
+    protected_areas_df: pd.DataFrame,
+) -> pl.DataFrame:
+    """
+    Extend `features_df` with boolean column indicating whether each UPRN is within a protected area.
+
+    Args:
+        features_df (pl.DataFrame): Dataframe containing UPRNs to be labelled with protected area boolean flag.
+        protected_areas_df (pd.DataFrame): Dataframe containing UPRNs and boolean flag indicating whether each UPRN is within a protected area.
+
+    Returns:
+        pl.DataFrame: Input dataframe extended with boolean column indicating whether each UPRN is within a protected area.
+    """
+
+    features_df = features_df.join(
+        protected_areas_df.select(["UPRN", "in_protected_area"]),
+        how="left",
+        on="UPRN",
+        # TODO: double check that filling with False is appropriate in all cases
+    ).with_columns(pl.col("in_protected_area").fill_null(False))
+
+    return features_df
