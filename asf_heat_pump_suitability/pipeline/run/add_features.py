@@ -1,9 +1,9 @@
 """
 Script to add features to UPRNs:
 - flat / apartment property type boolean flag
-- boolean flags to indicate whether UPRN is in a block of flats; in a heat network zone; and in a city centre
+- boolean flags to indicate whether UPRN is in a block of flats; in a heat network zone; and in a city centre; in a listed building; off-gas; near the coast; and in a protected area
 - estimated max contiguous and total outdoor space (m2)
-- EPC-derived features of tenure; attachment type of property; and current energy rating
+- EPC-derived features of tenure; attachment type of property; and current energy rating, solar PV info, estimated current energy consumption.
 
 Run:
 python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES
@@ -143,9 +143,7 @@ if __name__ == "__main__":
         "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet"
     )
     # Load trained block of flats classifier model
-    clf = base_getters.load_pickle(
-        config["output"]["save_as"]["model"]["block_of_flats_model"]
-    )
+    clf = base_getters.load_pickle(config["output"]["model"]["block_of_flats_model"])
     features_df = train_model.extend_df_in_block_of_flats_label(
         uprns_df=features_df,
         mapping=uprn_building_id_dict,
@@ -193,6 +191,7 @@ if __name__ == "__main__":
             "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
         )
     else:
+        # TODO: needs to be updated to enable loading for Scotland!
         inspire_file_names = get_datasets.load_gdf_inspire_land_parcels(
             path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EW.geojson"
         )
@@ -207,10 +206,6 @@ if __name__ == "__main__":
             ],
             ignore_index=False,
         )
-
-    buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
-        layer="building", grid_squares=grid_squares
-    )
 
     # Get intersection of building footprint polygons and land polygons
     intersection_gdf = outdoor_space.generate_gdf_building_intersections(
@@ -243,7 +238,6 @@ if __name__ == "__main__":
 
     del (
         land_parcels_gdf,
-        buildings_gdf,
         intersection_gdf,
         outdoor_space_gdf,
         uprns_space_df,
@@ -252,18 +246,104 @@ if __name__ == "__main__":
     # ------------------------ #
     # CONTEXTUAL FEATURES
     # ------------------------ #
-    # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE
+    # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE, SOLAR PV info, ESTIMATED CURRENT ENERGY CONSUMPTION and POSTCODE
     epc_df = pl.read_parquet(
         config["data"]["epc"]["domestic"],
-        columns=["UPRN", "TENURE", "BUILT_FORM", "CURRENT_ENERGY_RATING"],
+        columns=[
+            "UPRN",
+            "TENURE",
+            "BUILT_FORM",
+            "CURRENT_ENERGY_RATING",
+            "SOLAR_WATER_HEATING_FLAG",
+            "PHOTO_SUPPLY",
+            "ENERGY_CONSUMPTION_CURRENT",
+            "POSTCODE",
+        ],
     )
+
     features_df = epc.extend_df_epc_features(
         df=features_df,
         epc_df=epc_df,
-        columns=["UPRN", "TENURE", "CURRENT_ENERGY_RATING"],
+        columns=[
+            "UPRN",
+            "TENURE",
+            "CURRENT_ENERGY_RATING",
+            "SOLAR_WATER_HEATING_FLAG",
+            "ENERGY_CONSUMPTION_CURRENT",
+            "PHOTO_SUPPLY",
+            "POSTCODE",
+        ],
     )
 
-    del epc_df
+    # Add listed building boolean flag
+    from asf_heat_pump_suitability.pipeline.prepare_features import (
+        listed_buildings,
+    )
+
+    # Load listed buildings geodataframe for Great Britain
+    listed_buildings_gdf = listed_buildings.transform_gdf_listed_buildings(nation="GB")
+
+    features_df = listed_buildings.extend_df_listed_building_bool(
+        features_df=features_df,
+        uprns_gdf=uprns_gdf,
+        buildings_gdf=buildings_gdf,
+        listed_buildings_gdf=listed_buildings_gdf,
+    )
+
+    del listed_buildings_gdf
+
+    # Add number of off-gas properties
+    from asf_heat_pump_suitability.pipeline.prepare_features import (
+        off_gas,
+    )
+
+    off_gas_list = off_gas.process_off_gas_data()
+
+    code_point_gdf = load_geodata.load_gdf_code_points()
+
+    features_df = off_gas.extend_df_off_gas(
+        features_df=features_df,
+        uprns_gdf=uprns_gdf,
+        code_point_gdf=code_point_gdf,
+        off_gas_list=off_gas_list,
+        id_col=config["constant"]["id"]["building"],
+        max_distance_m=500,  # to be conservative
+    )
+
+    coast_gdf = load_geodata.load_gdf_gb_coast_boundaries()
+
+    from asf_heat_pump_suitability.pipeline.transform import coast
+
+    features_df = coast.extend_df_near_coastline_bool(
+        features_df=features_df,
+        uprns_gdf=uprns_gdf,
+        coast_gdf=coast_gdf,
+        distance_threshold_m=1500,
+        simplify_tolerance_m=150,
+    )
+
+    del coast_gdf
+
+    # Add conservation area boolean flag
+    from asf_heat_pump_suitability.pipeline.prepare_features import (
+        protected_areas,
+    )
+
+    uprn_to_country_dict = load_geodata.load_transform_dict_uprn_to_country_mapping()
+
+    # Map UPRNs to their corresponding countries
+    uprns_gdf["COUNTRY"] = uprns_gdf["UPRN"].map(uprn_to_country_dict)
+
+    uprns_protected_areas_df = protected_areas.load_transform_df_uprn_in_protected_area(
+        gdf=uprns_gdf
+    )
+
+    features_df = protected_areas.extend_df_protected_area_bool(
+        features_df=features_df,
+        protected_areas_df=uprns_protected_areas_df,
+    )
+
+    del uprns_protected_areas_df
 
     # ------------------------ #
     # SAVE OUTPUTS

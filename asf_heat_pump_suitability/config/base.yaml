@@ -14,6 +14,13 @@ data:
     grid_square_os_openroad: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/oproad_essh_gb/{square}_RoadLink.shp"
     # UK Points of Interest
     UK_poi_locations: "s3://asf-heat-pump-suitability/source_data/poi_uk.gpkg"
+    # OpenMap Code Point GB data for postcode lookup
+    # TODO: move this file to a different S3 location as it's not just Plymouth data - it's GB data
+    gb_code_points: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/codepo_gb.gpkg"
+    # GB coastline boundaries
+    gb_coast_boundaries: "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
+    # Path to folder with UPRN to country mapping files for GB
+    gb_uprn_country_mapping: "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/NSUL_DEC_2025/"
 
     boundaries:
       # UK LA boundaries
@@ -108,6 +115,20 @@ constant:
   cardiff:
     la_names: "Cardiff"
     grid_squares: "ST"
+  dudley:
+    la_names: "Dudley"
+    grid_squares: "SO"
+  vale_of_glamorgan:
+    la_names: "Vale of Glamorgan"
+    grid_squares:
+      - "ST"
+      - "SS"
+  midlothian:
+    la_names: "Midlothian"
+    grid_squares: "NT"
+  glasgow:
+    la_names: "Glasgow City"
+    grid_squares: "NS"
   target_crs: 27700 # British National Grid
   tech_types:
     individual: "Individual solution"
@@ -123,6 +144,8 @@ constant:
     heat_networks: "DHNZ"
   ID:
     building: "ID"
+  clustering:
+    tolerance_m: 5 # tolerance in m (metres) used to simplify clusters geometries
 
 output:
   dataset:
@@ -135,10 +158,11 @@ output:
     # Residential buildings with their most suitable low carbon heat technology group
     buildings_most_suitable_tech: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_buildings_most_suitable_tech.parquet"
     # Buildings containing domestic UPRNs aggregated into groups of neighbouring clusters of the same tech type
-    tech_clusters: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_clustered_tech_polygons_simplified_{tolerance}m.geojson"
-  save_as:
-    model:
-      block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"
+    tech_clusters: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_clustered_tech_polygons_simplified_{tolerance_m}m.geojson"
+    # Opportunity areas with most suitable tech, cluster ID, contextual data
+    clusters_tech_contextual_info: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/{local_authorities}/{local_authorities}_clusters_contextual_features_{tolerance_m}m.geojson"
+  model:
+    block_of_flats_model: "s3://asf-heat-pump-suitability/local_heat_planning/outputs/models/block_of_flats_building_classifier.pkl"
 
 #----------------------------------------------------------------#
 # DEPRECATING

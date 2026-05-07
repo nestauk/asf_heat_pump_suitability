@@ -3,6 +3,7 @@ import geopandas as gpd
 import os
 import pandas as pd
 from typing import Optional, List
+import boto3
 import s3fs
 
 from osbng import grids
@@ -129,10 +130,12 @@ def _extend_gdf_hn_zone_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
     id_cols = [col for col in gdf.columns if "ID" in col]
     id_col = id_cols[0]
-    print(f"Using Heat Network Zone {id_col} column as ID. Other options: {id_cols}")
 
-    gdf = gdf.rename(columns={id_col: f"original_{id_col}"})
     gdf["HNZoneID"] = gdf[id_col]
+    gdf = gdf.rename(columns={id_col: f"original_{id_col}"})
+    print(
+        f"Using Heat Network Zone {id_col} column as ID, after renaming to HNZoneID. Other ID options: {id_cols}"
+    )
     return gdf
 
 
@@ -335,3 +338,94 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
     print(f"POI CRS: {poi.crs}")
 
     return poi
+
+
+def load_gdf_code_points() -> gpd.GeoDataFrame:
+    """
+    Load GB code point geodataframe for postcode lookup and clean postcode column by removing spaces.
+    (CRS: EPSG:27700)
+
+    Returns:
+        gpd.GeoDataFrame: geodataframe of GB code points with geometry and POSTCODE columns.
+    """
+    code_point_gdf = gpd.read_file(
+        config["data"]["geodata"]["gb_code_points"],
+        layers="codepoint",
+    )
+
+    print(
+        f"GB code point geodataframe successfully loaded with CRS {code_point_gdf.crs}."
+    )
+
+    code_point_gdf["POSTCODE"] = code_point_gdf["postcode"].str.replace(" ", "")
+    return code_point_gdf
+
+
+def load_gdf_gb_coast_boundaries():
+    """
+    Load GB coastline boundaries geodataframe and dissolve into a single geometry.
+    (CRS: EPSG:27700)
+
+    Returns:
+        gpd.GeoDataFrame: geodataframe with single geometry of GB coastline boundaries.
+    """
+
+    coast_gdf = gpd.read_file(
+        config["data"]["geodata"]["gb_coast_boundaries"],
+    )
+
+    # Dissolve coastline boundaries into a single geometry
+    coast_gdf = gpd.GeoDataFrame(
+        geometry=[coast_gdf.geometry.union_all()], crs=coast_gdf.crs
+    )
+
+    print(
+        f"GB coastline boundaries geodataframe successfully loaded with CRS {coast_gdf.crs}."
+    )
+    return coast_gdf
+
+
+def load_transform_dict_uprn_to_country_mapping() -> dict:
+    """
+    Load and transform the UPRN to country mapping data from S3.
+
+    Returns:
+        dict: A dictionary mapping UPRN to corresponding country information.
+    """
+
+    print("Loading UPRN to country mapping...")
+    s3_client = boto3.client("s3")
+
+    path = config["data"]["geodata"]["gb_uprn_country_mapping"]
+    bucket_name = path.split("s3://")[1].split("/")[0]
+    prefix = path.split(f"s3://{bucket_name}/")[1]
+
+    response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+    files = [
+        f"s3://{bucket_name}/{obj['Key']}"
+        for obj in response.get("Contents", [])
+        if obj["Key"].endswith(".csv")
+    ]
+
+    uprn_to_country_df = pd.concat(
+        [pd.read_csv(file, usecols=["UPRN", "PCDS", "ctry25cd"]) for file in files],
+        ignore_index=True,
+    )
+
+    uprn_to_country_df["COUNTRY"] = (
+        uprn_to_country_df["ctry25cd"]
+        .str[0]
+        .map(
+            {
+                "E": "England",
+                "W": "Wales",
+                "S": "Scotland",
+            }
+        )
+    )
+
+    uprn_to_country_dict = dict(
+        zip(uprn_to_country_df["UPRN"], uprn_to_country_df["COUNTRY"])
+    )
+
+    return uprn_to_country_dict

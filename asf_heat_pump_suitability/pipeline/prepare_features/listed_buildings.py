@@ -29,21 +29,96 @@ def generate_df_epc_listed_buildings(
     return pl.concat(dfs, how="vertical")
 
 
-def transform_gdf_listed_buildings(nation: str) -> gpd.GeoDataFrame:
+def transform_gdf_listed_buildings(nation: str = "GB") -> gpd.GeoDataFrame:
     """
     Load and transform listed buildings polygons dataset for specified nation.
 
     Args:
-        nation (str): nation to load listed buildings data for. Options: "England"; "Scotland"; "Wales".
+        nation (str): nation to load listed buildings data for. Options: "England"; "Scotland"; "Wales"; "GB". Defaults to "GB" which loads data for all Great Britain.
 
     Returns:
         gpd.GeoDataFrame: listed buildings dataset for specified nation with grade and geometry columns.
     """
     gdf = get_datasets.load_gdf_listed_buildings(nation, columns=["geometry"])
     gdf = gdf.drop_duplicates(subset="geometry")
-    gdf["listed_building"] = True
+    gdf["in_listed_building"] = True
 
     return gdf
+
+
+def extend_df_listed_building_bool(
+    features_df: pl.DataFrame,
+    uprns_gdf: gpd.GeoDataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
+    listed_buildings_gdf: gpd.GeoDataFrame,
+) -> pl.DataFrame:
+    """
+    Add boolean column to features_df indicating whether UPRN is in a listed building.
+
+    Args:
+        features_df (pl.DataFrame): dataframe with one row per UPRN and UPRN column.
+        uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with point geometries for each UPRN.
+        buildings_gdf (gpd.GeoDataFrame): GeoDataFrame of building footprints with geometry column.
+        listed_buildings_gdf (gpd.GeoDataFrame): GeoDataFrame of listed buildings with geometry column.
+            Can be point or polygon geometries.
+
+    Returns:
+        pl.DataFrame: input features_df with new boolean column `in_listed_building` indicating whether UPRN is in a listed building.
+    """
+
+    # Separate geoemtries into points and polygons and spatial join separately to account
+
+    # Identify listed buildings that have polygon geoemetries
+    listed_polygons_gdf = listed_buildings_gdf[
+        listed_buildings_gdf.geometry.type.isin(["Polygon", "MultiPolygon"])
+    ][["geometry", "in_listed_building"]]
+
+    # Identify listed buildings that have point geometries
+    listed_points_gdf = listed_buildings_gdf[
+        listed_buildings_gdf.geometry.type.isin(["Point", "MultiPoint"])
+    ][["geometry", "in_listed_building"]]
+
+    # TODO: we need to double check that this isn't labelling buildings which touch a listed building on one edge as 'listed'.
+    # Join for polygons: We want buildings that touch/overlap listed building polygons
+    joined_polys_gdf = buildings_gdf.sjoin(
+        listed_polygons_gdf, how="inner", predicate="intersects"
+    )
+
+    # Join for points: We want buildings that contain the listed building points
+    joined_pts_gdf = buildings_gdf.sjoin(
+        listed_points_gdf, how="inner", predicate="contains"
+    )
+
+    # Combine joined polygons and points
+    joined_gdf = pd.concat([joined_polys_gdf, joined_pts_gdf], ignore_index=True)
+
+    # Spatial join UPRNs with listed buildings to label UPRNs in listed buildings.
+    uprns_gdf = (
+        uprns_gdf.sjoin(
+            joined_gdf[["geometry", "in_listed_building"]],
+            how="left",
+            predicate="intersects",
+        )
+        .fillna({"in_listed_building": False})
+        .drop(columns="index_right")
+    )
+
+    # We group by UPRN and take 'any' (True if any match is True)
+    uprns_gdf = (
+        uprns_gdf.groupby("UPRN")["in_listed_building"]
+        .max()
+        .fillna(False)
+        .reset_index()
+    )
+
+    # Extend features_df with listed building flag
+    features_df = features_df.join(
+        pl.from_pandas(uprns_gdf[["UPRN", "in_listed_building"]]),
+        how="left",
+        on="UPRN",
+    )
+
+    return features_df
 
 
 def chunk_sjoin_df_epc_listed_buildings(
