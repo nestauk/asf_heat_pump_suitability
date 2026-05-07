@@ -6,7 +6,7 @@ import geopandas as gpd
 import logging
 import pandas as pd
 import polars as pl
-from asf_heat_pump_suitability.getters import get_datasets
+from asf_heat_pump_suitability.getters import load_geodata
 from asf_heat_pump_suitability.utils import geo_utils
 
 
@@ -96,7 +96,7 @@ def generate_gdf_building_intersections(
     return gdf
 
 
-def transform_gdf_land_parcels(land_parcel_file: str) -> gpd.GeoDataFrame:
+def load_transform_gdf_land_parcels(land_parcel_file: str) -> gpd.GeoDataFrame:
     """
     Load and transform land parcel file to produce GeoDataFrame with unique National Cadastral Reference, land extent
     geometry, and land area (m2).
@@ -109,11 +109,11 @@ def transform_gdf_land_parcels(land_parcel_file: str) -> gpd.GeoDataFrame:
     """
     # TODO - the process to identify nation for processing could be improved
     if "inspire_ew" in land_parcel_file:
-        gdf = get_datasets.load_gdf_inspire_land_parcels(
+        gdf = load_geodata.load_gdf_inspire_land_parcels(
             land_parcel_file, columns=["NATIONALCADASTRALREFERENCE", "geometry"]
         )
     elif "inspire_scotland" in land_parcel_file:
-        gdf = get_datasets.load_gdf_inspire_land_parcels(
+        gdf = load_geodata.load_gdf_inspire_land_parcels(
             land_parcel_file, columns=["nationalca", "geometry"]
         ).rename(columns={"nationalca": "NATIONALCADASTRALREFERENCE"})
     else:
@@ -121,7 +121,7 @@ def transform_gdf_land_parcels(land_parcel_file: str) -> gpd.GeoDataFrame:
             f"Nation not identified from file path: {land_parcel_file} \n"
             f"Unable to conduct nation-specific preprocessing of land registry file."
         )
-    gdf = geo_utils.transform_gdf_drop_duplicates(gdf)
+    return geo_utils.transform_gdf_drop_duplicates(gdf)
 
 
 def generate_gdf_outdoor_space(

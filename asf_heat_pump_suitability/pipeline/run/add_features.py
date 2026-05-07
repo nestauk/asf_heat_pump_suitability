@@ -82,7 +82,6 @@ if __name__ == "__main__":
         heat_network_zones,
         city_centres,
     )
-    from asf_heat_pump_suitability.getters import get_datasets
 
     args = parse_arguments()
 
@@ -193,8 +192,8 @@ if __name__ == "__main__":
             "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
         )
     else:
-        inspire_file_names = get_datasets.load_gdf_inspire_land_parcels(
-            path="s3://asf-heat-pump-suitability/outputs/2023Q4/gardens/inspire_file_bounds_EWS.geojson"
+        inspire_file_names = gpd.read_file(
+            config["data"]["geodata"]["inspire_file_names"]
         )
         inspire_file_names = inspire_file_names[
             (inspire_file_names["LAD23NM"].isin(list_las))
@@ -203,7 +202,7 @@ if __name__ == "__main__":
 
         land_parcels_gdf = pd.concat(
             [
-                outdoor_space.transform_gdf_land_parcels(f"s3://{file}")
+                outdoor_space.load_transform_gdf_land_parcels(f"s3://{file}")
                 for file in inspire_file_names
             ],
             ignore_index=False,
