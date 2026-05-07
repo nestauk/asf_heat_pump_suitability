@@ -52,7 +52,10 @@ def clean_extend_df_epc(df: pl.DataFrame) -> pl.DataFrame:
     """
     df = retain_df_valid_uprns(df, drop=True)
     df = extend_df_attachment_type(df)
-    return clean_df_tenure(df)
+    df = clean_df_tenure(df)
+    if "PHOTO_SUPPLY" in df.columns and "SOLAR_WATER_HEATING_FLAG" in df.columns:
+        df = extend_df_solar_pv_flag(df)
+    return df
 
 
 def retain_df_valid_uprns(df: pl.DataFrame, drop: bool) -> pl.DataFrame:
@@ -121,4 +124,53 @@ def clean_df_tenure(df: pl.DataFrame) -> pl.DataFrame:
         .str.to_lowercase()
         .replace({"": None, "unknown": None})
         .alias("TENURE")
+    )
+
+
+def extend_df_solar_pv_flag(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Create new `has_solar_pv` column indicating presence of photovoltaic panels on a property based on `PHOTO_SUPPLY` column.
+
+    Args:
+        df (pl.DataFrame): EPC dataset with `PHOTO_SUPPLY` column.
+
+    Returns:
+        pl.DataFrame: EPC data with new `has_solar_pv` column.
+    """
+    has_pv = pl.col("PHOTO_SUPPLY") > 0
+    no_pv = pl.col("PHOTO_SUPPLY") == 0
+
+    return df.with_columns(
+        pl.when(has_pv)
+        .then(True)
+        .when(no_pv)
+        .then(False)
+        .otherwise(None)
+        .alias("has_solar_pv")
+    )
+
+
+def extend_df_is_solar_powered(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Create new `is_solar_powered` column indicating whether a property is solar powered based on `PHOTO_SUPPLY` and `SOLAR_WATER_HEATING_FLAG` columns.
+    It flags property as solar powered if it has either photovoltaic panels or solar water heating.
+
+    Args:
+        df (pl.DataFrame): EPC dataset with `PHOTO_SUPPLY` and `SOLAR_WATER_HEATING_FLAG` columns.
+
+    Returns:
+        pl.DataFrame: EPC data with new `is_solar_powered` column.
+    """
+    has_solar_water_heating = pl.col("SOLAR_WATER_HEATING_FLAG") == "True"
+    no_solar_water_heating = pl.col("SOLAR_WATER_HEATING_FLAG") == "False"
+    has_pv = pl.col("PHOTO_SUPPLY") > 0
+    no_pv = pl.col("PHOTO_SUPPLY") == 0
+
+    return df.with_columns(
+        pl.when(has_pv | has_solar_water_heating)
+        .then(True)
+        .when(no_pv & no_solar_water_heating)
+        .then(False)
+        .otherwise(None)
+        .alias("is_solar_powered")
     )

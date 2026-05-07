@@ -110,7 +110,7 @@ def identify_dict_most_suitable_tech(
     if in_block_of_flats:
         if city_centre_or_hnz:
             return {
-                "assigned_tech": TECH_TYPES["heat_network"],
+                "assigned_tech": TECH_TYPES["heat_networks"],
                 "decision_tree_path": "1. blocks of flats, in HNZ/ city centre",
             }
         else:
@@ -122,7 +122,7 @@ def identify_dict_most_suitable_tech(
         if city_centre_or_hnz:
             if not outdoor_space:
                 return {
-                    "assigned_tech": f"{TECH_TYPES['individual']} or {TECH_TYPES['heat_network']}",
+                    "assigned_tech": f"{TECH_TYPES['individual']} or {TECH_TYPES['heat_networks']}",
                     "decision_tree_path": "Not in block of flats. Unknown outdoor space in city centre",
                 }
             elif outdoor_space > OUTDOOR_SPACE_THRESHOLD_M2.get("within_hn_zone"):
@@ -132,7 +132,7 @@ def identify_dict_most_suitable_tech(
                 }
             else:
                 return {
-                    "assigned_tech": TECH_TYPES["heat_network"],
+                    "assigned_tech": TECH_TYPES["heat_networks"],
                     "decision_tree_path": "4. not in blocks of flats, in city centre, small or no outdoor space",
                 }
         else:
@@ -301,12 +301,12 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
             # where some properties are assigned district heat network and some networked GSHP
             # due to being just outside the HN zone boundary
             pl.when(
-                pl.col("assigned_tech").list.contains(TECH_TYPES["heat_network"])
+                pl.col("assigned_tech").list.contains(TECH_TYPES["heat_networks"])
                 & pl.col("assigned_tech").list.contains(TECH_TYPES["networked"])
             )
             .then(pl.lit(TECH_TYPES["communal"]))
-            .when(pl.col("assigned_tech").list.contains(TECH_TYPES["heat_network"]))
-            .then(pl.lit(TECH_TYPES["heat_network"]))
+            .when(pl.col("assigned_tech").list.contains(TECH_TYPES["heat_networks"]))
+            .then(pl.lit(TECH_TYPES["heat_networks"]))
             .when(pl.col("assigned_tech").list.contains(TECH_TYPES["networked"]))
             .then(pl.lit(TECH_TYPES["networked"]))
             .when(pl.col("assigned_tech").list.contains(TECH_TYPES["communal"]))
@@ -329,7 +329,7 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
             )
             .when(
                 pl.col("assigned_tech").list.contains(
-                    f"{TECH_TYPES['individual']} or {TECH_TYPES['heat_network']}"
+                    f"{TECH_TYPES['individual']} or {TECH_TYPES['heat_networks']}"
                 )
             )
             .then(
@@ -341,7 +341,7 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
                     )
                 )
                 .then(pl.lit(TECH_TYPES["individual"]))
-                .otherwise(pl.lit(TECH_TYPES["heat_network"]))
+                .otherwise(pl.lit(TECH_TYPES["heat_networks"]))
             )
             .otherwise(pl.lit("Unexpected combination"))
         )
