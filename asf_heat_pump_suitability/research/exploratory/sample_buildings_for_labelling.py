@@ -22,7 +22,7 @@ import simplekml
 import boto3
 
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.getters import load_boundaries, load_tree_input
+from asf_heat_pump_suitability.getters import load_boundaries, load_geodata
 from asf_heat_pump_suitability.pipeline.transform import uprns
 
 from datetime import date
@@ -285,7 +285,7 @@ n_samples["Plymouth"] = 400
 # %%
 # LOAD REQUIRED DATA TO SAMPLE BUILDINGS FROM
 # Load building footprints for sampling areas and load UPRNs
-buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
     layer="building", grid_squares=config["constant"]["grid_squares"]["sampling_areas"]
 )
 sampling_areas_df = pl.read_parquet(

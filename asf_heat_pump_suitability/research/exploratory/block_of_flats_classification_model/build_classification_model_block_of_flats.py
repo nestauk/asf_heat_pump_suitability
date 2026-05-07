@@ -38,7 +38,7 @@ from sklearn.metrics import (
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.pipeline.transform import uprns
-from asf_heat_pump_suitability.getters import load_tree_input
+from asf_heat_pump_suitability.getters import load_geodata
 
 plt.style.use("tableau-colorblind10")
 
@@ -108,7 +108,7 @@ plymouth_buildings_w_uprns_gdf = apr_oct_buildings_gdf.sjoin(
 
 # %%
 # Load OS OpenMap Local Buildings layer for sampling areas - uses October 2025 building footprint data
-sampling_areas_buildings_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+sampling_areas_buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
     layer="building", grid_squares=["NS", "SD", "SE", "SJ", "SK", "ST"]
 )
 

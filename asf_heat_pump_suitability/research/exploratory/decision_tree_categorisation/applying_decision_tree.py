@@ -27,11 +27,10 @@ from asf_heat_pump_suitability import PROJECT_DIR
 # %%
 # local imports
 from asf_heat_pump_suitability.pipeline.transform.uprns import generate_gdf_uprn_coords
-from asf_heat_pump_suitability.getters.load_tree_input import (
-    load_gdf_os_openmap_local_layer,
-)
+
 from asf_heat_pump_suitability.getters.load_geodata import (
     load_gdf_heat_network_zones,
+    load_gdf_os_openmap_layer,
 )
 from asf_heat_pump_suitability.getters import (
     load_boundaries,
@@ -173,9 +172,7 @@ plymouth_with_features.head()
 
 # %%
 # Loading building footprints for grid square "SX"
-building_footprints = load_gdf_os_openmap_local_layer(
-    layer="building", grid_squares="SX"
-)
+building_footprints = load_gdf_os_openmap_layer(layer="building", grid_squares="SX")
 building_footprints.head()
 
 # %% [markdown]

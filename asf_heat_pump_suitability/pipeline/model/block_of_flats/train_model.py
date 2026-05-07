@@ -302,7 +302,7 @@ def parse_arguments() -> argparse.Namespace:
 
 if __name__ == "__main__":
     from asf_heat_pump_suitability import config
-    from asf_heat_pump_suitability.getters import load_tree_input
+    from asf_heat_pump_suitability.getters import load_geodata
     from asf_heat_pump_suitability.pipeline.transform import uprns
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
@@ -324,7 +324,7 @@ if __name__ == "__main__":
 
     # Load building footprint data
     # TODO scale beyond sampling areas
-    building_footprints_gdf = load_tree_input.load_gdf_os_openmap_local_layer(
+    building_footprints_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building",
         grid_squares=config["constant"]["sampling_areas"]["grid_squares"],
     )

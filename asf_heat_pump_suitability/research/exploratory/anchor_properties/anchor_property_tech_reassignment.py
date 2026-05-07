@@ -13,12 +13,12 @@ import shapely
 import folium
 import os
 from asf_heat_pump_suitability import PROJECT_DIR, config
-from asf_heat_pump_suitability.getters import load_tree_input
+from asf_heat_pump_suitability.getters import load_geodata
 
 # %%
 # load datasets
 # convert to CRS 27700 if necessary
-building_footprints = load_tree_input.load_gdf_os_openmap_local_layer(
+building_footprints = load_geodata.load_gdf_os_openmap_layer(
     layer="building", grid_squares="SX"
 )
 
@@ -29,7 +29,7 @@ anchor_properties = gpd.read_file(
 tech_types = gpd.read_file(
     "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_building_most_suitable_tech.geojson"
 ).to_crs(27700)
-important_buildings = load_tree_input.load_gdf_os_openmap_local_layer(
+important_buildings = load_geodata.load_gdf_os_openmap_layer(
     layer="important_building", grid_squares="SX"
 )
 

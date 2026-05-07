@@ -27,8 +27,8 @@ import argparse
 
 # local imports
 from asf_heat_pump_suitability.pipeline.transform.uprns import generate_gdf_uprn_coords
-from asf_heat_pump_suitability.getters.load_tree_input import (
-    load_gdf_os_openmap_local_layer,
+from asf_heat_pump_suitability.getters.load_geodata import (
+    load_gdf_os_openmap_layer,
 )
 from asf_heat_pump_suitability import config
 
@@ -461,7 +461,7 @@ if __name__ == "__main__":
     local_authorities = args.local_authorities
 
     # TODO: create getters for footprints & uprns in future
-    buildings_gdf = load_gdf_os_openmap_local_layer(
+    buildings_gdf = load_gdf_os_openmap_layer(
         layer="building",
         grid_squares=config["constant"][local_authorities]["grid_squares"],
     )
