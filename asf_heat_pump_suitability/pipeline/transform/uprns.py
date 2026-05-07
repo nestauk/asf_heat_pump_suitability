@@ -103,11 +103,12 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
         # Scotland EPC data
         df_S = base_getters.load_df_from_s3(
             config["data"]["epc"][epc_type]["S"], columns="OSG_REFERENCE_NUMBER"
-        )
-        before = len(df_EW) + len(df_S)
+        ).rename({"OSG_REFERENCE_NUMBER": "UPRN"})
 
-        # England and Wales
-        df_EW = df_EW.with_columns(
+        df = pl.concat([df_EW, df_S])
+        before = len(df)
+
+        df = df.with_columns(
             # Remove any invalid UPRNs (i.e. those IDs which are generated in EPC preprocessing generated from concatenating building ref number and address)
             # These are not true UPRNs that can be used in joins across other datasets
             pl.col("UPRN")
@@ -116,21 +117,6 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
             .alias("UPRN")
         ).drop_nulls()
 
-        # Scotland
-        df_S = (
-            df_S.with_columns(
-                # Scotland data UPRN column is called 'OSG_REFERENCE_NUMBER'
-                pl.col("OSG_REFERENCE_NUMBER")
-                .cast(pl.Float64, strict=False)
-                .cast(pl.Int64)
-                .alias("UPRN")
-            )
-            .drop_nulls()
-            .drop("OSG_REFERENCE_NUMBER")
-        )
-
-        # Return England, Wales and Scotland EPC data together
-        df = pl.concat([df_EW, df_S])
     logging.info(
         f"{before - len(df)} invalid UPRNs dropped from {epc_type} EPC register. {len(df)} valid UPRNs remaining"
     )
