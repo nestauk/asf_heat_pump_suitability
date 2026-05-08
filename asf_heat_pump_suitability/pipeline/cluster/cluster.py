@@ -394,7 +394,7 @@ def load_tranform_gdf_linestring_barriers(
         layer="railway_track", grid_squares=grid_squares
     )
 
-    barrier_road_types = ["A Road", "B Road", "Motorway", "Minor Road", "Local Road"]
+    barrier_road_types = ["A Road", "B Road", "Motorway", "Minor Road"]
 
     barrier_roads_gdf = roads_gdf[roads_gdf["function"].isin(barrier_road_types)]
 
