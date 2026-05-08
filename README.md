@@ -68,23 +68,18 @@ asf_heat_pump_suitability
 
 A comprehensive table of citations for data used in this analysis can be found in [asf_heat_pump_suitability/config/README.md](https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme). See attributions below.
 
-- Contains OS data © Crown copyright and database right 2025.
-- Contains Royal Mail data © Royal Mail copyright and database right 2025.
-- Contains Office for National Statistics information licensed under the Open Government Licence v.3.0.
-- Contains public sector information licensed under the [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/)
-- This information is subject to Crown copyright and database rights 2025 and is reproduced with the permission of HM Land Registry. See INSPIRE index polygons [conditions of use](https://use-land-property-data.service.gov.uk/datasets/inspire#conditions).
-- This work uses HM Land Registry's INSPIRE Index Polygons service. This information is subject to Crown copyright and database rights 2024 and is reproduced with the permission of HM Land Registry. The polygons (including the associated geometry, namely x, y co-ordinates) are subject to Crown copyright and database rights 2025 Ordnance Survey 100026316.
-- Microsoft GlobalMLBuildingFootprints are made available under the [Open Database License](http://opendatacommons.org/licenses/odbl/1.0/). Any rights in individual contents of the database are licensed under the [Database Contents License](http://opendatacommons.org/licenses/dbcl/1.0/\).
-- This work uses designated Historic Asset GIS Data, The Welsh Historic Environment Service (Cadw), 2025, licensed under the Open Government Licence.
-- This work uses Historic England data © Historic England 2025. Contains Ordnance Survey data © Crown copyright and database right 2025. The Historic England GIS Data contained in this material was obtained on August 2024. The most publicly available up to date Historic England GIS Data can be obtained from HistoricEngland.org.uk.
-- This work uses data provided by the Consumer Data Research Centre, an ESRC Data Investment.
+- Contains public sector information licensed under the [Open Government Licence v.3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+- The data for this research include data provided by the Geographic Data Service (GeoDS), a Smart Data Research UK Investment: ES/Z504464/1.
+- Contains Ordnance Survey data. © Crown copyright and database right 2026.
+- Contains Royal Mail data © Royal Mail copyright and database right 2026.
+- Contains GeoPlace data © Local Government Information House Limited copyright and database right 2026.
+- Contains Historic Environment Scotland and Ordnance Survey data © Historic Environment Scotland - Scottish Charity No. SC045925 © Crown copyright and database right 2026
+- Contains public sector information from Plymouth City Council licensed under the [Open Government Licence v.3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+- This information is subject to Crown copyright and database rights 2026 and is reproduced with the permission of HM Land Registry. See INSPIRE index polygons [conditions of use](https://use-land-property-data.service.gov.uk/datasets/inspire#conditions).
+- This work uses HM Land Registry's INSPIRE Index Polygons service. This information is subject to Crown copyright and database rights 2026 and is reproduced with the permission of HM Land Registry. The polygons (including the associated geometry, namely x, y co-ordinates) are subject to Crown copyright and database rights 2026 Ordnance Survey 100026316.
+- This work uses designated Historic Asset GIS Data, The Welsh Historic Environment Service (Cadw), 2026, licensed under the Open Government Licence.
+- This work uses Historic England data © Historic England 2026. Contains Ordnance Survey data © Crown copyright and database right 2026. The Historic England GIS Data contained in this material was obtained on August 2024. The most publicly available up to date Historic England GIS Data can be obtained from HistoricEngland.org.uk.
 - This work uses Registers of Scotland's land extent polygons. © Crown copyright. Reproduced with the permission of Registers of Scotland.
-- This work uses data from the Scottish Census © Crown copyright. Data supplied by National Records of Scotland.
-- This work uses data from Electricity North West Ltd, SP Energy Networks, SSEN Distribution, UK Power Networks. Creative Commons Attribution: https://creativecommons.org/licenses/by/4.0/
-- Supported by Northern Powergrid Open Data. [License](https://northernpowergrid.opendatasoft.com/p/opendatalicence/)
-- Supported by NGED Open Data. [License](https://www.nationalgrid.co.uk/open-data-licence)
-- This work uses [Facebook Research's balance package](https://github.com/facebookresearch/balance) and [ipfn](https://github.com/Dirguis/ipfn) to conduct iterative proportional fitting.
-  Sarig, T., Galili, T., & Eilat, R. (2023). balance – a Python package for balancing biased data samples. https://arxiv.org/abs/2307.06024
 
 ## License
 
