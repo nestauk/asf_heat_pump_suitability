@@ -21,7 +21,7 @@ Please refer to the table below for a full list of data sources and their respec
 - Contains Royal Mail data © Royal Mail copyright and database right 2026.
 - Contains GeoPlace data © Local Government Information House Limited copyright and database right 2026.
 - Contains Historic Environment Scotland and Ordnance Survey data © Historic Environment Scotland - Scottish Charity No. SC045925 © Crown copyright and database right 2026
-- Contains public sector information from Plymouth City Council licensed under the [Open Government Licence v.3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/)..
+- Contains public sector information from Plymouth City Council licensed under the [Open Government Licence v.3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
 
 #### Code & software attributions
 
