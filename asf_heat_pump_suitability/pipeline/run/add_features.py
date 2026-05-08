@@ -138,7 +138,7 @@ if __name__ == "__main__":
 
     # TODO make this robust by automatically loading same labelled data used to train model
     labelled_df = pl.read_parquet(
-        "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet"
+        config["data"]["processed"]["manually_labelled_block_of_flats"]
     )
     # Load trained block of flats classifier model
     clf = base_getters.load_pickle(config["output"]["model"]["block_of_flats_model"])
