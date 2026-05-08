@@ -26,7 +26,7 @@ from asf_heat_pump_suitability.pipeline.transform import uprns
 # %%
 council_tax_df = pd.read_csv(config["data"]["geodata"]["council_tax_data"]["plymouth"])
 pipeline_domestic_gdf = base_getters.load_df_from_s3(
-    config["data"]["processed"]["plymouth_residential_uprns"]
+    config["output"]["dataset"]["domestic_uprns"].format(local_authority="plymouth")
 )
 building_footprints_gdf = load_geodata.load_gdf_os_openmap_layer(
     layer="building", grid_squares="SX"

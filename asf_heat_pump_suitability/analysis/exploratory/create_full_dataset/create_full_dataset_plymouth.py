@@ -40,6 +40,7 @@ from asf_heat_pump_suitability.pipeline.transform import outdoor_space
 from asf_heat_pump_suitability.analysis.flats_on_fossils.features import fuel_type
 from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
 import folium
+import config
 
 # %% [markdown]
 # ## Load data
@@ -47,7 +48,7 @@ import folium
 
 # %%
 # View OpenMap Local dataset layers for GB
-fiona.listlayers("s3://asf-heat-pump-suitability/source_data/opmplc_gb.gpkg")
+fiona.listlayers(config["data"]["geodata"]["gb_os_openmap_local"])
 
 # %%
 print("LOADING DATASETS TO GET RESIDENTIAL UPRNS FOR PLYMOUTH...")
@@ -97,7 +98,7 @@ cons_areas_gdf = gpd.read_file(
 print("\nLoading existing / planned HN zones...")
 # Source: HNZ analysis pipeline
 hn_zones_gdf = gpd.read_file(
-    "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Plymouth.gpkg",
+    config["data"]["geodata"]["heat_network_zones"]["plymouth"],
     layer="heat-network-zone-map-Plymouth",
 )
 
@@ -128,7 +129,7 @@ print("\nLOADING DATASETS TO FILL MISSING DATA")
 print("\nLoading OS Code-Point Open (all postcode units in GB)...")
 # Source: https://www.ordnancesurvey.co.uk/products/code-point-open
 code_point_df = gpd.read_file(
-    "s3://asf-heat-pump-suitability/exploration/spatial_clustering_plymouth/codepo_gb.gpkg",
+    config["data"]["geodata"]["gb_code_points"],
     layers="codepoint",
 )
 

@@ -49,7 +49,9 @@ apr_buildings_gdf = gpd.read_file(
 
 # Load October 2025 building footprints
 oct_buildings_gdf = gpd.read_file(
-    "s3://asf-heat-pump-suitability/local_heat_planning/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/SX/SX_Building.shp"
+    config["data"]["geodata"]["grid_square_os_openmap_local"].format(
+        layer="Building", grid_squares="SX"
+    )
 )
 
 # Print diffs
