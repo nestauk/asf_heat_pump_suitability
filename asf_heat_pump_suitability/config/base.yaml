@@ -53,6 +53,8 @@ data:
     poi_anchor_properties: "s3://asf-local-heat-planning-tool/inputs/processed/poi_anchor_properties_gb.geojson"
     # Names of inspire file bounds for England, Wales and Scotland
     inspire_file_names: "s3://asf-local-heat-planning-tool/inputs/processed/inspire/inspire_file_bounds_EWS.geojson"
+    # Manually labelled blocks of flats
+    manually_labelled_block_of_flats: "s3://asf-local-heat-planning-tool/inputs/processed/manually_labelled_block_of_flats.parquet"
 
 constant:
   id:
