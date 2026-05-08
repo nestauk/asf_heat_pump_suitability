@@ -23,6 +23,7 @@ import os
 
 # local imports
 from asf_heat_pump_suitability import PROJECT_DIR
+import config
 
 # %%
 # local imports
@@ -118,7 +119,7 @@ labelled_tech = labelled_tech.to_crs(epsg=27700)
 # %%
 # Getting data and converting polars df to geodf
 plymouth_uprns = pl.read_parquet(
-    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns.parquet"
+    config["output"]["dataset"]["domestic_uprns"].format(local_authority="plymouth")
 )
 plymouth_uprns = generate_gdf_uprn_coords(df=plymouth_uprns)
 plymouth_uprns.head()
@@ -156,7 +157,9 @@ hnz_and_city_centre_data.head()
 # %%
 # Getting data and converting polars df to geodf
 plymouth_with_features = pl.read_parquet(
-    "s3://asf-heat-pump-suitability/local_heat_planning/outputs/plymouth_residential_uprns_with_features.parquet"
+    config["output"]["dataset"]["domestic_uprns_with_features"].format(
+        local_authority="plymouth"
+    )
 )
 plymouth_with_features = generate_gdf_uprn_coords(df=plymouth_with_features)
 plymouth_with_features.head()

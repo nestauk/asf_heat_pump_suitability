@@ -435,7 +435,7 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             df,
-            config["output"]["dataset"]["residential_uprns"].format(
+            config["output"]["dataset"]["domestic_uprns"].format(
                 local_authority=local_authorities
             ),
         )

@@ -30,6 +30,7 @@ import random
 from asf_heat_pump_suitability.analysis.exploratory.create_full_dataset import (
     stoke_getters,
 )
+import config
 
 # %% [markdown]
 # ## Import data
@@ -82,7 +83,7 @@ stoke_greenspace_df_formatted = gpd.read_file(
 ).to_crs(epsg=4326)
 
 hnz_plymouth = gpd.read_file(
-    "s3://asf-heat-pump-suitability/heat_network_desnz_data/heat-network-zone-map-Plymouth.gpkg",
+    config["data"]["geodata"]["heat_network_zones"]["plymouth"],
     columns=["geometry", "Type"],
 ).to_crs(epsg=4326)
 

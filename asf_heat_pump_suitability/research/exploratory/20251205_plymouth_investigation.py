@@ -41,7 +41,7 @@ plymouth_uprns_gdf = uprns.generate_gdf_uprn_coords(plymouth_uprns_df)
 # %%
 # Plymouth residential UPRNs
 plymouth_residential_uprns_df = base_getters.load_df_from_s3(
-    config["data"]["processed"]["plymouth_residential_uprns"]
+    config["output"]["dataset"]["domestic_uprns"].format(local_authority="plymouth")
 )
 plymouth_residential_uprns_gdf = uprns.generate_gdf_uprn_coords(
     plymouth_residential_uprns_df

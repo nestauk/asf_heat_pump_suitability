@@ -44,7 +44,7 @@ uprns_GB_gdf = uprns.generate_gdf_uprn_coords(uprns_df)
 
 # %%
 residential_uprn_df = base_getters.load_df_from_s3(
-    config["data"]["processed"]["plymouth_residential_uprns"]
+    config["output"]["dataset"]["domestic_uprns"].format(local_authority="plymouth")
 )
 residential_gdf = uprns.generate_gdf_uprn_coords(residential_uprn_df)
 residential_gdf = building_footprints_gdf.sjoin(

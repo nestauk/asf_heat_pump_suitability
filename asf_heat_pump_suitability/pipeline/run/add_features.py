@@ -92,7 +92,7 @@ if __name__ == "__main__":
         else [config["constant"][local_authorities]["la_names"]]
     )
     detail_level = args.detail
-    uprns_path = config["output"]["dataset"]["residential_uprns"].format(
+    uprns_path = config["output"]["dataset"]["domestic_uprns"].format(
         local_authority=local_authorities
     )
     grid_squares = config["constant"][local_authorities]["grid_squares"]
@@ -138,7 +138,7 @@ if __name__ == "__main__":
 
     # TODO make this robust by automatically loading same labelled data used to train model
     labelled_df = pl.read_parquet(
-        "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet"
+        config["data"]["processed"]["manually_labelled_block_of_flats"]
     )
     # Load trained block of flats classifier model
     clf = base_getters.load_pickle(config["output"]["model"]["block_of_flats_model"])
@@ -183,27 +183,21 @@ if __name__ == "__main__":
     # ESTIMATE OUTDOOR SPACE
     # TODO scale beyond Plymouth. This is a temporary fix to working with multiple LAs
     print("Loading land registry data...")
+    inspire_file_names = gpd.read_file(
+        config["data"]["processed"]["inspire_file_names"]
+    )
+    inspire_file_names = inspire_file_names[
+        (inspire_file_names["LAD23NM"].isin(list_las))
+        | (inspire_file_names["registration_county"].isin(list_las))
+    ]["inspire_file_name"].unique()
 
-    if local_authorities == "plymouth":
-        land_parcels_gdf = gpd.read_file(
-            "s3://asf-heat-pump-suitability/local_heat_planning/plymouth_inputs/Plymouth_Land_Registry_Cadastral_Parcels.gml"
-        )
-    else:
-        inspire_file_names = gpd.read_file(
-            config["data"]["geodata"]["inspire_file_names"]
-        )
-        inspire_file_names = inspire_file_names[
-            (inspire_file_names["LAD23NM"].isin(list_las))
-            | (inspire_file_names["registration_county"].isin(list_las))
-        ]["inspire_file_name"].unique()
-
-        land_parcels_gdf = pd.concat(
-            [
-                outdoor_space.load_transform_gdf_land_parcels(f"s3://{file}")
-                for file in inspire_file_names
-            ],
-            ignore_index=False,
-        )
+    land_parcels_gdf = pd.concat(
+        [
+            outdoor_space.load_transform_gdf_land_parcels(f"s3://{file}")
+            for file in inspire_file_names
+        ],
+        ignore_index=False,
+    )
 
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares
@@ -353,7 +347,7 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             features_df,
-            path=config["output"]["dataset"]["residential_uprns_with_features"].format(
+            path=config["output"]["dataset"]["domestic_uprns_with_features"].format(
                 local_authority=local_authorities
             ),
         )

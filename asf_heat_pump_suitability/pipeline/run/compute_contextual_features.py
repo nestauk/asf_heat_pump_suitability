@@ -212,7 +212,7 @@ if __name__ == "__main__":
 
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
-        config["output"]["dataset"]["residential_uprns_with_features"].format(
+        config["output"]["dataset"]["domestic_uprns_with_features"].format(
             local_authority=local_authorities
         )
     )
