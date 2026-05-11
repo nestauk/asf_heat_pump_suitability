@@ -25,7 +25,7 @@ from asf_heat_pump_suitability.getters import get_target
 
 # %%
 # Import latest EPC data
-flats_epc_path = "s3://asf-heat-pump-suitability/outputs/2024Q3/analysis/2024_Q3_epc_flats_processed_filled_storey_count.parquet"
+flats_epc_path = "s3://asf-heat-pump-suitability/outputs/2024Q3/analysis/2024_Q3_epc_flats_processed_filled_storey_count_EW.parquet"
 raw_flats_epc_df = pl.read_parquet(flats_epc_path)
 
 # %%
@@ -38,28 +38,46 @@ flats_epc_df = raw_flats_epc_df
 # All but 2 of the missing `fuel_type` values are in flats with community heating.
 
 # %%
+flats_epc_df.columns
+
+# %%
 # Null counts
 flats_epc_df.select(
     [
         "PROPERTY_TYPE",
+        "FLAT_STOREY_COUNT",
         "building_rise",
         "fuel_type",
         "community_heating",
-        "fossil_fuel_heating",
+        "main_heating_fuel_class",
     ]
 ).null_count()
+
+# %%
+# Null counts
+flats_epc_df.select(
+    [
+        "PROPERTY_TYPE",
+        "FLAT_STOREY_COUNT",
+        "building_rise",
+        "fuel_type",
+        "community_heating",
+        "main_heating_fuel_class",
+    ]
+).count()
 
 # %%
 # Null proportions
 flats_epc_df.select(
     [
         "PROPERTY_TYPE",
+        "FLAT_STOREY_COUNT",
         "building_rise",
         "fuel_type",
         "community_heating",
-        "fossil_fuel_heating",
+        "main_heating_fuel_class",
     ]
-).null_count() / len(flats_epc_df)
+).count() / len(flats_epc_df)
 
 # %%
 flats_epc_df.filter(pl.col("fuel_type").is_null())["community_heating"].value_counts()
@@ -105,7 +123,18 @@ flats_epc_df = raw_flats_epc_df.with_columns(
 
 # %%
 census_property_df = get_target.transform_df_target_property_type()
-census_property_df["Flat, maisonette or apartment"].sum()
+print(census_property_df["Flat, maisonette or apartment"].sum())
+
+total_properties = census_property_df.sum().with_columns(
+    sum=pl.sum_horizontal(
+        "Detached",
+        "Semi-detached",
+        "Terraced (including end-terrace)",
+        "Flat, maisonette or apartment",
+    )
+)["sum"][0]
+
+print(census_property_df["Flat, maisonette or apartment"].sum() / total_properties)
 
 # %%
 len(flats_epc_df)
@@ -173,6 +202,9 @@ plt.pie(
 plt.title("Proportion of EPC flats by building rise type in GB")
 plt.show()
 
+plot_df = plot_df.with_columns((pl.col("proportion") * 100).alias("percentage"))
+plot_df.write_csv("rise_class_pie_chart.csv")
+
 # %%
 plot_df_nations = (
     flats_epc_df.filter(pl.col("building_rise").is_not_null())
@@ -231,6 +263,8 @@ plt.xlabel("Building rise type")
 plt.ylabel("Percentage of flats with community heating")
 plt.tight_layout()
 plt.show()
+
+plot_df.write_csv("communal_heating_proportion_by_rise.csv")
 
 # %% [markdown]
 # ### Comparison with English Housing Survey data
@@ -304,14 +338,14 @@ flats_epc_df.filter(pl.col("community_heating"))["fuel_type"].value_counts(
 # flats_epc_df.filter(pl.col("community_heating"))["fuel_type"].value_counts(sort=True, normalize=True).with_columns((pl.col("proportion")*100).round(3).alias("percentage")).write_csv("community_heating.csv")
 
 # %%
-flats_epc_df.filter(pl.col("community_heating"))["fossil_fuel_heating"].value_counts(
-    sort=True, normalize=False
-)
+flats_epc_df.filter(pl.col("community_heating"))[
+    "main_heating_fuel_class"
+].value_counts(sort=True, normalize=False)
 
 # %%
-flats_epc_df.filter(pl.col("community_heating"))["fossil_fuel_heating"].value_counts(
-    sort=True, normalize=True
-)
+flats_epc_df.filter(pl.col("community_heating"))[
+    "main_heating_fuel_class"
+].value_counts(sort=True, normalize=True)
 
 # %% [markdown]
 # ## 5. What proportion of different flat types (low, medium and high rise/ number of floors of whole building + any other details we have e.g. maisonette) use gas/ other fossil fuels - communally (as opposed to direct electric, communal heating powered by electricity)?
@@ -329,7 +363,7 @@ plot_df = (
     flats_epc_df.filter(
         pl.col("building_rise").is_not_null(), pl.col("community_heating")
     )
-    .group_by(["building_rise_title", "fossil_fuel_heating"])
+    .group_by(["building_rise_title", "main_heating_fuel_class"])
     .agg(pl.col("UPRN").count())
     .join(total_buildings_per_rise_community_df, how="left", on="building_rise_title")
     .with_columns(
@@ -342,17 +376,28 @@ plot_df
 # %%
 plot_df = (
     plot_df.pivot(
-        on="fossil_fuel_heating",
+        on="main_heating_fuel_class",
         index="building_rise_title",
         values="percentage_per_rise_type",
     )
-    .select(["building_rise_title", "true", "false", "null"])
+    .select(
+        [
+            "building_rise_title",
+            "fossil_fuel",
+            "electric",
+            "biofuels or waste",
+            "no heating",
+            "unknown",
+        ]
+    )
     .rename(
         {
             "building_rise_title": "Building rise type",
-            "true": "Fossil fuel heating",
-            "false": "Renewable heating",
-            "null": "Unknown",
+            "fossil_fuel": "Fossil fuels",
+            "electric": "Electricity",
+            "biofuels or waste": "Biofuels or waste",
+            "no heating": "No heating",
+            "unknown": "Unknown",
         }
     )
     .to_pandas()
@@ -385,7 +430,7 @@ plot_df = (
     flats_epc_df.filter(
         pl.col("building_rise").is_not_null(), ~pl.col("community_heating")
     )
-    .group_by(["building_rise_title", "fossil_fuel_heating"])
+    .group_by(["building_rise_title", "main_heating_fuel_class"])
     .agg(pl.col("UPRN").count())
     .join(total_buildings_per_rise_individual_df, how="left", on="building_rise_title")
     .with_columns(
@@ -398,16 +443,18 @@ plot_df
 # %%
 plot_df = (
     plot_df.pivot(
-        on="fossil_fuel_heating",
+        on="main_heating_fuel_class",
         index="building_rise_title",
         values="percentage_per_rise_type",
     )
-    .select(["building_rise_title", "true", "false"])
+    .select(
+        ["building_rise_title", "fossil_fuel", "electric"]
+    )  # biofuels and waste is so low to exclude. 0 unknown / no heating
     .rename(
         {
             "building_rise_title": "Building rise type",
-            "true": "Fossil fuel heating",
-            "false": "Renewable heating",
+            "fossil_fuel": "Fossil fuels",
+            "electric": "Electricity",
         }
     )
     .to_pandas()
@@ -423,6 +470,8 @@ plt.gca().xaxis.set_tick_params(rotation=0)
 plt.title("Percentage of individually heated flats on different heating fuel types")
 plt.tight_layout()
 plt.show()
+
+plot_df.to_csv("individual_heating_fuel_by_rise.csv")
 
 # %% [markdown]
 # ## 7. What flat types are most commonly heated individually with gas?
@@ -445,7 +494,9 @@ flats_epc_df.filter(
 
 # %%
 total_flats_per_storey_count_df = (
-    flats_epc_df.filter(pl.col("storey_count") <= 30)["storey_count"]
+    flats_epc_df.filter(pl.col("storey_count") <= 30, ~pl.col("community_heating"))[
+        "storey_count"
+    ]
     .value_counts(sort=True, normalize=False)
     .rename({"count": "total_count"})
 )
@@ -453,8 +504,13 @@ total_flats_per_storey_count_df
 
 # %%
 plot_df = (
-    flats_epc_df.filter(pl.col("storey_count") <= 30)
-    .group_by(["storey_count", "fossil_fuel_heating"])
+    flats_epc_df.filter(pl.col("storey_count") <= 30, ~pl.col("community_heating"))
+    .group_by(
+        [
+            "storey_count",
+            "main_heating_fuel_class",
+        ]
+    )
     .agg(pl.col("UPRN").count())
     .join(total_flats_per_storey_count_df, how="left", on="storey_count")
     .with_columns(
@@ -470,17 +526,27 @@ plot_df
 # %%
 plot_df = (
     plot_df.pivot(
-        on="fossil_fuel_heating",
+        on="main_heating_fuel_class",
         index="storey_count",
         values="percentage_per_storey_count",
     )
-    .select(["storey_count", "true", "false", "null"])
+    .select(
+        [
+            "storey_count",
+            "fossil_fuel",
+            "electric",
+            "biofuels or waste",
+            #  "no heating", "unknown"
+        ]
+    )
     .rename(
         {
             "storey_count": "Number of storeys",
-            "true": "Fossil fuel heating",
-            "false": "Renewable heating",
-            "null": "Unknown heating type",
+            "fossil_fuel": "Fossil fuels",
+            "electric": "Electricity",
+            "biofuels or waste": "Biofuels or waste",
+            # "no heating": "No heating",
+            # "unknown": "Unknown"
         }
     )
     .to_pandas()
@@ -499,10 +565,49 @@ plt.tight_layout()
 plt.show()
 
 # %%
-import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib import ticker
+plot_df = (
+    flats_epc_df.filter((pl.col("storey_count") <= 30), pl.col("community_heating"))
+    .group_by(
+        [
+            "storey_count",
+            "main_heating_fuel_class",
+        ]
+    )
+    .agg(pl.col("UPRN").count())
+    .sort(by="storey_count")
+)
 
+plot_df = (
+    plot_df.pivot(
+        on="main_heating_fuel_class",
+        index="storey_count",
+        values="UPRN",
+    )
+    .select(
+        [
+            "storey_count",
+            "fossil_fuel",
+            "electric",
+            "biofuels or waste",
+            "no heating",
+            "unknown",
+        ]
+    )
+    .rename(
+        {
+            "storey_count": "Number of storeys",
+            "fossil_fuel": "Fossil fuels",
+            "electric": "Electricity",
+            "biofuels or waste": "Biofuels or waste",
+            "no heating": "No heating",
+            "unknown": "Unknown",
+        }
+    )
+    .to_pandas()
+)
+
+plot_df.index = plot_df["Number of storeys"]
+plot_df = plot_df.drop("Number of storeys", axis=1)
 
 bins = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]
 labels = [
@@ -523,35 +628,97 @@ labels = [
     "29‑30",
 ]
 plot_df["bin"] = pd.cut(plot_df.index, bins=bins, labels=labels, right=True)
-plot_df = plot_df.groupby("bin").sum()  # aggregate percentages within each bin
-plot_df = plot_df.div(plot_df.sum(axis=1), axis=0) * 100  # convert to 0‑100 %
+plot_df = plot_df.groupby("bin").sum()
+plot_df = plot_df.div(plot_df.sum(axis=1), axis=0) * 100
 
-
-ax = plot_df.plot(
-    kind="bar", stacked=True, figsize=(10, 6), width=0.8, edgecolor="none"
-)
-
-
-ax.set_ylabel("Share of flats (%)")
-ax.set_xlabel("Number of storeys")
-ax.set_title("Heating‑fuel mix by building height")
-ax.yaxis.set_major_locator(ticker.MultipleLocator(20))
-ax.yaxis.set_major_formatter(ticker.PercentFormatter())
-
-ax.legend(title="", bbox_to_anchor=(1.02, 1), loc="upper left")
-ax.grid(axis="y", linestyle=":", linewidth=0.5)
-plt.tight_layout()
-plt.show()
+plot_df.to_csv("community_heating_fuel_mix_by_storey_count.csv")
 
 # %%
-plt.scatter(plot_df.index, plot_df["Fossil fuel heating"])
-plt.plot(plot_df.index, plot_df["Fossil fuel heating"], label="Fossil fuel heating")
-plt.scatter(plot_df.index, plot_df["Renewable heating"])
-plt.plot(plot_df.index, plot_df["Renewable heating"], label="Renewable heating")
-plt.scatter(plot_df.index, plot_df["Unknown heating type"])
-plt.plot(plot_df.index, plot_df["Unknown heating type"], label="Unknown heating type")
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# from matplotlib import ticker
+
+
+# bins = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]
+# labels = [
+#     "1‑2",
+#     "3‑4",
+#     "5‑6",
+#     "7‑8",
+#     "9‑10",
+#     "11‑12",
+#     "13‑14",
+#     "15‑16",
+#     "17‑18",
+#     "19‑20",
+#     "21‑22",
+#     "23‑24",
+#     "25‑26",
+#     "27‑28",
+#     "29‑30",
+# ]
+# plot_df["bin"] = pd.cut(plot_df.index, bins=bins, labels=labels, right=True)
+# plot_df = plot_df.groupby("bin").sum()  # aggregate percentages within each bin
+# plot_df = plot_df.div(plot_df.sum(axis=1), axis=0) * 100  # convert to 0‑100 %
+
+
+# ax = plot_df.plot(
+#     kind="bar", stacked=True, figsize=(10, 6), width=0.8, edgecolor="none"
+# )
+
+
+# ax.set_ylabel("Share of flats (%)")
+# ax.set_xlabel("Number of storeys")
+# ax.set_title("Heating‑fuel mix by building height")
+# ax.yaxis.set_major_locator(ticker.MultipleLocator(20))
+# ax.yaxis.set_major_formatter(ticker.PercentFormatter())
+
+# ax.legend(title="", bbox_to_anchor=(1.02, 1), loc="upper left")
+# ax.grid(axis="y", linestyle=":", linewidth=0.5)
+# plt.tight_layout()
+# plt.show()
+
+# plot_df.to_csv("individual_heating_fuel_mix_by_storey_count.csv")
+
+# %%
+plt.rcParams["figure.figsize"] = (10, 5)
+for fuel_type in [
+    "Fossil fuels",
+    "Electricity",
+    "Biofuels or waste",
+    #   "No heating", "Unknown"
+]:
+    plt.scatter(plot_df.index, plot_df[fuel_type])
+    plt.plot(plot_df.index, plot_df[fuel_type], label=fuel_type)
 plt.title("Percentage of flats on different heating fuel types by number of storeys")
 plt.xlabel("Number of storeys")
 plt.ylabel("Percentage of flats")
 plt.legend()
+plt.tight_layout()
 plt.show()
+
+# %%
+plot_df
+
+# %%
+individual = pd.read_csv("individual_heating_fuel_mix_by_storey_count.csv")
+communal = pd.read_csv("community_heating_fuel_mix_by_storey_count.csv")
+both = pd.read_csv("heating_fuel_mix_by_storey_count.csv")
+
+individual["system_type"] = "Individual"
+communal["system_type"] = "Communal"
+both["system_type"] = "All"
+
+df = pd.concat([both, individual, communal])
+df.to_csv("all_heating_fuel_mix_by_storey_count.csv")
+
+# %% [markdown]
+# ## What's the breakdown of fuel type overall?
+
+# %%
+flats_epc_df["main_heating_fuel_class"].value_counts(sort=True, normalize=False)
+
+# %%
+flats_epc_df["main_heating_fuel_class"].value_counts(sort=True, normalize=True)
+
+# %%
