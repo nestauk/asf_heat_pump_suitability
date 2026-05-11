@@ -27,7 +27,7 @@ import geopandas as gpd
 import pandas as pd
 import random
 
-from asf_heat_pump_suitability.analysis.exploratory.create_full_dataset import (
+from asf_heat_pump_suitability.research.exploratory.proof_of_concept_methodology.create_full_dataset import (
     stoke_getters,
 )
 import config

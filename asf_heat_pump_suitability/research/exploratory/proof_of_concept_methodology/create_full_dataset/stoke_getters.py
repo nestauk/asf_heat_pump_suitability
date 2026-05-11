@@ -1,7 +1,6 @@
 import geopandas as gpd
 from asf_heat_pump_suitability import config
 
-
 stoke_ward_boundary = (
     "s3://asf-heat-pump-suitability/source_data/stoke_ward_boundary.geojson"
 )

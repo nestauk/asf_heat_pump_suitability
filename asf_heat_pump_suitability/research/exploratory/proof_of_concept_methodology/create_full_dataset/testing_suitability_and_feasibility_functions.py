@@ -46,7 +46,6 @@ feasibility_scoring_data = prepare_df_for_feasibility_scoring(
 from assign_cluster_suitability_and_feasibility import create_df_feasibility_scoring
 from config import weights, expected_tech_types
 
-
 # %%
 weights
 
