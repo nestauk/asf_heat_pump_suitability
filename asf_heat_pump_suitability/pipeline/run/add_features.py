@@ -186,6 +186,11 @@ if __name__ == "__main__":
     inspire_file_names = gpd.read_file(
         config["data"]["processed"]["inspire_file_names"]
     )
+
+    # Find closest LA name in the INSPIRE data
+    list_las = outdoor_space.get_inspire_file_match(list_las)
+
+    # Find INSPIRE file path that matches this LA name
     inspire_file_names = inspire_file_names[
         (inspire_file_names["LAD23NM"].isin(list_las))
         | (inspire_file_names["registration_county"].isin(list_las))

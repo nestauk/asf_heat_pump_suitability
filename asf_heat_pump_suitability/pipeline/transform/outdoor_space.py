@@ -6,6 +6,7 @@ import geopandas as gpd
 import logging
 import pandas as pd
 import polars as pl
+import difflib
 from asf_heat_pump_suitability.getters import load_geodata
 from asf_heat_pump_suitability.utils import geo_utils
 
@@ -228,3 +229,40 @@ def sjoin_df_uprn_to_outdoor_space(
             columns=["geometry", "index_right"]
         )
     )
+
+
+def get_inspire_file_match(la_name, inspire_file_names, threshold=0.7):
+    """
+    Finds the closest INSPIRE file for a given LA name, if there is a match above a specified similarity threshold.
+
+    Args:
+        la_name (str): LA name to find an INSPIRE file match for.
+        file_list (gdf): dataframe of INSPIRE file names for England, Wales and Scotland with LAD23NM and registration_county columns.
+        threshold (float): lowest similarity score above which to accept an INSPIRE filename match. Default = 0.7
+
+    Returns:
+        str: name of INSPIRE file that best matches the LA name or None if there was no match above the similarity threshold.
+    """
+    # get list of all possible England, Wales and Scotland LA names in the INSPIRE data
+    combined_list = (
+        pd.concat(
+            [inspire_file_names["LAD23NM"], inspire_file_names["registration_county"]]
+        )
+        .dropna()
+        .tolist()
+    )
+
+    # make INSPIRE file names lower case for better matching, but keep original name to return
+    combined_map = {name.lower(): name for name in combined_list}
+
+    # get closest INSPIRE file match
+    match = difflib.get_close_matches(
+        la_name.lower(), combined_map.keys(), n=1, cutoff=threshold
+    )
+    if not match:
+        print(f"couldn't find an INSPIRE filename for {la_name}")
+    else:
+        match = match[0]
+        print(f"found an INSPIRE file match for {la_name}: {combined_map[match]}")
+
+    return combined_map[match] if match else None
