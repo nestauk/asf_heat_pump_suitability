@@ -87,35 +87,33 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
             config["data"]["epc"][epc_type], columns="UPRN"
         )
         before = len(df)
-        df = df.with_columns(
-            # Remove any invalid UPRNs (i.e. those IDs which are generated in EPC preprocessing generated from concatenating building ref number and address)
-            # These are not true UPRNs that can be used in joins across other datasets
-            pl.col("UPRN")
-            .cast(pl.Float64, strict=False)
-            .cast(pl.Int64)
-            .alias("UPRN")
-        ).drop_nulls()
+
     else:
         # England and Wales EPC data
         df_EW = base_getters.load_df_from_s3(
             config["data"]["epc"][epc_type]["EW"], columns="UPRN"
         )
         # Scotland EPC data
-        df_S = base_getters.load_df_from_s3(
-            config["data"]["epc"][epc_type]["S"], columns="OSG_REFERENCE_NUMBER"
-        ).rename({"OSG_REFERENCE_NUMBER": "UPRN"})
+        df_S = (
+            base_getters.load_df_from_s3(
+                config["data"]["epc"][epc_type]["S"], columns="OSG_REFERENCE_NUMBER"
+            )
+            .rename({"OSG_REFERENCE_NUMBER": "UPRN"})
+            .cast(pl.Float64, strict=False)
+            .cast(pl.Int64)
+        )
 
         df = pl.concat([df_EW, df_S])
         before = len(df)
 
-        df = df.with_columns(
-            # Remove any invalid UPRNs (i.e. those IDs which are generated in EPC preprocessing generated from concatenating building ref number and address)
-            # These are not true UPRNs that can be used in joins across other datasets
-            pl.col("UPRN")
-            .cast(pl.Float64, strict=False)
-            .cast(pl.Int64)
-            .alias("UPRN")
-        ).drop_nulls()
+    df = df.with_columns(
+        # Remove any invalid UPRNs (i.e. those IDs which are generated in EPC preprocessing generated from concatenating building ref number and address)
+        # These are not true UPRNs that can be used in joins across other datasets
+        pl.col("UPRN")
+        .cast(pl.Float64, strict=False)
+        .cast(pl.Int64)
+        .alias("UPRN")
+    ).drop_nulls()  # TODO: Scotland commercial EPC data has a lot (37 %) of null UPRNs.
 
     logging.info(
         f"{before - len(df)} invalid UPRNs dropped from {epc_type} EPC register. {len(df)} valid UPRNs remaining"
