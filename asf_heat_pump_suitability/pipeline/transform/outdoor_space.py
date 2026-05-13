@@ -237,7 +237,7 @@ def get_inspire_file_match(la_name, inspire_file_names, threshold=0.7):
 
     Args:
         la_name (str): LA name to find an INSPIRE file match for.
-        file_list (gdf): dataframe of INSPIRE file names for England, Wales and Scotland with LAD23NM and registration_county columns.
+        inspire_file_names (gdf): dataframe of INSPIRE file names for England, Wales and Scotland with LAD23NM and registration_county columns.
         threshold (float): lowest similarity score above which to accept an INSPIRE filename match. Default = 0.7
 
     Returns:
@@ -256,13 +256,14 @@ def get_inspire_file_match(la_name, inspire_file_names, threshold=0.7):
     combined_map = {name.lower(): name for name in combined_list}
 
     # get closest INSPIRE file match
-    match = difflib.get_close_matches(
-        la_name.lower(), combined_map.keys(), n=1, cutoff=threshold
+    matches = difflib.get_close_matches(
+        la_name.lower(), combined_map.keys(), n=3, cutoff=threshold
     )
-    if not match:
+    if not matches:
         print(f"couldn't find an INSPIRE filename for {la_name}")
     else:
-        match = match[0]
+        match = matches[0]
         print(f"found an INSPIRE file match for {la_name}: {combined_map[match]}")
+        print(f"other possible matches for {la_name}: {matches[1:]}")
 
-    return combined_map[match] if match else None
+    return combined_map[match] if matches else None

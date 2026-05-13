@@ -188,7 +188,12 @@ if __name__ == "__main__":
     )
 
     # Find closest LA name in the INSPIRE data
-    list_las = outdoor_space.get_inspire_file_match(list_las)
+    list_las = [
+        outdoor_space.get_inspire_file_match(
+            la_name=la, inspire_file_names=inspire_file_names
+        )
+        for la in list_las
+    ]
 
     # Find INSPIRE file path that matches this LA name
     inspire_file_names = inspire_file_names[
