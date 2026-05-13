@@ -132,6 +132,12 @@ constant:
   glasgow:
     la_names: "Glasgow City"
     grid_squares: "NS"
+  south_lanarkshire:
+    la_names: "South Lanarkshire"
+    grid_squares:
+      - "NT"
+      - "NS"
+      - "NX"
   target_crs: 27700 # British National Grid
   tech_types:
     individual: "Individual solution"
