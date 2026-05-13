@@ -164,10 +164,9 @@ if __name__ == "__main__":
         local_authority=local_authorities
     )
 
-    if len(hn_zones_gdf) > 0:
-        features_df = heat_network_zones.extend_df_heat_network_zone_bool(
-            uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
-        )
+    features_df = heat_network_zones.extend_df_heat_network_zone_bool(
+        uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
+    )
 
     # Load spatial signature polygons and label UPRNs in city centres
     spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
