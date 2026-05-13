@@ -137,7 +137,6 @@ constant:
     grid_squares:
       - "NT"
       - "NS"
-      - "NX"
   target_crs: 27700 # British National Grid
   tech_types:
     individual: "Individual solution"
