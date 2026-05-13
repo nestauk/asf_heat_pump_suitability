@@ -264,6 +264,6 @@ def get_inspire_file_match(la_name, inspire_file_names, threshold=0.7):
     else:
         match = matches[0]
         print(f"found an INSPIRE file match for {la_name}: {combined_map[match]}")
-        print(f"other possible matches for {la_name}: {matches[1:]}")
+        print(f"all possible matches for {la_name}: {matches}")
 
     return combined_map[match] if matches else None
