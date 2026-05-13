@@ -13,21 +13,6 @@ In the tables below, the 'Config key' column indicates the keys used in `asf_hea
 
 Please refer to the table below for a full list of data sources and their respective licensing and locations.
 
-#### Data attributions
-
-- Contains public sector information licensed under the [Open Government Licence v.3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
-- The data for this research include data provided by the Geographic Data Service (GeoDS), a Smart Data Research UK Investment: ES/Z504464/1.
-- Contains Ordnance Survey data. © Crown copyright and database right 2026.
-- Contains Royal Mail data © Royal Mail copyright and database right 2026.
-- Contains GeoPlace data © Local Government Information House Limited copyright and database right 2026.
-- Contains Historic Environment Scotland and Ordnance Survey data © Historic Environment Scotland - Scottish Charity No. SC045925 © Crown copyright and database right 2026
-- Contains public sector information from Plymouth City Council licensed under the [Open Government Licence v.3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
-- This information is subject to Crown copyright and database rights 2026 and is reproduced with the permission of HM Land Registry. See INSPIRE index polygons [conditions of use](https://use-land-property-data.service.gov.uk/datasets/inspire#conditions).
-- This work uses HM Land Registry's INSPIRE Index Polygons service. This information is subject to Crown copyright and database rights 2026 and is reproduced with the permission of HM Land Registry. The polygons (including the associated geometry, namely x, y co-ordinates) are subject to Crown copyright and database rights 2026 Ordnance Survey 100026316.
-- This work uses designated Historic Asset GIS Data, The Welsh Historic Environment Service (Cadw), 2026, licensed under the Open Government Licence.
-- This work uses Historic England data © Historic England 2026. Contains Ordnance Survey data © Crown copyright and database right 2026. The Historic England GIS Data contained in this material was obtained on August 2024. The most publicly available up to date Historic England GIS Data can be obtained from HistoricEngland.org.uk.
-- This work uses Registers of Scotland's land extent polygons. © Crown copyright. Reproduced with the permission of Registers of Scotland.
-
 #### Code & software attributions
 
 This work uses code modified from [fieldmaps/edge-extender](https://github.com/fieldmaps/edge-extender/) for use in Python. fieldmaps/edge-extender is published under an MIT License.
