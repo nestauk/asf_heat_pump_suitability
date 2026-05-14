@@ -15,7 +15,7 @@ from collections import OrderedDict
 import argparse
 import logging
 from asf_heat_pump_suitability.utils import save_utils
-from asf_heat_pump_suitability.analysis.flats_on_fossils.features import (
+from asf_heat_pump_suitability.research.analysis.flats_on_fossils.features import (
     building_rise,
     fuel_type,
 )

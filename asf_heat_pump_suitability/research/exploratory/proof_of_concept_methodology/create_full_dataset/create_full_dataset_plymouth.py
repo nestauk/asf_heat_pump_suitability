@@ -36,7 +36,9 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
     off_gas,
     output_areas,
 )
-from asf_heat_pump_suitability.analysis.flats_on_fossils.features import fuel_type
+from asf_heat_pump_suitability.research.analysis.flats_on_fossils.features import (
+    fuel_type,
+)
 from asf_heat_pump_suitability.pipeline.reweight_epc import prepare_sample
 import folium
 import config

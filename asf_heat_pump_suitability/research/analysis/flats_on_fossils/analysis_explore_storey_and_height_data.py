@@ -11,7 +11,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from asf_heat_pump_suitability.utils import save_utils
-from asf_heat_pump_suitability.analysis.flats_on_fossils.features import building_rise
+from asf_heat_pump_suitability.research.analysis.flats_on_fossils.features import (
+    building_rise,
+)
 
 # %% [markdown]
 # ## 1. Load processed EPC data for flats
