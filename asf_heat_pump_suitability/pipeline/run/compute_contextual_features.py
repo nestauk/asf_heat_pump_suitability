@@ -19,6 +19,8 @@ import geopandas as gpd
 
 from asf_heat_pump_suitability import config
 
+ANCHOR_LOAD_RADIUS = config["constant"]["clustering"]["anchor_load_radius_m"]
+
 
 def parse_arguments() -> argparse.Namespace:
     """
@@ -89,9 +91,7 @@ def extend_df_contextual_features(
     - number of off-gas properties
     - proximity to coastline flag (within 1500m)
     - protected area flag
-
-    Note that "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` column is added in the cluster.py,
-    so not explicitly included here as it is a feature of the clusters_df input to this function.
+    - within anchor load radius flag
 
     Args:
         clusters_df (pl.DataFrame): dataframe of clusters with cluster_id and `within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` feature
@@ -144,13 +144,13 @@ def extend_df_contextual_features(
             .alias("median_outdoor_space_m2"),
             # in_hn_zone flag
             pl.when(pl.col("in_hn_zone").any())
-            .then(True)
-            .otherwise(False)
+            .then("Yes")
+            .otherwise("No")
             .alias("in_hn_zone"),
             # in_city_centre flag
             pl.when(pl.col("in_city_centre").any())
-            .then(True)
-            .otherwise(False)
+            .then("Yes")
+            .otherwise("No")
             .alias("in_city_centre"),
             # n_uprns
             pl.col("UPRN").n_unique().alias("n_UPRNs"),
@@ -161,9 +161,15 @@ def extend_df_contextual_features(
             # n_uprns_off_gas
             pl.col("off_gas").sum().alias("n_uprns_off_gas"),
             # near_coastline flag
-            pl.col("within_1500m_coastline").any().alias("within_1500m_coastline"),
-            # in_conservation_area flag
-            pl.col("in_protected_area").any().alias("in_protected_area"),
+            pl.when(pl.col("within_1500m_coastline").any())
+            .then("Yes")
+            .otherwise("No")
+            .alias("within_1500m_coastline"),
+            # in_protected_area flag
+            pl.when(pl.col("in_protected_area").any())
+            .then("Yes")
+            .otherwise("No")
+            .alias("in_protected_area"),
         )
         .select(
             [
@@ -187,15 +193,31 @@ def extend_df_contextual_features(
     )
 
     # Add percentages used for sorting & filtering in the tool
-    # owner occupied, social rented, private rented percentages
+    # Tenure cols: owner occupied, social rented, private rented percentages
     tenure_cols = [
         col for col in dummy_contextual_feat_df.columns if col.startswith("tenure_")
     ]
+    # Adding percentages of properties with solar PV and off-gas, which are also used for filtering in the tool
+    perc_cols = tenure_cols + [
+        "n_uprns_solar_pv",
+        "n_uprns_off_gas",
+    ]
     clusters_df = clusters_df.with_columns(
         [
-            (pl.col(col) / pl.col("n_UPRNs") * 100).alias("perc_" + col)
-            for col in tenure_cols
+            (pl.col(col) / pl.col("n_UPRNs") * 100).alias(
+                "perc_" + col if col in tenure_cols else "perc_" + col.split("n_")[1]
+            )
+            for col in perc_cols
         ]
+    )
+
+    # Within anchor load feature already existed within clusters_df, as it's generated in the cluster generation step
+    # Changing values from True/False to Yes/No for easier filtering in the tool
+    clusters_df = clusters_df.with_columns(
+        pl.when(pl.col(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"))
+        .then("Yes")
+        .otherwise("No")
+        .alias(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load")
     )
 
     return clusters_df
