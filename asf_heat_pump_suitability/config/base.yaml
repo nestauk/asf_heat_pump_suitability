@@ -143,13 +143,15 @@ constant:
     networked: "Networked heat pump"
     communal: "Communal solution"
     heat_networks: "District heat network"
-  # radius in metres around anchor properties within which we are reassigning N-GSHP to communal
-  anchor_radius: 50
   tech_type_codes:
     individual: "IND"
     networked: "NHP"
     communal: "COM"
     heat_networks: "DHNZ"
+  anchor_radius: 50 # radius in metres around anchor properties within which we are reassigning N-GSHP to communal
+  coastline:
+    distance_from_coastline_threshold_m: 1500 # distance in metres from coastline threshold
+    simplify_tolerance_m: 150 # tolerance in m (metres) used to simplify coastline geometries
   ID:
     building: "ID"
   clustering:

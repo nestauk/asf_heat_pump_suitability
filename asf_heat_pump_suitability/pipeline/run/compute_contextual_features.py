@@ -19,7 +19,10 @@ import geopandas as gpd
 
 from asf_heat_pump_suitability import config
 
-ANCHOR_LOAD_RADIUS = config["constant"]["clustering"]["anchor_load_radius_m"]
+ANCHOR_LOAD_RADIUS = config["constant"]["clustering"]["anchor_radius"]
+COASTLINE_DISTANCE_THRESHOLD_M = config["constant"]["coastline"][
+    "distance_from_coastline_threshold_m"
+]
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -161,10 +164,10 @@ def extend_df_contextual_features(
             # n_uprns_off_gas
             pl.col("off_gas").sum().alias("n_uprns_off_gas"),
             # near_coastline flag
-            pl.when(pl.col("within_1500m_coastline").any())
+            pl.when(pl.col(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline").any())
             .then("Yes")
             .otherwise("No")
-            .alias("within_1500m_coastline"),
+            .alias(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"),
             # in_protected_area flag
             pl.when(pl.col("in_protected_area").any())
             .then("Yes")
@@ -182,7 +185,7 @@ def extend_df_contextual_features(
                 "n_uprns_in_listed_building",
                 "n_uprns_solar_pv",
                 "n_uprns_off_gas",
-                "within_1500m_coastline",
+                f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline",
                 "in_protected_area",
             ]
         )
