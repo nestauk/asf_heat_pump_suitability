@@ -14,7 +14,7 @@ import shapely
 import argparse
 from tqdm import tqdm
 from asf_heat_pump_suitability.utils import save_utils
-from asf_heat_pump_suitability.getters import load_data
+from asf_heat_pump_suitability.getters import load_geodata
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     building_footprint,
     lat_lon,
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     ]
 
     logging.info("Loading UK UPRNs")
-    uk_uprns_gdf = load_data.get_df_osopen_uprn_latlon()
+    uk_uprns_gdf = load_geodata.load_df_osopen_uprn()
     uk_uprns_gdf = lat_lon.generate_gdf_uprn_coords(
         uk_uprns_gdf, usecols=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
     )[["UPRN", "geometry"]]

@@ -64,28 +64,6 @@ def load_gdf_microsoft_building_footprints(url: str) -> gpd.GeoDataFrame:
     return gdf
 
 
-# TODO move to utils for flats on fossils
-def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
-    """
-    Get raw OS (Ordnance Survey) Open UPRN dataset containing latitude and longitude and British National Grid x and y
-    coordinates for all UPRNs in Great Britain.
-
-    Args:
-        **kwargs fo pl.read_csv
-
-    Returns:
-        pl.DataFrame: raw OS Open UPRN dataset with lat/lon and x/y coordinates for every UPRN
-    """
-    print("Loading OS OpenMap UPRN dataset...")
-    df = base_getters.get_df_from_zip_csv_s3(
-        config["data_source"]["GB_osopen_uprn_latlon"],
-        extract_file="osopenuprn_202405.csv",
-        **kwargs,
-    )
-
-    return df
-
-
 def load_df_off_gas_pcds() -> pl.DataFrame:
     """
     Get off gas grid postcodes from Supply Point Administration dataset.
