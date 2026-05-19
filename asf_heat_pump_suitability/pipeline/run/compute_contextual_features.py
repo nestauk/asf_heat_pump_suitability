@@ -147,13 +147,13 @@ def extend_df_contextual_features(
             .alias("median_outdoor_space_m2"),
             # in_hn_zone flag
             pl.when(pl.col("in_hn_zone").any())
-            .then("Yes")
-            .otherwise("No")
+            .then(pl.lit("Yes"))
+            .otherwise(pl.lit("No"))
             .alias("in_hn_zone"),
             # in_city_centre flag
             pl.when(pl.col("in_city_centre").any())
-            .then("Yes")
-            .otherwise("No")
+            .then(pl.lit("Yes"))
+            .otherwise(pl.lit("No"))
             .alias("in_city_centre"),
             # n_uprns
             pl.col("UPRN").n_unique().alias("n_UPRNs"),
@@ -165,13 +165,13 @@ def extend_df_contextual_features(
             pl.col("off_gas").sum().alias("n_uprns_off_gas"),
             # near_coastline flag
             pl.when(pl.col(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline").any())
-            .then("Yes")
-            .otherwise("No")
+            .then(pl.lit("Yes"))
+            .otherwise(pl.lit("No"))
             .alias(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"),
             # in_protected_area flag
             pl.when(pl.col("in_protected_area").any())
-            .then("Yes")
-            .otherwise("No")
+            .then(pl.lit("Yes"))
+            .otherwise(pl.lit("No"))
             .alias("in_protected_area"),
         )
         .select(
@@ -218,8 +218,8 @@ def extend_df_contextual_features(
     # Changing values from True/False to Yes/No for easier filtering in the tool
     clusters_df = clusters_df.with_columns(
         pl.when(pl.col(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"))
-        .then("Yes")
-        .otherwise("No")
+        .then(pl.lit("Yes"))
+        .otherwise(pl.lit("No"))
         .alias(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load")
     )
 
