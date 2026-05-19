@@ -99,16 +99,6 @@ def load_df_off_gas_pcds() -> pl.DataFrame:
     return df
 
 
-def load_df_gov_LSOA_LA() -> pd.DataFrame:
-    """
-    Load data.gov data of LSOA and the local authority they are part of.
-    """
-    df = pd.read_csv(
-        config["data_source"]["EW_LSOA_LA"], usecols=["LSOA21CD", "LAD23NM", "LAD23CD"]
-    )
-    return df
-
-
 def load_df_gov_LSOA_region() -> pd.DataFrame:
     """
     Load data.gov data of LSOA and the region they are part of.
