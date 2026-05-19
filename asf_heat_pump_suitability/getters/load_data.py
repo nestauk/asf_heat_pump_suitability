@@ -99,24 +99,6 @@ def load_df_off_gas_pcds() -> pl.DataFrame:
     return df
 
 
-def load_df_nrs_dwellings() -> pl.DataFrame:
-    """
-    Load 2023 dwelling counts per 2011 Data Zone in Scotland from National Records of Scotland. Data remains in raw
-    form with light processing to correct column headers and dtypes.
-
-    Returns:
-        pl.DataFrame: dwelling counts per 2011 Scottish Data Zone
-    """
-    df = base_getters.get_df_from_excel_s3_path(
-        config["data_source"]["S_NRScotland_households"], sheet_name="2023"
-    )
-    # Remove empty rows and set column headers to correct names
-    df.columns = df.row(2)
-    df = df[3:].cast(schemas.nrs_dwellings)
-
-    return df
-
-
 def load_desnz_geodata(
     gpkg_path: str, shp_path: str, layer_name: str
 ) -> Tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
