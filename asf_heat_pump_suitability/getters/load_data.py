@@ -64,28 +64,6 @@ def load_gdf_microsoft_building_footprints(url: str) -> gpd.GeoDataFrame:
     return gdf
 
 
-def get_df_ons_garden_space_avg(**kwargs) -> pl.DataFrame:
-    """
-    Get raw ONS 'Access to garden space, Great Britain' dataset.
-
-    Args:
-        **kwargs for pl.read_excel
-
-    Returns:
-        pl.DataFrame: raw ONS 'Access to garden space' dataset
-    """
-    content = base_getters.get_content_from_s3_path(
-        config["data_source"]["GB_ons_garden_space_access"]
-    )
-    df = pl.read_excel(
-        content,
-        sheet_name="MSOA gardens",
-        engine="calamine",
-        **kwargs,
-    )
-    return df
-
-
 def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
     """
     Get raw OS (Ordnance Survey) Open UPRN dataset containing latitude and longitude and British National Grid x and y
