@@ -4,7 +4,7 @@ import regex as re
 import logging
 from tqdm import tqdm
 import warnings
-from asf_heat_pump_suitability.getters import base_getters, get_datasets
+from asf_heat_pump_suitability.getters import base_getters, get_datasets, load_geodata
 from asf_heat_pump_suitability.utils import geo_utils
 
 
@@ -24,7 +24,7 @@ def generate_gdf_file_bounds_s(path: str) -> gpd.GeoDataFrame:
     for shp_dir in shp_dirs:
         files = base_getters.list_obj_s3_location(f"s3://{shp_dir}")
         shapefile = [file for file in files if file.endswith(".shp")][0]
-        gdf = get_datasets.load_gdf_inspire_land_parcels(
+        gdf = load_geodata.load_gdf_inspire_land_parcels(
             f"s3://{shapefile}", columns=["geometry"]
         )
         bounding_polygon = geo_utils.get_polygon_gdf_bounds(gdf)
@@ -202,7 +202,7 @@ def fill_nulls_file_bounds(
         f"Filling missing council boundaries for {len(missing_bbox)} land extent (INSPIRE) files"
     )
     for file in tqdm(missing_bbox):
-        land_parcels_gdf = get_datasets.load_gdf_inspire_land_parcels(f"s3://{file}")
+        land_parcels_gdf = load_geodata.load_gdf_inspire_land_parcels(f"s3://{file}")
         # Get the council name for the majority of a sample of land polygon centres
         candidate_nm = (
             gpd.sjoin(
@@ -236,11 +236,11 @@ def transform_gdf_land_parcels(land_parcel_file: str) -> gpd.GeoDataFrame:
     """
     # TODO - the process to identify nation for processing could be improved
     if "inspire_ew" in land_parcel_file:
-        gdf = get_datasets.load_gdf_inspire_land_parcels(
+        gdf = load_geodata.load_gdf_inspire_land_parcels(
             land_parcel_file, columns=["NATIONALCADASTRALREFERENCE", "geometry"]
         )
     elif "inspire_scotland" in land_parcel_file:
-        gdf = get_datasets.load_gdf_inspire_land_parcels(
+        gdf = load_geodata.load_gdf_inspire_land_parcels(
             land_parcel_file, columns=["nationalca", "geometry"]
         ).rename(columns={"nationalca": "NATIONALCADASTRALREFERENCE"})
     else:
