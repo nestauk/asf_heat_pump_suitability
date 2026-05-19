@@ -99,15 +99,6 @@ def load_df_off_gas_pcds() -> pl.DataFrame:
     return df
 
 
-def load_df_gov_LSOA_region() -> pd.DataFrame:
-    """
-    Load data.gov data of LSOA and the region they are part of.
-    """
-    return pd.read_csv(
-        config["data_source"]["EW_LSOA_region"], usecols=["LSOA21CD", "RGN22NM"]
-    )
-
-
 def load_df_lsoa_lad_lookup(**kwargs) -> pl.DataFrame:
     """
     Load LSOA to LAD lookup table from ONS.
