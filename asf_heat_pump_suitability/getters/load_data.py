@@ -99,46 +99,6 @@ def load_df_off_gas_pcds() -> pl.DataFrame:
     return df
 
 
-# TODO: move function to load_geodata.py
-def load_gdf_listed_buildings(nation: str = "GB", **kwargs) -> gpd.GeoDataFrame:
-    """
-    Get raw Listed Buildings polygons dataset for specified nation. CRS EPSG:27700, British National Grid.
-
-    Args:
-        nation (str): nation to load listed buildings data for. Options: "England"; "Scotland", "Wales", "GB". Default "GB" which loads data for all Great Britain.
-        **kwargs for `gpd.read_file()`
-
-    Returns:
-        gpd.GeoDataFrame: raw Listed Buildings dataset for specified nation
-    """
-    if nation.lower() == "england":
-        gdf = gpd.read_file(
-            config["data_source"]["E_historicengland_listed_buildings"], **kwargs
-        )
-    elif nation.lower() == "wales":
-        gdf = gpd.read_file(config["data_source"]["W_cadw_listed_buildings"], **kwargs)
-    elif nation.lower() == "scotland":
-        gdf = gpd.read_file(
-            config["data_source"]["S_scottish_gov_listed_buildings"], **kwargs
-        )
-    elif nation.lower() == "gb":
-        gdf_england = gpd.read_file(
-            config["data_source"]["E_historicengland_listed_buildings"], **kwargs
-        )
-        gdf_wales = gpd.read_file(
-            config["data_source"]["W_cadw_listed_buildings"], **kwargs
-        )
-        gdf_scotland = gpd.read_file(
-            config["data_source"]["S_scottish_gov_listed_buildings"], **kwargs
-        )
-        gdf = pd.concat([gdf_england, gdf_wales, gdf_scotland], ignore_index=True)
-    else:
-        raise ValueError(
-            "Please set `nation` to either 'England', 'Scotland', 'Wales', or 'GB'."
-        )
-    return gdf
-
-
 def load_gdf_ons_lsoa_bounds(**kwargs) -> gpd.GeoDataFrame:
     """
     Load raw 2021 LSOA geospatial boundary polygons for England and Wales from ONS. CRS
