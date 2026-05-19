@@ -86,27 +86,6 @@ def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
     return df
 
 
-def get_df_ons_number_of_households() -> pl.DataFrame:
-    """
-    Get raw ONS 'Number of households' per LSOA for England and Wales.
-
-    Returns:
-        pl.DataFrame: raw ONS 'Number of households' dataset
-    """
-    content = base_getters.get_content_from_s3_path(
-        config["data_source"]["EW_census_number_of_households"],
-    )
-    content_str = content.decode("utf-8")  # convert bytes to string
-    content_file = StringIO(content_str)  # convert string to file-like object
-    df = pl.read_csv(content_file, skip_rows=6, has_header=True)
-    # Preprocessing steps due to white space
-    # Remove the last eight rows
-    df = df.slice(0, len(df) - 9)
-    # Remove the first row
-    df = df.slice(1, len(df) - 1)
-    return df
-
-
 def get_df_ons_land_area() -> pl.DataFrame:
     """
     Get raw ONS 'land area' dataset. Contains Standard Area Measurements of ‘Land Area’ (Area to Mean High Water
