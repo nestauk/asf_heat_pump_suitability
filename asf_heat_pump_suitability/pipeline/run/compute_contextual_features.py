@@ -19,7 +19,7 @@ import geopandas as gpd
 
 from asf_heat_pump_suitability import config
 
-ANCHOR_LOAD_RADIUS = config["constant"]["clustering"]["anchor_radius"]
+ANCHOR_LOAD_RADIUS = config["constant"]["anchor_radius"]
 COASTLINE_DISTANCE_THRESHOLD_M = config["constant"]["coastline"][
     "distance_from_coastline_threshold_m"
 ]
