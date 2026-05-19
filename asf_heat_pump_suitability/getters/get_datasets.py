@@ -232,9 +232,9 @@ def get_df_ons_land_area() -> pl.DataFrame:
     return df
 
 
-def get_df_spa_offgasgrid() -> pl.DataFrame:
+def load_df_off_gas_pcds() -> pl.DataFrame:
     """
-    Get off gas grid data from Supply Point Administration dataset
+    Get off gas grid postcodes from Supply Point Administration dataset.
 
     Returns:
         pl.DataFrame: raw off gas grid dataset
