@@ -164,6 +164,13 @@ def extend_df_contextual_features(
             pl.col("within_1500m_coastline").any().alias("within_1500m_coastline"),
             # in_conservation_area flag
             pl.col("in_protected_area").any().alias("in_protected_area"),
+            # Counts of UPRNs in HN zone, city centre, near salt water, and in protected areas
+            pl.col("in_hn_zone").sum().alias("n_uprns_in_hn_zone"),
+            pl.col("in_city_centre").sum().alias("n_uprns_in_city_centre"),
+            pl.col("within_1500m_coastline")
+            .sum()
+            .alias("n_uprns_within_1500m_of_coastline"),
+            pl.col("in_protected_area").sum().alias("n_uprns_in_protected_area"),
         )
         .select(
             [
@@ -178,6 +185,10 @@ def extend_df_contextual_features(
                 "n_uprns_off_gas",
                 "within_1500m_coastline",
                 "in_protected_area",
+                "n_uprns_in_hn_zone",
+                "n_uprns_in_city_centre",
+                "n_uprns_within_1500m_of_coastline",
+                "n_uprns_in_protected_area",
             ]
         )
     )
