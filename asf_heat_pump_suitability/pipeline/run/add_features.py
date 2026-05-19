@@ -164,10 +164,9 @@ if __name__ == "__main__":
         local_authority=local_authorities
     )
 
-    if len(hn_zones_gdf) > 0:
-        features_df = heat_network_zones.extend_df_heat_network_zone_bool(
-            uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
-        )
+    features_df = heat_network_zones.extend_df_heat_network_zone_bool(
+        uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
+    )
 
     # Load spatial signature polygons and label UPRNs in city centres
     spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
@@ -183,13 +182,10 @@ if __name__ == "__main__":
     # ESTIMATE OUTDOOR SPACE
     # TODO scale beyond Plymouth. This is a temporary fix to working with multiple LAs
     print("Loading land registry data...")
-    inspire_file_names = gpd.read_file(
-        config["data"]["processed"]["inspire_file_names"]
-    )
-    inspire_file_names = inspire_file_names[
-        (inspire_file_names["LAD23NM"].isin(list_las))
-        | (inspire_file_names["registration_county"].isin(list_las))
-    ]["inspire_file_name"].unique()
+    inspire_file_gdf = gpd.read_file(config["data"]["processed"]["inspire_file_names"])
+    inspire_file_names = uprns_gdf.sjoin(
+        inspire_file_gdf, how="inner", predicate="intersects"
+    )["inspire_file_name"].unique()
 
     land_parcels_gdf = pd.concat(
         [
@@ -198,6 +194,8 @@ if __name__ == "__main__":
         ],
         ignore_index=False,
     )
+    land_parcels_gdf["geometry"] = land_parcels_gdf.normalize()
+    land_parcels_gdf = land_parcels_gdf.drop_duplicates(subset=["geometry"])
 
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares

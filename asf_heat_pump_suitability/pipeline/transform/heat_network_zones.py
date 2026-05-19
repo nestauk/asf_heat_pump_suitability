@@ -23,6 +23,9 @@ def extend_df_heat_network_zone_bool(
         pl.DataFrame: UPRN dataframe with boolean `in_hn_zone` column.
     """
     if hn_zone_gdf.empty:
+        print(
+            "No heat network zones found. Setting `in_hn_zone` to `False` for all UPRNs..."
+        )
         return uprns_df.with_columns(pl.lit(False).alias("in_hn_zone"))
     else:
         uprns_in_hnz = generate_dict_heat_network_zone_uprns(
