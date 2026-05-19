@@ -86,36 +86,6 @@ def get_df_osopen_uprn_latlon(**kwargs) -> pl.DataFrame:
     return df
 
 
-def get_df_ons_land_area() -> pl.DataFrame:
-    """
-    Get raw ONS 'land area' dataset. Contains Standard Area Measurements of ‘Land Area’ (Area to Mean High Water
-    Excluding Area of Inland Water) for England and Wales.
-
-    Returns:
-        pl.DataFrame: raw ONS 'land area' dataset
-    """
-    content = base_getters.get_content_from_s3_path(
-        config["data_source"]["EW_census_land_area"],
-    )
-    content_str = content.decode("utf-8")  # convert bytes to string
-    content_file = StringIO(content_str)  # convert string to file-like object
-
-    # dtypes specificed as polars read csv was inferring wrong data types and throwing error
-    dtypes = {
-        "LSOA21CD": pl.Utf8,
-        "LSOA21NM": pl.Utf8,
-        "Extent of the Realm (Area in KM2)": pl.Float64,
-        "Clipped to the Coastline (Area in KM2)": pl.Float64,
-        "Area of Inland Water (KM2)": pl.Float64,
-        "Land Count (Area in KM2)": pl.Float64,
-        "LTLA22CD": pl.Utf8,
-        "LTLA22NM": pl.Utf8,
-        "LTLA22NMW": pl.Utf8,
-    }
-    df = pl.read_csv(content_file, dtypes=dtypes, has_header=True)
-    return df
-
-
 def load_df_off_gas_pcds() -> pl.DataFrame:
     """
     Get off gas grid postcodes from Supply Point Administration dataset.
