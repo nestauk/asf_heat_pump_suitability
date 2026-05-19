@@ -2,7 +2,7 @@ import geopandas as gpd
 import pandas as pd
 import polars as pl
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.getters import load_data
+from asf_heat_pump_suitability.getters import load_data, load_geodata
 from asf_heat_pump_suitability.pipeline.prepare_features import epc
 
 
@@ -54,7 +54,7 @@ def transform_gdf_building_cons_areas() -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: building conservation areas in England and Wales
     """
-    e_gdf = load_data.load_gdf_historic_england_conservation_areas(
+    e_gdf = load_geodata.load_gdf_historic_england_conservation_areas(
         columns=["geometry", "name"]
     ).to_crs("EPSG:27700")
     # Remove erroneous point where the entirety of Leicester is classified as a conservation zone
@@ -62,7 +62,7 @@ def transform_gdf_building_cons_areas() -> gpd.GeoDataFrame:
         ["geometry"]
     ].reset_index(drop=True)
 
-    w_gdf = load_data.load_gdf_welsh_gov_conservation_areas(columns=["geometry"])
+    w_gdf = load_geodata.load_gdf_welsh_gov_conservation_areas(columns=["geometry"])
 
     gdf = pd.concat([e_gdf, w_gdf]).drop_duplicates(subset=["geometry"])
     gdf["in_conservation_area_ew"] = True
