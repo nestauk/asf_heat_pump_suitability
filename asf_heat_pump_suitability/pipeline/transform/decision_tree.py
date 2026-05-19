@@ -31,6 +31,7 @@ from asf_heat_pump_suitability.getters.load_geodata import (
     load_gdf_os_openmap_layer,
 )
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.getters import resolve_las
 
 OUTDOOR_SPACE_THRESHOLD_M2 = config["constant"]["threshold"][
     "outdoor_space_threshold_m2"
@@ -460,15 +461,19 @@ if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
 
+    list_las = resolve_las.resolve_la_names(local_authorities)
+    url_slug = resolve_las.make_slug(local_authorities)
+    grid_squares = resolve_las.get_la_grid_squares(list_las)
+
     # TODO: create getters for footprints & uprns in future
     buildings_gdf = load_gdf_os_openmap_layer(
         layer="building",
-        grid_squares=config["constant"][local_authorities]["grid_squares"],
+        grid_squares=grid_squares,
     )
 
     uprns_with_features_df = pl.read_parquet(
         config["output"]["dataset"]["domestic_uprns_with_features"].format(
-            local_authority=local_authorities
+            local_authority=url_slug
         )
     )
     uprns_with_features_gdf = generate_gdf_uprn_coords(df=uprns_with_features_df)
@@ -480,7 +485,7 @@ if __name__ == "__main__":
     )
 
     identify_gdf_tuple_most_suitable_tech_uprn_and_building(
-        local_authorities=local_authorities,
+        local_authorities=url_slug,
         buildings_gdf=buildings_gdf,
         id_col="ID",
         uprns_gdf=uprns_with_features_gdf,

@@ -68,6 +68,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import (
         base_getters,
         load_geodata,
+        resolve_las,
     )
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
@@ -86,16 +87,14 @@ if __name__ == "__main__":
 
     local_authorities = args.local_authorities.lower()
 
-    list_las = (
-        config["constant"][local_authorities]["la_names"]
-        if isinstance(config["constant"][local_authorities]["la_names"], list)
-        else [config["constant"][local_authorities]["la_names"]]
-    )
+    list_las = resolve_las.resolve_la_names(local_authorities)
+    url_slug = resolve_las.make_slug(local_authorities)
+    grid_squares = resolve_las.get_la_grid_squares(list_las)
+
     detail_level = args.detail
     uprns_path = config["output"]["dataset"]["domestic_uprns"].format(
-        local_authority=local_authorities
+        local_authority=url_slug
     )
-    grid_squares = config["constant"][local_authorities]["grid_squares"]
 
     # Load UPRN data
     print(f"Loading domestic UPRNs from: {uprns_path}")
@@ -160,9 +159,7 @@ if __name__ == "__main__":
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
 
     # Load planned heat network zone polygons (if available)
-    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
-        local_authority=local_authorities
-    )
+    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=list_las)
 
     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
         uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
@@ -346,6 +343,6 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             features_df,
             path=config["output"]["dataset"]["domestic_uprns_with_features"].format(
-                local_authority=local_authorities
+                local_authority=url_slug
             ),
         )

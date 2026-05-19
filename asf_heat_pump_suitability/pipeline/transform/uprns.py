@@ -348,6 +348,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import (
         load_geodata,
         load_boundaries,
+        resolve_las,
     )
     from asf_heat_pump_suitability.pipeline.transform import (
         non_residential_entities,
@@ -359,6 +360,10 @@ if __name__ == "__main__":
 
     local_authorities = args.local_authorities.lower()
 
+    list_las = resolve_las.resolve_la_names(local_authorities)
+    url_slug = resolve_las.make_slug(local_authorities)
+    grid_squares = resolve_las.get_la_grid_squares(list_las)
+
     uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
 
@@ -369,9 +374,8 @@ if __name__ == "__main__":
         grid_squares = None
     else:  # Specific local authorities (any number of LAs can be specified in config file)
         print(f"Creating residential UPRN dataset for {local_authorities}...")
-        grid_squares = config["constant"][local_authorities]["grid_squares"]
         la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=config["constant"][local_authorities]["la_names"]
+            select_las=list_las
         )
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
@@ -434,6 +438,6 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             df,
             config["output"]["dataset"]["domestic_uprns"].format(
-                local_authority=local_authorities
+                local_authority=url_slug
             ),
         )

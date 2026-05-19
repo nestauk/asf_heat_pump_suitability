@@ -21,7 +21,7 @@ from shapely.geometry import MultiPoint, Polygon, MultiPolygon
 import libpysal
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
-from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
+from asf_heat_pump_suitability.getters import load_geodata, load_boundaries, resolve_las
 
 ANCHOR_RADIUS = config["constant"]["anchor_radius"]
 
@@ -633,21 +633,23 @@ if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
     tolerance_m = config["constant"]["clustering"]["tolerance_m"]
-    list_las = config["constant"][local_authorities]["la_names"]
+
+    list_las = resolve_las.resolve_la_names(local_authorities)
+    url_slug = resolve_las.make_slug(local_authorities)
+    grid_squares = resolve_las.get_la_grid_squares(list_las)
 
     tech_gdf = (
         gpd.read_parquet(
             config["output"]["dataset"]["buildings_most_suitable_tech"].format(
-                local_authorities=local_authorities
+                local_authorities=url_slug
             )
         )
         .set_geometry("geometry")
         .to_crs(config["constant"]["target_crs"])
     )
-    grid_squares = config["constant"][local_authorities]["grid_squares"]
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        select_las=config["constant"][local_authorities]["la_names"]
+        select_las=list_las
     )
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares
@@ -673,6 +675,7 @@ if __name__ == "__main__":
     )
 
     # Add heat network zones to clusters_gdf, if they exist
+    # TODO: check this still works now LAs have been removed from config
     hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
         local_authority=local_authorities
     )
@@ -688,7 +691,7 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             clusters_gdf,
             config["output"]["dataset"]["tech_clusters"].format(
-                local_authorities=local_authorities,
+                local_authorities=url_slug,
                 tolerance_m=tolerance_m,
             ),
         )
