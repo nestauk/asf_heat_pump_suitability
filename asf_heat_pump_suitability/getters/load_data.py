@@ -99,18 +99,6 @@ def load_df_off_gas_pcds() -> pl.DataFrame:
     return df
 
 
-def load_df_scot_gov_data_zone_LA() -> pd.DataFrame:
-    """
-    Load Scottish Gov data zones with the local authority they are part of.
-    """
-    df = pd.read_csv(
-        config["data_source"]["S_data_zone_LA"],
-        usecols=["DZ22_Code", "DZ22_Name", "LA_Name", "LA_Code", "SPD_Name"],
-        encoding="iso-8859-1",
-    )
-    return df
-
-
 def load_df_gov_LSOA_LA() -> pd.DataFrame:
     """
     Load data.gov data of LSOA and the local authority they are part of.
