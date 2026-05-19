@@ -97,22 +97,3 @@ def load_df_off_gas_pcds() -> pl.DataFrame:
         config["data_source"]["UK_spa_offgasgrid"], sheet_name="Off-Gas Postcodes 2024"
     )
     return df
-
-
-def load_df_dz_lookup(**kwargs) -> pl.DataFrame:
-    """
-    Load Data Zone to LAD lookup table from Scottish Government.
-
-    Args:
-        **kwargs for `polars.read_csv()`
-
-    Returns:
-        pl.DataFrame: DZ to LAD lookup table for Scotland
-    """
-    df = pl.read_csv(
-        config["data_source"]["S_dz_lookup"],
-        infer_schema_length=5000,
-        ignore_errors=True,
-        **kwargs,
-    )
-    return df
