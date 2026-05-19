@@ -99,22 +99,6 @@ def load_df_off_gas_pcds() -> pl.DataFrame:
     return df
 
 
-def load_gdf_scotgov_data_zone_bounds(**kwargs) -> gpd.GeoDataFrame:
-    """
-    Load raw 2011 Data Zone geospatial boundary polygons and area data for Scotland from the Scottish Government. CRS
-    British National Grid (EPSG:27700).
-
-    Args:
-        **kwargs for geopandas.read_file()
-
-    Returns:
-        gpd.GeoDataFrame: boundary polygons and area standard area measurement data for 2011 Scottish Data Zones
-    """
-    return gpd.read_file(
-        config["data_source"]["S_scottish_gov_DZ2011_boundaries"], **kwargs
-    )
-
-
 def load_df_nrs_dwellings() -> pl.DataFrame:
     """
     Load 2023 dwelling counts per 2011 Data Zone in Scotland from National Records of Scotland. Data remains in raw
