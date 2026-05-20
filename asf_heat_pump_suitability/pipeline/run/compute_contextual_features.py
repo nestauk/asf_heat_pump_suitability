@@ -63,8 +63,7 @@ def filter_df_uprns_to_clusters(
     Returns:
         pl.DataFrame: filtered UPRN dataframe with only UPRNs within clusters
     """
-    print("len uprns before filtering:", len(uprns_gdf))
-    print("len clusters:", len(clusters_gdf))
+
     # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with cluster geodataframe
     uprns_df = pl.from_pandas(
         uprns_gdf.sjoin(
@@ -73,7 +72,7 @@ def filter_df_uprns_to_clusters(
             predicate="within",
         ).drop(columns=["geometry"])
     )
-    print("len uprns after filtering to clusters:", len(uprns_df))
+
     return uprns_df
 
 
@@ -137,6 +136,14 @@ def extend_df_contextual_features(
     contextual_feat_clusters_df = (
         uprns_df.group_by("cluster_id")
         .agg(
+            # n_uprns
+            pl.col("UPRN").n_unique().alias("n_UPRNs"),
+            # n_uprns_listed_building
+            pl.col("in_listed_building").sum().alias("n_uprns_in_listed_building"),
+            # n_uprns_solar_pv
+            pl.col("has_solar_pv").sum().alias("n_uprns_solar_pv"),
+            # n_uprns_off_gas
+            pl.col("off_gas").sum().alias("n_uprns_off_gas"),
             # median estimated energy consumption in 12 months (in kWh/m2)
             pl.col("ENERGY_CONSUMPTION_CURRENT")
             .median()
@@ -146,45 +153,49 @@ def extend_df_contextual_features(
             .median()
             .alias("median_outdoor_space_m2"),
             # in_hn_zone flag
-            pl.when(pl.col("in_hn_zone").any())
+            pl.when(pl.col("in_hn_zone").is_null().all())
+            .then(pl.lit("Unknown"))
+            .when(pl.col("in_hn_zone").any())
             .then(pl.lit("Yes"))
             .otherwise(pl.lit("No"))
             .alias("in_hn_zone"),
             # in_city_centre flag
-            pl.when(pl.col("in_city_centre").any())
+            pl.when(pl.col("in_city_centre").is_null().all())
+            .then(pl.lit("Unknown"))
+            .when(pl.col("in_city_centre").any())
             .then(pl.lit("Yes"))
             .otherwise(pl.lit("No"))
             .alias("in_city_centre"),
-            # n_uprns
-            pl.col("UPRN").n_unique().alias("n_UPRNs"),
-            # n_uprns_listed_building
-            pl.col("in_listed_building").sum().alias("n_uprns_in_listed_building"),
-            # n_uprns_solar_pv
-            pl.col("has_solar_pv").sum().alias("n_uprns_solar_pv"),
-            # n_uprns_off_gas
-            pl.col("off_gas").sum().alias("n_uprns_off_gas"),
             # near_coastline flag
-            pl.when(pl.col(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline").any())
+            pl.when(
+                pl.col(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline")
+                .is_null()
+                .all()
+            )
+            .then(pl.lit("Unknown"))
+            .when(pl.col(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline").any())
             .then(pl.lit("Yes"))
             .otherwise(pl.lit("No"))
             .alias(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"),
             # in_protected_area flag
-            pl.when(pl.col("in_protected_area").any())
+            pl.when(pl.col("in_protected_area").is_null().all())
+            .then(pl.lit("Unknown"))
+            .when(pl.col("in_protected_area").any())
             .then(pl.lit("Yes"))
             .otherwise(pl.lit("No"))
             .alias("in_protected_area"),
         )
         .select(
             [
-                "median_estimated_energy_consumption_12_months_kwh_per_m2",
                 "cluster_id",
-                "median_outdoor_space_m2",
-                "in_hn_zone",
-                "in_city_centre",
                 "n_UPRNs",
                 "n_uprns_in_listed_building",
                 "n_uprns_solar_pv",
                 "n_uprns_off_gas",
+                "median_estimated_energy_consumption_12_months_kwh_per_m2",
+                "median_outdoor_space_m2",
+                "in_hn_zone",
+                "in_city_centre",
                 f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline",
                 "in_protected_area",
             ]
@@ -193,6 +204,17 @@ def extend_df_contextual_features(
 
     clusters_df = clusters_df.join(
         contextual_feat_clusters_df, how="left", on="cluster_id"
+    )
+
+    print(clusters_df[f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"].value_counts())
+    # Switching from booleans to Yes/No/Unknown `within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load`
+    clusters_df = clusters_df.with_columns(
+        pl.when(pl.col(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load").is_null())
+        .then(pl.lit("Unknown"))
+        .when(pl.col(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"))
+        .then(pl.lit("Yes"))
+        .otherwise(pl.lit("No"))
+        .alias(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load")
     )
 
     # Add percentages used for sorting & filtering in the tool
@@ -212,15 +234,6 @@ def extend_df_contextual_features(
             )
             for col in perc_cols
         ]
-    )
-
-    # Within anchor load feature already existed within clusters_df, as it's generated in the cluster generation step
-    # Changing values from True/False to Yes/No for easier filtering in the tool
-    clusters_df = clusters_df.with_columns(
-        pl.when(pl.col(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"))
-        .then(pl.lit("Yes"))
-        .otherwise(pl.lit("No"))
-        .alias(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load")
     )
 
     return clusters_df
@@ -244,7 +257,7 @@ if __name__ == "__main__":
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
 
     print("Loading opportunity areas...")
-    clusters_gdf = gpd.read_file(
+    clusters_gdf = gpd.read_parquet(
         config["output"]["dataset"]["tech_clusters"].format(
             local_authorities=local_authorities,
             tolerance_m=tolerance_m,
@@ -263,6 +276,51 @@ if __name__ == "__main__":
         ),  # drop geometry for now and use polars
         uprns_df=uprns_df,
     )
+
+    ##------ TODO: SECTION TO BE DELETED BEFORE MERGING TO DEV
+    print(
+        "Value counts for in_hn_zone:",
+        clusters_with_contextual_features_df["in_hn_zone"].value_counts(),
+    )
+    print(
+        "Value counts for in_city_centre:",
+        clusters_with_contextual_features_df["in_city_centre"].value_counts(),
+    )
+    print(
+        "Value counts for within_1500m_coastline:",
+        clusters_with_contextual_features_df[
+            f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"
+        ].value_counts(),
+    )
+    print(
+        "Value counts for in_protected_area:",
+        clusters_with_contextual_features_df["in_protected_area"].value_counts(),
+    )
+    print(
+        "Value counts for within_anchor_load_radius:",
+        clusters_with_contextual_features_df[
+            f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
+        ].value_counts(),
+    )
+    print(
+        "Percentage of properties with solar PV:",
+        clusters_with_contextual_features_df["perc_uprns_solar_pv"].mean(),
+    )
+    print(
+        "Percentage of properties off-gas:",
+        clusters_with_contextual_features_df["perc_uprns_off_gas"].mean(),
+    )
+    percentage_cols = [
+        col
+        for col in clusters_with_contextual_features_df.columns
+        if col.startswith("perc_")
+    ]
+    for col in percentage_cols:
+        missing_percentage = (
+            clusters_with_contextual_features_df[col].is_null().mean() * 100
+        )
+        print(f"Percentage of missing values in {col}: {missing_percentage:.2f}%")
+    ##------ SECTION ENDS ------Í
 
     if args.save:
         # Adding the geometry back to the clusters dataframe
