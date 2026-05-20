@@ -206,7 +206,6 @@ def extend_df_contextual_features(
         contextual_feat_clusters_df, how="left", on="cluster_id"
     )
 
-    print(clusters_df[f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"].value_counts())
     # Switching from booleans to Yes/No/Unknown `within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load`
     clusters_df = clusters_df.with_columns(
         pl.when(pl.col(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load").is_null())
