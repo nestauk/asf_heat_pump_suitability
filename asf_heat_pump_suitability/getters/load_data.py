@@ -1,3 +1,5 @@
+"Functions to load non-geospatial datasets. No or minimal processing occurs in these functions."
+
 import polars as pl
 import pandas as pd
 import geopandas as gpd
