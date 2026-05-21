@@ -180,7 +180,8 @@ def identify_df_building_most_suitable_tech(
                 ]
             ]
         )
-        # TODO this will drop valid EPC UPRNs with no building footprint. These need to be mapped to their nearest building footprints.
+        # This will drop valid EPC UPRNs with no building footprint.
+        # These need to be mapped to their nearest building footprints to be included.
         # This is required to prevent the creation of a row with no geometry
     ).drop_nulls(subset=id_col)
 
