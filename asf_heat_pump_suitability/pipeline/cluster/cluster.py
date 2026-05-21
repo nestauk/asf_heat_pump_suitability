@@ -64,6 +64,7 @@ def generate_gdf_clusters(
     polygon_overlay_gdf: gpd.GeoDataFrame,
     combined_anchor_gdf: gpd.GeoDataFrame,
     radius: float,
+    id_col: str = "ID",
 ) -> gpd.GeoDataFrame:
     """
     Generate clusters of building footprints, where one cluster:
@@ -80,6 +81,7 @@ def generate_gdf_clusters(
         poi_gdf (gpd.GeoDataFrame): anchor properties dataframe taken from POI data, with point geometries
         important_buildings_gdf (gpd.GeoDataFrame): important building footprint polygons
         radius (float): radius in metres around anchor property within which communal solutions should be assigned
+        id_col (str): building ID column. Default "ID".
 
     Returns:
         gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster
@@ -107,6 +109,15 @@ def generate_gdf_clusters(
     else:
         cells_gdf = gdfs[0]
 
+    # TODO move to proper testing when sample test set available
+    if len(cells_gdf) != len(tech_gdf):
+        n_cells = len(cells_gdf)
+        n_buildings = len(tech_gdf)
+        raise UserWarning(
+            f"The number of cells and the number of buildings are different when they should be the same. "
+            f"There is a problem with the clustering. N cells: {n_cells}; N buildings: {n_buildings}"
+        )
+
     # Tech reassignment for cells within a certain distance of anchor properties
     reassigned_gdf = reassign_gdf_near_anchor_properties(
         tech_gdf=tech_gdf,
@@ -115,13 +126,13 @@ def generate_gdf_clusters(
     )
 
     cells_gdf["assigned_tech"] = cells_gdf.ID.map(
-        reassigned_gdf.set_index("ID").to_dict()["assigned_tech"]
+        reassigned_gdf.set_index(id_col).to_dict()["assigned_tech"]
     )
 
     # Add "within_{radius}m_from_anchor_load" as a column to cells_gdf
     cells_gdf = cells_gdf.merge(
-        reassigned_gdf[["ID", f"within_{radius}m_from_anchor_load"]],
-        on="ID",
+        reassigned_gdf[[id_col, f"within_{radius}m_from_anchor_load"]],
+        on=id_col,
         how="left",
     )
 
