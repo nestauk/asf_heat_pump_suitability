@@ -368,33 +368,29 @@ def _handle_gdf_fragmented_cells(
         how="inner",
     )
 
-    print(cells_gdf[cell_id_col].duplicated().sum())
-    print(cells_gdf["geometry"].duplicated().sum())
-    print(tech_gdf["geometry"].duplicated().sum())
+    # Clean fragments to avoid bleeding geometries creating neighbour 'swallowing' effects during dissolve.
+    # e.g. building A swallows building B's cell due to microscopic overlaps in a cell fragment.
+    pure_fragments_gdf = gpd.overlay(
+        cells_gdf[[building_id_col, "geometry"]],
+        tech_gdf[["geometry"]],
+        how="difference",
+    )
 
     # Dissolve building footprints and their cell fragments together
     cols = [building_id_col, "geometry"]
-    union_gdf = (
-        pd.concat([cells_gdf[cols], tech_gdf[cols]], ignore_index=True)
-        .dissolve(by=building_id_col)
-        .rename(columns={"geometry": "unionised_geometry"})
-    )
+    union_gdf = pd.concat(
+        [pure_fragments_gdf[cols], tech_gdf[cols]], ignore_index=True
+    ).dissolve(by=building_id_col)
 
     # Join unionised cells back to original buildings
-    cells_gdf = tech_gdf.merge(union_gdf, how="left", on=building_id_col)
-
-    # If building is missing a Voronoi cell (due to overlay operation), then assign it the building footprint geometry
-    # This happens in some edge cases
-    cells_gdf["unionised_geometry"] = cells_gdf["unionised_geometry"].fillna(
-        cells_gdf["geometry"]
-    )
-
-    # Keep the Voronoi cell geometries, filled with building footprints
-    return (
-        cells_gdf.drop(columns=["geometry", building_id_col])
-        .rename(columns={"unionised_geometry": "geometry"})
+    cells_gdf = (
+        tech_gdf.drop(columns="geometry")
+        .merge(union_gdf, how="left", on=building_id_col)
         .set_geometry("geometry", crs=cells_gdf.crs)
     )
+
+    # # Keep the Voronoi cell geometries, filled with building footprints
+    return cells_gdf.drop(columns=[building_id_col])
 
 
 def load_tranform_gdf_linestring_barriers(
