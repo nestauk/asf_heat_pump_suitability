@@ -3,7 +3,7 @@ import geopandas as gpd
 import pandas as pd
 from tqdm import tqdm
 import logging
-from asf_heat_pump_suitability.getters import get_datasets
+from asf_heat_pump_suitability.getters import load_geodata
 from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
 
 
@@ -39,7 +39,7 @@ def transform_gdf_listed_buildings(nation: str = "GB") -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: listed buildings dataset for specified nation with grade and geometry columns.
     """
-    gdf = get_datasets.load_gdf_listed_buildings(nation, columns=["geometry"])
+    gdf = load_geodata.load_gdf_listed_buildings(nation, columns=["geometry"])
     gdf = gdf.drop_duplicates(subset="geometry")
     gdf["in_listed_building"] = True
 
