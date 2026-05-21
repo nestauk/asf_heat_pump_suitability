@@ -382,15 +382,16 @@ def _handle_gdf_fragmented_cells(
         [pure_fragments_gdf[cols], tech_gdf[cols]], ignore_index=True
     ).dissolve(by=building_id_col)
 
-    # Join unionised cells back to original buildings
+    # Join unionised cells back to original buildings to retain building assets
     cells_gdf = (
+        # Drop building geometries before merging as we already have them included in the dissolve above
         tech_gdf.drop(columns="geometry")
         .merge(union_gdf, how="left", on=building_id_col)
         .set_geometry("geometry", crs=cells_gdf.crs)
+        .drop(columns=[building_id_col])
     )
 
-    # # Keep the Voronoi cell geometries, filled with building footprints
-    return cells_gdf.drop(columns=[building_id_col])
+    return cells_gdf[~cells_gdf["geometry"].is_empty]
 
 
 def load_tranform_gdf_linestring_barriers(
