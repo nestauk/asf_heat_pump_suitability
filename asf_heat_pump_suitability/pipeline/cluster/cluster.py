@@ -157,15 +157,47 @@ def generate_gdf_clusters(
         + (clusters_gdf["cluster_id"] + 1).astype(str)
     )
 
+    # TODO move to testing when sample set available
     if round(clusters_gdf["geometry"].area.sum(), 3) > round(
         clusters_gdf["geometry"].union_all().area, 3
     ):
         warnings.warn(
             "Sum of all cluster areas is greater than the area of the cluster union. "
-            "This indicates cluster polygons are overlapping."
+            "This indicates cluster polygons are overlapping.",
+            UserWarning,
+        )
+
+    # TODO move to testing when sample set available
+    joined_gdf = sjoin_gdf_buildings_to_clusters(
+        tech_gdf=tech_gdf, clusters_gdf=clusters_gdf
+    )
+    n_missing = joined_gdf["cluster_id"].isna().sum()
+    if n_missing > 0:
+        warnings.warn(
+            f"There is a problem with the clustering. {n_missing} buildings have not been assigned to a cluster.",
+            UserWarning,
         )
 
     return clusters_gdf
+
+
+def sjoin_gdf_buildings_to_clusters(
+    tech_gdf: gpd.GeoDataFrame, clusters_gdf: gpd.GeoDataFrame
+):
+    """
+    Join buildings to their corresponding cluster.
+
+    Args:
+        tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
+        buildings_gdf (gpd.GeoDataFrame): clusters of building footprints with the same assigned technology, one row per cluster.
+
+    Returns:
+        gpd.GeoDataFrame: building footprints with assigned tech type and cluster ID
+    """
+    buffered_tech_gdf = tech_gdf.copy()
+    # Reduce the size of the building footprints slightly so they can be completely contained within the cluster cells
+    buffered_tech_gdf["geometry"] = buffered_tech_gdf["geometry"].buffer(-0.1)
+    return buffered_tech_gdf.sjoin(clusters_gdf, how="left", predicate="within")
 
 
 def extend_edges_gdf(
