@@ -337,25 +337,51 @@ def _handle_gdf_fragmented_cells(
     Returns:
         gpd.GeoDataFrame: domestic building cells with overlapping physical barriers removed and cell fragments handled
     """
-    # Add a temporary ID for each building
-    id_col = "_internal_building_id"
-    tech_gdf[id_col] = np.arange(len(tech_gdf))
-    cols = [id_col, "geometry"]
+    # Add a temporary ID for each building and cell fragment
+    building_id_col = "_internal_building_id"
+    cell_id_col = "_internal_cell_fragment_id"
 
-    # Keep only cell fragments that intersect with a building and label with the ID of the building
-    cells_gdf = cells_gdf.sjoin(
-        tech_gdf[cols], how="inner", predicate="intersects"
-    ).drop(columns=["index_right"])
+    tech_gdf = tech_gdf.assign(**{building_id_col: np.arange(len(tech_gdf))})
+    cells_gdf = cells_gdf.assign(**{cell_id_col: np.arange(len(cells_gdf))})
+
+    # Keep only cell fragments that intersect with a building and label with the ID of the building.
+    # We use intersection overlay and get the intersection area between each fragment and building, retaining only the
+    # pairing with the largest intersection per cell fragment. This handles cases where one fragment joins to multiple
+    # buildings to prevent the final set of cells from containing any overlapping geometries.
+    intersections_gdf = gpd.overlay(
+        cells_gdf[[cell_id_col, "geometry"]],
+        tech_gdf[[building_id_col, "geometry"]],
+        how="intersection",
+    )
+    intersections_gdf["area"] = intersections_gdf.geometry.area
+    intersections_gdf["max_intersection"] = intersections_gdf.groupby(cell_id_col)[
+        "area"
+    ].transform("max")
+    intersections_gdf = intersections_gdf[
+        intersections_gdf["area"] == intersections_gdf["max_intersection"]
+    ].copy()
+
+    # Map building IDs to best intersecting cell fragments
+    cells_gdf = cells_gdf.merge(
+        intersections_gdf[[cell_id_col, building_id_col]],
+        on=cell_id_col,
+        how="inner",
+    )
+
+    print(cells_gdf[cell_id_col].duplicated().sum())
+    print(cells_gdf["geometry"].duplicated().sum())
+    print(tech_gdf["geometry"].duplicated().sum())
 
     # Dissolve building footprints and their cell fragments together
+    cols = [building_id_col, "geometry"]
     union_gdf = (
-        pd.concat([cells_gdf[cols], tech_gdf[cols]])
-        .dissolve(by=id_col)
+        pd.concat([cells_gdf[cols], tech_gdf[cols]], ignore_index=True)
+        .dissolve(by=building_id_col)
         .rename(columns={"geometry": "unionised_geometry"})
     )
 
     # Join unionised cells back to original buildings
-    cells_gdf = tech_gdf.merge(union_gdf, how="left", on=id_col)
+    cells_gdf = tech_gdf.merge(union_gdf, how="left", on=building_id_col)
 
     # If building is missing a Voronoi cell (due to overlay operation), then assign it the building footprint geometry
     # This happens in some edge cases
@@ -365,7 +391,7 @@ def _handle_gdf_fragmented_cells(
 
     # Keep the Voronoi cell geometries, filled with building footprints
     return (
-        cells_gdf.drop(columns=["geometry", id_col])
+        cells_gdf.drop(columns=["geometry", building_id_col])
         .rename(columns={"unionised_geometry": "geometry"})
         .set_geometry("geometry", crs=cells_gdf.crs)
     )
