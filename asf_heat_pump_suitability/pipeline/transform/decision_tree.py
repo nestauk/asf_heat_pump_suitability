@@ -64,32 +64,6 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def extend_gdf_building_footprints(
-    gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame, id_col: str
-) -> gpd.GeoDataFrame:
-    """
-    Extends the GeoDataFrame with the building footprint geometries the UPRNs are located within.
-
-    Args:
-        gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
-        buildings_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
-        id_col (str): The name of the column in `buildings_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
-
-    Returns:
-        gpd.GeoDataFrame: GeoDataFrame with building footprint polygons added.
-    """
-    # Creates a copy of the building geometry column to keep after the spatial join
-    buildings_gdf["building_geometry"] = buildings_gdf["geometry"]
-
-    # Extend the UPRN GeoDataFrame with building footprints geometry using id_col
-    gdf = gdf.merge(
-        buildings_gdf[[id_col, "building_geometry"]],
-        how="left",
-        on=id_col,
-    )
-    return gdf
-
-
 def identify_dict_most_suitable_tech(
     in_block_of_flats: bool, outdoor_space: float, city_centre_or_hnz: bool
 ) -> dict:
