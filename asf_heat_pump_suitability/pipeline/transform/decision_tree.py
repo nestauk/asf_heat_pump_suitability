@@ -26,7 +26,7 @@ import geopandas as gpd
 import argparse
 
 # local imports
-from asf_heat_pump_suitability.pipeline.transform.uprns import generate_gdf_uprn_coords
+from asf_heat_pump_suitability.pipeline.transform import uprns
 from asf_heat_pump_suitability.getters.load_geodata import (
     load_gdf_os_openmap_layer,
 )
@@ -206,7 +206,9 @@ def identify_df_building_most_suitable_tech(
                 ]
             ]
         )
-    )
+        # TODO this will drop valid EPC UPRNs with no building footprint. These need to be mapped to their nearest building footprints.
+        # This is required to prevent the creation of a row with no geometry
+    ).drop_nulls(subset=id_col)
 
     # Create df with set of most suitable tech per building footprint
     solutions_per_footprint_df = (
@@ -471,7 +473,7 @@ if __name__ == "__main__":
             local_authority=local_authorities
         )
     )
-    uprns_with_features_gdf = generate_gdf_uprn_coords(df=uprns_with_features_df)
+    uprns_with_features_gdf = uprns.generate_gdf_uprn_coords(df=uprns_with_features_df)
 
     # TODO: move this to add_features.py
     uprns_with_features_gdf["in_city_centre_or_hn_zone"] = (
