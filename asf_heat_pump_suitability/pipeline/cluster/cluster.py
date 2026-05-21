@@ -19,6 +19,7 @@ import numpy as np
 import shapely
 from shapely.geometry import MultiPoint, Polygon, MultiPolygon
 import libpysal
+import warnings
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
@@ -113,9 +114,10 @@ def generate_gdf_clusters(
     if len(cells_gdf) != len(tech_gdf):
         n_cells = len(cells_gdf)
         n_buildings = len(tech_gdf)
-        raise UserWarning(
+        warnings.warn(
             f"The number of cells and the number of buildings are different when they should be the same. "
-            f"There is a problem with the clustering. N cells: {n_cells}; N buildings: {n_buildings}"
+            f"There is a problem with the clustering. N cells: {n_cells}; N buildings: {n_buildings}",
+            UserWarning,
         )
 
     # Tech reassignment for cells within a certain distance of anchor properties
@@ -154,6 +156,14 @@ def generate_gdf_clusters(
         + "_"
         + (clusters_gdf["cluster_id"] + 1).astype(str)
     )
+
+    if round(clusters_gdf["geometry"].area.sum(), 3) > round(
+        clusters_gdf["geometry"].union_all().area, 3
+    ):
+        warnings.warn(
+            "Sum of all cluster areas is greater than the area of the cluster union. "
+            "This indicates cluster polygons are overlapping."
+        )
 
     return clusters_gdf
 
