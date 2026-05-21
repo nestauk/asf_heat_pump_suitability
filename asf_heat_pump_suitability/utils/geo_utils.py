@@ -92,3 +92,39 @@ def verify_gdf_crs(
         return gdf.to_crs(target_crs)
     else:
         return gdf
+
+
+def find_overlapping_geometries(
+    gdf: gpd.GeoDataFrame, return_geometries: bool = True, id_col=None
+) -> gpd.GeoDataFrame | set:
+    """
+    Find geometries in the same GeoDataFrame which overlap with any other geometry in the same GeoDataFrame.
+
+    Args:
+        gdf (gpd.GeoDataFrame): containing geometries to check for overlaps
+        return_geometries (bool): set to `True` to return a `GeoDataFrame` with the overlapping geometries. Set to `False`
+        to return just the IDs of overlapping geometries.
+        id_col (str): name of unique ID for geometries. Required only when `return_geometries` is set to `False`. Default
+        `None` to use index.
+
+    Returns:
+        gpd.GeoDataFrame | set: geometries or IDs of geometries which overlap with any other geometry within the `GeoDataFrame`
+    """
+    buffer = gdf.copy()
+    # Buffer added to prevent touching neighbours being identified as overlapping
+    buffer["geometry"] = buffer["geometry"].buffer(-0.0001)
+    intersecting_gdf = buffer.sjoin(buffer, predicate="intersects")
+    intersecting_gdf = intersecting_gdf.loc[
+        intersecting_gdf.index != intersecting_gdf.index_right
+    ]
+    if return_geometries:
+        return intersecting_gdf
+    else:
+        if id_col:
+            overlapping_ids = set(intersecting_gdf[f"{id_col}_left"])
+        else:
+            overlapping_ids = set(intersecting_gdf.index)
+            id_col = "index"
+
+        print(f"ID used: {id_col}. Overlapping ID count: {len(overlapping_ids)}")
+        return overlapping_ids
