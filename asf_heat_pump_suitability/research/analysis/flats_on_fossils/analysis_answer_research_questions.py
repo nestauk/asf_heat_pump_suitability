@@ -17,7 +17,7 @@
 import polars as pl
 import matplotlib.pyplot as plt
 from matplotlib import ticker
-from asf_heat_pump_suitability.getters import get_target
+from asf_heat_pump_suitability.research.analysis.flats_on_fossils import utils
 
 # %% [markdown]
 # ## 1. Load processed EPC data for flats
@@ -122,7 +122,7 @@ flats_epc_df = raw_flats_epc_df.with_columns(
 # Information from combined Scotland and England and Wales census data: 6,238,634.
 
 # %%
-census_property_df = get_target.transform_df_target_property_type()
+census_property_df = utils.transform_df_target_property_type()
 print(census_property_df["Flat, maisonette or apartment"].sum())
 
 total_properties = census_property_df.sum().with_columns(
