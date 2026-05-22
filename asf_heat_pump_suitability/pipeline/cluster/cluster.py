@@ -272,9 +272,6 @@ def extend_edges_gdf(
     )
     # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
     voronoi_gdf = (
-        # TODO because of the 'contains' predicate, we lose a small number of Voronoi cells which are missing a tiny edge.
-        # This is handled later by retaining the building footprint of these buildings instead.
-        # However it could be improved by retaining the max intersection.
         voronoi_gdf.sjoin(points_gdf, how="inner", predicate="contains")
         .dissolve(by=id_col)
         .reset_index()
@@ -408,7 +405,7 @@ def _handle_gdf_fragmented_cells(
         container_gdf=cells_gdf,
         within_gdf=tech_gdf,
         container_id=cell_id_col,
-        within_id=building_id_col,
+        within_cols={building_id_col, "geometry"},
     )
 
     # Map building IDs to best intersecting cell fragments
@@ -444,10 +441,26 @@ def _handle_gdf_fragmented_cells(
     return cells_gdf[~cells_gdf["geometry"].is_empty]
 
 
-def sjoin_gdf_max_intersection(container_gdf, within_gdf, container_id, within_id):
+def sjoin_gdf_max_intersection(
+    container_gdf,
+    within_gdf,
+    container_id,
+    container_cols: set[str] = None,
+    within_cols: set[str] = None,
+):
+    if container_cols:
+        container_cols.add(container_id)
+        container_cols.add("geometry")
+    else:
+        container_cols = [container_id, "geometry"]
+    if within_cols:
+        within_cols.add("geometry")
+    else:
+        within_cols = ["geometry"]
+
     intersections_gdf = gpd.overlay(
-        container_gdf[[container_id, "geometry"]],
-        within_gdf[[within_id, "geometry"]],
+        container_gdf[container_cols],
+        within_gdf[within_cols],
         how="intersection",
     )
     intersections_gdf["area"] = intersections_gdf.geometry.area
