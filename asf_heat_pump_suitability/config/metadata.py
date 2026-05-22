@@ -11,11 +11,13 @@ ANCHOR_LOAD_RADIUS = config["constant"]["clustering"]["anchor_load_radius"]
 COASTLINE_DISTANCE_THRESHOLD_M = config["constant"]["clustering"][
     "distance_from_coastline_threshold_m"
 ]
+
 metadata = {
     "License": "This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.",
     "Date of creation": datetime.now().strftime("%Y-%m-%d"),
     "Data sources and attributions": "https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme",
-    "Variable descriptions": {
+    "GitHub repository": "https://github.com/nestauk/asf_heat_pump_suitability",
+    "Variable names and descriptions": {
         "cluster_id": "Unique identifier for each cluster.",
         "assigned_tech": "Assigned low-carbon heating technology category. Categories are: `Individual solution`, `Networked heat pump`, `Communal solution`, `District heat network`. Can additionaly contain `DESNZ_HNZ` values (if there the local authority was part of the DESNZ heat network zoning).",
         "geometry": "Polygon geometry of the cluster",
@@ -50,9 +52,9 @@ metadata = {
         "median_estimated_energy_consumption_12_months_kwh_per_m2": "Median estimated energy consumption in 12 months (in kWh/m2) of properties within the cluster",
         "median_outdoor_space_m2": "Median of the maximum contigous outdoor space in m2 of properties within the cluster",
         "in_hn_zone": "Whether any properties within the cluster are in DESNZ heat network zones. You can refer to: https://www.gov.uk/government/publications/heat-network-zone-opportunity-reports",
-        "in_city_centre": "Whether any properties within the cluster are in 'city centres' as per the Spatial Signatures Framework",
+        "in_city_centre": "Whether any properties within the cluster are in a location classified into one of the following pen portraits/signature types in the Spatial Signatures Framework: https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/transform/city_centres.py#L10-L17",
         f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline": f"Whether any properties within the cluster are within {COASTLINE_DISTANCE_THRESHOLD_M}m of the coastline",
         "in_protected_area": "Whether any properties within the cluster are in conservation areas for England and Wales, or Scottish World Heritage sites.",
-        f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load": f"Whether the cluster is within {ANCHOR_LOAD_RADIUS}m from an anchor load (a location with high electricity demand, e.g. a school or hospital). See a full list of anchor load types in: ",
+        f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load": f"Whether the cluster is within {ANCHOR_LOAD_RADIUS}m from an anchor load (a location with high electricity demand, e.g. a school or hospital). See a full list of anchor load types in: https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/cluster/cluster.py#L28-L46",
     },
 }
