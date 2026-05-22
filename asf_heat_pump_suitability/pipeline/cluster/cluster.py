@@ -405,7 +405,7 @@ def _handle_gdf_fragmented_cells(
         container_gdf=cells_gdf,
         within_gdf=tech_gdf,
         container_id=cell_id_col,
-        within_cols={building_id_col, "geometry"},
+        within_cols=[building_id_col, "geometry"],
     )
 
     # Map building IDs to best intersecting cell fragments
@@ -445,16 +445,20 @@ def sjoin_gdf_max_intersection(
     container_gdf,
     within_gdf,
     container_id,
-    container_cols: set[str] = None,
-    within_cols: set[str] = None,
+    container_cols: list[str] = None,
+    within_cols: list[str] = None,
 ):
     if container_cols:
+        container_cols = set(container_cols)
         container_cols.add(container_id)
         container_cols.add("geometry")
+        container_cols = list(container_cols)
     else:
         container_cols = [container_id, "geometry"]
     if within_cols:
+        within_cols = set(within_cols)
         within_cols.add("geometry")
+        container_cols = list(within_cols)
     else:
         within_cols = ["geometry"]
 
