@@ -340,10 +340,7 @@ if __name__ == "__main__":
         )
 
         geojson_file = json.loads(clusters_with_contextual_features_gdf.to_json())
-        geojson_file["metadata"] = config["metadata"]  # .format(
-        #     coastline_distance_threshold_m=COASTLINE_DISTANCE_THRESHOLD_M,
-        #     anchor_load_radius=ANCHOR_LOAD_RADIUS,
-        #     )
+        geojson_file["metadata"] = config["metadata"]
 
         print(geojson_file)
         save_utils.save_to_s3(
