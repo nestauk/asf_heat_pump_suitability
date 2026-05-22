@@ -272,6 +272,9 @@ def extend_edges_gdf(
     )
     # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
     voronoi_gdf = (
+        # TODO because of the 'contains' predicate, we lose a small number of Voronoi cells which are missing a tiny edge.
+        # This is handled later by retaining the building footprint of these buildings instead.
+        # However it could be improved by retaining the max intersection.
         voronoi_gdf.sjoin(points_gdf, how="inner", predicate="contains")
         .dissolve(by=id_col)
         .reset_index()
