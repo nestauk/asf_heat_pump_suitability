@@ -404,18 +404,12 @@ def _handle_gdf_fragmented_cells(
     # We use intersection overlay and get the intersection area between each fragment and building, retaining only the
     # pairing with the largest intersection per cell fragment. This handles cases where one fragment joins to multiple
     # buildings to prevent the final set of cells from containing any overlapping geometries.
-    intersections_gdf = gpd.overlay(
-        cells_gdf[[cell_id_col, "geometry"]],
-        tech_gdf[[building_id_col, "geometry"]],
-        how="intersection",
+    intersections_gdf = sjoin_gdf_max_intersection(
+        container_gdf=cells_gdf,
+        within_gdf=tech_gdf,
+        container_id=cell_id_col,
+        within_id=building_id_col,
     )
-    intersections_gdf["area"] = intersections_gdf.geometry.area
-    intersections_gdf["max_intersection"] = intersections_gdf.groupby(cell_id_col)[
-        "area"
-    ].transform("max")
-    intersections_gdf = intersections_gdf[
-        intersections_gdf["area"] == intersections_gdf["max_intersection"]
-    ].copy()
 
     # Map building IDs to best intersecting cell fragments
     cells_gdf = cells_gdf.merge(
@@ -448,6 +442,25 @@ def _handle_gdf_fragmented_cells(
     )
 
     return cells_gdf[~cells_gdf["geometry"].is_empty]
+
+
+def sjoin_gdf_max_intersection(container_gdf, within_gdf, container_id, within_id):
+    intersections_gdf = gpd.overlay(
+        container_gdf[[container_id, "geometry"]],
+        within_gdf[[within_id, "geometry"]],
+        how="intersection",
+    )
+    intersections_gdf["area"] = intersections_gdf.geometry.area
+    intersections_gdf["max_intersection"] = intersections_gdf.groupby(container_id)[
+        "area"
+    ].transform("max")
+    return (
+        intersections_gdf[
+            intersections_gdf["area"] == intersections_gdf["max_intersection"]
+        ]
+        .copy()
+        .drop(columns=["area", "max_intersection"])
+    )
 
 
 def load_tranform_gdf_linestring_barriers(
