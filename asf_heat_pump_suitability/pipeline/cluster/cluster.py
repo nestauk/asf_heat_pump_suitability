@@ -458,7 +458,7 @@ def sjoin_gdf_max_intersection(
     if within_cols:
         within_cols = set(within_cols)
         within_cols.add("geometry")
-        container_cols = list(within_cols)
+        within_cols = list(within_cols)
     else:
         within_cols = ["geometry"]
 
