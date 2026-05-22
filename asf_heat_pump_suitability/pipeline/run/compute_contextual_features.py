@@ -335,6 +335,9 @@ if __name__ == "__main__":
         clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
             clusters_with_contextual_features_df, geometry="geometry", crs="EPSG:27700"
         )
+        clusters_with_contextual_features_gdf = (
+            clusters_with_contextual_features_gdf.to_crs(epsg=4326)
+        )
 
         geojson_file = json.loads(clusters_with_contextual_features_gdf.to_json())
         geojson_file["metadata"] = config["metadata"]  # .format(
@@ -342,6 +345,7 @@ if __name__ == "__main__":
         #     anchor_load_radius=ANCHOR_LOAD_RADIUS,
         #     )
 
+        print(geojson_file)
         save_utils.save_to_s3(
             geojson_file,
             config["output"]["dataset"]["clusters_tech_contextual_info"].format(
