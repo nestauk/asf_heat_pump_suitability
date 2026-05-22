@@ -57,7 +57,7 @@ data:
     inspire_file_names: "s3://asf-local-heat-planning-tool/inputs/processed/inspire/inspire_file_bounds_EWS.geojson"
     # Manually labelled blocks of flats
     manually_labelled_block_of_flats: "s3://asf-local-heat-planning-tool/inputs/processed/manually_labelled_block_of_flats.parquet"
-    # Valid local authority names
+    # Valid local authority names, taken from the 'LAD23NM' column of the UK_ons_lad_bound file
     valid_la_names: "s3://asf-local-heat-planning-tool/inputs/processed/valid_la_names.csv"
 
 constant:

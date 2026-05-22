@@ -232,7 +232,7 @@ def load_gdf_os_openmap_layer(
         gpd.GeoDataFrame: OS OpenMap Local geometries for specified layer
     """
     if not grid_squares:  # Load all of GB
-        if layer == "GreenspaceSite":
+        if layer == "greenspace_site":
             file_path = config["data"]["geodata"]["gb_os_openmap_greenspace"]
         else:
             file_path = config["data"]["geodata"]["gb_os_openmap_local"]

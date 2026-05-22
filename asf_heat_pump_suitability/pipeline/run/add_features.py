@@ -37,6 +37,7 @@ def parse_arguments() -> argparse.Namespace:
         "--local_authorities",
         help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
+        nargs="+",
         required=True,
     )
 
@@ -68,7 +69,6 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import (
         base_getters,
         load_geodata,
-        resolve_las,
     )
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
@@ -81,19 +81,18 @@ if __name__ == "__main__":
         epc,
         heat_network_zones,
         city_centres,
+        local_authority,
     )
 
     args = parse_arguments()
 
-    local_authorities = args.local_authorities.lower()
+    local_authorities = [la.lower() for la in args.local_authorities]
 
-    list_las = resolve_las.resolve_la_names(local_authorities)
-    url_slug = resolve_las.make_slug(local_authorities)
-    grid_squares = resolve_las.get_la_grid_squares(list_las)
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
     detail_level = args.detail
     uprns_path = config["output"]["dataset"]["domestic_uprns"].format(
-        local_authority=url_slug
+        local_authority=local_authority_dict["url_slug"]
     )
 
     # Load UPRN data
@@ -119,7 +118,7 @@ if __name__ == "__main__":
     # Load building footprint data
     # TODO scale beyond sampling areas
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="building", grid_squares=grid_squares
+        layer="building", grid_squares=local_authority_dict["grid_squares"]
     )
 
     # Map UPRNs to the ID of the building they're in
@@ -158,8 +157,12 @@ if __name__ == "__main__":
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
 
-    # Load planned heat network zone polygons (if available)
-    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(local_authority=list_las)
+    # Load planned heat network zone polygons (if available) for each LA in the list, then concatenate the gdfs
+    hn_zones_gdf_list = [
+        load_geodata.load_gdf_heat_network_zones(local_authority=la)
+        for la in local_authority_dict["valid_local_authorities"]
+    ]
+    hn_zones_gdf = pd.concat(hn_zones_gdf_list, ignore_index=True)
 
     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
         uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
@@ -195,7 +198,7 @@ if __name__ == "__main__":
     land_parcels_gdf = land_parcels_gdf.drop_duplicates(subset=["geometry"])
 
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="building", grid_squares=grid_squares
+        layer="building", grid_squares=local_authority_dict["grid_squares"]
     )
 
     # Get intersection of building footprint polygons and land polygons
@@ -343,6 +346,6 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             features_df,
             path=config["output"]["dataset"]["domestic_uprns_with_features"].format(
-                local_authority=url_slug
+                local_authority=local_authority_dict["url_slug"]
             ),
         )

@@ -18,10 +18,11 @@ import pandas as pd
 import numpy as np
 import shapely
 from shapely.geometry import MultiPoint, Polygon, MultiPolygon
+from asf_heat_pump_suitability.pipeline.transform import local_authority
 import libpysal
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
-from asf_heat_pump_suitability.getters import load_geodata, load_boundaries, resolve_las
+from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
 ANCHOR_RADIUS = config["constant"]["anchor_radius"]
 
@@ -618,7 +619,8 @@ def parse_arguments() -> argparse.Namespace:
         "--local_authorities",
         help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
-        default="GB",
+        nargs="+",
+        default=["GB"],
         required=False,
     )
 
@@ -634,14 +636,12 @@ if __name__ == "__main__":
     local_authorities = args.local_authorities
     tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
-    list_las = resolve_las.resolve_la_names(local_authorities)
-    url_slug = resolve_las.make_slug(local_authorities)
-    grid_squares = resolve_las.get_la_grid_squares(list_las)
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
     tech_gdf = (
         gpd.read_parquet(
             config["output"]["dataset"]["buildings_most_suitable_tech"].format(
-                local_authorities=url_slug
+                local_authorities=local_authority_dict["url_slug"]
             )
         )
         .set_geometry("geometry")
@@ -649,18 +649,22 @@ if __name__ == "__main__":
     )
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        select_las=list_las
+        select_las=local_authority_dict["valid_local_authorities"]
     )
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="building", grid_squares=grid_squares
+        layer="building", grid_squares=local_authority_dict["grid_squares"]
     )
 
     # Load and transform physical barriers for clusters
-    line_overlay_gdf = load_tranform_gdf_linestring_barriers(grid_squares)
-    polygon_overlay_gdf = load_transform_gdf_polygon_barriers(grid_squares)
+    line_overlay_gdf = load_tranform_gdf_linestring_barriers(
+        local_authority_dict["grid_squares"]
+    )
+    polygon_overlay_gdf = load_transform_gdf_polygon_barriers(
+        local_authority_dict["grid_squares"]
+    )
 
     combined_anchor_gdf = load_transform_anchor_property_gdfs(
-        buildings_gdf=buildings_gdf, grid_squares=grid_squares
+        buildings_gdf=buildings_gdf, grid_squares=local_authority_dict["grid_squares"]
     )
 
     # Generate clusters
@@ -675,7 +679,6 @@ if __name__ == "__main__":
     )
 
     # Add heat network zones to clusters_gdf, if they exist
-    # TODO: check this still works now LAs have been removed from config
     hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
         local_authority=local_authorities
     )
@@ -691,7 +694,7 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             clusters_gdf,
             config["output"]["dataset"]["tech_clusters"].format(
-                local_authorities=url_slug,
+                local_authorities=local_authority_dict["url_slug"],
                 tolerance_m=tolerance_m,
             ),
         )

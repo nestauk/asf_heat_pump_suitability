@@ -33,6 +33,7 @@ def parse_arguments() -> argparse.Namespace:
         "--local_authorities",
         help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
+        nargs="+",
         required=True,
     )
 
@@ -202,22 +203,20 @@ def extend_df_contextual_features(
 
 
 if __name__ == "__main__":
-    from asf_heat_pump_suitability.pipeline.transform import uprns
+    from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
-    from asf_heat_pump_suitability.getters import resolve_las
 
     args = parse_arguments()
     local_authorities = args.local_authorities
     tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
-    list_las = resolve_las.resolve_la_names(local_authorities)
-    url_slug = resolve_las.make_slug(local_authorities)
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
         config["output"]["dataset"]["domestic_uprns_with_features"].format(
-            local_authority=url_slug
+            local_authority=local_authority_dict["url_slug"]
         )
     )
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
@@ -225,7 +224,7 @@ if __name__ == "__main__":
     print("Loading opportunity areas...")
     clusters_gdf = gpd.read_file(
         config["output"]["dataset"]["tech_clusters"].format(
-            local_authorities=url_slug,
+            local_authorities=local_authority_dict["url_slug"],
             tolerance_m=tolerance_m,
         ),
     ).to_crs(epsg=27700)
@@ -260,7 +259,7 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             clusters_with_contextual_features_gdf,
             config["output"]["dataset"]["clusters_tech_contextual_info"].format(
-                local_authorities=url_slug,
+                local_authorities=local_authority_dict["url_slug"],
                 tolerance_m=tolerance_m,
             ),
         )

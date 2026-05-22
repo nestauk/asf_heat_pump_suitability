@@ -126,7 +126,7 @@ def filter_gdf_domestic_uprns(
     uprn_gdf: gpd.GeoDataFrame,
     buildings_gdf: gpd.GeoDataFrame,
     non_residential_buildings_gdf: gpd.GeoDataFrame,
-    local_authority: str,
+    local_authority: str | list[str],
     id_col: str = config["constant"]["id"]["building"],
 ) -> gpd.GeoDataFrame:
     """
@@ -180,7 +180,9 @@ def filter_gdf_domestic_uprns(
 
     # TODO this could be updated to a classification model and scaled
     # This triggers for Plymouth only as the threshold density was calculated from Plymouth data only
-    if local_authority.lower() == "plymouth":
+    if [la.lower() for la in local_authority_dict["valid_local_authorities"]] == [
+        "plymouth"
+    ]:
         # Identify large buildings with low UPRN density which will be labelled non-domestic
         non_domestic_buildings_gdf = _generate_gdf_non_domestic_buildings_by_density(
             domestic_uprns_gdf=domestic_uprn_gdf,
@@ -328,6 +330,7 @@ def parse_arguments() -> argparse.Namespace:
         "--local_authorities",
         help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
+        nargs="+",
         default="GB",
         required=False,
     )
@@ -348,21 +351,19 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import (
         load_geodata,
         load_boundaries,
-        resolve_las,
     )
     from asf_heat_pump_suitability.pipeline.transform import (
         non_residential_entities,
         poi,
+        local_authority,
     )
     from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
 
-    local_authorities = args.local_authorities.lower()
+    local_authorities = [la.lower() for la in args.local_authorities]
 
-    list_las = resolve_las.resolve_la_names(local_authorities)
-    url_slug = resolve_las.make_slug(local_authorities)
-    grid_squares = resolve_las.get_la_grid_squares(list_las)
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
     uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
@@ -375,7 +376,7 @@ if __name__ == "__main__":
     else:  # Specific local authorities (any number of LAs can be specified in config file)
         print(f"Creating residential UPRN dataset for {local_authorities}...")
         la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=list_las
+            select_las=local_authority_dict["valid_local_authorities"]
         )
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
@@ -396,7 +397,7 @@ if __name__ == "__main__":
     # Get layers required for identifying residential UPRNs
     layers = {
         f"{layer}_gdf": load_geodata.load_gdf_os_openmap_layer(
-            layer=layer, grid_squares=grid_squares
+            layer=layer, grid_squares=local_authority_dict["grid_squares"]
         )
         for layer in ["important_building", "railway_station", "building"]
     }
@@ -416,7 +417,9 @@ if __name__ == "__main__":
         uprn_gdf=uprns_gdf,
         buildings_gdf=layers["building_gdf"],
         non_residential_buildings_gdf=non_residential_buildings_gdf,
-        local_authority=args.local_authorities.lower(),
+        local_authority=[
+            la.lower() for la in local_authority_dict["valid_local_authorities"]
+        ],
     )
 
     # Save residential UPRNs to S3
@@ -438,6 +441,6 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             df,
             config["output"]["dataset"]["domestic_uprns"].format(
-                local_authority=url_slug
+                local_authority=local_authority_dict["url_slug"]
             ),
         )

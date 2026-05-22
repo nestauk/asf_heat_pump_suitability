@@ -31,7 +31,7 @@ from asf_heat_pump_suitability.getters.load_geodata import (
     load_gdf_os_openmap_layer,
 )
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.getters import resolve_las
+from asf_heat_pump_suitability.pipeline.transform import local_authority
 
 OUTDOOR_SPACE_THRESHOLD_M2 = config["constant"]["threshold"][
     "outdoor_space_threshold_m2"
@@ -52,6 +52,7 @@ def parse_arguments() -> argparse.Namespace:
         "--local_authorities",
         help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
         type=str,
+        nargs="+",
         required=True,
     )
 
@@ -364,7 +365,7 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     Saves outputs to S3 if specified.
 
     Args:
-        local_authorities (str): Local authority or authorities.
+        local_authorities (str): filename to save decision tree outputs to.
         buildings_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
         id_col (str): The name of the column in `buildings_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
@@ -461,19 +462,17 @@ if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
 
-    list_las = resolve_las.resolve_la_names(local_authorities)
-    url_slug = resolve_las.make_slug(local_authorities)
-    grid_squares = resolve_las.get_la_grid_squares(list_las)
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
     # TODO: create getters for footprints & uprns in future
     buildings_gdf = load_gdf_os_openmap_layer(
         layer="building",
-        grid_squares=grid_squares,
+        grid_squares=local_authority_dict["grid_squares"],
     )
 
     uprns_with_features_df = pl.read_parquet(
         config["output"]["dataset"]["domestic_uprns_with_features"].format(
-            local_authority=url_slug
+            local_authority=local_authority_dict["url_slug"]
         )
     )
     uprns_with_features_gdf = generate_gdf_uprn_coords(df=uprns_with_features_df)
@@ -485,7 +484,7 @@ if __name__ == "__main__":
     )
 
     identify_gdf_tuple_most_suitable_tech_uprn_and_building(
-        local_authorities=url_slug,
+        local_authorities=local_authority_dict["url_slug"],
         buildings_gdf=buildings_gdf,
         id_col="ID",
         uprns_gdf=uprns_with_features_gdf,
