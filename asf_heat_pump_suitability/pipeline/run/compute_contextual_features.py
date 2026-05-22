@@ -342,7 +342,6 @@ if __name__ == "__main__":
         geojson_file = json.loads(clusters_with_contextual_features_gdf.to_json())
         geojson_file["metadata"] = config["metadata"]
 
-        print(geojson_file)
         save_utils.save_to_s3(
             geojson_file,
             config["output"]["dataset"]["clusters_tech_contextual_info"].format(
