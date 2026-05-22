@@ -66,9 +66,20 @@ def save_to_s3(df: pl.DataFrame | gpd.GeoDataFrame, path: str) -> None:
         else:
             with fsspec.open(path, "wb") as f:
                 df.to_file(f)
+    elif isinstance(df, dict):
+        if file_type == "geojson":
+            with fsspec.open(path, "w") as f:
+                import json
+
+                json.dump(df, f, indent=4, ensure_ascii=False)
+        else:
+            raise ValueError(
+                "Save to S3 can only save dict GeoDataFrames as .geojson file types."
+                "Please ensure the `path` argument contains .geojson file type."
+            )
     else:
         raise TypeError(
-            f"Can only save polars.DataFrame or geopandas.GeoDataFrame, not {type(df)}"
+            f"Can only save polars.DataFrame, geopandas.GeoDataFrame, or dict, not {type(df)}"
         )
 
 
