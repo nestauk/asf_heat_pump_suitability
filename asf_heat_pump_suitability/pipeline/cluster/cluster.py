@@ -352,14 +352,36 @@ def overlay_gdf_physical_barriers(
     Returns:
         gpd.GeoDataFrame: domestic building cells with overlapping physical barriers removed
     """
-    # Filter to domestic building Voronois only
-    voronoi_gdf = voronoi_gdf.sjoin(
-        tech_gdf[["assigned_tech", "geometry"]], how="inner", predicate="contains"
-    ).drop(columns="index_right")
+    # # Filter to domestic building Voronois only
+    # Add a temporary ID for each Voronoi cell
+    cell_id_col = "_internal_cell_fragment_id"
+
+    voronoi_gdf = voronoi_gdf.assign(**{cell_id_col: np.arange(len(voronoi_gdf))})
+
+    # Get the largest intersecting Voronoi cell for each domestic building.
+    # This method means that buildings with a Voronoi cell that does not completely contain them (e.g. missing a tiny corner)
+    # still retain a Voronoi cell
+    intersection_gdf = sjoin_gdf_max_intersection(
+        container_gdf=voronoi_gdf,
+        within_gdf=tech_gdf,
+        container_id=cell_id_col,
+        within_cols=["ID", "assigned_tech", "geometry"],
+    )
+    # Map each building to its corresponding Voronoi ID
+    cell_to_building_mapping = intersection_gdf.set_index(cell_id_col)["ID"].to_dict()
+
+    # Use the mapping to label the original Voronoi cells with the correct building ID
+    voronoi_gdf["select_id"] = voronoi_gdf[cell_id_col].replace(
+        cell_to_building_mapping
+    )
+    # Filter to the rows where the building ID matches (i.e. only domestic buildings are retained here)
+    domestic_voronoi_gdf = voronoi_gdf[
+        voronoi_gdf["ID"] == voronoi_gdf["select_id"]
+    ].drop(columns="select_id")
 
     # Remove areas covered by polygons and lines
     cells_gdf = (
-        voronoi_gdf.overlay(polygon_overlay_gdf, how="difference")
+        domestic_voronoi_gdf.overlay(polygon_overlay_gdf, how="difference")
         .overlay(line_overlay_gdf, how="difference")
         .explode()
     )
