@@ -471,10 +471,19 @@ def sjoin_gdf_max_intersection(
     building_cols: list[str] = None,
 ) -> gpd.GeoDataFrame:
     """
-    Match polygons from two different geodataframes which have the maximum intersecting overlap area.
+    Match cells to the buildings they have the greatest intersecting area with.
 
     Args:
-        cell_gdf (gpd.GeoDataFrame): polygons
+        cell_gdf (gpd.GeoDataFrame): polygons of cells which contain buildings
+        building_gdf (gpd.GeoDataFrame): polygons of building footprints
+        cell_id (str): name of column containing unique cell ID
+        cell_cols (list[str]): list of columns to retain from `cell_gdf`. Default `None` to retain only columns required for
+        the operation (`cell_id`, `geometry`).
+        building_cols (list[str]): list of columns to retain from `building_gdf`. Default `None` to retain only columns required for
+        the operation (`geometry`).
+
+    Returns:
+        gpd.GeoDataFrame: cells with the building that has the greatest intersecting area with them. One row per unique cell.
     """
     # Ensure required columns are retained
     if cell_cols:
@@ -484,7 +493,7 @@ def sjoin_gdf_max_intersection(
         cell_cols = list(cell_cols)
     else:
         cell_cols = [cell_id, "geometry"]
-    if building_gdf:
+    if building_cols:
         building_cols = set(building_cols)
         building_cols.add("geometry")
         building_cols = list(building_cols)
@@ -500,6 +509,7 @@ def sjoin_gdf_max_intersection(
     intersections_gdf["max_intersection"] = intersections_gdf.groupby(cell_id)[
         "area"
     ].transform("max")
+
     return (
         intersections_gdf[
             intersections_gdf["area"] == intersections_gdf["max_intersection"]
