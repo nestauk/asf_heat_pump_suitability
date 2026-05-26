@@ -17,6 +17,7 @@ import argparse
 import polars as pl
 import geopandas as gpd
 import json
+from datetime import datetime
 
 from asf_heat_pump_suitability import config
 
@@ -324,7 +325,7 @@ if __name__ == "__main__":
 
     if args.save:
         # Adding the geometry back to the clusters dataframe
-        clusters_with_contextual_features_df = (
+        clusters_with_contextual_features_gdf = (
             clusters_with_contextual_features_df.to_pandas().merge(
                 clusters_gdf[["cluster_id", "geometry"]],
                 how="left",
@@ -333,15 +334,25 @@ if __name__ == "__main__":
         )
 
         clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
-            clusters_with_contextual_features_df, geometry="geometry", crs="EPSG:27700"
+            clusters_with_contextual_features_gdf, geometry="geometry", crs="EPSG:27700"
         )
+
+        # Convert CRS to EPSG:4326
         clusters_with_contextual_features_gdf = (
             clusters_with_contextual_features_gdf.to_crs(epsg=4326)
         )
 
+        # Convert to geojson format and add metadata
         geojson_file = json.loads(clusters_with_contextual_features_gdf.to_json())
-        geojson_file["metadata"] = config["metadata"]
+        metadata = {
+            "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
+            "Local authority": local_authorities,
+        }
+        # append metadata from config base.yaml
+        metadata.update(config["metadata"])
+        geojson_file["metadata"] = metadata
 
+        # Save to S3 as geojson
         save_utils.save_to_s3(
             geojson_file,
             config["output"]["dataset"]["clusters_tech_contextual_info"].format(
