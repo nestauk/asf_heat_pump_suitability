@@ -362,10 +362,10 @@ def overlay_gdf_physical_barriers(
     # This method means that buildings with a Voronoi cell that does not completely contain them (e.g. missing a tiny corner)
     # still retain a Voronoi cell
     intersection_gdf = sjoin_gdf_max_intersection(
-        container_gdf=voronoi_gdf,
-        within_gdf=tech_gdf,
-        container_id=cell_id_col,
-        within_cols=["ID", "assigned_tech", "geometry"],
+        cell_gdf=voronoi_gdf,
+        building_gdf=tech_gdf,
+        cell_id=cell_id_col,
+        building_cols=["ID", "assigned_tech", "geometry"],
     )
     # Map each building to its corresponding Voronoi ID
     cell_to_building_mapping = intersection_gdf.set_index(cell_id_col)["ID"].to_dict()
@@ -424,10 +424,10 @@ def _handle_gdf_fragmented_cells(
     # pairing with the largest intersection per cell fragment. This handles cases where one fragment joins to multiple
     # buildings to prevent the final set of cells from containing any overlapping geometries.
     intersections_gdf = sjoin_gdf_max_intersection(
-        container_gdf=cells_gdf,
-        within_gdf=tech_gdf,
-        container_id=cell_id_col,
-        within_cols=[building_id_col, "geometry"],
+        cell_gdf=cells_gdf,
+        building_gdf=tech_gdf,
+        cell_id=cell_id_col,
+        building_cols=[building_id_col, "geometry"],
     )
 
     # Map building IDs to best intersecting cell fragments
@@ -464,33 +464,40 @@ def _handle_gdf_fragmented_cells(
 
 
 def sjoin_gdf_max_intersection(
-    container_gdf,
-    within_gdf,
-    container_id,
-    container_cols: list[str] = None,
-    within_cols: list[str] = None,
-):
-    if container_cols:
-        container_cols = set(container_cols)
-        container_cols.add(container_id)
-        container_cols.add("geometry")
-        container_cols = list(container_cols)
+    cell_gdf: gpd.GeoDataFrame,
+    building_gdf: gpd.GeoDataFrame,
+    cell_id: str,
+    cell_cols: list[str] = None,
+    building_cols: list[str] = None,
+) -> gpd.GeoDataFrame:
+    """
+    Match polygons from two different geodataframes which have the maximum intersecting overlap area.
+
+    Args:
+        cell_gdf (gpd.GeoDataFrame): polygons
+    """
+    # Ensure required columns are retained
+    if cell_cols:
+        cell_cols = set(cell_cols)
+        cell_cols.add(cell_id)
+        cell_cols.add("geometry")
+        cell_cols = list(cell_cols)
     else:
-        container_cols = [container_id, "geometry"]
-    if within_cols:
-        within_cols = set(within_cols)
-        within_cols.add("geometry")
-        within_cols = list(within_cols)
+        cell_cols = [cell_id, "geometry"]
+    if building_gdf:
+        building_cols = set(building_cols)
+        building_cols.add("geometry")
+        building_cols = list(building_cols)
     else:
-        within_cols = ["geometry"]
+        building_cols = ["geometry"]
 
     intersections_gdf = gpd.overlay(
-        container_gdf[container_cols],
-        within_gdf[within_cols],
+        cell_gdf[cell_cols],
+        building_gdf[building_cols],
         how="intersection",
     )
     intersections_gdf["area"] = intersections_gdf.geometry.area
-    intersections_gdf["max_intersection"] = intersections_gdf.groupby(container_id)[
+    intersections_gdf["max_intersection"] = intersections_gdf.groupby(cell_id)[
         "area"
     ].transform("max")
     return (
