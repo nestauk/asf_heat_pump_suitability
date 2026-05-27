@@ -5,7 +5,7 @@ import pyproj
 import warnings
 from convertbng.util import convert_bng
 import numpy as np
-from asf_heat_pump_suitability.getters import get_datasets
+from asf_heat_pump_suitability.getters import load_data
 from asf_heat_pump_suitability.utils import geo_utils
 
 
@@ -17,7 +17,7 @@ def transform_df_uk_dataset_links() -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: URLs to Microsoft building footprint files for UK only with bounding geometries of files
     """
-    df = get_datasets.load_df_microsoft_building_footprint_links()
+    df = load_data.load_df_microsoft_building_footprint_links()
     df = df[df["Location"] == "UnitedKingdom"]
 
     transformer = _set_crs_transformer()
@@ -111,7 +111,7 @@ def transform_gdf_building_footprints(building_footprint_file: str) -> gpd.GeoDa
     Returns:
         gpd.GeoDataFrame: building footprints polygons in BNG with unique IDs, and footprint area in m2
     """
-    gdf = get_datasets.load_gdf_microsoft_building_footprints(building_footprint_file)
+    gdf = load_data.load_gdf_microsoft_building_footprints(building_footprint_file)
     gdf["geometry"] = transform_geoseries_convert_bng(gdf["geometry"])
     gdf = gdf.dropna(subset="geometry", axis=0)
     gdf = extend_gdf_building_footprint_id(gdf)

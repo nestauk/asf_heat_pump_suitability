@@ -127,7 +127,13 @@ def generate_gdf_clusters(
 
     # Creating the clusters
     clusters_gdf = (
-        cells_gdf.dissolve(by="assigned_tech")
+        cells_gdf.dissolve(
+            by="assigned_tech",
+            aggfunc={
+                # If any building in cluster is within anchor load radius, label cluster as within radius
+                f"within_{radius}m_from_anchor_load": "max",
+            },
+        )
         .explode()
         .reset_index()[
             ["assigned_tech", "geometry", f"within_{radius}m_from_anchor_load"]
