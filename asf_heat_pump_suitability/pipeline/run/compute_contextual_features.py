@@ -17,8 +17,13 @@ import argparse
 import polars as pl
 import geopandas as gpd
 import json
+import os
+from dotenv import load_dotenv
 
 from asf_heat_pump_suitability import config
+
+# Load environment variables from .env file
+load_dotenv()
 
 ANCHOR_LOAD_RADIUS = config["constant"]["anchor_radius"]
 COASTLINE_DISTANCE_THRESHOLD_M = config["constant"]["coastline"][
@@ -342,10 +347,23 @@ if __name__ == "__main__":
         geojson_file = json.loads(clusters_with_contextual_features_gdf.to_json())
         geojson_file["metadata"] = config["metadata"]
 
+        s3_file_path = config["output"]["dataset"][
+            "clusters_tech_contextual_info"
+        ].format(
+            local_authorities=local_authorities,
+            tolerance_m=tolerance_m,
+        )
+
+        # Save to data science S3 bucket
         save_utils.save_to_s3(
             geojson_file,
-            config["output"]["dataset"]["clusters_tech_contextual_info"].format(
-                local_authorities=local_authorities,
-                tolerance_m=tolerance_m,
-            ),
+            s3_file_path,
+        )
+
+        # Save to front-end S3 bucket for use in the tool
+        front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
+        file_name = s3_file_path.split("/")[-1]
+        save_utils.save_to_s3(
+            geojson_file,
+            os.path.join(front_end_staging_s3_path, file_name),
         )
