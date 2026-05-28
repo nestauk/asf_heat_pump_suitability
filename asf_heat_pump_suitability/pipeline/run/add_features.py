@@ -75,6 +75,7 @@ if __name__ == "__main__":
         city_centres,
         local_authority,
         listed_buildings,
+        off_gas,
     )
 
     args = parse_arguments()
@@ -277,9 +278,6 @@ if __name__ == "__main__":
     del listed_buildings_gdf
 
     # Add number of off-gas properties
-    from asf_heat_pump_suitability.pipeline.prepare_features import (
-        off_gas,
-    )
 
     off_gas_list = off_gas.process_off_gas_data()
 
