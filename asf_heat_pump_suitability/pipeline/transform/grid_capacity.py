@@ -15,8 +15,8 @@ import polars as pl
 
 from asf_heat_pump_suitability.pipeline.prepare_features import (
     boundaries,
-    household_count,
 )
+from asf_heat_pump_suitability.pipeline.transform import household_count
 from asf_heat_pump_suitability.getters.get_dno_datasets import (
     generate_enw_gdf,
     generate_npg_gdf,
