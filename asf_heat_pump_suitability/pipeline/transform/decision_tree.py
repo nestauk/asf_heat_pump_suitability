@@ -10,12 +10,6 @@ To run the script:
 
 python asf_heat_pump_suitability/pipeline/transform/decision_tree.py --local_authorities LOCAL_AUTHORITIES
 
-LOCAL AUTHORITIES can be one of the following, as defined in the `constant` section of base.yaml:
-- plymouth
-- plymouth_similar_cities
-- sampling_areas
-- greater_manchester_las
-
 Use --save if you want to save the outputs to S3.
 """
 
@@ -50,7 +44,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
         nargs="+",
         required=True,
@@ -365,7 +359,7 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     Saves outputs to S3 if specified.
 
     Args:
-        local_authorities (str): filename to save decision tree outputs to.
+        local_authorities (str): local authority slug to save decision tree outputs to.
         buildings_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
         id_col (str): The name of the column in `buildings_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.

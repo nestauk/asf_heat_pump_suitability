@@ -97,7 +97,7 @@ def get_list_la_grid_squares(
     local_authorities: list = None, buffer_m: float = 1000
 ) -> list:
     """
-    Return grid squares corresponding to a local authority or list of local authorities. The buffer (m) ensures that buildings straddling the LA boundary are captured.
+    Return grid squares corresponding to a local authority or list of local authorities. The buffer (m) ensures that geographical features (e.g. buildings) straddling the LA boundary are captured if they fall into neighbouring grid squares.
 
     Args:
         local_authorities (list): Official ONS place name (e.g. "King's Lynn and West Norfolk") or a list of names (e.g. ["Glasgow", "Midlothian"]). Defaults None to return whole of GB.
@@ -132,13 +132,14 @@ def get_dict_la_data(la_names: str | list[str]) -> dict:
         la_names (str | list[str]): List of local authority names.
 
     Returns:
-        dict: Format -> { "url-slug": { "valid_local_authorities": [...], "grid_squares": [...] } }
+        dict: Format -> { "url-slug": str, "valid_local_authorities": [...], "grid_squares": [...] }
     """
     resolved_las = resolve_list_la_names(la_names)
     # whole of GB
     if resolved_las is None:
         slug = "gb"
-        grid_squares_set = get_list_la_grid_squares(None)
+        grid_squares = load_geodata.load_gdf_bng_grid_squares()
+        grid_squares_set = set(grid_squares["bng_ref"])
     else:
         # Generate the URL slug from the official resolved names
         slug = make_str_slug(resolved_las)

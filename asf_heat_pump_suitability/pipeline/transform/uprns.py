@@ -7,17 +7,9 @@ residential:
 - UPRNs found in the domestic EPC register
 
 To run the script:
-python asf_heat_pump_suitability/pipeline/transform/uprns.py
-
-Set the `local_authorities` parameter to:
-- `plymouth` for Plymouth only
-- `plymouth_similar` for Plymouth and 4 similar local authorities (Liverpool, Portsmouth, Southampton, Swansea)
-- `sampling_areas` for Plymouth and 5 different local authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham)
-- `greater_manchester_las` for all Greater Manchester local authorities (Bolton, Bury, Manchester, Oldham, Rochdale, Salford, Stockport, Tameside, Trafford, Wigan)
+python asf_heat_pump_suitability/pipeline/transform/uprns.py --local_authorities LOCAL_AUTHORITIES
 
 Defaults to `GB` (all of Great Britain), but this is not yet implemented.
-
-Temporary (before we scale): Set up a new local authority or group of local authorities by adding an entry to the `constant` section of the config.yaml file.
 
 Set --save to save the outputs to S3. By default, outputs are not saved.
 """
@@ -328,7 +320,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
         nargs="+",
         default="GB",
