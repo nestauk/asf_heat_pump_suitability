@@ -273,7 +273,8 @@ def map_dict_uprns_to_building_id(
     max_distance: float = 1,
 ) -> dict:
     """
-    Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within or intersect with, or the nearest building < 1m away if not located within a building.
+    Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within or intersect
+    with, or the nearest building < 1m away if not located within a building.
 
     Args:
         uprns_gdf (gpd.GeoDataFrame): UPRNs with geospatial point data
@@ -301,7 +302,6 @@ def map_dict_uprns_to_building_id(
     nearest_buildings_uprns = unmatched_uprns.sjoin_nearest(
         buildings_gdf, how="inner", max_distance=max_distance
     )
-
     # combine the two gdfs and turn into a dictionary
     uprns_building_dict = (
         (pd.concat([uprns_inside_buildings, nearest_buildings_uprns]))
