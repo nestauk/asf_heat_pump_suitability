@@ -182,22 +182,22 @@ def generate_gdf_clusters(
 
 
 def sjoin_gdf_buildings_to_clusters(
-    tech_gdf: gpd.GeoDataFrame, clusters_gdf: gpd.GeoDataFrame
-):
+    buildings_gdf: gpd.GeoDataFrame, clusters_gdf: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
     """
-    Join buildings to their corresponding cluster.
+    Join buildings to their corresponding cluster. Building footprints are returned with a -10cm buffer.
 
     Args:
-        tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
-        buildings_gdf (gpd.GeoDataFrame): clusters of building footprints with the same assigned technology, one row per cluster.
+        buildings_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
+        clusters_gdf (gpd.GeoDataFrame): clusters of building footprints with the same assigned technology, one row per cluster.
 
     Returns:
         gpd.GeoDataFrame: building footprints with assigned tech type and cluster ID
     """
-    buffered_tech_gdf = tech_gdf.copy()
+    buffered_buildings_gdf = buildings_gdf.copy()
     # Reduce the size of the building footprints slightly so they can be completely contained within the cluster cells
-    buffered_tech_gdf["geometry"] = buffered_tech_gdf["geometry"].buffer(-0.1)
-    return buffered_tech_gdf.sjoin(clusters_gdf, how="left", predicate="within")
+    buffered_buildings_gdf["geometry"] = buffered_buildings_gdf["geometry"].buffer(-0.1)
+    return buffered_buildings_gdf.sjoin(clusters_gdf, how="left", predicate="within")
 
 
 def extend_edges_gdf(
