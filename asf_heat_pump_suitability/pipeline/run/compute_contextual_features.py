@@ -140,10 +140,22 @@ def extend_df_contextual_features(
             pl.col("UPRN").n_unique().alias("n_UPRNs"),
             # n_uprns_listed_building
             pl.col("in_listed_building").sum().alias("n_uprns_in_listed_building"),
+            # n_uprns_missing_listed_building_flag
+            pl.col("in_listed_building")
+            .is_null()
+            .sum()
+            .alias("n_uprns_missing_listed_building_flag"),
             # n_uprns_solar_pv
             pl.col("has_solar_pv").sum().alias("n_uprns_solar_pv"),
+            # n_uprns_missing_solar_pv_flag
+            pl.col("has_solar_pv")
+            .is_null()
+            .sum()
+            .alias("n_uprns_missing_solar_pv_flag"),
             # n_uprns_off_gas
             pl.col("off_gas").sum().alias("n_uprns_off_gas"),
+            # n_uprns_missing_off_gas_flag
+            pl.col("off_gas").is_null().sum().alias("n_uprns_missing_off_gas_flag"),
             # median estimated energy consumption in 12 months (in kWh/m2)
             pl.col("ENERGY_CONSUMPTION_CURRENT")
             .median()
@@ -190,8 +202,11 @@ def extend_df_contextual_features(
                 "cluster_id",
                 "n_UPRNs",
                 "n_uprns_in_listed_building",
+                "n_uprns_missing_listed_building_flag",
                 "n_uprns_solar_pv",
+                "n_uprns_missing_solar_pv_flag",
                 "n_uprns_off_gas",
+                "n_uprns_missing_off_gas_flag",
                 "median_estimated_energy_consumption_12_months_kwh_per_m2",
                 "median_outdoor_space_m2",
                 "in_hn_zone",
@@ -224,7 +239,9 @@ def extend_df_contextual_features(
     # Adding percentages of properties with solar PV and off-gas, which are also used for filtering in the tool
     perc_cols = tenure_cols + [
         "n_uprns_solar_pv",
+        "n_uprns_missing_solar_pv_flag",
         "n_uprns_off_gas",
+        "n_uprns_missing_off_gas_flag",
     ]
     clusters_df = clusters_df.with_columns(
         [
@@ -275,51 +292,6 @@ if __name__ == "__main__":
         ),  # drop geometry for now and use polars
         uprns_df=uprns_df,
     )
-
-    ##------ TODO: SECTION TO BE DELETED BEFORE MERGING TO DEV
-    print(
-        "Value counts for in_hn_zone:",
-        clusters_with_contextual_features_df["in_hn_zone"].value_counts(),
-    )
-    print(
-        "Value counts for in_city_centre:",
-        clusters_with_contextual_features_df["in_city_centre"].value_counts(),
-    )
-    print(
-        "Value counts for within_1500m_coastline:",
-        clusters_with_contextual_features_df[
-            f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"
-        ].value_counts(),
-    )
-    print(
-        "Value counts for in_protected_area:",
-        clusters_with_contextual_features_df["in_protected_area"].value_counts(),
-    )
-    print(
-        "Value counts for within_anchor_load_radius:",
-        clusters_with_contextual_features_df[
-            f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
-        ].value_counts(),
-    )
-    print(
-        "Percentage of properties with solar PV:",
-        clusters_with_contextual_features_df["perc_uprns_solar_pv"].mean(),
-    )
-    print(
-        "Percentage of properties off-gas:",
-        clusters_with_contextual_features_df["perc_uprns_off_gas"].mean(),
-    )
-    percentage_cols = [
-        col
-        for col in clusters_with_contextual_features_df.columns
-        if col.startswith("perc_")
-    ]
-    for col in percentage_cols:
-        missing_percentage = (
-            clusters_with_contextual_features_df[col].is_null().mean() * 100
-        )
-        print(f"Percentage of missing values in {col}: {missing_percentage:.2f}%")
-    ##------ SECTION ENDS ------Í
 
     if args.save:
         # Adding the geometry back to the clusters dataframe
