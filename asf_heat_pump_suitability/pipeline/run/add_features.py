@@ -76,6 +76,7 @@ if __name__ == "__main__":
         local_authority,
         listed_buildings,
         off_gas,
+        protected_areas,
     )
 
     args = parse_arguments()
@@ -307,9 +308,6 @@ if __name__ == "__main__":
     del coast_gdf
 
     # Add conservation area boolean flag
-    from asf_heat_pump_suitability.pipeline.prepare_features import (
-        protected_areas,
-    )
 
     uprn_to_country_dict = load_geodata.load_transform_dict_uprn_to_country_mapping()
 

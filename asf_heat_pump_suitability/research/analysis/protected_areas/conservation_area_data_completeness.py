@@ -15,9 +15,7 @@ import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
 from asf_heat_pump_suitability.getters import load_data, load_geodata
-from asf_heat_pump_suitability.pipeline.prepare_features import (
-    protected_areas,
-)
+from asf_heat_pump_suitability.pipeline.transform import protected_areas
 
 # %% [markdown]
 # ### Load and transform datasets
