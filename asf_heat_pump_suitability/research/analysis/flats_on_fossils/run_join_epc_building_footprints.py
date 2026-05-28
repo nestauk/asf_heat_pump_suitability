@@ -16,9 +16,9 @@ from tqdm import tqdm
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.getters import load_geodata
 from asf_heat_pump_suitability.pipeline.prepare_features import (
-    building_footprint,
     lat_lon,
 )
+from asf_heat_pump_suitability.pipeline.transform import building_footprint
 
 
 def parse_arguments() -> argparse.Namespace:
