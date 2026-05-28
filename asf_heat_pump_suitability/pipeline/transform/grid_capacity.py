@@ -13,9 +13,7 @@ import pandas as pd
 import geopandas as gpd
 import polars as pl
 
-from asf_heat_pump_suitability.pipeline.prepare_features import (
-    boundaries,
-)
+from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.transform import household_count
 from asf_heat_pump_suitability.getters.get_dno_datasets import (
     generate_enw_gdf,
@@ -277,7 +275,7 @@ def calculate_grid_capacity() -> pl.DataFrame:
     )
 
     # Load and process LSOA/DataZone boundary data
-    lsoa_gdf = boundaries.load_transform_gdf_lsoa_dz_boundaries().to_crs(CRS)
+    lsoa_gdf = load_transform_gdf_lsoa_dz_boundaries().to_crs(CRS)
 
     # Load and process household data
     households_df = household_count.load_transform_df_n_households().to_pandas()
@@ -292,6 +290,54 @@ def calculate_grid_capacity() -> pl.DataFrame:
     # Rename LSOA column for consistency
 
     return pl.from_pandas(result)
+
+
+def load_transform_gdf_lsoa_dz_boundaries() -> gpd.GeoDataFrame:
+    """
+    Load raw 2021 LSOA/2011 Data Zone geospatial boundary polygons for England and Wales, and Scotland. LSOAs and DataZones
+    are combined into single `lsoa` column. CRS British National Grid (EPSG:27700).
+
+    Returns:
+        gpd.GeoDataFrame: boundary polygons for 2021 LSOAs / 2011 DataZones
+    """
+    lsoa_gdf = load_gdf_ons_lsoa_bounds(columns=["LSOA21CD", "geometry"]).rename(
+        columns={"LSOA21CD": "lsoa"}
+    )
+    dz_gdf = load_gdf_scotgov_data_zone_bounds(columns=["DataZone", "geometry"]).rename(
+        columns={"DataZone": "lsoa"}
+    )
+    assert lsoa_gdf.crs == dz_gdf.crs
+    return pd.concat([lsoa_gdf, dz_gdf])
+
+
+def load_gdf_scotgov_data_zone_bounds(**kwargs) -> gpd.GeoDataFrame:
+    """
+    Load raw 2011 Data Zone geospatial boundary polygons and area data for Scotland from the Scottish Government. CRS
+    British National Grid (EPSG:27700).
+
+    Args:
+        **kwargs for geopandas.read_file()
+
+    Returns:
+        gpd.GeoDataFrame: boundary polygons and area standard area measurement data for 2011 Scottish Data Zones
+    """
+    return gpd.read_file(
+        config["data_source"]["S_scottish_gov_DZ2011_boundaries"], **kwargs
+    )
+
+
+def load_gdf_ons_lsoa_bounds(**kwargs) -> gpd.GeoDataFrame:
+    """
+    Load raw 2021 LSOA geospatial boundary polygons for England and Wales from ONS. CRS
+    British National Grid (EPSG:27700).
+
+    Args:
+        **kwargs for geopandas.read_file()
+
+    Returns:
+        gpd.GeoDataFrame: boundary polygons for 2021 LSOAs
+    """
+    return gpd.read_file(config["data_source"]["EW_lsoa_bounds"], **kwargs)
 
 
 def parse_arguments() -> argparse.Namespace:
