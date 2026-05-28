@@ -94,11 +94,11 @@ def verify_gdf_crs(
         return gdf
 
 
-def find_overlapping_geometries(
+def find_gdf_overlapping_geometries(
     gdf: gpd.GeoDataFrame, return_geometries: bool = True, id_col=None
 ) -> gpd.GeoDataFrame | set:
     """
-    Find geometries in the same GeoDataFrame which overlap with any other geometry in the same GeoDataFrame.
+    Find overlapping geometries within the same GeoDataFrame.
 
     Args:
         gdf (gpd.GeoDataFrame): containing geometries to check for overlaps
