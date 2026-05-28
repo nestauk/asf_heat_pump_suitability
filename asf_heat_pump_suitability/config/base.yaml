@@ -61,6 +61,9 @@ data:
       # plymouth council tax data
       plymouth: "s3://asf-local-heat-planning-tool/inputs/geodata/council_tax/PLYMOUTH_CTBANDS_ONSUD_202512.csv"
 
+  # Number of households in each LA recorded in 2021 census
+  gb_household_census_data: "s3://asf-local-heat-planning-tool/inputs/testing/v2021_census_households_GB.csv"
+
   epc:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
     commercial:

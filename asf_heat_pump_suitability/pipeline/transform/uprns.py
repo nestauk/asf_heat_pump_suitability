@@ -30,6 +30,7 @@ import argparse
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 from asf_heat_pump_suitability.utils import geo_utils
+from asf_heat_pump_suitability.schemas import uprns_schema
 
 
 def generate_gdf_uprn_coords(
@@ -93,6 +94,7 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
         df_EW = base_getters.load_df_from_s3(
             config["data"]["epc"][epc_type]["EW"], columns="UPRN"
         )
+
         # Scotland EPC data
         df_S = (
             base_getters.load_df_from_s3(
@@ -114,6 +116,10 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
         .cast(pl.Int64)
         .alias("UPRN")
     ).drop_nulls()  # TODO: Scotland commercial EPC data has a lot (37 %) of null UPRNs.
+
+    # Validate the EPC UPRNs
+    df_validated = uprns_schema.EPC_UPRN_Schema.validate(df.to_pandas(), lazy=True)
+    df = pl.from_pandas(df_validated)
 
     logging.info(
         f"{before - len(df)} invalid UPRNs dropped from {epc_type} EPC register. {len(df)} valid UPRNs remaining"
@@ -429,6 +435,44 @@ if __name__ == "__main__":
             ]
         ]
     )
+
+    # --- PANDERA VALIDATION ---
+
+    # rough expected UPRN range for whole of GB
+    if local_authorities == "gb":
+        min_uprns = 10000000
+        max_uprns = 50000000
+
+    else:
+        # TODO: this will need updating with updated grid squares work
+        la_names_list = [config["constant"][local_authorities]["la_names"]]
+        la_names_lower = [name.lower() for name in la_names_list]
+
+        # data on number of households in each LA in GB
+        census_df = pd.read_csv(config["data"]["gb_household_census_data"])
+        la_census_data = census_df[
+            census_df["Lower Tier Local Authorities"].str.lower().isin(la_names_lower)
+        ]
+
+        if la_census_data.empty:
+            raise ValueError(f"Could not find census data for LAs: {la_names_list}")
+
+        # sum number of households in each LA for list of input LAs
+        census_households = la_census_data["Observation"].sum()
+
+        # +/- 40% buffer on total number of households
+        min_uprns = int(census_households * 0.6)
+        max_uprns = int(census_households * 1.4)
+
+    # perform validation checks on df
+    schema = uprns_schema.create_domestic_uprn_schema(
+        min_expected_rows=min_uprns, max_expected_rows=max_uprns
+    )
+
+    df_validated = schema.validate(df.to_pandas(), lazy=True)
+    df = pl.from_pandas(df_validated)
+
+    # ---------------------------
 
     if args.save:
         save_utils.save_to_s3(
