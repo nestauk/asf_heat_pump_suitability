@@ -14,11 +14,9 @@ import polars as pl
 import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
-from asf_heat_pump_suitability.getters import get_datasets
+from asf_heat_pump_suitability.getters import load_data, load_geodata
 from asf_heat_pump_suitability.pipeline.prepare_features import (
-    epc,
     protected_areas,
-    lat_lon,
 )
 
 # %% [markdown]
@@ -27,13 +25,13 @@ from asf_heat_pump_suitability.pipeline.prepare_features import (
 # %%
 # Load England and Wales building conservation area data and concatenate
 e_gdf = (
-    get_datasets.load_gdf_historic_england_conservation_areas(
+    load_geodata.load_gdf_historic_england_conservation_areas(
         columns=["name", "geometry"]
     )
     .to_crs("EPSG:27700")
     .rename(columns={"name": "sitename"})
 )
-w_gdf = get_datasets.load_gdf_welsh_gov_conservation_areas(
+w_gdf = load_geodata.load_gdf_welsh_gov_conservation_areas(
     columns=["sitename", "geometry"]
 )
 full_cons_areas_gdf = pd.concat([e_gdf, w_gdf]).drop_duplicates(subset=["geometry"])
@@ -41,7 +39,7 @@ full_cons_areas_gdf["in_conservation_area_ew"] = True
 
 # %%
 # Load geospatial boundaries of local authorities
-council_bounds = get_datasets.load_gdf_ons_council_bounds()
+council_bounds = load_data.load_gdf_ons_council_bounds()
 
 # %% [markdown]
 # Because this analysis is focussing on conservation area data availability for Local Authority Districts (councils), the steps below are meant to join the conservation areas to their local authorities. I tried out a couple of different join methods and this one seemed to produce the best results when comparing to our count data.
@@ -181,7 +179,7 @@ plt.show()
 
 # %%
 # Add a column to assign country
-cons_areas_df = epc.extend_df_country_col(cons_areas_df, lsoa_col="LAD23CD")
+cons_areas_df = protected_areas.extend_df_country_col(cons_areas_df, lsoa_col="LAD23CD")
 
 # LADs with far too many / few conservation areas
 sample_lads = cons_areas_df.filter((pl.col("diff") <= -10) | (pl.col("diff") >= 10))[
