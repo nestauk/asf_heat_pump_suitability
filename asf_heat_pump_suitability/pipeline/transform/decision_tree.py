@@ -351,13 +351,6 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
             - GeoDataFrame with UPRN-level most suitable tech and decision tree path.
             - GeoDataFrame with building footprint-level most suitable tech.
     """
-    # Join UPRNs with buildings they intersect with or are up to 3m away.
-    # This allows valid EPC UPRNs which fall just outside building footprints to be matched to a building.
-    uprn_to_building_id = uprns.map_dict_uprns_to_building_id(
-        uprns_gdf=uprns_gdf, buildings_gdf=buildings_gdf, id_col=id_col, max_distance=3
-    )
-    uprns_gdf[id_col] = uprns_gdf["UPRN"].replace(uprn_to_building_id)
-
     # Join corresponding building geometry to each UPRN
     buildings_gdf["building_geometry"] = buildings_gdf["geometry"]
     uprns_gdf = uprns_gdf.merge(
