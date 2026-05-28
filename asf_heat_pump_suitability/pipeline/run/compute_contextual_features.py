@@ -133,6 +133,8 @@ def extend_df_contextual_features(
         dummy_contextual_feat_df, how="left", on="cluster_id"
     )
 
+    print(uprns_df[["UPRN", "in_listed_building"]])
+
     contextual_feat_clusters_df = (
         uprns_df.group_by("cluster_id")
         .agg(
@@ -291,6 +293,22 @@ if __name__ == "__main__":
             clusters_gdf.drop(columns="geometry")
         ),  # drop geometry for now and use polars
         uprns_df=uprns_df,
+    )
+
+    print(
+        clusters_with_contextual_features_df[
+            "n_uprns_missing_listed_building_flag"
+        ].value_counts()
+    )
+    print(
+        clusters_with_contextual_features_df[
+            "n_uprns_missing_solar_pv_flag"
+        ].value_counts()
+    )
+    print(
+        clusters_with_contextual_features_df[
+            "n_uprns_missing_off_gas_flag"
+        ].value_counts()
     )
 
     if args.save:
