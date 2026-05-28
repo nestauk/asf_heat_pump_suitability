@@ -295,22 +295,6 @@ if __name__ == "__main__":
         uprns_df=uprns_df,
     )
 
-    print(
-        clusters_with_contextual_features_df[
-            "n_uprns_missing_listed_building_flag"
-        ].value_counts()
-    )
-    print(
-        clusters_with_contextual_features_df[
-            "n_uprns_missing_solar_pv_flag"
-        ].value_counts()
-    )
-    print(
-        clusters_with_contextual_features_df[
-            "n_uprns_missing_off_gas_flag"
-        ].value_counts()
-    )
-
     if args.save:
         # Adding the geometry back to the clusters dataframe
         clusters_with_contextual_features_df = (
