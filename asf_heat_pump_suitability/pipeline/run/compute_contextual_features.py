@@ -255,13 +255,12 @@ if __name__ == "__main__":
     )
 
     print("Loading clusters...")
-    # clusters_gdf = gpd.read_parquet(
-    #     config["output"]["dataset"]["tech_clusters"].format(
-    #         local_authorities=local_authority_dict["url_slug"],
-    #         tolerance_m=tolerance_m,
-    #     ),
-    # ).to_crs(epsg=27700)
-    clusters_gdf = gpd.read_parquet("test_clusters.parquet").to_crs(epsg=27700)
+    clusters_gdf = gpd.read_parquet(
+        config["output"]["dataset"]["tech_clusters"].format(
+            local_authorities=local_authority_dict["url_slug"],
+            tolerance_m=tolerance_m,
+        ),
+    ).to_crs(epsg=27700)
 
     uprns_df = cluster.map_df_uprns_to_clusters(
         uprns_df=uprns_df, buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
