@@ -275,13 +275,14 @@ if __name__ == "__main__":
     )
     uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
 
-    print("Loading opportunity areas...")
-    clusters_gdf = gpd.read_parquet(
-        config["output"]["dataset"]["tech_clusters"].format(
-            local_authorities=local_authority_dict["url_slug"],
-            tolerance_m=tolerance_m,
-        ),
-    ).to_crs(epsg=27700)
+    print("Loading clusters...")
+    # clusters_gdf = gpd.read_parquet(
+    #     config["output"]["dataset"]["tech_clusters"].format(
+    #         local_authorities=local_authority_dict["url_slug"],
+    #         tolerance_m=tolerance_m,
+    #     ),
+    # ).to_crs(epsg=27700)
+    clusters_gdf = gpd.read_parquet("test_clusters.parquet").to_crs(epsg=27700)
 
     print("Filtering to clusters...")
     uprns_df = filter_df_uprns_to_clusters(
@@ -308,6 +309,12 @@ if __name__ == "__main__":
 
         clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
             clusters_with_contextual_features_df, geometry="geometry", crs="EPSG:27700"
+        )
+        # Simplify geometries for smaller file size
+        clusters_with_contextual_features_gdf["geometry"] = (
+            clusters_with_contextual_features_gdf["geometry"].simplify(
+                tolerance=tolerance_m
+            )
         )
 
         save_utils.save_to_s3(
