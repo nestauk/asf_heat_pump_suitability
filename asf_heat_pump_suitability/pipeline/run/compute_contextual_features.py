@@ -50,31 +50,6 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def filter_df_uprns_to_clusters(
-    uprns_gdf: gpd.GeoDataFrame, clusters_gdf: gpd.GeoDataFrame
-) -> pl.DataFrame:
-    """
-    Filter UPRN geodataframe to only those which are within clusters.
-
-    Args:
-        uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs with geometry and EPC features
-        clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
-    Returns:
-        pl.DataFrame: filtered UPRN dataframe with only UPRNs within clusters
-    """
-
-    # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with cluster geodataframe
-    uprns_df = pl.from_pandas(
-        uprns_gdf.sjoin(
-            clusters_gdf[["cluster_id", "geometry"]],
-            how="right",
-            predicate="within",
-        ).drop(columns=["geometry"])
-    )
-
-    return uprns_df
-
-
 def extend_df_contextual_features(
     clusters_df: pl.DataFrame,
     uprns_df: pl.DataFrame,
