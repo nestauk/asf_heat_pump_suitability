@@ -274,6 +274,11 @@ if __name__ == "__main__":
         uprns_df=uprns_df,
     )
 
+    # TODO identify source of empty clusters and fix - temporary fix to remove empty clusters
+    clusters_with_contextual_features_df = clusters_with_contextual_features_df.filter(
+        pl.col("n_UPRNs").is_not_null()
+    )
+
     if args.save:
         # Adding the geometry back to the clusters dataframe
         clusters_with_contextual_features_df = (
