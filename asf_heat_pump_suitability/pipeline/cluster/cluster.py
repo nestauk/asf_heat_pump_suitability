@@ -785,7 +785,7 @@ def map_df_uprns_to_clusters(
         ~clusters_gdf["cluster_id"].isin(desnz_hn_zones_gdf["cluster_id"])
     ]
 
-    building_cluster_mapping = cluster.sjoin_gdf_buildings_to_clusters(
+    building_cluster_mapping = sjoin_gdf_buildings_to_clusters(
         buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
     ).dropna(subset="cluster_id")
     building_cluster_mapping = building_cluster_mapping.set_index(building_id)[
@@ -798,7 +798,7 @@ def map_df_uprns_to_clusters(
     if desnz_hn_zones_gdf.empty:
         return uprns_df
     else:
-        building_desnz_mapping = cluster.sjoin_gdf_buildings_to_clusters(
+        building_desnz_mapping = sjoin_gdf_buildings_to_clusters(
             buildings_gdf=buildings_gdf, clusters_gdf=desnz_hn_zones_gdf
         ).dropna(subset="cluster_id")
         building_desnz_mapping = building_desnz_mapping.set_index(building_id)[
