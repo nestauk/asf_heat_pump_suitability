@@ -114,6 +114,7 @@ def get_list_la_grid_squares(
         local_authorities
     )
     boundary_gdf = boundary_gdf.geometry.buffer(buffer_m).union_all()
+    # TODO: add if statement for running with test data
 
     # clip grid square gdf to local authority boundaries and return grid squares
     grid_gdf = grid_gdf.clip(boundary_gdf)

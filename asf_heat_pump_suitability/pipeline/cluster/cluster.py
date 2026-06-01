@@ -649,7 +649,9 @@ if __name__ == "__main__":
     )
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        select_las=local_authority_dict["valid_local_authorities"]
+        select_las=local_authority_dict[
+            "valid_local_authorities"
+        ]  # TODO add if statement for running with test dataset (would just take the geometry of the input polygons)
     )
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=local_authority_dict["grid_squares"]
