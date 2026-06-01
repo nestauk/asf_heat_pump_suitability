@@ -258,7 +258,7 @@ def extend_df_contextual_features(
 
 if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import load_geodata
-    from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
+    from asf_heat_pump_suitability.pipeline.transform import local_authority
     from asf_heat_pump_suitability.pipeline.cluster import cluster
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
@@ -287,40 +287,10 @@ if __name__ == "__main__":
     #     ),
     # ).to_crs(epsg=27700)
     clusters_gdf = gpd.read_parquet("test_clusters.parquet").to_crs(epsg=27700)
-    desnz_hn_zones_gdf = clusters_gdf[clusters_gdf["cluster_id"].str.contains("DESNZ")]
-    clusters_gdf = clusters_gdf[
-        ~clusters_gdf["cluster_id"].isin(desnz_hn_zones_gdf["cluster_id"])
-    ]
 
-    print("Join UPRNs to clusters...")
-    # TODO move cluster-building mapping to cluster.py
-    building_cluster_mapping = (
-        cluster.sjoin_gdf_buildings_to_clusters(
-            buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
-        )
-        .dropna(subset="cluster_id")
-        .set_index("ID")["cluster_id"]
-        .to_dict()
+    uprns_df = cluster.map_df_uprns_to_clusters(
+        uprns_df=uprns_df, buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
     )
-    uprns_df = uprns_df.with_columns(
-        pl.col("ID").replace_strict(building_cluster_mapping).alias("cluster_id")
-    )
-
-    building_desnz_mapping = (
-        cluster.sjoin_gdf_buildings_to_clusters(
-            buildings_gdf=buildings_gdf, clusters_gdf=desnz_hn_zones_gdf
-        )
-        .dropna(subset="cluster_id")
-        .set_index("ID")["cluster_id"]
-        .to_dict()
-    )
-    desnz_uprns_df = uprns_df.with_columns(
-        pl.col("ID")
-        .replace_strict(building_desnz_mapping, default=None)
-        .alias("cluster_id")
-    ).drop_nulls(subset="cluster_id")
-
-    uprns_df = pl.concat([uprns_df, desnz_uprns_df])
 
     print("Calculate remaining features per cluster...")
     clusters_with_contextual_features_df = extend_df_contextual_features(
