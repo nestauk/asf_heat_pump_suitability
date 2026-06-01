@@ -16,6 +16,7 @@ import polars as pl
 import geopandas as gpd
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.pipeline.cluster import cluster
 
 ANCHOR_LOAD_RADIUS = config["constant"]["anchor_radius"]
 COASTLINE_DISTANCE_THRESHOLD_M = config["constant"]["coastline"][
@@ -234,7 +235,6 @@ def extend_df_contextual_features(
 if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import load_geodata
     from asf_heat_pump_suitability.pipeline.transform import local_authority
-    from asf_heat_pump_suitability.pipeline.cluster import cluster
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
 
