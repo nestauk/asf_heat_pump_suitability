@@ -20,7 +20,7 @@ import geopandas as gpd
 import argparse
 
 # local imports
-from asf_heat_pump_suitability.pipeline.transform.uprns import generate_gdf_uprn_coords
+from asf_heat_pump_suitability.pipeline.transform import uprns
 from asf_heat_pump_suitability.getters.load_geodata import (
     load_gdf_os_openmap_layer,
 )
@@ -58,32 +58,6 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     return parser.parse_args()
-
-
-def extend_gdf_building_footprints(
-    gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame, id_col: str
-) -> gpd.GeoDataFrame:
-    """
-    Extends the GeoDataFrame with the building footprint geometries the UPRNs are located within.
-
-    Args:
-        gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
-        buildings_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
-        id_col (str): The name of the column in `buildings_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
-
-    Returns:
-        gpd.GeoDataFrame: GeoDataFrame with building footprint polygons added.
-    """
-    # Creates a copy of the building geometry column to keep after the spatial join
-    buildings_gdf["building_geometry"] = buildings_gdf["geometry"]
-
-    # Extend the UPRN GeoDataFrame with building footprints geometry using id_col
-    gdf = gdf.merge(
-        buildings_gdf[[id_col, "building_geometry"]],
-        how="left",
-        on=id_col,
-    )
-    return gdf
 
 
 def identify_dict_most_suitable_tech(
@@ -202,7 +176,10 @@ def identify_df_building_most_suitable_tech(
                 ]
             ]
         )
-    )
+        # This will drop valid EPC UPRNs with no building footprint.
+        # These need to be mapped to their nearest building footprints to be included.
+        # This is required to prevent the creation of a row with no geometry
+    ).drop_nulls(subset=id_col)
 
     # Create df with set of most suitable tech per building footprint
     solutions_per_footprint_df = (
@@ -370,8 +347,12 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
             - GeoDataFrame with UPRN-level most suitable tech and decision tree path.
             - GeoDataFrame with building footprint-level most suitable tech.
     """
-    uprns_gdf = extend_gdf_building_footprints(
-        gdf=uprns_gdf, buildings_gdf=buildings_gdf, id_col=id_col
+    # Join corresponding building geometry to each UPRN
+    buildings_gdf["building_geometry"] = buildings_gdf["geometry"]
+    uprns_gdf = uprns_gdf.merge(
+        buildings_gdf[[id_col, "building_geometry"]],
+        how="left",
+        on=id_col,
     )
 
     print("Number of building IDs: ", uprns_gdf[id_col].nunique())
@@ -469,7 +450,7 @@ if __name__ == "__main__":
             local_authority=local_authority_dict["url_slug"]
         )
     )
-    uprns_with_features_gdf = generate_gdf_uprn_coords(df=uprns_with_features_df)
+    uprns_with_features_gdf = uprns.generate_gdf_uprn_coords(df=uprns_with_features_df)
 
     # TODO: move this to add_features.py
     uprns_with_features_gdf["in_city_centre_or_hn_zone"] = (
