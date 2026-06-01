@@ -16,6 +16,7 @@ import argparse
 import geopandas as gpd
 import pandas as pd
 import numpy as np
+import polars as pl
 import shapely
 from shapely.geometry import MultiPoint, Polygon, MultiPolygon
 from asf_heat_pump_suitability.pipeline.transform import local_authority
@@ -141,7 +142,13 @@ def generate_gdf_clusters(
 
     # Creating the clusters
     clusters_gdf = (
-        cells_gdf.dissolve(by="assigned_tech")
+        cells_gdf.dissolve(
+            by="assigned_tech",
+            aggfunc={
+                # If any building in cluster is within anchor load radius, label cluster as within radius
+                f"within_{radius}m_from_anchor_load": "max",
+            },
+        )
         .explode()
         .reset_index()[
             ["assigned_tech", "geometry", f"within_{radius}m_from_anchor_load"]
@@ -754,6 +761,58 @@ def append_gdf_heat_network_zone_layer(
         return clusters_gdf
 
 
+def map_df_uprns_to_clusters(
+    uprns_df: pl.DataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
+    clusters_gdf: gpd.GeoDataFrame,
+    building_id: str = "ID",
+) -> pl.DataFrame:
+    """
+    Map UPRNs to clusters they are located within.
+
+    Args:
+        uprns_df (pl.DataFrame): UPRNs with building ID column required.
+        buildings_gdf (gpd.GeoDataFrame): buildings in area of interest with building ID column.
+        clusters_gdf (gpd.GeoDataFrame): clusters with `cluster_id` column required.
+        building_id (str): name of building ID column in both `uprns_df` and `buildings_gdf`.
+
+    Returns:
+        pl.DataFrame: UPRNs mapped to their clusters. Expect some UPRNs to be duplicated if the `clusters_gdf` contains DESNZ Heat Network zones.
+    """
+    # Split clusters into DESNZ heat network zones and clusters
+    desnz_hn_zones_gdf = clusters_gdf[clusters_gdf["cluster_id"].str.contains("DESNZ")]
+    clusters_gdf = clusters_gdf[
+        ~clusters_gdf["cluster_id"].isin(desnz_hn_zones_gdf["cluster_id"])
+    ]
+
+    building_cluster_mapping = sjoin_gdf_buildings_to_clusters(
+        buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
+    ).dropna(subset="cluster_id")
+    building_cluster_mapping = building_cluster_mapping.set_index(building_id)[
+        "cluster_id"
+    ].to_dict()
+    uprns_df = uprns_df.with_columns(
+        pl.col("ID").replace_strict(building_cluster_mapping).alias("cluster_id")
+    )
+
+    if desnz_hn_zones_gdf.empty:
+        return uprns_df
+    else:
+        building_desnz_mapping = sjoin_gdf_buildings_to_clusters(
+            buildings_gdf=buildings_gdf, clusters_gdf=desnz_hn_zones_gdf
+        ).dropna(subset="cluster_id")
+        building_desnz_mapping = building_desnz_mapping.set_index(building_id)[
+            "cluster_id"
+        ].to_dict()
+        desnz_uprns_df = uprns_df.with_columns(
+            pl.col("ID")
+            .replace_strict(building_desnz_mapping, default=None)
+            .alias("cluster_id")
+        ).drop_nulls(subset="cluster_id")
+
+        return pl.concat([uprns_df, desnz_uprns_df])
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
@@ -782,7 +841,6 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
-    tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
@@ -838,14 +896,9 @@ if __name__ == "__main__":
     )
 
     if args.save:
-        # Simplify geometry for file size using tolerance
-        clusters_gdf["geometry"] = clusters_gdf["geometry"].simplify(
-            tolerance=tolerance_m
-        )
         save_utils.save_to_s3(
             clusters_gdf,
             config["output"]["dataset"]["tech_clusters"].format(
                 local_authorities=local_authority_dict["url_slug"],
-                tolerance_m=tolerance_m,
             ),
         )

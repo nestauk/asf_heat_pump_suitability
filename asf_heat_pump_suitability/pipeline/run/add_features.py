@@ -304,8 +304,10 @@ if __name__ == "__main__":
         features_df=features_df,
         uprns_gdf=uprns_gdf,
         coast_gdf=coast_gdf,
-        distance_threshold_m=1500,
-        simplify_tolerance_m=150,
+        distance_threshold_m=config["constant"]["coastline"][
+            "distance_from_coastline_threshold_m"
+        ],
+        simplify_tolerance_m=config["constant"]["coastline"]["simplify_tolerance_m"],
     )
 
     del coast_gdf
