@@ -169,7 +169,7 @@ def generate_gdf_clusters(
 
     # TODO move to testing when sample set available
     joined_gdf = sjoin_gdf_buildings_to_clusters(
-        tech_gdf=tech_gdf, clusters_gdf=clusters_gdf
+        buildings_gdf=tech_gdf, clusters_gdf=clusters_gdf
     )
     n_missing = joined_gdf["cluster_id"].isna().sum()
     if n_missing > 0:
