@@ -788,7 +788,6 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
-    tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
@@ -844,14 +843,9 @@ if __name__ == "__main__":
     )
 
     if args.save:
-        # Simplify geometry for file size using tolerance
-        clusters_gdf["geometry"] = clusters_gdf["geometry"].simplify(
-            tolerance=tolerance_m
-        )
         save_utils.save_to_s3(
             clusters_gdf,
             config["output"]["dataset"]["tech_clusters"].format(
                 local_authorities=local_authority_dict["url_slug"],
-                tolerance_m=tolerance_m,
             ),
         )
