@@ -50,6 +50,58 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def map_df_uprns_to_clusters(
+    uprns_df: pl.DataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
+    clusters_gdf: gpd.GeoDataFrame,
+    building_id: str = "ID",
+) -> pl.DataFrame:
+    """
+    Map UPRNs to clusters they are located within.
+
+    Args:
+        uprns_df (pl.DataFrame): UPRNs with building ID column required.
+        buildings_gdf (gpd.GeoDataFrame): buildings in area of interest with building ID column.
+        clusters_gdf (gpd.GeoDataFrame): clusters with `cluster_id` column required.
+        building_id (str): name of building ID column in both `uprns_df` and `buildings_gdf`.
+
+    Returns:
+        pl.DataFrame: UPRNs mapped to their clusters. Expect some UPRNs to be duplicated if the `clusters_gdf` contains DESNZ Heat Network zones.
+    """
+    # Split clusters into DESNZ heat network zones and clusters
+    desnz_hn_zones_gdf = clusters_gdf[clusters_gdf["cluster_id"].str.contains("DESNZ")]
+    clusters_gdf = clusters_gdf[
+        ~clusters_gdf["cluster_id"].isin(desnz_hn_zones_gdf["cluster_id"])
+    ]
+
+    building_cluster_mapping = cluster.sjoin_gdf_buildings_to_clusters(
+        buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
+    ).dropna(subset="cluster_id")
+    building_cluster_mapping = building_cluster_mapping.set_index(building_id)[
+        "cluster_id"
+    ].to_dict()
+    uprns_df = uprns_df.with_columns(
+        pl.col("ID").replace_strict(building_cluster_mapping).alias("cluster_id")
+    )
+
+    if desnz_hn_zones_gdf.empty:
+        return uprns_df
+    else:
+        building_desnz_mapping = cluster.sjoin_gdf_buildings_to_clusters(
+            buildings_gdf=buildings_gdf, clusters_gdf=desnz_hn_zones_gdf
+        ).dropna(subset="cluster_id")
+        building_desnz_mapping = building_desnz_mapping.set_index(building_id)[
+            "cluster_id"
+        ].to_dict()
+        desnz_uprns_df = uprns_df.with_columns(
+            pl.col("ID")
+            .replace_strict(building_desnz_mapping, default=None)
+            .alias("cluster_id")
+        ).drop_nulls(subset="cluster_id")
+
+        return pl.concat([uprns_df, desnz_uprns_df])
+
+
 def filter_df_uprns_to_clusters(
     uprns_gdf: gpd.GeoDataFrame, clusters_gdf: gpd.GeoDataFrame
 ) -> pl.DataFrame:
