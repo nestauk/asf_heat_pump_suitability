@@ -22,9 +22,7 @@ import pandas as pd
 import argparse
 from argparse import ArgumentParser
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.pipeline.prepare_features import (
-    land_extent,
-)
+from asf_heat_pump_suitability.pipeline.transform import land_extent
 
 
 def parse_arguments() -> argparse.Namespace:

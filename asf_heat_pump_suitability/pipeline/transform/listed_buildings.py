@@ -4,7 +4,7 @@ import pandas as pd
 from tqdm import tqdm
 import logging
 from asf_heat_pump_suitability.getters import load_geodata
-from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
+from asf_heat_pump_suitability.pipeline.transform import lat_lon
 
 
 def generate_df_epc_listed_buildings(
