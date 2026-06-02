@@ -181,7 +181,7 @@ def concat_gdfs(
 ) -> gpd.GeoDataFrame:
     """
     Concatenate list of (geo)dataframes from a single given source (e.g. directory, list of file paths, list of
-    (geo)dataframes into a single one.
+    (geo)dataframes) into a single one.
 
     Args:
         dir_path (str): path to S3 directory containing files of interest to concatenate. Optional.
