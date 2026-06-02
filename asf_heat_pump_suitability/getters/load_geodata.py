@@ -6,13 +6,14 @@ from typing import Optional, List
 import boto3
 import s3fs
 import shapely
-from tenacity import retry, stop_after_attempt
 import logging
 
+from tenacity import retry, stop_after_attempt
 from osbng import grids
 
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.getters import base_getters
+from asf_heat_pump_suitability.getters import base_getters, load_boundaries
+from asf_heat_pump_suitability.pipeline.transform import local_authority as la
 
 
 def load_df_osopen_uprn(**kwargs) -> pl.DataFrame:
@@ -49,79 +50,49 @@ def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
 
 
 def load_gdf_heat_network_zones(
-    local_authority: Optional[str],
-    boundary: Optional[shapely.Polygon | shapely.MultiPolygon],
+    boundary: Optional[shapely.Polygon | shapely.MultiPolygon] = None,
+    local_authority: Optional[str] = None,
 ) -> gpd.GeoDataFrame:
     """
     Load GeoDataFrame with heat network zone polygons in given Local Authority or boundary area.
 
     Args:
-        local_authority (str): Optional. Local Authority to load heat network zone polygons for.
         boundary (shapely.Polygon | shapely.MultiPolygon): Optional. Boundary to load heat network zone polygons for.
+        local_authority (str): Optional. Local Authority to load heat network zone polygons for. This is slower than using
+        the boundary directly.
 
     Returns:
         gpd.GeoDataFrame: polygons of heat network zones in given Local Authority or boundary.
     """
-    # TODO: this will currently only work for HN zone files defined in config/base.yaml.
-    # We need to change this to make it work for all other HN zone files,
-    # e.g. by concatenating all HN zone files and checking if the geometries intersect with the local authority boundary
+    hn_gdf = gpd.read_parquet(
+        path=config["data"]["geodata"]["heat_network_zones"]
+    ).drop(columns="index_right")
+    # Assume first column with `ID` substring is the zone ID column
+    # Note original ID column retained in case of erroneous ID assignment
+    hn_gdf = _extend_gdf_hn_zone_id(hn_gdf)
 
-    # Local authority (e.g. `plymouth`)
-    local_authority = local_authority.lower()
-    gdf = gpd.GeoDataFrame()
+    if boundary:
+        hn_gdf = hn_gdf[hn_gdf["geometry"].intersects(boundary)]
+        if hn_gdf.empty:
+            print("No heat network zone geodata found within given boundary.")
+        else:
+            return hn_gdf
 
-    try:
-        gdf = base_getters.get_gdf_from_gpkg_s3_path(
-            path=config["data"]["geodata"]["heat_network_zones"][local_authority],
-            **kwargs,
+    else:
+        local_authority_dict = la.get_dict_la_data(local_authority)
+        boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+            select_las=local_authority_dict["valid_local_authorities"]
         )
-        # Assume first column with `ID` substring is the zone ID column
-        # Note original ID column retained in case of erroneous ID assignment
-        gdf = _extend_gdf_hn_zone_id(gdf)
 
-    except (ValueError, KeyError):
-        # Get list of LAs (e.g. for `greater_manchester_las` this means getting a list of all individual LAs) to attempt
-        # loading heat network zone geodata for each LA individually if no geodata found for the whole group of LAs.
-        try:
-            list_las = config["constant"][local_authority]["la_names"]
-            list_las = list_las if isinstance(list_las, list) else [list_las]
-        except (ValueError, KeyError):
+        hn_gdf = hn_gdf.sjoin(
+            boundary_gdf[["geometry"]], how="inner", predicate="intersects"
+        )
+        if hn_gdf.empty:
             print(
                 f"No heat network zone geodata found for Local Authority: {local_authority}."
             )
-            list_las = []
-
-        # If gdf is still empty and `local_authority` represents a group of LAs
-        if gdf.empty and len(list_las) > 1:
-            # Check if heat network zone geodata is available for each LA in the list, and if so, load it and concatenate
-            # it to a single geodataframe.
-            for la in list_las:
-                try:
-                    gdf = pd.concat(
-                        [
-                            gdf,
-                            base_getters.get_gdf_from_gpkg_s3_path(
-                                path=config["data"]["geodata"]["heat_network_zones"][
-                                    la
-                                ],
-                                **kwargs,
-                            ),
-                        ],
-                        ignore_index=True,
-                    )
-                    # Deal with different ID column names in different geodataframes by renaming the ID column to "ZoneID"
-                    gdf = _extend_gdf_hn_zone_id(gdf)
-                except (ValueError, KeyError):
-                    print(
-                        f"No heat network zone geodata found for Local Authority: {la}."
-                    )
-    finally:
-        if len(gdf) > 0:
-            gdf.set_geometry("geometry", inplace=True)
-            print(
-                f"Heat network zone geodataframe successfully loaded for {local_authority} with CRS {gdf.crs}."
-            )
-    return gdf
+        else:
+            return hn_gdf.drop(columns="index_right")
 
 
 def _extend_gdf_hn_zone_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
