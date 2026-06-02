@@ -85,8 +85,8 @@ def make_str_slug(name: str | list[str]) -> str:
     for item in names:
         item = str(item).lower()
         item = re.sub(r"['\u2018\u2019\u02bc]", "", item)
-        item = re.sub(r"[^a-z0-9]+", "-", item)
-        cleaned = item.strip("-")
+        item = re.sub(r"[^a-z0-9]+", "_", item)
+        cleaned = item.strip("_")
         if cleaned:  # Avoid adding empty strings to the final slug
             slug_parts.append(cleaned)
 
