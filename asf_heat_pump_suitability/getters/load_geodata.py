@@ -5,6 +5,7 @@ import pandas as pd
 from typing import Optional, List
 import boto3
 import s3fs
+import shapely
 from tenacity import retry, stop_after_attempt
 import logging
 
@@ -47,31 +48,28 @@ def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame.from_features(grids.bng_grid_100km, crs=27700)
 
 
-def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFrame:
+def load_gdf_heat_network_zones(
+    local_authority: Optional[str],
+    boundary: Optional[shapely.Polygon | shapely.MultiPolygon],
+) -> gpd.GeoDataFrame:
     """
-    Load GeoDataFrame with heat network zone polygons in given Local Authority.
+    Load GeoDataFrame with heat network zone polygons in given Local Authority or boundary area.
 
     Args:
-        local_authority (str): Local Authority or Local Authorities to load Heat Network zone polygons for.
-        e.g. `plymouth` for Plymouth Local Authority; `greater_manchester_las` for Greater Manchester Combined Authority (all 10 LAs in Greater Manchester).
-        See config/base.yaml under the `constant` key for options.
-
-        **kwargs for `gpd.read_file()`
+        local_authority (str): Optional. Local Authority to load heat network zone polygons for.
+        boundary (shapely.Polygon | shapely.MultiPolygon): Optional. Boundary to load heat network zone polygons for.
 
     Returns:
-        gpd.GeoDataFrame: polygons of heat network zones in given Local Authority.
+        gpd.GeoDataFrame: polygons of heat network zones in given Local Authority or boundary.
     """
-
     # TODO: this will currently only work for HN zone files defined in config/base.yaml.
     # We need to change this to make it work for all other HN zone files,
-    # for example by concatenating all HN zone files and checking if the geometries intersect with the local authority boundary.
+    # e.g. by concatenating all HN zone files and checking if the geometries intersect with the local authority boundary
 
+    # Local authority (e.g. `plymouth`)
+    local_authority = local_authority.lower()
     gdf = gpd.GeoDataFrame()
 
-    # Local authority (e.g. `plymouth`) or group of local authorities (e.g. `greater_manchester_las`)
-    local_authority = local_authority.lower()
-
-    # Load heat network zone geodata for the specified local authority or group of local authorities.
     try:
         gdf = base_getters.get_gdf_from_gpkg_s3_path(
             path=config["data"]["geodata"]["heat_network_zones"][local_authority],
@@ -84,8 +82,14 @@ def load_gdf_heat_network_zones(local_authority: str, **kwargs) -> gpd.GeoDataFr
     except (ValueError, KeyError):
         # Get list of LAs (e.g. for `greater_manchester_las` this means getting a list of all individual LAs) to attempt
         # loading heat network zone geodata for each LA individually if no geodata found for the whole group of LAs.
-        list_las = config["constant"][local_authority]["la_names"]
-        list_las = list_las if isinstance(list_las, list) else [list_las]
+        try:
+            list_las = config["constant"][local_authority]["la_names"]
+            list_las = list_las if isinstance(list_las, list) else [list_las]
+        except (ValueError, KeyError):
+            print(
+                f"No heat network zone geodata found for Local Authority: {local_authority}."
+            )
+            list_las = []
 
         # If gdf is still empty and `local_authority` represents a group of LAs
         if gdf.empty and len(list_las) > 1:
