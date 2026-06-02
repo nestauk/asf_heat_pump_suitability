@@ -76,7 +76,7 @@ def make_str_slug(name: str | list[str]) -> str:
         name (str | list[str]): string e.g. an official ONS place name ("King's Lynn and West Norfolk") or a list of strings (e.g. ["Glasgow", "Midlothian"]).
 
     Returns:
-        str: URL-safe slug (e.g. "kings-lynn-and-west-norfolk" or "glasgow-midlothian")
+        str: URL-safe slug (e.g. "kings_lynn_and_west_norfolk" or "glasgow_midlothian")
     """
     # Convert a single string to a 1-element list so the rest of the logic is identical
     names = [name] if isinstance(name, str) else name
