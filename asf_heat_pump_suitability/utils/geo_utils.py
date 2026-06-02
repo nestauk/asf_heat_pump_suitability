@@ -146,11 +146,14 @@ def map_dict_files_to_boundaries(dir_path: str, save_as: str = None) -> dict:
     mapping = dict()
     extensions = ["geojson", "gpkg", "shp"]
     fs = s3fs.S3FileSystem()
+    dir_path = dir_path.rstrip("/")
     geo_files = [f for ext in extensions for f in fs.glob(f"{dir_path}/*.{ext}")]
+    print(f"Found {len(geo_files)} files to map. Beginning mapping...")
     for file in geo_files:
         print(f"\nLoading: {file}")
         gdf = gpd.read_file(f"s3://{file}").to_crs(epsg=27700)
-        mapping[file] = gdf.boundary
+        gdf["geometry"] = gdf["geometry"].make_valid()
+        mapping[file] = gdf.dissolve()["geometry"].iloc[0]
 
     if save_as:
         gdf = gpd.GeoDataFrame(
