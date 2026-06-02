@@ -1,13 +1,15 @@
 import logging
-from typing import Union, List
+from typing import Union
+
+import s3fs
 
 import geopandas as gpd
-import pandas as pd
 import shapely
 
 from shapely.geometry.base import BaseGeometry
 from shapely import wkb
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.utils import save_utils
 
 
 def transform_gdf_drop_duplicates(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -128,3 +130,34 @@ def find_gdf_overlapping_geometries(
 
         print(f"ID used: {id_col}. Overlapping ID count: {len(overlapping_ids)}")
         return overlapping_ids
+
+
+def map_dict_files_to_boundaries(dir_path: str, save_as: str = None) -> dict:
+    """
+    Create mapping of geospatial file names in a given S3 directory to their boundaries.
+
+    Args:
+        dir_path (str): path to S3 directory containing geospatial files of interest.
+        save_as (str): Optional. Save the mapping to a geospatial file type. Default None which does not save the output.
+
+    Returns:
+        dict: mapping of file names to boundary geometries
+    """
+    mapping = dict()
+    extensions = ["geojson", "gpkg", "shp"]
+    fs = s3fs.S3FileSystem()
+    geo_files = [f for ext in extensions for f in fs.glob(f"{dir_path}/*.{ext}")]
+    for file in geo_files:
+        print(f"\nLoading: {file}")
+        gdf = gpd.read_file(f"s3://{file}").to_crs(epsg=27700)
+        mapping[file] = gdf.boundary
+
+    if save_as:
+        gdf = gpd.GeoDataFrame(
+            {"file_path": mapping.keys(), "geometry": mapping.values()},
+            geometry="geometry",
+            crs=27700,
+        )
+        save_utils.save_to_s3(gdf, save_as)
+
+    return mapping
