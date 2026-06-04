@@ -61,6 +61,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import (
         base_getters,
         load_geodata,
+        load_boundaries,
     )
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
@@ -149,12 +150,11 @@ if __name__ == "__main__":
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
 
-    # Load planned heat network zone polygons (if available) for each LA in the list, then concatenate the gdfs
-    hn_zones_gdf_list = [
-        load_geodata.load_gdf_heat_network_zones(local_authority=la)
-        for la in local_authority_dict["valid_local_authorities"]
-    ]
-    hn_zones_gdf = pd.concat(hn_zones_gdf_list, ignore_index=True)
+    boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+        select_las=local_authority_dict["valid_local_authorities"]
+    )
+    # Add heat network zones to clusters_gdf, if they exist
+    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(boundary=boundary_gdf)
 
     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
         uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
@@ -170,6 +170,7 @@ if __name__ == "__main__":
         spatial_signatures_gdf=spatial_signatures_gdf,
     )
     del hn_zones_gdf, spatial_signatures_gdf
+
     # ------------------------ #
     # ESTIMATE OUTDOOR SPACE
     # TODO scale beyond Plymouth. This is a temporary fix to working with multiple LAs
