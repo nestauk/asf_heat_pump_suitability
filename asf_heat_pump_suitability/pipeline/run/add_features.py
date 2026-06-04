@@ -75,6 +75,9 @@ if __name__ == "__main__":
         heat_network_zones,
         city_centres,
         local_authority,
+        listed_buildings,
+        off_gas,
+        protected_areas,
     )
 
     args = parse_arguments()
@@ -269,9 +272,6 @@ if __name__ == "__main__":
     )
 
     # Add listed building boolean flag
-    from asf_heat_pump_suitability.pipeline.prepare_features import (
-        listed_buildings,
-    )
 
     # Load listed buildings geodataframe for Great Britain
     listed_buildings_gdf = listed_buildings.transform_gdf_listed_buildings(nation="GB")
@@ -286,9 +286,6 @@ if __name__ == "__main__":
     del listed_buildings_gdf
 
     # Add number of off-gas properties
-    from asf_heat_pump_suitability.pipeline.prepare_features import (
-        off_gas,
-    )
 
     off_gas_list = off_gas.process_off_gas_data()
 
@@ -320,9 +317,6 @@ if __name__ == "__main__":
     del coast_gdf
 
     # Add conservation area boolean flag
-    from asf_heat_pump_suitability.pipeline.prepare_features import (
-        protected_areas,
-    )
 
     uprn_to_country_dict = load_geodata.load_transform_dict_uprn_to_country_mapping()
 
