@@ -57,7 +57,7 @@ if __name__ == "__main__":
     import pandas as pd
 
     from asf_heat_pump_suitability import config
-    from asf_heat_pump_suitability.utils import save_utils
+    from asf_heat_pump_suitability.utils import geo_utils, save_utils
     from asf_heat_pump_suitability.getters import (
         base_getters,
         load_geodata,
@@ -149,6 +149,11 @@ if __name__ == "__main__":
 
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
+
+    geo_utils.concat_gdfs(
+        dir_path=config["data"]["geodata"]["heat_network_zones"]["desnz_files"],
+        save_as=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"],
+    )
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
         select_las=local_authority_dict["valid_local_authorities"]

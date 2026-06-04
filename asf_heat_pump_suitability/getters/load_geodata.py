@@ -68,7 +68,7 @@ def load_gdf_heat_network_zones(
         gpd.GeoDataFrame: polygons of heat network zones in given Local Authority or boundary.
     """
     hn_gdf = gpd.read_parquet(
-        path=config["data"]["geodata"]["heat_network_zones"]
+        path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
     ).drop(columns="index_right")
     # Assume first column with `ID` substring is the zone ID column
     # Note original ID column retained in case of erroneous ID assignment
