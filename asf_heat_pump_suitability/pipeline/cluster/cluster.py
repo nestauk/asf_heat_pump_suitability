@@ -885,11 +885,7 @@ if __name__ == "__main__":
     )
 
     # Add heat network zones to clusters_gdf, if they exist
-    hn_zones_gdf_list = [
-        load_geodata.load_gdf_heat_network_zones(local_authority=la)
-        for la in local_authority_dict["valid_local_authorities"]
-    ]
-    hn_zones_gdf = pd.concat(hn_zones_gdf_list, ignore_index=True)
+    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(boundary=boundary_gdf)
 
     clusters_gdf = append_gdf_heat_network_zone_layer(
         clusters_gdf=clusters_gdf, hn_zones_gdf=hn_zones_gdf
