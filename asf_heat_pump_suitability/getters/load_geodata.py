@@ -50,14 +50,17 @@ def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
 
 
 def load_gdf_heat_network_zones(
-    boundary: Optional[shapely.Polygon | shapely.MultiPolygon] = None,
+    boundary: Optional[
+        shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame
+    ] = None,
     local_authority: Optional[str] = None,
 ) -> gpd.GeoDataFrame:
     """
     Load GeoDataFrame with heat network zone polygons in given Local Authority or boundary area.
 
     Args:
-        boundary (shapely.Polygon | shapely.MultiPolygon): Optional. Boundary to load heat network zone polygons for.
+        boundary (shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame): Optional. Boundary to load heat network
+        zone polygons for or geodataframe of multiple boundary polygons.
         local_authority (str): Optional. Local Authority to load heat network zone polygons for. This is slower than using
         the boundary directly.
 
@@ -72,7 +75,12 @@ def load_gdf_heat_network_zones(
     hn_gdf = _extend_gdf_hn_zone_id(hn_gdf)
 
     if boundary:
-        hn_gdf = hn_gdf[hn_gdf["geometry"].intersects(boundary)]
+        if isinstance(boundary, gpd.GeoDataFrame):
+            hn_gdf = hn_gdf.sjoin(
+                boundary[["geometry"]], how="inner", predicate="intersects"
+            )
+        else:
+            hn_gdf = hn_gdf[hn_gdf["geometry"].intersects(boundary)]
         if hn_gdf.empty:
             print("No heat network zone geodata found within given boundary.")
         else:
