@@ -15,6 +15,8 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters, load_boundaries
 from asf_heat_pump_suitability.pipeline.transform import local_authority as la
 
+_BNG_GRID_100KM_FEATURES = None
+
 
 def load_df_osopen_uprn(**kwargs) -> pl.DataFrame:
     """
@@ -46,7 +48,15 @@ def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: British National Grid square codes and their corresponding polygons
     """
-    return gpd.GeoDataFrame.from_features(grids.bng_grid_100km, crs=27700)
+    global _BNG_GRID_100KM_FEATURES
+
+    # Materialize the iterator into a reusable list only once
+    # This is required to make multiple calls to this function in the same session
+    # Otherwise it will raise errors due to iterator exhaustion
+    if _BNG_GRID_100KM_FEATURES is None:
+        _BNG_GRID_100KM_FEATURES = list(grids.bng_grid_100km)
+
+    return gpd.GeoDataFrame.from_features(_BNG_GRID_100KM_FEATURES, crs=27700)
 
 
 def load_gdf_heat_network_zones(
@@ -74,7 +84,7 @@ def load_gdf_heat_network_zones(
     # Note original ID column retained in case of erroneous ID assignment
     hn_gdf = _extend_gdf_hn_zone_id(hn_gdf)
 
-    if boundary:
+    if boundary is not None:
         if isinstance(boundary, gpd.GeoDataFrame):
             hn_gdf = hn_gdf.sjoin(
                 boundary[["geometry"]], how="inner", predicate="intersects"
