@@ -166,6 +166,15 @@ def map_dict_files_to_boundaries(dir_path: str, save_as: str = None) -> dict:
 
 
 def list_geo_files(dir_path: str) -> list:
+    """
+    List all geospatial files in a directory on S3 of types geojson, geopackage, and shapefiles.
+
+    Args:
+        dir_path (str): S3 URI to directory
+
+    Returns:
+        list: S3 URIs to all geospatial files in directory
+    """
     extensions = ["geojson", "gpkg", "shp"]
     fs = s3fs.S3FileSystem()
     dir_path = dir_path.rstrip("/")
