@@ -161,9 +161,10 @@ if __name__ == "__main__":
     # Add heat network zones to clusters_gdf, if they exist
     hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(boundary=boundary_gdf)
 
-    features_df = heat_network_zones.extend_df_heat_network_zone_bool(
-        uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
-    )
+    if hn_zones_gdf is not None:
+        features_df = heat_network_zones.extend_df_heat_network_zone_bool(
+            uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
+        )
 
     # Load spatial signature polygons and label UPRNs in city centres
     spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
