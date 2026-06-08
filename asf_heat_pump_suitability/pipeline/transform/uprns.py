@@ -23,6 +23,7 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 from asf_heat_pump_suitability.utils import geo_utils
 from asf_heat_pump_suitability.schemas import uprns_schema
+import warnings
 
 
 def generate_gdf_uprn_coords(
@@ -332,10 +333,10 @@ def get_census_uprn_range(local_authorities: list[str]):
         la_lower = [la.lower() for la in local_authorities]
 
         # data on number of households in each LA in England and Wales
-        ew_census_df = pl.read_csv(config["data"]["ew_household_census_data"])
+        ew_census_df = pl.read_csv(config["data"]["EW_household_census_data"])
         # data on number of households in each LA in Scotland
         s_census_df = pl.read_csv(
-            config["data"]["s_household_census_data"], skip_rows=3
+            config["data"]["S_household_census_data"], skip_rows=3
         )
 
         # Scottish data has some newline characters in header, remove these
@@ -350,27 +351,49 @@ def get_census_uprn_range(local_authorities: list[str]):
 
         # find number of households and sum for LAs in Scotland
         scot_matches = s_census_df.filter(
-            pl.col("Council Area").str.to_lowercase().is_in(la_lower)
+            pl.col("Area name").str.to_lowercase().is_in(la_lower)
         )
         scot_sum = (
-            scot_matches["Number of households with at least one usual resident"].sum()
+            scot_matches["Number of households with at least one usual resident "].sum()
             or 0
         )
+
+        # Identify missing LAs
+        ew_found = (
+            ew_matches["Lower Tier Local Authorities"].str.to_lowercase().to_list()
+        )
+        scot_found = scot_matches["Area name"].str.to_lowercase().to_list()
+        all_found = set(ew_found + scot_found)
+
+        # set default min/ max UPRN range for each missing LA
+        default_min_uprns = 850
+        default_max_uprns = 593000
+
+        missing_las = [la for la in la_lower if la not in all_found]
+        if missing_las:
+            warnings.warn(
+                f"Could not find census data for LAs: {missing_las}. "
+                f"Adding default range (Min: {default_min_uprns}, Max: {default_max_uprns}) for each."
+            )
 
         # Combine sums
         total_census_households = ew_sum + scot_sum
 
-        # Fallback in case LA was not found in either census
-        if total_census_households == 0:
-            min_uprns = 850
-            max_uprns = 593000
-            raise Warning(f"Could not find census data for LAs: {local_authorities}")
+        # +/- 40% buffer on total number of households
+        min_uprns = int(total_census_households * 0.95)
+        max_uprns = int(total_census_households * 1.4)
 
-        else:
+        # Add the default values for the LAs we did not find
+        min_uprns += len(missing_las) * default_min_uprns
+        max_uprns += len(missing_las) * default_max_uprns
 
-            # +/- 40% buffer on total number of households
-            min_uprns = int(total_census_households * 0.95)
-            max_uprns = int(total_census_households * 1.4)
+        # Fallback in case empty list is passed or some other edge case
+        if min_uprns == 0 and max_uprns == 0:
+            min_uprns = len(la_lower) * default_min_uprns
+            max_uprns = len(la_lower) * default_max_uprns
+            warnings.warn(
+                f"Could not find census data for any LAs: {local_authorities}"
+            )
 
     return {"min": min_uprns, "max": max_uprns}
 

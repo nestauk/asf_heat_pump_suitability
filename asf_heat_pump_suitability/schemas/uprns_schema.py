@@ -61,6 +61,7 @@ def create_domestic_uprn_schema(
                 lambda df: (min_expected_rows <= len(df) <= max_expected_rows),
                 name="uprn_census_household_comparison",
                 ignore_na=False,
+                error="UPRN count is outside the expected values from census household data.",
             )
         ],
         strict=True,
