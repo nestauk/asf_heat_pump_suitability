@@ -312,32 +312,65 @@ def map_dict_uprns_to_building_id(
     return uprns_building_dict
 
 
-def get_census_uprn_range(local_authorities):
+def get_census_uprn_range(local_authorities: list[str]):
+    """
+    Finds the number of households in a Local Authority from the 2021 census, and returns a min and max expected number of UPRNs at 0.95 and 1.4 times the sum of census counts.
+
+    Args:
+        local_authorities (list[str]): list of Local Authorities to find census counts for.
+
+    Returns:
+        dict: dictionary with minimum and maximum expected UPRNs based on total census counts. Format: {"min": min_uprns, "max": max_uprns}.
+
+    """
     # rough expected UPRN range for whole of GB
     if local_authorities == "gb":
         min_uprns = 27000000
         max_uprns = 40000000
 
     else:
-        # TODO: this will need updating with updated grid squares work
-        la_names_list = [config["constant"][local_authorities]["la_names"]]
-        la_names_lower = [name.lower() for name in la_names_list]
+        la_lower = [la.lower() for la in local_authorities]
 
-        # data on number of households in each LA in GB
-        census_df = pl.read_csv(config["data"]["gb_household_census_data"])
-        la_census_data = census_df[
-            census_df["Lower Tier Local Authorities"].str.lower().isin(la_names_lower)
-        ]
+        # data on number of households in each LA in England and Wales
+        ew_census_df = pl.read_csv(config["data"]["ew_household_census_data"])
+        # data on number of households in each LA in Scotland
+        s_census_df = pl.read_csv(
+            config["data"]["s_household_census_data"], skip_rows=3
+        )
 
-        if la_census_data.empty:
-            raise Warning(f"Could not find census data for LAs: {la_names_list}")
+        # Scottish data has some newline characters in header, remove these
+        cleaned_columns = {col: col.replace("\n", "") for col in s_census_df.columns}
+        s_census_df = s_census_df.rename(cleaned_columns)
 
-        # sum number of households in each LA for list of input LAs
-        census_households = la_census_data["Observation"].sum()
+        # find number of households and sum for LAs in England and Wales
+        ew_matches = ew_census_df.filter(
+            pl.col("Lower Tier Local Authorities").str.to_lowercase().is_in(la_lower)
+        )
+        ew_sum = ew_matches["Observation"].sum() or 0
 
-        # +/- 40% buffer on total number of households
-        min_uprns = int(census_households * 0.95)
-        max_uprns = int(census_households * 1.4)
+        # find number of households and sum for LAs in Scotland
+        scot_matches = s_census_df.filter(
+            pl.col("Council Area").str.to_lowercase().is_in(la_lower)
+        )
+        scot_sum = (
+            scot_matches["Number of households with at least one usual resident"].sum()
+            or 0
+        )
+
+        # Combine sums
+        total_census_households = ew_sum + scot_sum
+
+        # Fallback in case LA was not found in either census
+        if total_census_households == 0:
+            min_uprns = 850
+            max_uprns = 593000
+            raise Warning(f"Could not find census data for LAs: {local_authorities}")
+
+        else:
+
+            # +/- 40% buffer on total number of households
+            min_uprns = int(total_census_households * 0.95)
+            max_uprns = int(total_census_households * 1.4)
 
     return {"min": min_uprns, "max": max_uprns}
 
