@@ -8,14 +8,6 @@ Script to add features to UPRNs:
 Run:
 python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES
 
-where LOCAL_AUTHORITIES is one of:
-- `plymouth` for Plymouth only
-- `plymouth_similar` for Plymouth and 4 similar local authorities (Liverpool, Portsmouth, Southampton, Swansea)
-- `sampling_areas` for Plymouth and 5 different local authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham)
-- `greater_manchester_las` for all Greater Manchester local authorities (Bolton, Bury, Manchester, Oldham, Rochdale, Salford, Stockport, Tameside, Trafford, Wigan)
-- `cardiff` for Cardiff only
-You can see the full list of local authority options in the `constant` section of the config.yaml file.
-
 Set -- `--detail "simplified"` to use simplified spatial signature polygons to label city centres. The default is "full" which uses the fully detailed spatial signatures framework.
 
 To save outputs to S3, add --save flag.
@@ -35,8 +27,9 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
+        nargs="+",
         required=True,
     )
 
@@ -80,22 +73,22 @@ if __name__ == "__main__":
         epc,
         heat_network_zones,
         city_centres,
+        local_authority,
+        listed_buildings,
+        off_gas,
+        protected_areas,
     )
 
     args = parse_arguments()
 
-    local_authorities = args.local_authorities.lower()
+    local_authorities = [la.lower() for la in args.local_authorities]
 
-    list_las = (
-        config["constant"][local_authorities]["la_names"]
-        if isinstance(config["constant"][local_authorities]["la_names"], list)
-        else [config["constant"][local_authorities]["la_names"]]
-    )
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
+
     detail_level = args.detail
     uprns_path = config["output"]["dataset"]["domestic_uprns"].format(
-        local_authority=local_authorities
+        local_authority=local_authority_dict["url_slug"]
     )
-    grid_squares = config["constant"][local_authorities]["grid_squares"]
 
     # Load UPRN data
     print(f"Loading domestic UPRNs from: {uprns_path}")
@@ -120,7 +113,7 @@ if __name__ == "__main__":
     # Load building footprint data
     # TODO scale beyond sampling areas
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="building", grid_squares=grid_squares
+        layer="building", grid_squares=local_authority_dict["grid_squares"]
     )
 
     # Map UPRNs to the ID of the building they're in
@@ -159,10 +152,12 @@ if __name__ == "__main__":
     # ------------------------ #
     # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
 
-    # Load planned heat network zone polygons (if available)
-    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
-        local_authority=local_authorities
-    )
+    # Load planned heat network zone polygons (if available) for each LA in the list, then concatenate the gdfs
+    hn_zones_gdf_list = [
+        load_geodata.load_gdf_heat_network_zones(local_authority=la)
+        for la in local_authority_dict["valid_local_authorities"]
+    ]
+    hn_zones_gdf = pd.concat(hn_zones_gdf_list, ignore_index=True)
 
     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
         uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
@@ -198,7 +193,7 @@ if __name__ == "__main__":
     land_parcels_gdf = land_parcels_gdf.drop_duplicates(subset=["geometry"])
 
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="building", grid_squares=grid_squares
+        layer="building", grid_squares=local_authority_dict["grid_squares"]
     )
 
     # Get intersection of building footprint polygons and land polygons
@@ -270,9 +265,6 @@ if __name__ == "__main__":
     )
 
     # Add listed building boolean flag
-    from asf_heat_pump_suitability.pipeline.prepare_features import (
-        listed_buildings,
-    )
 
     # Load listed buildings geodataframe for Great Britain
     listed_buildings_gdf = listed_buildings.transform_gdf_listed_buildings(nation="GB")
@@ -287,9 +279,6 @@ if __name__ == "__main__":
     del listed_buildings_gdf
 
     # Add number of off-gas properties
-    from asf_heat_pump_suitability.pipeline.prepare_features import (
-        off_gas,
-    )
 
     off_gas_list = off_gas.process_off_gas_data()
 
@@ -312,16 +301,15 @@ if __name__ == "__main__":
         features_df=features_df,
         uprns_gdf=uprns_gdf,
         coast_gdf=coast_gdf,
-        distance_threshold_m=1500,
-        simplify_tolerance_m=150,
+        distance_threshold_m=config["constant"]["coastline"][
+            "distance_from_coastline_threshold_m"
+        ],
+        simplify_tolerance_m=config["constant"]["coastline"]["simplify_tolerance_m"],
     )
 
     del coast_gdf
 
     # Add conservation area boolean flag
-    from asf_heat_pump_suitability.pipeline.prepare_features import (
-        protected_areas,
-    )
 
     uprn_to_country_dict = load_geodata.load_transform_dict_uprn_to_country_mapping()
 
@@ -346,6 +334,6 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             features_df,
             path=config["output"]["dataset"]["domestic_uprns_with_features"].format(
-                local_authority=local_authorities
+                local_authority=local_authority_dict["url_slug"]
             ),
         )

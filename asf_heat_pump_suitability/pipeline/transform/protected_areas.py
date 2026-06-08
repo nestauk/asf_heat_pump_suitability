@@ -3,7 +3,6 @@ import pandas as pd
 import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import load_data, load_geodata
-from asf_heat_pump_suitability.pipeline.prepare_features import epc
 
 
 def load_transform_df_uprn_in_protected_area(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
@@ -142,9 +141,28 @@ def generate_df_conservation_area_data_availability(
     df = pl.from_pandas(df)
 
     df = (
-        epc.extend_df_country_col(df, lsoa_col="LAD23CD")
+        extend_df_country_col(df, lsoa_col="LAD23CD")
         .filter(pl.col("country").is_in(["England", "Wales"]))
         .drop("country")
+    )
+
+    return df
+
+
+def extend_df_country_col(df: pl.DataFrame, lsoa_col: str = "lsoa") -> pl.DataFrame:
+    """
+    Add a new column to a dataframe based on LSOA/DataZone code.
+
+    Args:
+        df (pl.DataFrame): dataframe with column containing LSOA / DataZone code
+        lsoa_col (str): column containing LSOA / DataZone code
+
+    Returns:
+        pl.DataFrame: dataframe with new "country" column
+    """
+    df = df.with_columns(pl.col(lsoa_col).str.slice(0, 1).alias("country"))
+    df = df.with_columns(
+        pl.col("country").replace({"E": "England", "S": "Scotland", "W": "Wales"})
     )
 
     return df

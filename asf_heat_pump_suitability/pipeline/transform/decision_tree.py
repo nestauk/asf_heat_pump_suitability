@@ -10,12 +10,6 @@ To run the script:
 
 python asf_heat_pump_suitability/pipeline/transform/decision_tree.py --local_authorities LOCAL_AUTHORITIES
 
-LOCAL AUTHORITIES can be one of the following, as defined in the `constant` section of base.yaml:
-- plymouth
-- plymouth_similar_cities
-- sampling_areas
-- greater_manchester_las
-
 Use --save if you want to save the outputs to S3.
 """
 
@@ -26,11 +20,12 @@ import geopandas as gpd
 import argparse
 
 # local imports
-from asf_heat_pump_suitability.pipeline.transform.uprns import generate_gdf_uprn_coords
+from asf_heat_pump_suitability.pipeline.transform import uprns
 from asf_heat_pump_suitability.getters.load_geodata import (
     load_gdf_os_openmap_layer,
 )
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.pipeline.transform import local_authority
 
 OUTDOOR_SPACE_THRESHOLD_M2 = config["constant"]["threshold"][
     "outdoor_space_threshold_m2"
@@ -49,8 +44,9 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
+        nargs="+",
         required=True,
     )
 
@@ -62,32 +58,6 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     return parser.parse_args()
-
-
-def extend_gdf_building_footprints(
-    gdf: gpd.GeoDataFrame, buildings_gdf: gpd.GeoDataFrame, id_col: str
-) -> gpd.GeoDataFrame:
-    """
-    Extends the GeoDataFrame with the building footprint geometries the UPRNs are located within.
-
-    Args:
-        gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
-        buildings_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
-        id_col (str): The name of the column in `buildings_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
-
-    Returns:
-        gpd.GeoDataFrame: GeoDataFrame with building footprint polygons added.
-    """
-    # Creates a copy of the building geometry column to keep after the spatial join
-    buildings_gdf["building_geometry"] = buildings_gdf["geometry"]
-
-    # Extend the UPRN GeoDataFrame with building footprints geometry using id_col
-    gdf = gdf.merge(
-        buildings_gdf[[id_col, "building_geometry"]],
-        how="left",
-        on=id_col,
-    )
-    return gdf
 
 
 def identify_dict_most_suitable_tech(
@@ -206,7 +176,10 @@ def identify_df_building_most_suitable_tech(
                 ]
             ]
         )
-    )
+        # This will drop valid EPC UPRNs with no building footprint.
+        # These need to be mapped to their nearest building footprints to be included.
+        # This is required to prevent the creation of a row with no geometry
+    ).drop_nulls(subset=id_col)
 
     # Create df with set of most suitable tech per building footprint
     solutions_per_footprint_df = (
@@ -363,7 +336,7 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     Saves outputs to S3 if specified.
 
     Args:
-        local_authorities (str): Local authority or authorities.
+        local_authorities (str): local authority slug to save decision tree outputs to.
         buildings_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
         id_col (str): The name of the column in `buildings_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
@@ -374,8 +347,12 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
             - GeoDataFrame with UPRN-level most suitable tech and decision tree path.
             - GeoDataFrame with building footprint-level most suitable tech.
     """
-    uprns_gdf = extend_gdf_building_footprints(
-        gdf=uprns_gdf, buildings_gdf=buildings_gdf, id_col=id_col
+    # Join corresponding building geometry to each UPRN
+    buildings_gdf["building_geometry"] = buildings_gdf["geometry"]
+    uprns_gdf = uprns_gdf.merge(
+        buildings_gdf[[id_col, "building_geometry"]],
+        how="left",
+        on=id_col,
     )
 
     print("Number of building IDs: ", uprns_gdf[id_col].nunique())
@@ -460,18 +437,20 @@ if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
 
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
+
     # TODO: create getters for footprints & uprns in future
     buildings_gdf = load_gdf_os_openmap_layer(
         layer="building",
-        grid_squares=config["constant"][local_authorities]["grid_squares"],
+        grid_squares=local_authority_dict["grid_squares"],
     )
 
     uprns_with_features_df = pl.read_parquet(
         config["output"]["dataset"]["domestic_uprns_with_features"].format(
-            local_authority=local_authorities
+            local_authority=local_authority_dict["url_slug"]
         )
     )
-    uprns_with_features_gdf = generate_gdf_uprn_coords(df=uprns_with_features_df)
+    uprns_with_features_gdf = uprns.generate_gdf_uprn_coords(df=uprns_with_features_df)
 
     # TODO: move this to add_features.py
     uprns_with_features_gdf["in_city_centre_or_hn_zone"] = (
@@ -480,7 +459,7 @@ if __name__ == "__main__":
     )
 
     identify_gdf_tuple_most_suitable_tech_uprn_and_building(
-        local_authorities=local_authorities,
+        local_authorities=local_authority_dict["url_slug"],
         buildings_gdf=buildings_gdf,
         id_col="ID",
         uprns_gdf=uprns_with_features_gdf,

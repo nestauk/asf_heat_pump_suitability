@@ -6,6 +6,8 @@ data:
     gb_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares
     grid_square_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+    # OpenMap Green space Geopackage
+    gb_os_openmap_greenspace: "s3://asf-local-heat-planning-tool/inputs/geodata/opgrsp_gb.gpkg"
     # OpenMap Green space layers for certain grid squares
     grid_square_os_openmap_greenspace: "s3://asf-local-heat-planning-tool/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/{square}/{square}_{layer}.shp"
     # OpenRoad Local road data for GB
@@ -78,6 +80,8 @@ data:
     inspire_file_names: "s3://asf-local-heat-planning-tool/inputs/processed/inspire/inspire_file_bounds_EWS.geojson"
     # Manually labelled blocks of flats
     manually_labelled_block_of_flats: "s3://asf-local-heat-planning-tool/inputs/processed/manually_labelled_block_of_flats.parquet"
+    # Valid local authority names, taken from the 'LAD23NM' column of the UK_ons_lad_bound file
+    valid_la_names: "s3://asf-local-heat-planning-tool/inputs/processed/valid_la_names.csv"
 
 constant:
   id:
@@ -87,24 +91,6 @@ constant:
     outdoor_space_threshold_m2:
       within_hn_zone: 70
       outside_hn_zone: 30
-  plymouth:
-    la_names: "Plymouth"
-    grid_squares: "SX"
-  plymouth_similar_cities:
-    la_names:
-      - "Liverpool"
-      - "Plymouth"
-      - "Portsmouth"
-      - "Southampton"
-      - "Swansea"
-    grid_squares:
-      - "SD"
-      - "SJ"
-      - "SN"
-      - "SS"
-      - "SU"
-      - "SX"
-      - "SZ"
   sampling_areas:
     la_names:
       - "Bath and North East Somerset"
@@ -121,58 +107,21 @@ constant:
       - "SK"
       - "ST"
       - "SX"
-  greater_manchester_las:
-    la_names:
-      - "Bolton"
-      - "Bury"
-      - "Manchester"
-      - "Oldham"
-      - "Rochdale"
-      - "Salford"
-      - "Stockport"
-      - "Tameside"
-      - "Trafford"
-      - "Wigan"
-    grid_squares:
-      - "SD"
-      - "SE"
-      - "SJ"
-      - "SK"
-  cardiff:
-    la_names: "Cardiff"
-    grid_squares: "ST"
-  dudley:
-    la_names: "Dudley"
-    grid_squares: "SO"
-  vale_of_glamorgan:
-    la_names: "Vale of Glamorgan"
-    grid_squares:
-      - "ST"
-      - "SS"
-  midlothian:
-    la_names: "Midlothian"
-    grid_squares: "NT"
-  glasgow:
-    la_names: "Glasgow City"
-    grid_squares: "NS"
-  south_lanarkshire:
-    la_names: "South Lanarkshire"
-    grid_squares:
-      - "NT"
-      - "NS"
   target_crs: 27700 # British National Grid
   tech_types:
     individual: "Individual solution"
     networked: "Networked heat pump"
     communal: "Communal solution"
     heat_networks: "District heat network"
-  # radius in metres around anchor properties within which we are reassigning N-GSHP to communal
-  anchor_radius: 50
   tech_type_codes:
     individual: "IND"
     networked: "NHP"
     communal: "COM"
     heat_networks: "DHNZ"
+  anchor_radius: 50 # radius in metres around anchor properties within which we are reassigning N-GSHP to communal
+  coastline:
+    distance_from_coastline_threshold_m: 1500 # distance in metres from coastline threshold
+    simplify_tolerance_m: 150 # tolerance in m (metres) used to simplify coastline geometries
   ID:
     building: "ID"
   clustering:
@@ -189,7 +138,7 @@ output:
     # Residential buildings with their most suitable low carbon heat technology group
     buildings_most_suitable_tech: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_buildings_most_suitable_tech.parquet"
     # Buildings containing domestic UPRNs aggregated into groups of neighbouring clusters of the same tech type
-    tech_clusters: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_clustered_tech_polygons_simplified_{tolerance_m}m.geojson"
+    tech_clusters: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_clustered_tech_polygons.parquet"
     # Opportunity areas with most suitable tech, cluster ID, contextual data
     clusters_tech_contextual_info: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_clusters_contextual_features_{tolerance_m}m.geojson"
   model:
