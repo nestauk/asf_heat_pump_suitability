@@ -321,6 +321,36 @@ def map_dict_uprns_to_building_id(
     return uprns_building_dict
 
 
+def get_census_uprn_range(local_authorities):
+    # rough expected UPRN range for whole of GB
+    if local_authorities == "gb":
+        min_uprns = 27000000
+        max_uprns = 40000000
+
+    else:
+        # TODO: this will need updating with updated grid squares work
+        la_names_list = [config["constant"][local_authorities]["la_names"]]
+        la_names_lower = [name.lower() for name in la_names_list]
+
+        # data on number of households in each LA in GB
+        census_df = pl.read_csv(config["data"]["gb_household_census_data"])
+        la_census_data = census_df[
+            census_df["Lower Tier Local Authorities"].str.lower().isin(la_names_lower)
+        ]
+
+        if la_census_data.empty:
+            raise Warning(f"Could not find census data for LAs: {la_names_list}")
+
+        # sum number of households in each LA for list of input LAs
+        census_households = la_census_data["Observation"].sum()
+
+        # +/- 40% buffer on total number of households
+        min_uprns = int(census_households * 0.95)
+        max_uprns = int(census_households * 1.4)
+
+    return {"min": min_uprns, "max": max_uprns}
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
@@ -438,36 +468,16 @@ if __name__ == "__main__":
 
     # --- PANDERA VALIDATION ---
 
-    # rough expected UPRN range for whole of GB
-    if local_authorities == "gb":
-        min_uprns = 10000000
-        max_uprns = 50000000
-
-    else:
-        # TODO: this will need updating with updated grid squares work
-        la_names_list = [config["constant"][local_authorities]["la_names"]]
-        la_names_lower = [name.lower() for name in la_names_list]
-
-        # data on number of households in each LA in GB
-        census_df = pd.read_csv(config["data"]["gb_household_census_data"])
-        la_census_data = census_df[
-            census_df["Lower Tier Local Authorities"].str.lower().isin(la_names_lower)
-        ]
-
-        if la_census_data.empty:
-            raise ValueError(f"Could not find census data for LAs: {la_names_list}")
-
-        # sum number of households in each LA for list of input LAs
-        census_households = la_census_data["Observation"].sum()
-
-        # +/- 40% buffer on total number of households
-        min_uprns = int(census_households * 0.6)
-        max_uprns = int(census_households * 1.4)
-
+    # find acceptable UPRN range
+    uprn_bounds = get_census_uprn_range(local_authorities)
     # perform validation checks on df
     schema = uprns_schema.create_domestic_uprn_schema(
-        min_expected_rows=min_uprns, max_expected_rows=max_uprns
+        min_expected_rows=uprn_bounds["min"], max_expected_rows=uprn_bounds["max"]
     )
+
+    print(f"Min Expected: {uprn_bounds["min"]}")
+    print(f"Max Expected: {uprn_bounds["max"]}")
+    print(f"Actual Rows:  {len(df)}")
 
     df_validated = schema.validate(df.to_pandas(), lazy=True)
     df = pl.from_pandas(df_validated)
