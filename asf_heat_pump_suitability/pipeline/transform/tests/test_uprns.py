@@ -56,6 +56,54 @@ class TestMapDictUPRNsBuildingToID:
         return gpd.GeoDataFrame(buildings_data, crs="EPSG:27700")
 
     @pytest.fixture()
+    def buildings_gdf_wgs84(self):
+        """Create test building footprints in WGS84."""
+        buildings_data_wgs84 = [
+            {
+                "building_id": "B1",
+                "type": "Square",
+                "geometry": Polygon(
+                    [
+                        (-0.5547295, 51.6898588),
+                        (-0.5545849, 51.6898570),
+                        (-0.5545820, 51.6899469),
+                        (-0.5547266, 51.6899487),
+                    ]
+                ),
+            },
+            {
+                "building_id": "B2",
+                "type": "Long Terrace",
+                # Shares the eastern side of B1
+                "geometry": Polygon(
+                    [
+                        (-0.5545849, 51.6898570),
+                        (-0.5541510, 51.6898517),
+                        (-0.5541482, 51.6899415),
+                        (-0.5545820, 51.6899469),
+                    ]
+                ),
+            },
+            {
+                "building_id": "B3",
+                "type": "L-Shape",
+                # Placed further north; does not intersect with any points
+                "geometry": Polygon(
+                    [
+                        (-0.5547238, 51.6900385),
+                        (-0.5544345, 51.6900350),
+                        (-0.5544317, 51.6901249),
+                        (-0.5545763, 51.6901266),
+                        (-0.5545734, 51.6902165),
+                        (-0.5547181, 51.6902183),
+                    ]
+                ),
+            },
+        ]
+
+        return gpd.GeoDataFrame(buildings_data_wgs84, crs="EPSG:4326")
+
+    @pytest.fixture()
     def uprns_gdf(self):
         """Create test UPRN geometries."""
         points_data = [
