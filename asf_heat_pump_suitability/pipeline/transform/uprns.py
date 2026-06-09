@@ -312,9 +312,9 @@ def map_dict_uprns_to_building_id(
     return uprns_building_dict
 
 
-def get_census_uprn_range(local_authorities: list[str]):
+def get_dict_census_uprn_range(local_authorities: list[str]) -> dict:
     """
-    Finds the number of households in a Local Authority from the 2021 census, and returns a min and max expected number of UPRNs at 0.95 and 1.4 times the sum of census counts.
+    Finds the number of households in a Local Authority from the 2021 (England and Wales) and 2022 (Scotland) census, and returns a min and max expected number of UPRNs at 0.95 and 1.4 times the sum of census counts.
 
     Args:
         local_authorities (list[str]): list of Local Authorities to find census counts for.
@@ -323,7 +323,7 @@ def get_census_uprn_range(local_authorities: list[str]):
         dict: dictionary with minimum and maximum expected UPRNs based on total census counts. Format: {"min": min_uprns, "max": max_uprns}.
 
     """
-    # rough expected UPRN range for whole of GB
+    # rough expected UPRN range for whole of GB. ONS estimates https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/families/bulletins/familiesandhouseholds/2024 ~29 million households in UK.
     if local_authorities == "gb":
         min_uprns = 27000000
         max_uprns = 40000000
@@ -334,6 +334,7 @@ def get_census_uprn_range(local_authorities: list[str]):
         # data on number of households in each LA in England and Wales
         ew_census_df = pl.read_csv(config["data"]["EW_household_census_data"])
         # data on number of households in each LA in Scotland
+        # skip first three as they contain information about the data, not any household counts.
         s_census_df = pl.read_csv(
             config["data"]["S_household_census_data"], skip_rows=3
         )
@@ -365,6 +366,7 @@ def get_census_uprn_range(local_authorities: list[str]):
         all_found = set(ew_found + scot_found)
 
         # set default min/ max UPRN range for each missing LA
+        # This is roughly the number of households in the smallest and largest LAs, multiplied by 0.95 (min) and 1.4 (max)
         default_min_uprns = 850
         default_max_uprns = 593000
 
@@ -520,14 +522,14 @@ if __name__ == "__main__":
     # --- PANDERA VALIDATION ---
 
     # find acceptable UPRN range
-    uprn_bounds = get_census_uprn_range(local_authorities)
+    uprn_bounds = get_dict_census_uprn_range(local_authorities)
     # perform validation checks on df
     schema = uprns_schema.create_domestic_uprn_schema(
         min_expected_rows=uprn_bounds["min"], max_expected_rows=uprn_bounds["max"]
     )
 
-    print(f"Min Expected: {uprn_bounds["min"]}")
-    print(f"Max Expected: {uprn_bounds["max"]}")
+    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds["min"]}")
+    print(f"Max Expected (1.4 * household census counts): {uprn_bounds["max"]}")
     print(f"Actual Rows:  {len(df)}")
 
     df = schema.validate(df, lazy=True)
