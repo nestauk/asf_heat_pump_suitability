@@ -7,7 +7,7 @@ from asf_heat_pump_suitability.pipeline.transform.uprns import (
 
 
 class TestMapDictUPRNsBuildingToID:
-    """Tests for `map_dict_uprns_to_building_id`.`"""
+    """Tests for `map_dict_uprns_to_building_id`."""
 
     @pytest.fixture(scope="class")
     def buildings_gdf(self):
