@@ -78,41 +78,6 @@ class TestMapDictUPRNsBuildingToID:
         return gpd.GeoDataFrame(buildings_data_wgs84, crs="EPSG:4326")
 
     @pytest.fixture()
-    def uprns_gdf(self):
-        """Create test UPRN geometries."""
-        uprns_data = [
-            {
-                "UPRN": "P1",
-                "description": "Inside building footprint",
-                "geometry": Point(500005, 200005),  # Inside B1
-            },
-            {
-                "UPRN": "P2",
-                "description": "On the exterior boundary",
-                "geometry": Point(500000, 200005),  # On the western edge of B1
-            },
-            {
-                "UPRN": "P3",
-                "description": "On the shared side of two buildings",
-                "geometry": Point(500010, 200005),  # Exactly on the B1/B2 shared line
-            },
-            {
-                "UPRN": "P4",
-                "description": "Just outside (<5m outside)",
-                "geometry": Point(500043, 200005),  # 3m east of B2's eastern wall
-            },
-            {
-                "UPRN": "P5",
-                "description": "Far outside (10+m outside)",
-                "geometry": Point(
-                    500000, 200060
-                ),  # 20m north of B3, far from all others
-            },
-        ]
-
-        return gpd.GeoDataFrame(uprns_data, crs="EPSG:27700")
-
-    @pytest.fixture()
     def gdf_one_uprn_inside_building(self):
         """Create test UPRN geometry inside building."""
         uprns_data = [
