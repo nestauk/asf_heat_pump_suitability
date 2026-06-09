@@ -112,7 +112,6 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
 
     # Validate the EPC UPRNs
     df = uprns_schema.EPC_UPRN_Schema.validate(df, lazy=True)
-    # df = pl.from_pandas(df_validated)
 
     logging.info(
         f"{before - len(df)} invalid UPRNs dropped from {epc_type} EPC register. {len(df)} valid UPRNs remaining"
@@ -532,7 +531,6 @@ if __name__ == "__main__":
     print(f"Actual Rows:  {len(df)}")
 
     df = schema.validate(df, lazy=True)
-    # df = pl.from_pandas(df_validated)
 
     # ---------------------------
 
