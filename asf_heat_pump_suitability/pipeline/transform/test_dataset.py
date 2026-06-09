@@ -1,5 +1,6 @@
 import argparse
 import geopandas as gpd
+import shapely
 from pathlib import Path
 from asf_heat_pump_suitability.getters import load_boundaries, base_getters
 from asf_heat_pump_suitability.utils import save_utils
@@ -10,38 +11,78 @@ import pandas as pd
 import boto3
 
 
-def get_boundary(local_authorities=None, boundary_file=None):
+def get_boundary(
+    local_authorities: str | list[str] = None,
+    boundary_file: gpd.GeoDataFrame | str = None,
+) -> shapely.Geometry:
     """
     Finds boundary geometry given an input file containing a GeoDataFrame or Local Authority name.
 
     Args:
         local_authorities (str | list[str]): Local Authority or list of Local Authorities to find the boundary for.
-        boundary_file: File containing a GeoDataFrame with a boundary polygon or multipolygon.
+        boundary_file (gpd.GeoDataFrame | str): GeoDataFrame or path to file containing a GeoDataFrame with a boundary polygon or multipolygon.
 
     Returns:
-        gpd.GeoDataFrame: GeoDataFrame with the boundary polygon.
+        shapely.Geometry: unioned boundary polygon/ multipolygon.
+
+    Raises:
+        ValueError if exactly one input argument is not passed
     """
+
+    if bool(local_authorities) == bool(boundary_file):
+        raise ValueError(
+            "Please provide exactly one argument: either 'local_authorities' or 'boundary_file'."
+        )
+
     if local_authorities:
         boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
             local_authorities
         )
+
     else:
-        boundary_gdf = gpd.read_file(boundary_file)
+        if isinstance(boundary_file, gpd.GeoDataFrame):
+            boundary_gdf = boundary_file
+        else:
+            boundary_gdf = gpd.read_file(boundary_file)
 
     boundary_gdf = boundary_gdf.to_crs(27700)
     return boundary_gdf.geometry.union_all()
 
 
+def _get_output_path(input_filepath: str) -> str:
+    """
+    Helper function to derive an output filepath in S3 based on an input path. E.g. an input file in s3://asf-local-heat-planning-tool/inputs/geodata/FILENAME will create an output filepath of s3://asf-local-heat-planning-tool/test/inputs/geodata/test_FILENAME.
+
+    Args:
+        input_filepath (str): location on S3 where input data is stored
+
+    Returns: str with output filepath
+    """
+
+    # replace inputs directory with test/inputs
+    modified_path = input_filepath.replace("/inputs/", "/test/inputs/", 1)
+
+    # split filepath and filename
+    base_dir, filename = modified_path.rsplit("/", 1)
+
+    output_filepath = f"{base_dir}/test_{filename}"
+
+    return output_filepath
+
+
 def clip_and_save_dataset(
-    input_filepath, boundary_geometry, layer=None, save_output=False
-):
+    input_filepath: str,
+    boundary_geometry: gpd.GeoDataFrame,
+    layer: str = None,
+    save_output: bool = False,
+) -> gpd.GeoDataFrame:
     """
     Clips a geospatial input file based on the boundary geometry and saves a file to S3.
 
     Args:
         input_filepath (str): name of the file to clip.
         boundary_geometry (gpd.GeoDataFrame): boundary geometry to clip to.
-        layer: name of the layer of the input file to load (if loading a geopackage).
+        layer (str): name of the layer of the input file to load (if loading a geopackage).
         save_output (bool): to save output to S3.
 
     Returns:
@@ -90,9 +131,6 @@ def clip_and_save_dataset(
 
     clipped_gdf = gpd.clip(gdf, boundary_geometry)
 
-    output_filename = f"test_{input_path.name}"
-    output_filepath = input_path.parent / output_filename
-
     # drop geometry column from data containing X and Y columns for consistency with input dataset
     if not is_geodata:
         output_df = clipped_gdf.drop(columns="geometry")
@@ -100,21 +138,31 @@ def clip_and_save_dataset(
         output_df = clipped_gdf
 
     if save_output:
+        output_filepath = _get_output_path(input_filepath)
+        print(f"saving clipped data to {output_filepath}")
         save_utils.save_to_s3(output_df, str(output_filepath))
 
     return output_df
 
 
 def filter_epc_by_uprn(
-    input_filepath, reference_df, epc_type, country=None, save_output=False
-):
+    input_filepath: str,
+    reference_df: pd.DataFrame,
+    epc_type: str,
+    country: str = None,
+    save_output: bool = False,
+) -> gpd.GeoDataFrame:
     """
     Filters a dataset containing UPRNs to only those UPRNs found in a reference dataset.
 
     Args:
         input_filepath (str): input file to filter
         reference_df (pd.DataFrame | gpd.GeoDataFrame): reference dataframe containing a list of UPRNs to filter the input file to.
+        epc_type (str): building type (domestic or commercial) to load EPC data for.
+        country (str): country (EW for England and Wales or S for Scotland) to load epc data for.
         save_output (bool): to save output to S3.
+
+    Returns: gpd.GeoDataframe: GeoDataFrame with filtered UPRNs
     """
 
     print(f"Processing {input_filepath}...")
@@ -155,24 +203,26 @@ def filter_epc_by_uprn(
             )
 
     if save_output:
-        input_path = Path(input_filepath)
-        output_filename = f"uprn_filtered_{input_path.name}"
-        output_path = input_path.parent / output_filename
+        output_filepath = _get_output_path(input_filepath)
+        print(f"saving clipped data to {output_filepath}")
 
-        save_utils.save_to_s3(filtered_df, str(output_path))
-        return output_path
+        save_utils.save_to_s3(filtered_df, str(output_filepath))
 
-    return None
+    return filtered_df
 
 
-def filter_country_mapping_by_uprn(input_filepath, reference_df, save_output=False):
+def filter_country_mapping_by_uprn(
+    input_filepath: str, reference_df: pd.DataFrame, save_output: bool = False
+) -> gpd.GeoDataFrame:
     """
     Filters a dataset containing UPRNs to only those UPRNs found in a reference dataset.
 
     Args:
         input_filepath (str): input file to filter
-        reference_filepath (str): reference file containing a list of UPRNs to filter the input file to.
+        reference_df (pd.DataFrame): reference dataframe containing a list of UPRNs to filter the input file to.
         save_output (bool): to save output to S3.
+
+    Returns: gpd.GeoDataFrame: GeoDataFrame with filtered UPRNs
     """
 
     print(f"Processing {input_filepath}...")
@@ -205,22 +255,41 @@ def filter_country_mapping_by_uprn(input_filepath, reference_df, save_output=Fal
     filtered_df = target_df[target_df["UPRN"].isin(valid_uprns)]
 
     if save_output:
-        input_path = Path(input_filepath)
-        output_filename = f"uprn_filtered_{input_path.name}"
-        output_path = input_path.parent / output_filename
+        output_filepath = _get_output_path(input_filepath)
+        print(f"saving clipped data to {output_filepath}")
 
-        save_utils.save_to_s3(filtered_df, str(output_path))
-        return output_path
+        save_utils.save_to_s3(filtered_df, str(output_filepath))
 
     return filtered_df
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
+    """
+    Create ArgumentParser and parse.
+
+    Returns:
+        argparse.Namespace: populated `Namespace`
+    """
+
     parser = argparse.ArgumentParser()
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--local_authorities", type=str)
-    group.add_argument("--input_geometry", type=str)
-    parser.add_argument("--save", action="store_true")
+    group = parser.add_mutually_exclusive_group(
+        required=True,
+        description="Note: You must provide EITHER --local_authorities OR --input_geometry, but not both.",
+    )
+    group.add_argument(
+        "--local_authorities",
+        type=str,
+        help="Local authority or authorities (case insensitive) to clip test file to e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
+        nargs="+",
+    )
+    group.add_argument(
+        "--input_geometry",
+        type=str,
+        help=" Boundary geometry or path to boundary geometry to clip test file to.",
+    )
+    parser.add_argument(
+        "--save", action="store_true", help="If --save is set, it saves outputs to S3."
+    )
 
     return parser.parse_args()
 
@@ -277,7 +346,9 @@ if __name__ == "__main__":
             save_output=args.save,
         )
         if file_info["path"] == config["data"]["geodata"]["uk_osopen_uprn"]:
-            print("Saving clipped OS Open UPRNs in memory")
+            print(
+                "Saving clipped OS Open UPRNs in memory to filter EPC and country mapping data with..."
+            )
             reference_uprn_df = clipped_df
             print(reference_uprn_df.head())
 

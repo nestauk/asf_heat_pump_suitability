@@ -151,9 +151,7 @@ if __name__ == "__main__":
 
     # Load planned heat network zone polygons (if available) for each LA in the list, then concatenate the gdfs
     hn_zones_gdf_list = [
-        load_geodata.load_gdf_heat_network_zones(
-            local_authority=la
-        )  # TODO: how do we do this with a test dataset? no HN zone? but then how do we test the hn zone works
+        load_geodata.load_gdf_heat_network_zones(local_authority=la)
         for la in local_authority_dict["valid_local_authorities"]
     ]
     hn_zones_gdf = pd.concat(hn_zones_gdf_list, ignore_index=True)
