@@ -251,5 +251,16 @@ class TestMapDictUPRNsBuildingToID:
         expected = {"P2": "B1"}
         assert results == expected
 
-    def test_uprn_joined_to_single_building(self):
-        pass
+    def test_uprn_joined_to_single_building(
+        self, buildings_gdf, gdf_uprn_on_shared_edge
+    ):
+        """Test UPRN on shared edge maps to only one building."""
+        results = map_dict_uprns_to_building_id(
+            buildings_gdf=buildings_gdf,
+            uprns_gdf=gdf_uprn_on_shared_edge,
+            id_col="building_id",
+            max_distance=5,
+        )
+
+        expected = {"P3": "B1"}
+        assert results == expected
