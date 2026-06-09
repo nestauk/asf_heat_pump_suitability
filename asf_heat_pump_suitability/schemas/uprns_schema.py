@@ -1,8 +1,9 @@
-import pandera as pa
+import pandera.polars as pa
+import polars as pl
 
 # Validate EPC UPRNs are max 12 digit positive integers
 EPC_UPRN_Schema = pa.DataFrameSchema(
-    {"UPRN": pa.Column("Int64", pa.Check.in_range(1, 999999999999), nullable=False)},
+    {"UPRN": pa.Column(pl.Int64, pa.Check.in_range(1, 999999999999), nullable=False)},
     strict=False,
 )
 
@@ -36,29 +37,32 @@ def create_domestic_uprn_schema(
     Domestic_UPRN_Schema = pa.DataFrameSchema(
         columns={
             "UPRN": pa.Column(
-                "Int64",
+                pl.Int64,
                 unique=True,
                 checks=pa.Check.in_range(1, 999999999999),
                 nullable=False,
             ),
             "X_COORDINATE": pa.Column(
-                float, checks=pa.Check.in_range(0.0, 700000.0), nullable=False
+                pl.Float64, checks=pa.Check.in_range(0.0, 700000.0), nullable=False
             ),
             "Y_COORDINATE": pa.Column(
-                float, checks=pa.Check.in_range(0.0, 1300000.0), nullable=False
+                pl.Float64, checks=pa.Check.in_range(0.0, 1300000.0), nullable=False
             ),
             "LATITUDE": pa.Column(
-                float, checks=pa.Check.in_range(49.0, 61.01), nullable=True
+                pl.Float64, checks=pa.Check.in_range(49.0, 61.01), nullable=True
             ),
             "LONGITUDE": pa.Column(
-                float, checks=pa.Check.in_range(-9.0, 2.01), nullable=True
+                pl.Float64, checks=pa.Check.in_range(-9.0, 2.01), nullable=True
             ),
-            "LAD23CD": pa.Column(str, nullable=False),
-            "LAD23NM": pa.Column(str, nullable=False),
+            "LAD23CD": pa.Column(pl.String, nullable=False),
+            "LAD23NM": pa.Column(pl.String, nullable=False),
         },
         checks=[
             pa.Check(
-                lambda df: (min_expected_rows <= len(df) <= max_expected_rows),
+                # Access the lazyframe from the PolarsData wrapper and evaluate length
+                lambda df: df.lazyframe.select(
+                    (pl.len() >= min_expected_rows) & (pl.len() <= max_expected_rows)
+                ),
                 name="uprn_census_household_comparison",
                 ignore_na=False,
                 error="UPRN count is outside the expected values from census household data.",

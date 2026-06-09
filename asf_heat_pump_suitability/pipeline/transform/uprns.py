@@ -111,8 +111,8 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
     ).drop_nulls()  # TODO: Scotland commercial EPC data has a lot (37 %) of null UPRNs.
 
     # Validate the EPC UPRNs
-    df_validated = uprns_schema.EPC_UPRN_Schema.validate(df.to_pandas(), lazy=True)
-    df = pl.from_pandas(df_validated)
+    df = uprns_schema.EPC_UPRN_Schema.validate(df, lazy=True)
+    # df = pl.from_pandas(df_validated)
 
     logging.info(
         f"{before - len(df)} invalid UPRNs dropped from {epc_type} EPC register. {len(df)} valid UPRNs remaining"
@@ -531,8 +531,8 @@ if __name__ == "__main__":
     print(f"Max Expected: {uprn_bounds["max"]}")
     print(f"Actual Rows:  {len(df)}")
 
-    df_validated = schema.validate(df.to_pandas(), lazy=True)
-    df = pl.from_pandas(df_validated)
+    df = schema.validate(df, lazy=True)
+    # df = pl.from_pandas(df_validated)
 
     # ---------------------------
 
