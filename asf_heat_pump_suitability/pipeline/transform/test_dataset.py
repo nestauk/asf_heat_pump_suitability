@@ -1,3 +1,17 @@
+"""
+Script to reduce input datasets to a Local Authority or custom geometry boundary, for use when testing.
+This is for speed gains so the script does not cut down any grid-square based inputs as there would be no improvement on speed.
+
+To run the script:
+python asf_heat_pump_suitability/pipeline/transform/test_dataset.py --local_authorities LOCAL AUTHORITY OR LOCAL AUTHORITIES
+
+OR
+
+python asf_heat_pump_suitability/pipeline/transform/test_dataset.py --input_geometry INPUT GEOMETRY BOUNDARY FILE OR GEODATAFRAME
+
+set --save to save outputs to S3. By default, outputs are not saved.
+"""
+
 import argparse
 import geopandas as gpd
 import shapely
