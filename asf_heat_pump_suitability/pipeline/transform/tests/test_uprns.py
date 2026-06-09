@@ -108,27 +108,27 @@ class TestMapDictUPRNsBuildingToID:
         """Create test UPRN geometries."""
         points_data = [
             {
-                "point_id": "P1",
+                "UPRN": "P1",
                 "description": "Inside building footprint",
                 "geometry": Point(500005, 200005),  # Inside B1
             },
             {
-                "point_id": "P2",
+                "UPRN": "P2",
                 "description": "On the exterior boundary",
                 "geometry": Point(500000, 200005),  # On the western edge of B1
             },
             {
-                "point_id": "P3",
+                "UPRN": "P3",
                 "description": "On the shared side of two buildings",
                 "geometry": Point(500010, 200005),  # Exactly on the B1/B2 shared line
             },
             {
-                "point_id": "P4",
+                "UPRN": "P4",
                 "description": "Just outside (<5m outside)",
                 "geometry": Point(500043, 200005),  # 3m east of B2's eastern wall
             },
             {
-                "point_id": "P5",
+                "UPRN": "P5",
                 "description": "Far outside (10+m outside)",
                 "geometry": Point(
                     500000, 200060
@@ -138,8 +138,13 @@ class TestMapDictUPRNsBuildingToID:
 
         return gpd.GeoDataFrame(points_data, crs="EPSG:27700")
 
-    def test_diff_crs(self):
-        pass
+    def test_diff_crs(self, buildings_gdf_wgs84, uprns_gdf):
+        test_mapping = map_dict_uprns_to_building_id(
+            buildings_gdf=buildings_gdf_wgs84,
+            uprns_gdf=uprns_gdf,
+            id_col="building_id",
+            max_distance=1,
+        )
 
     def test_uprn_inside_building(self):
         pass
@@ -148,6 +153,9 @@ class TestMapDictUPRNsBuildingToID:
         pass
 
     def test_uprn_no_building_match(self):
+        pass
+
+    def test_many_to_one_mapping(self):
         pass
 
     def test_uprn_joined_to_single_building(self):
