@@ -177,7 +177,7 @@ class TestOverlayGdfPhysicalBarriers:
         polygon_overlay_gdf,
         buildings_gdf,
     ):
-        # TODO requires an edge case input where overlaying barriers remove all and some of the property
+        # TODO requires an edge case input where overlaying barriers remove all and some of the property (including overlapping and bisecting)
         """Test Voronoi cells entirely contain buildings after overlaying barriers. This tests the function can handle
         edge cases like a barrier completely or partially overlapping a building footprint and thus fragmenting the cell
         so that it no longer encases a full building footprint."""
