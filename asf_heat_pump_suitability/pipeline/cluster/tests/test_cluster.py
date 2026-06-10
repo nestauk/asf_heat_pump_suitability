@@ -111,36 +111,6 @@ class TestGenerateGdfClusters:
 
         assert set(results) == set(expected)
 
-    def test_no_empty_clusters(
-        self,
-        buildings_gdf,
-        boundary_gdf,
-        tech_gdf,
-        line_overlay_gdf,
-        polygon_overlay_gdf,
-        anchor_gdf,
-    ):
-        """Test there are no clusters that do not match to a building."""
-        clusters_gdf = generate_gdf_clusters(
-            buildings_gdf=buildings_gdf,
-            boundary_gdf=boundary_gdf,
-            tech_gdf=tech_gdf,
-            line_overlay_gdf=line_overlay_gdf,
-            polygon_overlay_gdf=polygon_overlay_gdf,
-            combined_anchor_gdf=anchor_gdf,
-            radius=50,
-            id_col="building_id",
-        )
-
-        results = (
-            clusters_gdf.sjoin(buildings_gdf, how="left", predicate="contains")[
-                "building_id"
-            ]
-            .isna()
-            .sum()
-        )
-        assert results == 0
-
     def test_clusters_contain_domestic_only(
         self,
         buildings_gdf,
@@ -150,6 +120,7 @@ class TestGenerateGdfClusters:
         polygon_overlay_gdf,
         anchor_gdf,
     ):
+        # TODO requires adding clusters which should be removed (e.g. commercial)
         """Test that there are only domestic building footprints in the clusters."""
         clusters_gdf = generate_gdf_clusters(
             buildings_gdf=buildings_gdf,
@@ -161,12 +132,24 @@ class TestGenerateGdfClusters:
             radius=50,
             id_col="building_id",
         )
+
+        # Check for domestic building IDs
         results = clusters_gdf.sjoin(buildings_gdf, how="inner", predicate="contains")[
             "building_id"
         ]
         expected = buildings_gdf[buildings_gdf["type"] == "domestic"]
 
         assert set(results) == set(expected)
+
+        # Check there are no empty clusters
+        results = (
+            clusters_gdf.sjoin(buildings_gdf, how="left", predicate="contains")[
+                "building_id"
+            ]
+            .isna()
+            .sum()
+        )
+        assert results == 0
 
     def test_neighbouring_clusters_different(self):
         """Check dissolve worked properly"""
