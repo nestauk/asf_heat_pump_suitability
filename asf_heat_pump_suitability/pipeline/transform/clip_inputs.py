@@ -25,7 +25,7 @@ import pandas as pd
 import boto3
 
 
-def get_boundary(
+def get_geometry_boundary(
     local_authorities: str | list[str] = None,
     boundary_file: gpd.GeoDataFrame | str = None,
 ) -> shapely.Geometry:
@@ -63,7 +63,7 @@ def get_boundary(
     return boundary_gdf.geometry.union_all()
 
 
-def _get_output_path(input_filepath: str) -> str:
+def _get_str_output_path(input_filepath: str) -> str:
     """
     Helper function to derive an output filepath in S3 based on an input path. E.g. an input file in s3://asf-local-heat-planning-tool/inputs/geodata/FILENAME will create an output filepath of s3://asf-local-heat-planning-tool/test/inputs/geodata/test_FILENAME.
 
@@ -73,18 +73,18 @@ def _get_output_path(input_filepath: str) -> str:
     Returns: str with output filepath
     """
 
-    # replace inputs directory with test/inputs
-    modified_path = input_filepath.replace("/inputs/", "/test/inputs/", 1)
+    # get base directory and filename of input file
+    input_filepath = Path(input_filepath)
+    base_dir = input_filepath.parent.parent
+    filename = input_filepath.name
 
-    # split filepath and filename
-    base_dir, filename = modified_path.rsplit("/", 1)
-
-    output_filepath = f"{base_dir}/test_{filename}"
+    # modify so "/inputs" --> "/test/inputs" and "filename" --> "test_filename"
+    output_filepath = os.join(base_dir, "test" "inputs", f"test_{filename}")
 
     return output_filepath
 
 
-def clip_and_save_dataset(
+def clip_df_and_save_dataset(
     input_filepath: str,
     boundary_geometry: gpd.GeoDataFrame,
     layer: str = None,
@@ -96,7 +96,7 @@ def clip_and_save_dataset(
     Args:
         input_filepath (str): name of the file to clip.
         boundary_geometry (gpd.GeoDataFrame): boundary geometry to clip to.
-        layer (str): name of the layer of the input file to load (if loading a geopackage).
+        layer (str): name of the layer of the input file to load (if loading a geopackage). Defaults to None which is used when not loading a geopackage.
         save_output (bool): to save output to S3.
 
     Returns:
@@ -152,14 +152,14 @@ def clip_and_save_dataset(
         output_df = clipped_gdf
 
     if save_output:
-        output_filepath = _get_output_path(input_filepath)
+        output_filepath = _get_str_output_path(input_filepath)
         print(f"saving clipped data to {output_filepath}")
         save_utils.save_to_s3(output_df, str(output_filepath))
 
     return output_df
 
 
-def filter_epc_by_uprn(
+def filter_df_epc_by_uprn(
     input_filepath: str,
     reference_df: pd.DataFrame,
     epc_type: str,
@@ -217,7 +217,7 @@ def filter_epc_by_uprn(
             )
 
     if save_output:
-        output_filepath = _get_output_path(input_filepath)
+        output_filepath = _get_str_output_path(input_filepath)
         print(f"saving clipped data to {output_filepath}")
 
         save_utils.save_to_s3(filtered_df, str(output_filepath))
@@ -225,7 +225,7 @@ def filter_epc_by_uprn(
     return filtered_df
 
 
-def filter_country_mapping_by_uprn(
+def filter_dict_country_mapping_by_uprn(
     input_filepath: str, reference_df: pd.DataFrame, save_output: bool = False
 ) -> gpd.GeoDataFrame:
     """
@@ -269,7 +269,7 @@ def filter_country_mapping_by_uprn(
     filtered_df = target_df[target_df["UPRN"].isin(valid_uprns)]
 
     if save_output:
-        output_filepath = _get_output_path(input_filepath)
+        output_filepath = _get_str_output_path(input_filepath)
         print(f"saving clipped data to {output_filepath}")
 
         save_utils.save_to_s3(filtered_df, str(output_filepath))
@@ -293,7 +293,7 @@ def parse_arguments() -> argparse.Namespace:
     group.add_argument(
         "--local_authorities",
         type=str,
-        help="Local authority or authorities (case insensitive) to clip test file to e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
+        help="Local authority or authorities (case insensitive) to clip test file to boundary of e.g. -- 'plymouth' to clip to the boundary of Plymouth or --'glasgow city' 'south lanarkshire' to clip to the boundaries of both Glasgow City and South Lanarkshire.",
         nargs="+",
     )
     group.add_argument(
@@ -348,12 +348,12 @@ if __name__ == "__main__":
 
     reference_uprn_df = None
 
-    boundary_gdf = get_boundary(
+    boundary_gdf = get_geometry_boundary(
         local_authorities=args.local_authorities, boundary_file=args.input_geometry
     )
 
     for file_info in GEOSPATIAL_FILES_TO_PROCESS:
-        clipped_df = clip_and_save_dataset(
+        clipped_df = clip_df_and_save_dataset(
             input_filepath=file_info["path"],
             boundary_geometry=boundary_gdf,
             layer=file_info["layer"],
@@ -367,7 +367,7 @@ if __name__ == "__main__":
             print(reference_uprn_df.head())
 
     for file_info in EPC_FILES_TO_PROCESS:
-        filter_epc_by_uprn(
+        filter_df_epc_by_uprn(
             input_filepath=file_info["path"],
             reference_df=reference_uprn_df,
             epc_type=file_info["epc_type"],
@@ -375,7 +375,7 @@ if __name__ == "__main__":
             save_output=args.save,
         )
 
-    filter_country_mapping_by_uprn(
+    filter_dict_country_mapping_by_uprn(
         input_filepath=COUNTRY_MAP_FILE_TO_PROCESS,
         reference_df=reference_uprn_df,
         save_output=args.save,
