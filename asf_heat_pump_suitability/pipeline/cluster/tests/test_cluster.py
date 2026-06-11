@@ -144,7 +144,27 @@ class TestReassignGdfAnchorProperties:
 
 
 class TestExtendEdgesGdf:
-    def test_voronoi_contain_single_buildings(self):
+    @pytest.fixture(scope="class")
+    def polygon_gdf(self):
+        return gpd.GeoDataFrame()
+
+    @pytest.fixture(scope="class")
+    def boundary(self):
+        return gpd.GeoDataFrame()
+
+    def test_voronoi_contain_single_polygons(self, polygon_gdf, boundary):
+        cells_gdf = extend_edges_gdf(gdf=polygon_gdf, boundary=boundary)
+        results = cells_gdf.sjoin(polygon_gdf, how="inner", predicate="contains")
+        assert len(results) == len(polygon_gdf)
+        assert set(results["id"]) == set(polygon_gdf["id"])
+
+    def test_polygons_within_boundary(self, polygon_gdf, boundary):
+        cells_gdf = extend_edges_gdf(gdf=polygon_gdf, boundary=boundary)
+        results = cells_gdf.sjoin(polygon_gdf, how="inner", predicate="contains")["id"]
+        expected = polygon_gdf[polygon_gdf["within_boundary"]]["id"]
+        assert set(results) == set(expected)
+
+    def test_voronoi_larger_than_buffer(self):
         pass
 
 
@@ -178,6 +198,7 @@ class TestOverlayGdfPhysicalBarriers:
         buildings_gdf,
     ):
         # TODO requires an edge case input where overlaying barriers remove all and some of the property (including overlapping and bisecting)
+        # TODO edge case where original Voronoi cell doesn't completely cover building
         """Test Voronoi cells entirely contain buildings after overlaying barriers. This tests the function can handle
         edge cases like a barrier completely or partially overlapping a building footprint and thus fragmenting the cell
         so that it no longer encases a full building footprint."""
