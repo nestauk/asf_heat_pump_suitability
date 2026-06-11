@@ -235,13 +235,18 @@ class TestGenerateGdfClusters:
             radius=50,
             id_col="building_id",
         )
-        results = buildings_gdf.sjoin(clusters_gdf, how="inner", predicate="within")[
-            "building_id"
-        ]
-        expected = buildings_gdf["building_id"]
 
-        print(set(expected).difference(set(results)))
-        assert set(results) == set(expected)
+        # Check if the uncontained area is effectively zero (e.g., less than 1 square millimeter)
+        # This is to account for floating point errors which can cause tiny slivers of building not to be covered by
+        # the cluster.
+        uncontained_slivers = gpd.overlay(
+            buildings_gdf, clusters_gdf, how="difference", keep_geom_type=False
+        )
+        uncontained_slivers["area"] = uncontained_slivers["geometry"].area
+        results = uncontained_slivers[uncontained_slivers["area"] > 1e-5]
+        assert (
+            len(results) == 0
+        ), f"Buildings {set(results['building_id'])} are missing significant coverage in the clustering."
 
 
 #
