@@ -175,7 +175,7 @@ class TestGenerateGdfClusters:
         )
 
     @pytest.fixture(scope="class")
-    def gdf_tech_mixed_domestic(self, buildings_gdf):
+    def tech_gdf(self, buildings_gdf):
         non_domestic_ids = ["B03", "B05", "B08"]
 
         tech_mapping = {
@@ -195,10 +195,10 @@ class TestGenerateGdfClusters:
 
         # Apply functions across the dataframe
         buildings_gdf["domestic"] = buildings_gdf["building_id"].apply(
-            utils.assign_domestic_status, args=(non_domestic_ids,)
+            utils.assign_bool_domestic_status, args=(non_domestic_ids,)
         )
         buildings_gdf["assigned_tech"] = buildings_gdf["building_id"].apply(
-            utils.assign_tech_type, args=(tech_mapping,)
+            utils.assign_str_tech_type, args=(tech_mapping,)
         )
 
         return buildings_gdf
@@ -212,26 +212,37 @@ class TestGenerateGdfClusters:
         return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
 
     @pytest.fixture(scope="class")
-    def anchor_gdf(self):
+    def gdf_empty_anchors(self):
         return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
+
+    @pytest.fixture(scope="class")
+    def gdf_anchor_properties(self, buildings_gdf):
+        non_domestic_ids = ["B03", "B05", "B08"]
+
+        # Apply functions across the dataframe
+        buildings_gdf["domestic"] = buildings_gdf["building_id"].apply(
+            utils.assign_bool_domestic_status, args=(non_domestic_ids,)
+        )
+
+        return buildings_gdf[~buildings_gdf["domestic"]].copy()
 
     def test_all_buildings_assigned_cluster(
         self,
         buildings_gdf,
         boundary_gdf,
-        gdf_tech_mixed_domestic,
+        tech_gdf,
         line_overlay_gdf,
         polygon_overlay_gdf,
-        anchor_gdf,
+        gdf_empty_anchors,
     ):
         """Test each domestic building is assigned to a cluster."""
         clusters_gdf = generate_gdf_clusters(
             buildings_gdf=buildings_gdf,
             boundary_gdf=boundary_gdf,
-            tech_gdf=gdf_tech_mixed_domestic,
+            tech_gdf=tech_gdf,
             line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
-            combined_anchor_gdf=anchor_gdf,
+            combined_anchor_gdf=gdf_empty_anchors,
             radius=50,
             id_col="building_id",
         )
@@ -239,58 +250,68 @@ class TestGenerateGdfClusters:
         # Check if the uncontained area is effectively zero (e.g., less than 1 square millimeter)
         # This is to account for floating point errors which can cause tiny slivers of building not to be covered by
         # the cluster.
-        uncontained_slivers = gpd.overlay(
+        uncontained_slivers_gdf = gpd.overlay(
             buildings_gdf, clusters_gdf, how="difference", keep_geom_type=False
         )
-        uncontained_slivers["area"] = uncontained_slivers["geometry"].area
-        results = uncontained_slivers[uncontained_slivers["area"] > 1e-5]
+        uncontained_slivers_gdf["area"] = uncontained_slivers_gdf["geometry"].area
+        results = uncontained_slivers_gdf[uncontained_slivers_gdf["area"] > 1e-5]
         assert (
             len(results) == 0
         ), f"Buildings {set(results['building_id'])} are missing significant coverage in the clustering."
 
+    def test_clusters_contain_domestic_only(
+        self,
+        buildings_gdf,
+        boundary_gdf,
+        tech_gdf,
+        line_overlay_gdf,
+        polygon_overlay_gdf,
+        gdf_empty_anchors,
+    ):
+        """Test that there are only domestic building footprints in the clusters (i.e. no non-domestic buildings are
+        retained) and test that there are no clusters retained which do not contain a domestic building (i.e. no empty
+        clusters)."""
+        domestic_tech_gdf = tech_gdf[tech_gdf["domestic"]].copy()
 
-#
-#     def test_clusters_contain_domestic_only(
-#         self,
-#         buildings_gdf,
-#         boundary_gdf,
-#         tech_gdf,
-#         line_overlay_gdf,
-#         polygon_overlay_gdf,
-#         anchor_gdf,
-#     ):
-#         # TODO requires adding clusters which should be removed (e.g. commercial)
-#         """Test that there are only domestic building footprints in the clusters (i.e. no non-domestic buildings are
-#         retained) and test that there are no clusters retained which do not contain a domestic building (i.e. no empty
-#         clusters)."""
-#         clusters_gdf = generate_gdf_clusters(
-#             buildings_gdf=buildings_gdf,
-#             boundary_gdf=boundary_gdf,
-#             tech_gdf=tech_gdf,
-#             line_overlay_gdf=line_overlay_gdf,
-#             polygon_overlay_gdf=polygon_overlay_gdf,
-#             combined_anchor_gdf=anchor_gdf,
-#             radius=50,
-#             id_col="building_id",
-#         )
-#
-#         # Check only domestic building IDs are retained
-#         results = clusters_gdf.sjoin(buildings_gdf, how="inner", predicate="contains")[
-#             "building_id"
-#         ]
-#         expected = buildings_gdf[buildings_gdf["type"] == "domestic"]
-#
-#         assert set(results) == set(expected)
-#
-#         # Check there are no empty clusters
-#         results = (
-#             clusters_gdf.sjoin(buildings_gdf, how="left", predicate="contains")[
-#                 "building_id"
-#             ]
-#             .isna()
-#             .sum()
-#         )
-#         assert results == 0
+        clusters_gdf = generate_gdf_clusters(
+            buildings_gdf=buildings_gdf,
+            boundary_gdf=boundary_gdf,
+            tech_gdf=domestic_tech_gdf,
+            line_overlay_gdf=line_overlay_gdf,
+            polygon_overlay_gdf=polygon_overlay_gdf,
+            combined_anchor_gdf=gdf_empty_anchors,
+            radius=50,
+            id_col="building_id",
+        )
+
+        # Check only domestic building IDs are retained
+        non_domestic_gdf = tech_gdf[~tech_gdf["domestic"]]
+        results = clusters_gdf.sjoin(
+            non_domestic_gdf, how="inner", predicate="intersects"
+        )["building_id"]
+
+        assert (
+            len(results) == 0
+        ), "Some non-domestic building footprints are found in the clusters."
+
+        # Check there are no empty clusters
+        empty_clusters_gdf = gpd.overlay(
+            buildings_gdf, clusters_gdf, how="intersection", keep_geom_type=False
+        ).dissolve(by="cluster_id")
+        empty_clusters_gdf["area"] = empty_clusters_gdf["geometry"].area
+
+        # Find smallest building area and subtract small sliver for floating point errors
+        smallest_building_area = buildings_gdf.area.min() - 1e-5
+
+        # Clusters must intersect with at least the area of the smallest building footprint, otherwise they are considered empty
+        results = empty_clusters_gdf[
+            empty_clusters_gdf["area"] <= smallest_building_area
+        ]
+        assert (
+            len(results) == 0
+        ), "There are clusters which do not contain any buildings."
+
+
 #
 #     def test_clusters_not_overlapping(
 #         self,
