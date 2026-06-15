@@ -240,6 +240,74 @@ def extend_df_contextual_features(
     return clusters_df
 
 
+def create_gdf_contextual_features(
+    uprns_gdf: gpd.GeoDataFrame, clusters_gdf: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """
+    Create geodataframe with cluster_id, geometry and contextual features for each cluster
+
+    Args:
+        uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs and UPRN-level features
+        clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
+    Returns:
+        gpd.GeoDataFrame: geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
+    """
+
+    uprns_df = filter_df_uprns_to_clusters(
+        uprns_gdf=uprns_gdf, clusters_gdf=clusters_gdf
+    )
+
+    clusters_with_contextual_features_df = extend_df_contextual_features(
+        clusters_df=pl.from_pandas(
+            clusters_gdf.drop(columns="geometry")
+        ),  # drop geometry for now and use polars
+        uprns_df=uprns_df,
+    )
+
+    # Adding the geometry back to the clusters dataframe
+    clusters_with_contextual_features_gdf = (
+        clusters_with_contextual_features_df.to_pandas().merge(
+            clusters_gdf[["cluster_id", "geometry"]],
+            how="left",
+            on="cluster_id",
+        )
+    )
+
+    return gpd.GeoDataFrame(
+        clusters_with_contextual_features_gdf, geometry="geometry", crs="EPSG:27700"
+    ).to_crs(epsg=4326)
+
+
+def create_json_contextual_features_metadata(
+    clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
+) -> json:
+    """
+    Create json with cluster level data and associated metadata.
+
+    Args:
+        clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
+
+    Returns:
+       json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
+
+    """
+
+    print("Adding metadata and converting to geojson format...")
+    # Convert to geojson format and add metadata
+    geojson_file = json.loads(
+        clusters_with_contextual_features_gdf.to_json(drop_id=True)
+    )
+    metadata = {
+        "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
+        "Local authority": local_authorities,
+    }
+    # append metadata from config base.yaml
+    metadata.update(config["metadata"])
+    geojson_file["metadata"] = metadata
+
+    return geojson_file
+
+
 if __name__ == "__main__":
     from asf_heat_pump_suitability.pipeline.transform import uprns
     from asf_heat_pump_suitability import config
@@ -265,88 +333,18 @@ if __name__ == "__main__":
         ),
     ).to_crs(epsg=27700)
 
-    print("Filtering to clusters...")
-    uprns_df = filter_df_uprns_to_clusters(
+    print("Computing contextual features for clusters...")
+    clusters_with_contextual_features_gdf = create_gdf_contextual_features(
         uprns_gdf=uprns_gdf, clusters_gdf=clusters_gdf
     )
 
-    print("Calculate remaining features per cluster...")
-    clusters_with_contextual_features_df = extend_df_contextual_features(
-        clusters_df=pl.from_pandas(
-            clusters_gdf.drop(columns="geometry")
-        ),  # drop geometry for now and use polars
-        uprns_df=uprns_df,
+    print("Creating json with contextual features for each cluster and metadata...")
+    geojson_file = create_json_contextual_features_metadata(
+        clusters_with_contextual_features_gdf
     )
-
-    ##------ TODO: SECTION TO BE DELETED BEFORE MERGING TO DEV
-    print(
-        "Value counts for in_hn_zone:",
-        clusters_with_contextual_features_df["in_hn_zone"].value_counts(),
-    )
-    print(
-        "Value counts for in_city_centre:",
-        clusters_with_contextual_features_df["in_city_centre"].value_counts(),
-    )
-    print(
-        "Value counts for within_1500m_coastline:",
-        clusters_with_contextual_features_df[
-            f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"
-        ].value_counts(),
-    )
-    print(
-        "Value counts for in_protected_area:",
-        clusters_with_contextual_features_df["in_protected_area"].value_counts(),
-    )
-    print(
-        "Value counts for within_anchor_load_radius:",
-        clusters_with_contextual_features_df[
-            f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
-        ].value_counts(),
-    )
-    print(
-        "Percentage of properties with solar PV:",
-        clusters_with_contextual_features_df["perc_uprns_solar_pv"].mean(),
-    )
-    print(
-        "Percentage of properties off-gas:",
-        clusters_with_contextual_features_df["perc_uprns_off_gas"].mean(),
-    )
-    percentage_cols = [
-        col
-        for col in clusters_with_contextual_features_df.columns
-        if col.startswith("perc_")
-    ]
-    for col in percentage_cols:
-        missing_percentage = (
-            clusters_with_contextual_features_df[col].is_null().mean() * 100
-        )
-        print(f"Percentage of missing values in {col}: {missing_percentage:.2f}%")
-    ##------ SECTION ENDS ------Í
 
     if args.save:
-        # Adding the geometry back to the clusters dataframe
-        clusters_with_contextual_features_gdf = (
-            clusters_with_contextual_features_df.to_pandas().merge(
-                clusters_gdf[["cluster_id", "geometry"]],
-                how="left",
-                on="cluster_id",
-            )
-        )
-
-        clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
-            clusters_with_contextual_features_gdf, geometry="geometry", crs="EPSG:27700"
-).to_crs(epsg=4326)
-
-        # Convert to geojson format and add metadata
-        geojson_file = json.loads(clusters_with_contextual_features_gdf.to_json(drop_id=True))
-        metadata = {
-            "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
-            "Local authority": local_authorities,
-        }
-        # append metadata from config base.yaml
-        metadata.update(config["metadata"])
-        geojson_file["metadata"] = metadata
-
+        print("Saving geojson to S3... ")
         # Save to S3 as geojson
         save_utils.save_to_s3(
             geojson_file,
