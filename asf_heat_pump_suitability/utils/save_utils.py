@@ -74,7 +74,7 @@ def save_to_s3(df: pl.DataFrame | gpd.GeoDataFrame, path: str) -> None:
                 json.dump(df, f, indent=4, ensure_ascii=False)
         else:
             raise ValueError(
-                "Save to S3 can only save dict GeoDataFrames as .geojson file types."
+                "Save to S3 can only save dict as .geojson file types."
                 "Please ensure the `path` argument contains .geojson file type."
             )
     else:
