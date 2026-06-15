@@ -1,16 +1,14 @@
 "Functions to load non-geospatial datasets. No or minimal processing occurs in these functions."
 
+from collections import OrderedDict
+
 import polars as pl
 import pandas as pd
 import geopandas as gpd
 import logging
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.getters import base_getters, schemas
-from io import StringIO
-from tenacity import retry, stop_after_attempt
+from asf_heat_pump_suitability.getters import base_getters
 import warnings
-import pyogrio
-from typing import Tuple
 
 # Ignore RunTimeWarning when loading Microsoft building footprint files
 # as reading from gzipped stream should be faster than unzipping and loading data
@@ -40,10 +38,13 @@ def load_df_microsoft_building_footprint_links() -> pd.DataFrame:
     Returns:
         pd.DataFrame: Microsoft Global ML Building Footprints data links
     """
+    schema = OrderedDict(
+        [("Location", str), ("QuadKey", str), ("Url", str), ("Size", str)]
+    )
     logging.info("Loading Microsoft building footprint data-links file")
     df = pd.read_csv(
         config["data_source"]["global_microsoft_building_footprint_links"],
-        dtype=schemas.microsoft_datalinks,
+        dtype=schema,
     )
 
     return df

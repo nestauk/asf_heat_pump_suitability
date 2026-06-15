@@ -16,9 +16,12 @@ import argparse
 import geopandas as gpd
 import pandas as pd
 import numpy as np
+import polars as pl
 import shapely
 from shapely.geometry import MultiPoint, Polygon, MultiPolygon
+from asf_heat_pump_suitability.pipeline.transform import local_authority
 import libpysal
+import warnings
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
@@ -64,6 +67,7 @@ def generate_gdf_clusters(
     polygon_overlay_gdf: gpd.GeoDataFrame,
     combined_anchor_gdf: gpd.GeoDataFrame,
     radius: float,
+    id_col: str = "ID",
 ) -> gpd.GeoDataFrame:
     """
     Generate clusters of building footprints, where one cluster:
@@ -80,6 +84,7 @@ def generate_gdf_clusters(
         poi_gdf (gpd.GeoDataFrame): anchor properties dataframe taken from POI data, with point geometries
         important_buildings_gdf (gpd.GeoDataFrame): important building footprint polygons
         radius (float): radius in metres around anchor property within which communal solutions should be assigned
+        id_col (str): building ID column. Default "ID".
 
     Returns:
         gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster
@@ -107,6 +112,16 @@ def generate_gdf_clusters(
     else:
         cells_gdf = gdfs[0]
 
+    # TODO move to proper testing when sample test set available
+    if len(cells_gdf) != len(tech_gdf):
+        n_cells = len(cells_gdf)
+        n_buildings = len(tech_gdf)
+        warnings.warn(
+            f"The number of cells and the number of buildings are different when they should be the same. "
+            f"There is a problem with the clustering. N cells: {n_cells}; N buildings: {n_buildings}",
+            UserWarning,
+        )
+
     # Tech reassignment for cells within a certain distance of anchor properties
     reassigned_gdf = reassign_gdf_near_anchor_properties(
         tech_gdf=tech_gdf,
@@ -115,13 +130,13 @@ def generate_gdf_clusters(
     )
 
     cells_gdf["assigned_tech"] = cells_gdf.ID.map(
-        reassigned_gdf.set_index("ID").to_dict()["assigned_tech"]
+        reassigned_gdf.set_index(id_col).to_dict()["assigned_tech"]
     )
 
     # Add "within_{radius}m_from_anchor_load" as a column to cells_gdf
     cells_gdf = cells_gdf.merge(
-        reassigned_gdf[["ID", f"within_{radius}m_from_anchor_load"]],
-        on="ID",
+        reassigned_gdf[[id_col, f"within_{radius}m_from_anchor_load"]],
+        on=id_col,
         how="left",
     )
 
@@ -150,7 +165,47 @@ def generate_gdf_clusters(
         + (clusters_gdf["cluster_id"] + 1).astype(str)
     )
 
+    # TODO move to testing when sample set available
+    if round(clusters_gdf["geometry"].area.sum(), 3) > round(
+        clusters_gdf["geometry"].union_all().area, 3
+    ):
+        warnings.warn(
+            "Sum of all cluster areas is greater than the area of the cluster union. "
+            "This indicates cluster polygons are overlapping.",
+            UserWarning,
+        )
+
+    # TODO move to testing when sample set available
+    joined_gdf = sjoin_gdf_buildings_to_clusters(
+        buildings_gdf=tech_gdf, clusters_gdf=clusters_gdf
+    )
+    n_missing = joined_gdf["cluster_id"].isna().sum()
+    if n_missing > 0:
+        warnings.warn(
+            f"There is a problem with the clustering. {n_missing} buildings have not been assigned to a cluster.",
+            UserWarning,
+        )
+
     return clusters_gdf
+
+
+def sjoin_gdf_buildings_to_clusters(
+    buildings_gdf: gpd.GeoDataFrame, clusters_gdf: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """
+    Join buildings to their corresponding cluster. Building footprints are returned with a -10cm buffer.
+
+    Args:
+        buildings_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
+        clusters_gdf (gpd.GeoDataFrame): clusters of building footprints with the same assigned technology, one row per cluster.
+
+    Returns:
+        gpd.GeoDataFrame: building footprints with assigned tech type and cluster ID
+    """
+    buffered_buildings_gdf = buildings_gdf.copy()
+    # Reduce the size of the building footprints slightly so they can be completely contained within the cluster cells
+    buffered_buildings_gdf["geometry"] = buffered_buildings_gdf["geometry"].buffer(-0.1)
+    return buffered_buildings_gdf.sjoin(clusters_gdf, how="left", predicate="within")
 
 
 def extend_edges_gdf(
@@ -305,14 +360,36 @@ def overlay_gdf_physical_barriers(
     Returns:
         gpd.GeoDataFrame: domestic building cells with overlapping physical barriers removed
     """
-    # Filter to domestic building Voronois only
-    voronoi_gdf = voronoi_gdf.sjoin(
-        tech_gdf[["assigned_tech", "geometry"]], how="inner", predicate="contains"
-    ).drop(columns="index_right")
+    # # Filter to domestic building Voronois only
+    # Add a temporary ID for each Voronoi cell
+    cell_id_col = "_internal_cell_fragment_id"
+
+    voronoi_gdf = voronoi_gdf.assign(**{cell_id_col: np.arange(len(voronoi_gdf))})
+
+    # Get the largest intersecting Voronoi cell for each domestic building.
+    # This method means that buildings with a Voronoi cell that does not completely contain them (e.g. missing a tiny corner)
+    # still retain a Voronoi cell
+    intersection_gdf = sjoin_gdf_max_intersection(
+        cell_gdf=voronoi_gdf,
+        building_gdf=tech_gdf,
+        cell_id=cell_id_col,
+        building_cols=["ID", "assigned_tech", "geometry"],
+    )
+    # Map each building to its corresponding Voronoi ID
+    cell_to_building_mapping = intersection_gdf.set_index(cell_id_col)["ID"].to_dict()
+
+    # Use the mapping to label the original Voronoi cells with the correct building ID
+    voronoi_gdf["select_id"] = voronoi_gdf[cell_id_col].replace(
+        cell_to_building_mapping
+    )
+    # Filter to the rows where the building ID matches (i.e. only domestic buildings are retained here)
+    domestic_voronoi_gdf = voronoi_gdf[
+        voronoi_gdf["ID"] == voronoi_gdf["select_id"]
+    ].drop(columns="select_id")
 
     # Remove areas covered by polygons and lines
     cells_gdf = (
-        voronoi_gdf.overlay(polygon_overlay_gdf, how="difference")
+        domestic_voronoi_gdf.overlay(polygon_overlay_gdf, how="difference")
         .overlay(line_overlay_gdf, how="difference")
         .explode()
     )
@@ -343,37 +420,110 @@ def _handle_gdf_fragmented_cells(
     Returns:
         gpd.GeoDataFrame: domestic building cells with overlapping physical barriers removed and cell fragments handled
     """
-    # Add a temporary ID for each building
-    id_col = "_internal_building_id"
-    tech_gdf[id_col] = np.arange(len(tech_gdf))
-    cols = [id_col, "geometry"]
+    # Add a temporary ID for each building and cell fragment
+    building_id_col = "_internal_building_id"
+    cell_id_col = "_internal_cell_fragment_id"
 
-    # Keep only cell fragments that intersect with a building and label with the ID of the building
-    cells_gdf = cells_gdf.sjoin(
-        tech_gdf[cols], how="inner", predicate="intersects"
-    ).drop(columns=["index_right"])
+    tech_gdf = tech_gdf.assign(**{building_id_col: np.arange(len(tech_gdf))})
+    cells_gdf = cells_gdf.assign(**{cell_id_col: np.arange(len(cells_gdf))})
+
+    # Keep only cell fragments that intersect with a building and label with the ID of the building.
+    # We use intersection overlay and get the intersection area between each fragment and building, retaining only the
+    # pairing with the largest intersection per cell fragment. This handles cases where one fragment joins to multiple
+    # buildings to prevent the final set of cells from containing any overlapping geometries.
+    intersections_gdf = sjoin_gdf_max_intersection(
+        cell_gdf=cells_gdf,
+        building_gdf=tech_gdf,
+        cell_id=cell_id_col,
+        building_cols=[building_id_col, "geometry"],
+    )
+
+    # Map building IDs to best intersecting cell fragments
+    cells_gdf = cells_gdf.merge(
+        intersections_gdf[[cell_id_col, building_id_col]],
+        on=cell_id_col,
+        how="inner",
+    )
+
+    # Clean fragments to avoid bleeding geometries creating neighbour 'swallowing' effects during dissolve.
+    # e.g. building A swallows building B's cell due to microscopic overlaps in a cell fragment.
+    pure_fragments_gdf = gpd.overlay(
+        cells_gdf[[building_id_col, "geometry"]],
+        tech_gdf[["geometry"]],
+        how="difference",
+    )
 
     # Dissolve building footprints and their cell fragments together
-    union_gdf = (
-        pd.concat([cells_gdf[cols], tech_gdf[cols]])
-        .dissolve(by=id_col)
-        .rename(columns={"geometry": "unionised_geometry"})
-    )
+    cols = [building_id_col, "geometry"]
+    union_gdf = pd.concat(
+        [pure_fragments_gdf[cols], tech_gdf[cols]], ignore_index=True
+    ).dissolve(by=building_id_col)
 
-    # Join unionised cells back to original buildings
-    cells_gdf = tech_gdf.merge(union_gdf, how="left", on=id_col)
-
-    # If building is missing a Voronoi cell (due to overlay operation), then assign it the building footprint geometry
-    # This happens in some edge cases
-    cells_gdf["unionised_geometry"] = cells_gdf["unionised_geometry"].fillna(
-        cells_gdf["geometry"]
-    )
-
-    # Keep the Voronoi cell geometries, filled with building footprints
-    return (
-        cells_gdf.drop(columns=["geometry", id_col])
-        .rename(columns={"unionised_geometry": "geometry"})
+    # Join unionised cells back to original buildings to retain building assets
+    cells_gdf = (
+        # Drop building geometries before merging as we already have them included in the dissolve above
+        tech_gdf.drop(columns="geometry")
+        .merge(union_gdf, how="left", on=building_id_col)
         .set_geometry("geometry", crs=cells_gdf.crs)
+        .drop(columns=[building_id_col])
+    )
+
+    return cells_gdf[~cells_gdf["geometry"].is_empty]
+
+
+def sjoin_gdf_max_intersection(
+    cell_gdf: gpd.GeoDataFrame,
+    building_gdf: gpd.GeoDataFrame,
+    cell_id: str,
+    cell_cols: list[str] = None,
+    building_cols: list[str] = None,
+) -> gpd.GeoDataFrame:
+    """
+    Match cells to the buildings they have the greatest intersecting area with.
+
+    Args:
+        cell_gdf (gpd.GeoDataFrame): polygons of cells which contain buildings
+        building_gdf (gpd.GeoDataFrame): polygons of building footprints
+        cell_id (str): name of column containing unique cell ID
+        cell_cols (list[str]): list of columns to retain from `cell_gdf`. Default `None` to retain only columns required for
+        the operation (`cell_id`, `geometry`).
+        building_cols (list[str]): list of columns to retain from `building_gdf`. Default `None` to retain only columns required for
+        the operation (`geometry`).
+
+    Returns:
+        gpd.GeoDataFrame: cells with the building that has the greatest intersecting area with them. One row per unique cell.
+    """
+    # Ensure required columns are retained
+    if cell_cols:
+        cell_cols = set(cell_cols)
+        cell_cols.add(cell_id)
+        cell_cols.add("geometry")
+        cell_cols = list(cell_cols)
+    else:
+        cell_cols = [cell_id, "geometry"]
+    if building_cols:
+        building_cols = set(building_cols)
+        building_cols.add("geometry")
+        building_cols = list(building_cols)
+    else:
+        building_cols = ["geometry"]
+
+    intersections_gdf = gpd.overlay(
+        cell_gdf[cell_cols],
+        building_gdf[building_cols],
+        how="intersection",
+    )
+    intersections_gdf["area"] = intersections_gdf.geometry.area
+    intersections_gdf["max_intersection"] = intersections_gdf.groupby(cell_id)[
+        "area"
+    ].transform("max")
+
+    return (
+        intersections_gdf[
+            intersections_gdf["area"] == intersections_gdf["max_intersection"]
+        ]
+        .copy()
+        .drop(columns=["area", "max_intersection"])
     )
 
 
@@ -611,6 +761,58 @@ def append_gdf_heat_network_zone_layer(
         return clusters_gdf
 
 
+def map_df_uprns_to_clusters(
+    uprns_df: pl.DataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
+    clusters_gdf: gpd.GeoDataFrame,
+    building_id: str = "ID",
+) -> pl.DataFrame:
+    """
+    Map UPRNs to clusters they are located within.
+
+    Args:
+        uprns_df (pl.DataFrame): UPRNs with building ID column required.
+        buildings_gdf (gpd.GeoDataFrame): buildings in area of interest with building ID column.
+        clusters_gdf (gpd.GeoDataFrame): clusters with `cluster_id` column required.
+        building_id (str): name of building ID column in both `uprns_df` and `buildings_gdf`.
+
+    Returns:
+        pl.DataFrame: UPRNs mapped to their clusters. Expect some UPRNs to be duplicated if the `clusters_gdf` contains DESNZ Heat Network zones.
+    """
+    # Split clusters into DESNZ heat network zones and clusters
+    desnz_hn_zones_gdf = clusters_gdf[clusters_gdf["cluster_id"].str.contains("DESNZ")]
+    clusters_gdf = clusters_gdf[
+        ~clusters_gdf["cluster_id"].isin(desnz_hn_zones_gdf["cluster_id"])
+    ]
+
+    building_cluster_mapping = sjoin_gdf_buildings_to_clusters(
+        buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
+    ).dropna(subset="cluster_id")
+    building_cluster_mapping = building_cluster_mapping.set_index(building_id)[
+        "cluster_id"
+    ].to_dict()
+    uprns_df = uprns_df.with_columns(
+        pl.col("ID").replace_strict(building_cluster_mapping).alias("cluster_id")
+    )
+
+    if desnz_hn_zones_gdf.empty:
+        return uprns_df
+    else:
+        building_desnz_mapping = sjoin_gdf_buildings_to_clusters(
+            buildings_gdf=buildings_gdf, clusters_gdf=desnz_hn_zones_gdf
+        ).dropna(subset="cluster_id")
+        building_desnz_mapping = building_desnz_mapping.set_index(building_id)[
+            "cluster_id"
+        ].to_dict()
+        desnz_uprns_df = uprns_df.with_columns(
+            pl.col("ID")
+            .replace_strict(building_desnz_mapping, default=None)
+            .alias("cluster_id")
+        ).drop_nulls(subset="cluster_id")
+
+        return pl.concat([uprns_df, desnz_uprns_df])
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
@@ -622,9 +824,10 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
-        default="GB",
+        nargs="+",
+        default=["GB"],
         required=False,
     )
 
@@ -638,33 +841,36 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
-    tolerance_m = config["constant"]["clustering"]["tolerance_m"]
-    list_las = config["constant"][local_authorities]["la_names"]
+
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
     tech_gdf = (
         gpd.read_parquet(
             config["output"]["dataset"]["buildings_most_suitable_tech"].format(
-                local_authorities=local_authorities
+                local_authorities=local_authority_dict["url_slug"]
             )
         )
         .set_geometry("geometry")
         .to_crs(config["constant"]["target_crs"])
     )
-    grid_squares = config["constant"][local_authorities]["grid_squares"]
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        select_las=config["constant"][local_authorities]["la_names"]
+        select_las=local_authority_dict["valid_local_authorities"]
     )
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="building", grid_squares=grid_squares
+        layer="building", grid_squares=local_authority_dict["grid_squares"]
     )
 
     # Load and transform physical barriers for clusters
-    line_overlay_gdf = load_tranform_gdf_linestring_barriers(grid_squares)
-    polygon_overlay_gdf = load_transform_gdf_polygon_barriers(grid_squares)
+    line_overlay_gdf = load_tranform_gdf_linestring_barriers(
+        local_authority_dict["grid_squares"]
+    )
+    polygon_overlay_gdf = load_transform_gdf_polygon_barriers(
+        local_authority_dict["grid_squares"]
+    )
 
     combined_anchor_gdf = load_transform_anchor_property_gdfs(
-        buildings_gdf=buildings_gdf, grid_squares=grid_squares
+        buildings_gdf=buildings_gdf, grid_squares=local_authority_dict["grid_squares"]
     )
 
     # Generate clusters
@@ -679,22 +885,20 @@ if __name__ == "__main__":
     )
 
     # Add heat network zones to clusters_gdf, if they exist
-    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
-        local_authority=local_authorities
-    )
+    hn_zones_gdf_list = [
+        load_geodata.load_gdf_heat_network_zones(local_authority=la)
+        for la in local_authority_dict["valid_local_authorities"]
+    ]
+    hn_zones_gdf = pd.concat(hn_zones_gdf_list, ignore_index=True)
+
     clusters_gdf = append_gdf_heat_network_zone_layer(
         clusters_gdf=clusters_gdf, hn_zones_gdf=hn_zones_gdf
     )
 
     if args.save:
-        # Simplify geometry for file size using tolerance
-        clusters_gdf["geometry"] = clusters_gdf["geometry"].simplify(
-            tolerance=tolerance_m
-        )
         save_utils.save_to_s3(
             clusters_gdf,
             config["output"]["dataset"]["tech_clusters"].format(
-                local_authorities=local_authorities,
-                tolerance_m=tolerance_m,
+                local_authorities=local_authority_dict["url_slug"],
             ),
         )
