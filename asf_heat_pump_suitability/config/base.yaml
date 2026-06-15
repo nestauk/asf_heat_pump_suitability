@@ -234,7 +234,7 @@ metadata:
     "current_energy_rating_null": "Number of UPRNs (properties) within the cluster with unknown energy rating"
     "median_estimated_energy_consumption_12_months_kwh_per_m2": "Median estimated energy consumption in 12 months (in kWh/m2) of properties within the cluster"
     "median_outdoor_space_m2": "Median of the maximum contiguous outdoor space in metres squared of properties within the cluster"
-    "in_hn_zone": "Whether any properties within the cluster are in DESNZ heat network zones. You can refer to https://www.gov.uk/government/publications/heat-network-zone-opportunity-reports"
+    "in_hn_zone": "Whether any properties within the cluster are in DESNZ heat network zones. You can refer to https://www.gov.uk/government/publications/heat-network-zone-opportunity-reports to view heat network zone locations"
     "in_city_centre": "Whether any properties within the cluster are in a location classified into one of the following Spatial Signatures Framework pen portraits/signature types https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/transform/city_centres.py#L10-L17"
     "within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline": "Whether any properties within the cluster are within {COASTLINE_DISTANCE_THRESHOLD_M}m of the coastline"
     "in_protected_area": "Whether any properties within the cluster are in conservation areas for England and Wales, or Scottish World Heritage sites."
