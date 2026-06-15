@@ -22,12 +22,12 @@ from datetime import datetime
 from argparse import ArgumentParser
 from asf_heat_pump_suitability.getters import base_getters
 from asf_heat_pump_suitability.utils import save_utils
-from asf_heat_pump_suitability.pipeline.prepare_features import (
-    lat_lon,
-    land_extent,
+from asf_heat_pump_suitability.pipeline.transform import (
+    outdoor_space,
     building_footprint,
+    land_extent,
+    lat_lon,
 )
-from asf_heat_pump_suitability.pipeline.transform import outdoor_space
 
 
 def parse_arguments() -> argparse.Namespace:
