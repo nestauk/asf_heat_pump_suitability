@@ -338,7 +338,7 @@ if __name__ == "__main__":
 ).to_crs(epsg=4326)
 
         # Convert to geojson format and add metadata
-        geojson_file = json.loads(clusters_with_contextual_features_gdf.to_json())
+        geojson_file = json.loads(clusters_with_contextual_features_gdf.to_json(drop_id=True))
         metadata = {
             "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
             "Local authority": local_authorities,
