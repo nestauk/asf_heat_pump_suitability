@@ -202,7 +202,7 @@ metadata:
   "GitHub repository": "https://github.com/nestauk/asf_heat_pump_suitability"
   "Variable names and descriptions":
     "cluster_id": "Unique identifier for each cluster."
-    "assigned_tech": "Assigned low-carbon heating technology category. Categories are: `Individual solution`, `Networked heat pump`, `Communal solution`, `District heat network`. Can additionaly contain `DESNZ_HNZ` values (if there the local authority was part of the DESNZ heat network zoning)."
+    "assigned_tech": "Assigned low-carbon heating technology category. Categories are: `Individual solution`, `Networked heat pump`, `Communal solution`, `District heat network`. Can additionally contain `DESNZ_HNZ` values (if the local authority was part of the DESNZ heat network zoning pilot)."
     "geometry": "Polygon geometry of the cluster"
     "n_UPRNs": "Number of domestic UPRNs (properties) within the cluster"
     "n_uprns_in_listed_building": "Number of UPRNs (properties) within the cluster that are in listed buildings"
