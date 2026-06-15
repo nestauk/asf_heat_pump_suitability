@@ -335,12 +335,7 @@ if __name__ == "__main__":
 
         clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
             clusters_with_contextual_features_gdf, geometry="geometry", crs="EPSG:27700"
-        )
-
-        # Convert CRS to EPSG:4326
-        clusters_with_contextual_features_gdf = (
-            clusters_with_contextual_features_gdf.to_crs(epsg=4326)
-        )
+).to_crs(epsg=4326)
 
         # Convert to geojson format and add metadata
         geojson_file = json.loads(clusters_with_contextual_features_gdf.to_json())
