@@ -8,7 +8,7 @@ import geopandas as gpd
 import polars as pl
 import matplotlib.pyplot as plt
 
-from asf_heat_pump_suitability.pipeline.prepare_features import lat_lon
+from asf_heat_pump_suitability.pipeline.transform import lat_lon
 
 # %%
 # Listed building point geoms Scotland

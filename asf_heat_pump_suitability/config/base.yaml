@@ -6,6 +6,8 @@ data:
     gb_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares
     grid_square_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+    # OpenMap Green space Geopackage
+    gb_os_openmap_greenspace: "s3://asf-local-heat-planning-tool/inputs/geodata/opgrsp_gb.gpkg"
     # OpenMap Green space layers for certain grid squares
     grid_square_os_openmap_greenspace: "s3://asf-local-heat-planning-tool/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/{square}/{square}_{layer}.shp"
     # OpenRoad Local road data for GB
@@ -61,6 +63,10 @@ data:
       # plymouth council tax data
       plymouth: "s3://asf-local-heat-planning-tool/inputs/geodata/council_tax/PLYMOUTH_CTBANDS_ONSUD_202512.csv"
 
+  # Number of households in each LA recorded in 2021 census
+  EW_household_census_data: "s3://asf-local-heat-planning-tool/inputs/testing/v2021_census_households_EW.csv"
+  S_household_census_data: "s3://asf-local-heat-planning-tool/inputs/testing/v2022_census_households_S.csv"
+
   epc:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
     commercial:
@@ -75,6 +81,8 @@ data:
     inspire_file_names: "s3://asf-local-heat-planning-tool/inputs/processed/inspire/inspire_file_bounds_EWS.geojson"
     # Manually labelled blocks of flats
     manually_labelled_block_of_flats: "s3://asf-local-heat-planning-tool/inputs/processed/manually_labelled_block_of_flats.parquet"
+    # Valid local authority names, taken from the 'LAD23NM' column of the UK_ons_lad_bound file
+    valid_la_names: "s3://asf-local-heat-planning-tool/inputs/processed/valid_la_names.csv"
 
 constant:
   id:
@@ -84,24 +92,6 @@ constant:
     outdoor_space_threshold_m2:
       within_hn_zone: 70
       outside_hn_zone: 30
-  plymouth:
-    la_names: "Plymouth"
-    grid_squares: "SX"
-  plymouth_similar_cities:
-    la_names:
-      - "Liverpool"
-      - "Plymouth"
-      - "Portsmouth"
-      - "Southampton"
-      - "Swansea"
-    grid_squares:
-      - "SD"
-      - "SJ"
-      - "SN"
-      - "SS"
-      - "SU"
-      - "SX"
-      - "SZ"
   sampling_areas:
     la_names:
       - "Bath and North East Somerset"
@@ -118,45 +108,6 @@ constant:
       - "SK"
       - "ST"
       - "SX"
-  greater_manchester_las:
-    la_names:
-      - "Bolton"
-      - "Bury"
-      - "Manchester"
-      - "Oldham"
-      - "Rochdale"
-      - "Salford"
-      - "Stockport"
-      - "Tameside"
-      - "Trafford"
-      - "Wigan"
-    grid_squares:
-      - "SD"
-      - "SE"
-      - "SJ"
-      - "SK"
-  cardiff:
-    la_names: "Cardiff"
-    grid_squares: "ST"
-  dudley:
-    la_names: "Dudley"
-    grid_squares: "SO"
-  vale_of_glamorgan:
-    la_names: "Vale of Glamorgan"
-    grid_squares:
-      - "ST"
-      - "SS"
-  midlothian:
-    la_names: "Midlothian"
-    grid_squares: "NT"
-  glasgow:
-    la_names: "Glasgow City"
-    grid_squares: "NS"
-  south_lanarkshire:
-    la_names: "South Lanarkshire"
-    grid_squares:
-      - "NT"
-      - "NS"
   target_crs: 27700 # British National Grid
   tech_types:
     individual: "Individual solution"
@@ -188,7 +139,7 @@ output:
     # Residential buildings with their most suitable low carbon heat technology group
     buildings_most_suitable_tech: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_buildings_most_suitable_tech.parquet"
     # Buildings containing domestic UPRNs aggregated into groups of neighbouring clusters of the same tech type
-    tech_clusters: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_clustered_tech_polygons_simplified_{tolerance_m}m.parquet"
+    tech_clusters: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_clustered_tech_polygons.parquet"
     # Opportunity areas with most suitable tech, cluster ID, contextual data
     clusters_tech_contextual_info: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_clusters_contextual_features_{tolerance_m}m.geojson"
   model:
@@ -202,7 +153,7 @@ metadata:
   "GitHub repository": "https://github.com/nestauk/asf_heat_pump_suitability"
   "Variable names and descriptions":
     "cluster_id": "Unique identifier for each cluster."
-    "assigned_tech": "Assigned low-carbon heating technology category. Categories are: `Individual solution`, `Networked heat pump`, `Communal solution`, `District heat network`. Can additionaly contain `DESNZ_HNZ` values (if there the local authority was part of the DESNZ heat network zoning)."
+    "assigned_tech": "Assigned low-carbon heating technology category. Categories are: `Individual solution`, `Networked heat pump`, `Communal solution`, `District heat network`. Can additionally contain `DESNZ_HNZ` values (if the local authority was part of the DESNZ heat network zoning pilot)."
     "geometry": "Polygon geometry of the cluster"
     "n_UPRNs": "Number of domestic UPRNs (properties) within the cluster"
     "n_uprns_in_listed_building": "Number of UPRNs (properties) within the cluster that are in listed buildings"
@@ -233,12 +184,12 @@ metadata:
     "current_energy_rating_g": "Number of UPRNs (properties) within the cluster with energy rating G"
     "current_energy_rating_null": "Number of UPRNs (properties) within the cluster with unknown energy rating"
     "median_estimated_energy_consumption_12_months_kwh_per_m2": "Median estimated energy consumption in 12 months (in kWh/m2) of properties within the cluster"
-    "median_outdoor_space_m2": "Median of the maximum contigous outdoor space in m2 of properties within the cluster"
-    "in_hn_zone": "Whether any properties within the cluster are in DESNZ heat network zones. You can refer to https://www.gov.uk/government/publications/heat-network-zone-opportunity-reports"
+    "median_outdoor_space_m2": "Median of the maximum contiguous outdoor space in metres squared of properties within the cluster"
+    "in_hn_zone": "Whether any properties within the cluster are in DESNZ heat network zones. You can refer to https://www.gov.uk/government/publications/heat-network-zone-opportunity-reports to view heat network zone locations"
     "in_city_centre": "Whether any properties within the cluster are in a location classified into one of the following Spatial Signatures Framework pen portraits/signature types https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/transform/city_centres.py#L10-L17"
     "within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline": "Whether any properties within the cluster are within {COASTLINE_DISTANCE_THRESHOLD_M}m of the coastline"
     "in_protected_area": "Whether any properties within the cluster are in conservation areas for England and Wales, or Scottish World Heritage sites."
-    "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load": "Whether the cluster is within {ANCHOR_LOAD_RADIUS}m from an anchor load (a location with high electricity demand, e.g. a school or hospital). See a full list of anchor load types in https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/cluster/cluster.py#L28-L46"
+    "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load": "Whether the cluster is within a {ANCHOR_LOAD_RADIUS}m radius of an anchor load (a location with high heat demand, e.g. a school or hospital). See a full list of anchor load types in https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/cluster/cluster.py#L28-L46"
 
 #----------------------------------------------------------------#
 # DEPRECATING

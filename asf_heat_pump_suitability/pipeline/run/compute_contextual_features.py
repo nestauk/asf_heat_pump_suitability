@@ -8,8 +8,6 @@ Script to compute contextual information for clusters including:
 Run:
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
 
-LOCAL_AUTHORITIES should be one of the options specified in base.yaml's `constant` section, e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.
-
 Add --save to save the output to S3 as a geojson with geometry and contextual features per cluster.
 """
 
@@ -22,6 +20,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.pipeline.cluster import cluster
 
 # Load environment variables from .env file
 load_dotenv()
@@ -43,8 +42,9 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
+        nargs="+",
         required=True,
     )
 
@@ -56,31 +56,6 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     return parser.parse_args()
-
-
-def filter_df_uprns_to_clusters(
-    uprns_gdf: gpd.GeoDataFrame, clusters_gdf: gpd.GeoDataFrame
-) -> pl.DataFrame:
-    """
-    Filter UPRN geodataframe to only those which are within clusters.
-
-    Args:
-        uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs with geometry and EPC features
-        clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
-    Returns:
-        pl.DataFrame: filtered UPRN dataframe with only UPRNs within clusters
-    """
-
-    # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with cluster geodataframe
-    uprns_df = pl.from_pandas(
-        uprns_gdf.sjoin(
-            clusters_gdf[["cluster_id", "geometry"]],
-            how="right",
-            predicate="within",
-        ).drop(columns=["geometry"])
-    )
-
-    return uprns_df
 
 
 def extend_df_contextual_features(
@@ -147,10 +122,22 @@ def extend_df_contextual_features(
             pl.col("UPRN").n_unique().alias("n_UPRNs"),
             # n_uprns_listed_building
             pl.col("in_listed_building").sum().alias("n_uprns_in_listed_building"),
+            # n_uprns_missing_listed_building_flag
+            pl.col("in_listed_building")
+            .is_null()
+            .sum()
+            .alias("n_uprns_missing_listed_building_flag"),
             # n_uprns_solar_pv
             pl.col("has_solar_pv").sum().alias("n_uprns_solar_pv"),
+            # n_uprns_missing_solar_pv_flag
+            pl.col("has_solar_pv")
+            .is_null()
+            .sum()
+            .alias("n_uprns_missing_solar_pv_flag"),
             # n_uprns_off_gas
             pl.col("off_gas").sum().alias("n_uprns_off_gas"),
+            # n_uprns_missing_off_gas_flag
+            pl.col("off_gas").is_null().sum().alias("n_uprns_missing_off_gas_flag"),
             # median estimated energy consumption in 12 months (in kWh/m2)
             pl.col("ENERGY_CONSUMPTION_CURRENT")
             .median()
@@ -197,8 +184,11 @@ def extend_df_contextual_features(
                 "cluster_id",
                 "n_UPRNs",
                 "n_uprns_in_listed_building",
+                "n_uprns_missing_listed_building_flag",
                 "n_uprns_solar_pv",
+                "n_uprns_missing_solar_pv_flag",
                 "n_uprns_off_gas",
+                "n_uprns_missing_off_gas_flag",
                 "median_estimated_energy_consumption_12_months_kwh_per_m2",
                 "median_outdoor_space_m2",
                 "in_hn_zone",
@@ -231,7 +221,9 @@ def extend_df_contextual_features(
     # Adding percentages of properties with solar PV and off-gas, which are also used for filtering in the tool
     perc_cols = tenure_cols + [
         "n_uprns_solar_pv",
+        "n_uprns_missing_solar_pv_flag",
         "n_uprns_off_gas",
+        "n_uprns_missing_off_gas_flag",
     ]
     clusters_df = clusters_df.with_columns(
         [
@@ -245,37 +237,19 @@ def extend_df_contextual_features(
     return clusters_df
 
 
-if __name__ == "__main__":
-    from asf_heat_pump_suitability.pipeline.transform import uprns
-    from asf_heat_pump_suitability import config
-    from asf_heat_pump_suitability.utils import save_utils
+def create_gdf_contextual_features(
+    uprns_df: pl.DataFrame, clusters_gdf: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """
+    Create geodataframe with cluster_id, geometry and contextual features for each cluster
 
-    args = parse_arguments()
-    local_authorities = args.local_authorities
-    tolerance_m = config["constant"]["clustering"]["tolerance_m"]
+    Args:
+        uprns_df (pl.DataFrame): dataframe of UPRNs and UPRN-level features
+        clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
+    Returns:
+        gpd.GeoDataFrame: geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
+    """
 
-    print(f"Loading {local_authorities} domestic UPRNs...")
-    uprns_df = pl.read_parquet(
-        config["output"]["dataset"]["domestic_uprns_with_features"].format(
-            local_authority=local_authorities
-        )
-    )
-    uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
-
-    print("Loading opportunity areas...")
-    clusters_gdf = gpd.read_parquet(
-        config["output"]["dataset"]["tech_clusters"].format(
-            local_authorities=local_authorities,
-            tolerance_m=tolerance_m,
-        ),
-    ).to_crs(epsg=27700)
-
-    print("Filtering to clusters...")
-    uprns_df = filter_df_uprns_to_clusters(
-        uprns_gdf=uprns_gdf, clusters_gdf=clusters_gdf
-    )
-
-    print("Calculate remaining features per cluster...")
     clusters_with_contextual_features_df = extend_df_contextual_features(
         clusters_df=pl.from_pandas(
             clusters_gdf.drop(columns="geometry")
@@ -283,84 +257,107 @@ if __name__ == "__main__":
         uprns_df=uprns_df,
     )
 
-    ##------ TODO: SECTION TO BE DELETED BEFORE MERGING TO DEV
-    print(
-        "Value counts for in_hn_zone:",
-        clusters_with_contextual_features_df["in_hn_zone"].value_counts(),
+    # TODO identify source of empty clusters and fix - temporary fix to remove empty clusters
+    clusters_with_contextual_features_df = clusters_with_contextual_features_df.filter(
+        pl.col("n_UPRNs").is_not_null()
     )
-    print(
-        "Value counts for in_city_centre:",
-        clusters_with_contextual_features_df["in_city_centre"].value_counts(),
-    )
-    print(
-        "Value counts for within_1500m_coastline:",
-        clusters_with_contextual_features_df[
-            f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"
-        ].value_counts(),
-    )
-    print(
-        "Value counts for in_protected_area:",
-        clusters_with_contextual_features_df["in_protected_area"].value_counts(),
-    )
-    print(
-        "Value counts for within_anchor_load_radius:",
-        clusters_with_contextual_features_df[
-            f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
-        ].value_counts(),
-    )
-    print(
-        "Percentage of properties with solar PV:",
-        clusters_with_contextual_features_df["perc_uprns_solar_pv"].mean(),
-    )
-    print(
-        "Percentage of properties off-gas:",
-        clusters_with_contextual_features_df["perc_uprns_off_gas"].mean(),
-    )
-    percentage_cols = [
-        col
-        for col in clusters_with_contextual_features_df.columns
-        if col.startswith("perc_")
-    ]
-    for col in percentage_cols:
-        missing_percentage = (
-            clusters_with_contextual_features_df[col].is_null().mean() * 100
+
+    # Adding the geometry back to the clusters dataframe
+    clusters_with_contextual_features_gdf = (
+        clusters_with_contextual_features_df.to_pandas().merge(
+            clusters_gdf[["cluster_id", "geometry"]],
+            how="left",
+            on="cluster_id",
         )
-        print(f"Percentage of missing values in {col}: {missing_percentage:.2f}%")
-    ##------ SECTION ENDS ------Í
+    )
+
+    return gpd.GeoDataFrame(
+        clusters_with_contextual_features_gdf, geometry="geometry", crs="EPSG:27700"
+    ).to_crs(epsg=4326)
+
+
+def create_json_contextual_features_metadata(
+    clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
+) -> json:
+    """
+    Create json with cluster level data and associated metadata.
+
+    Args:
+        clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
+
+    Returns:
+       json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
+
+    """
+
+    print("Adding metadata and converting to geojson format...")
+    # Convert to geojson format and add metadata
+    geojson_file = json.loads(
+        clusters_with_contextual_features_gdf.to_json(drop_id=True)
+    )
+    metadata = {
+        "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
+        "Local authority": local_authorities,
+    }
+    # append metadata from config base.yaml
+    metadata.update(config["metadata"])
+    geojson_file["metadata"] = metadata
+
+    return geojson_file
+
+
+if __name__ == "__main__":
+    from asf_heat_pump_suitability.getters import load_geodata
+    from asf_heat_pump_suitability.pipeline.transform import local_authority
+    from asf_heat_pump_suitability import config
+    from asf_heat_pump_suitability.utils import save_utils
+
+    args = parse_arguments()
+    local_authorities = args.local_authorities
+    tolerance_m = config["constant"]["clustering"]["tolerance_m"]
+
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
+
+    print(f"Loading {local_authorities} domestic UPRNs...")
+    uprns_df = pl.read_parquet(
+        config["output"]["dataset"]["domestic_uprns_with_features"].format(
+            local_authority=local_authority_dict["url_slug"]
+        )
+    )
+
+    buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
+        layer="building", grid_squares=local_authority_dict["grid_squares"]
+    )
+
+    print("Loading clusters...")
+    clusters_gdf = gpd.read_parquet(
+        config["output"]["dataset"]["tech_clusters"].format(
+            local_authorities=local_authority_dict["url_slug"],
+            tolerance_m=tolerance_m,
+        ),
+    ).to_crs(epsg=27700)
+
+    uprns_df = cluster.map_df_uprns_to_clusters(
+        uprns_df=uprns_df, buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
+    )
+
+    print("Computing contextual features for clusters...")
+    clusters_with_contextual_features_gdf = create_gdf_contextual_features(
+        uprns_df=uprns_df, clusters_gdf=clusters_gdf
+    )
+
+    print("Creating json with contextual features for each cluster and metadata...")
+    geojson_file = create_json_contextual_features_metadata(
+        clusters_with_contextual_features_gdf
+    )
 
     if args.save:
-        # Adding the geometry back to the clusters dataframe
-        clusters_with_contextual_features_gdf = (
-            clusters_with_contextual_features_df.to_pandas().merge(
-                clusters_gdf[["cluster_id", "geometry"]],
-                how="left",
-                on="cluster_id",
-            )
-        )
-
-        clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
-            clusters_with_contextual_features_gdf, geometry="geometry", crs="EPSG:27700"
-        )
-
-        # Convert CRS to EPSG:4326
-        clusters_with_contextual_features_gdf = (
-            clusters_with_contextual_features_gdf.to_crs(epsg=4326)
-        )
-
-        # Convert to geojson format and add metadata
-        geojson_file = json.loads(clusters_with_contextual_features_gdf.to_json())
-        metadata = {
-            "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
-            "Local authority": local_authorities,
-        }
-        # append metadata from config base.yaml
-        metadata.update(config["metadata"])
-        geojson_file["metadata"] = metadata
-
+        print("Saving geojson to S3... ")
+        # Save to S3 as geojson
         s3_file_path = config["output"]["dataset"][
             "clusters_tech_contextual_info"
         ].format(
-            local_authorities=local_authorities,
+            local_authorities=local_authority_dict["url_slug"],
             tolerance_m=tolerance_m,
         )
 
