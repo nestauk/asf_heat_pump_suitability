@@ -86,6 +86,7 @@ def load_gdf_heat_network_zones(
     hn_gdf = gpd.read_parquet(
         path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
     ).drop(columns="index_right")
+
     # Assume first column with `ID` substring is the zone ID column
     # Note original ID column retained in case of erroneous ID assignment
     hn_gdf = _extend_gdf_hn_zone_id(hn_gdf)
@@ -121,8 +122,8 @@ def load_gdf_heat_network_zones(
             print(
                 f"No heat network zone geodata found for Local Authority: {local_authority}."
             )
-    else:
-        return hn_gdf.drop_duplicates(subset="HNZoneID")
+
+    return geo_utils.transform_gdf_drop_duplicates(hn_gdf)
 
 
 def _extend_gdf_hn_zone_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
