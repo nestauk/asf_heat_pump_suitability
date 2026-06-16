@@ -296,8 +296,23 @@ def create_json_contextual_features_metadata(
         "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
         "Local authority": local_authorities,
     }
+
     # append metadata from config base.yaml
     metadata.update(config["metadata"])
+    metadata["Variable names and descriptions"][
+        f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"
+    ] = (
+        metadata["Variable names and descriptions"]
+        .pop("within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline")
+        .format(COASTLINE_DISTANCE_THRESHOLD_M=COASTLINE_DISTANCE_THRESHOLD_M)
+    )
+    metadata["Variable names and descriptions"][
+        f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
+    ] = (
+        metadata["Variable names and descriptions"]
+        .pop("within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load")
+        .format(ANCHOR_LOAD_RADIUS=ANCHOR_LOAD_RADIUS)
+    )
     geojson_file["metadata"] = metadata
 
     return geojson_file
