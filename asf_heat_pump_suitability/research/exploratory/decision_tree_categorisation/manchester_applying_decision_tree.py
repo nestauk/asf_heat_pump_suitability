@@ -137,7 +137,7 @@ gm_la_boundaries_gdf
 # This dataset contains the geometries of all planned heat network zones in Greater Manchester as per DESNZ data. Data is likely outdated.
 
 # %%
-gm_hn_zones_gdf = load_gdf_heat_network_zones(local_authority="greater_manchester_las")
+gm_hn_zones_gdf = load_gdf_heat_network_zones(boundary=gm_la_boundaries_gdf)
 
 # %%
 gm_hn_zones_gdf.crs

@@ -23,7 +23,7 @@ import os
 
 # local imports
 from asf_heat_pump_suitability import PROJECT_DIR
-import config
+from asf_heat_pump_suitability import config
 
 # %%
 # local imports
@@ -219,7 +219,7 @@ plymouth_la_boundaries_gdf.head()
 # This dataset contains the geometries of all planned heat network zones in Plymouth as per DESNZ data.
 
 # %%
-plymouth_hn_zones_gdf = load_gdf_heat_network_zones(local_authority="plymouth")
+plymouth_hn_zones_gdf = load_gdf_heat_network_zones(boundary=plymouth_la_boundaries_gdf)
 
 # %%
 plymouth_hn_zones_gdf.crs
