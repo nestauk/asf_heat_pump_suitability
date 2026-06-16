@@ -84,7 +84,7 @@ def _get_str_output_path(input_filepath: str) -> str:
     return output_filepath
 
 
-def clip_df_and_save_dataset(
+def clip_gdf_and_save_dataset(
     input_filepath: str,
     boundary_geometry: gpd.GeoDataFrame,
     layer: str = None,
@@ -165,7 +165,7 @@ def filter_df_epc_by_uprn(
     epc_type: str,
     country: str = None,
     save_output: bool = False,
-) -> gpd.GeoDataFrame:
+) -> pd.DataFrame:
     """
     Filters a dataset containing UPRNs to only those UPRNs found in a reference dataset.
 
@@ -176,7 +176,7 @@ def filter_df_epc_by_uprn(
         country (str): country (EW for England and Wales or S for Scotland) to load epc data for.
         save_output (bool): to save output to S3.
 
-    Returns: gpd.GeoDataframe: GeoDataFrame with filtered UPRNs
+    Returns: pd.Dataframe: DataFrame with filtered UPRNs
     """
 
     print(f"Processing {input_filepath}...")
@@ -225,9 +225,9 @@ def filter_df_epc_by_uprn(
     return filtered_df
 
 
-def filter_dict_country_mapping_by_uprn(
+def filter_df_country_mapping_by_uprn(
     input_filepath: str, reference_df: pd.DataFrame, save_output: bool = False
-) -> gpd.GeoDataFrame:
+) -> pd.DataFrame:
     """
     Filters a dataset containing UPRNs to only those UPRNs found in a reference dataset.
 
@@ -236,7 +236,7 @@ def filter_dict_country_mapping_by_uprn(
         reference_df (pd.DataFrame): reference dataframe containing a list of UPRNs to filter the input file to.
         save_output (bool): to save output to S3.
 
-    Returns: gpd.GeoDataFrame: GeoDataFrame with filtered UPRNs
+    Returns: pd.DataFrame: GeoDataFrame with filtered UPRNs
     """
 
     print(f"Processing {input_filepath}...")
