@@ -278,12 +278,14 @@ def create_gdf_contextual_features(
 
 def create_json_contextual_features_metadata(
     clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
+    local_authorities: str,
 ) -> json:
     """
     Create json with cluster level data and associated metadata.
 
     Args:
         clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
+        local_authorities (str): local authority or authorities for which the data was generated
 
     Returns:
        json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
@@ -348,7 +350,7 @@ if __name__ == "__main__":
 
     print("Creating json with contextual features for each cluster and metadata...")
     geojson_file = create_json_contextual_features_metadata(
-        clusters_with_contextual_features_gdf
+        clusters_with_contextual_features_gdf, local_authorities
     )
 
     if args.save:
