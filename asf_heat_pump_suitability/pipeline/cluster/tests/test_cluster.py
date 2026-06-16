@@ -38,9 +38,6 @@ class TestGenerateGdfClusters:
             ]
         )
 
-        geometries.extend([b01_inner, b02_wrap])
-        building_ids.extend(["B01_inner", "B02_wrap"])
-
         # =====================================================================
         # CASE 2: Small cluster surrounded by realistic building types
         # =====================================================================
@@ -57,9 +54,6 @@ class TestGenerateGdfClusters:
                 (400075, 400010),
             ]
         )
-
-        geometries.extend([b03_cluster1, b04_cluster2])
-        building_ids.extend(["B03_cluster_1", "B04_cluster_2"])
 
         # Surrounding buildings (outer ring)
         b05_base = Polygon(
@@ -143,7 +137,36 @@ class TestGenerateGdfClusters:
             ]
         )
 
-        surrounding_shapes = [
+        # =====================================================================
+        # ADDING NEW TIGHT EDGE CASES (B13 & B14)
+        # =====================================================================
+        # B13: L-shaped footprint directly south of B01/B02, 5cm away from B02's base
+        b13_l_encase = Polygon(
+            [
+                (399990, 399970),
+                (400000, 399970),
+                (400000, 399982),
+                (400020, 399982),
+                (400020, 399989.95),
+                (399990, 399989.95),
+            ]
+        )
+
+        # B14: Footprint positioned exactly 5 millimeters east of B13's vertical wall
+        b14_millimeter_gap = Polygon(
+            [
+                (400020.005, 399982),
+                (400029, 399982),
+                (400029, 399989.95),
+                (400020.005, 399989.95),
+            ]
+        )
+
+        geometries = [
+            b01_inner,
+            b02_wrap,
+            b03_cluster1,
+            b04_cluster2,
             b05_rotated,
             b06_block,
             b07_rotated,
@@ -152,9 +175,25 @@ class TestGenerateGdfClusters:
             b10_irreg,
             b11_terrace,
             b12_horseshoe,
+            b13_l_encase,
+            b14_millimeter_gap,
         ]
-        geometries.extend(surrounding_shapes)
-        building_ids.extend([f"B{i:02d}_surround" for i in range(5, 13)])
+        building_ids = [
+            "B01",
+            "B02",
+            "B03",
+            "B04",
+            "B05",
+            "B06",
+            "B07",
+            "B08",
+            "B09",
+            "B10",
+            "B11",
+            "B12",
+            "B13",
+            "B14",
+        ]
 
         # Build the base buildings GeoDataFrame
         gdf = gpd.GeoDataFrame(
@@ -182,13 +221,15 @@ class TestGenerateGdfClusters:
             "B01": "Individual solution",
             "B05": "Individual solution",
             "B06": "Individual solution",
+            "B10": "Individual solution",
+            "B14": "Individual solution",
             "B07": "Communal solution",
             "B11": "Communal solution",
             "B12": "Communal solution",
+            "B13": "Communal solution",
             "B02": "Networked heat pump",
             "B03": "Networked heat pump",
             "B04": "Networked heat pump",
-            "B10": "Individual solution",
             "B08": "District heat network",
             "B09": "District heat network",
         }
@@ -250,8 +291,8 @@ class TestGenerateGdfClusters:
         # Check if the uncontained area is effectively zero (e.g., less than 1 square millimeter)
         # This is to account for floating point errors which can cause tiny slivers of building not to be covered by
         # the cluster.
-        uncontained_slivers_gdf = gpd.overlay(
-            buildings_gdf, clusters_gdf, how="difference", keep_geom_type=False
+        uncontained_slivers_gdf = buildings_gdf.overlay(
+            clusters_gdf, how="difference", keep_geom_type=False
         )
         uncontained_slivers_gdf["area"] = uncontained_slivers_gdf["geometry"].area
         results = uncontained_slivers_gdf[uncontained_slivers_gdf["area"] > 1e-5]
@@ -295,8 +336,8 @@ class TestGenerateGdfClusters:
         ), "Some non-domestic building footprints are found in the clusters."
 
         # Check there are no empty clusters
-        empty_clusters_gdf = gpd.overlay(
-            buildings_gdf, clusters_gdf, how="intersection", keep_geom_type=False
+        empty_clusters_gdf = buildings_gdf.overlay(
+            clusters_gdf, how="intersection", keep_geom_type=False
         ).dissolve(by="cluster_id")
         empty_clusters_gdf["area"] = empty_clusters_gdf["geometry"].area
 
