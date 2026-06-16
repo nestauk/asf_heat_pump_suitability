@@ -152,6 +152,7 @@ def map_dict_files_to_boundaries(dir_path: str, save_as: str = None) -> dict:
         print(f"\nLoading: {file}")
         gdf = gpd.read_file(f"s3://{file}").to_crs(epsg=27700)
         gdf["geometry"] = gdf["geometry"].make_valid()
+        # Dissolving all geometries in gdf into one
         mapping[file] = gdf.dissolve()["geometry"].iloc[0]
 
     if save_as:
@@ -189,13 +190,13 @@ def concat_gdfs(
     save_as: Optional[str] = None,
 ) -> gpd.GeoDataFrame:
     """
-    Concatenate list of (geo)dataframes from a single given source (e.g. directory, list of file paths, list of
-    (geo)dataframes) into a single one.
+    Concatenate list of geodataframes from a single given source (e.g. directory, list of file paths, list of
+    geodataframes) into a single one.
 
     Args:
         dir_path (str): path to S3 directory containing files of interest to concatenate. Optional.
         file_paths (List[str]): list of file paths containing data to concatenate. Optional.
-        gdfs (List[pl.DataFrame | gpd.GeoDataFrame]): list of (geo)dataframes to concatenate. Optional.
+        gdfs (List[gpd.GeoDataFrame]): list of geodataframes to concatenate. Optional.
         crs (str): CRS of final geodataframe. Default 27700 (BNG).
         save_as (str): Optional. Save the mapping to a geospatial file type. Default None which does not save the output.
 
