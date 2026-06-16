@@ -7,14 +7,17 @@ import boto3
 import s3fs
 import shapely
 import logging
+import warnings
 
 from tenacity import retry, stop_after_attempt
 from osbng import grids
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.utils import geo_utils
 from asf_heat_pump_suitability.getters import base_getters, load_boundaries
 from asf_heat_pump_suitability.pipeline.transform import local_authority as la
 
+# Instantiate variable to fill with list from iterator in `load_gdf_bng_grid_squares`
 _BNG_GRID_100KM_FEATURES = None
 
 
@@ -66,51 +69,60 @@ def load_gdf_heat_network_zones(
     local_authority: Optional[str] = None,
 ) -> gpd.GeoDataFrame:
     """
-    Load GeoDataFrame with heat network zone polygons in given Local Authority or boundary area.
+    Load GeoDataFrame with heat network zone polygons in given Local Authority or boundary area. Leave both arguments
+    as None to load all DESNZ heat network zones in UK.
 
     Args:
         boundary (shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame): Optional. Boundary to load heat network
         zone polygons for or geodataframe of multiple boundary polygons.
         local_authority (str): Optional. Local Authority to load heat network zone polygons for. This is slower than using
-        the boundary directly.
+        the boundary directly. If both `local_authority` and `boundary` arguments are passed, then `boundary` is used and
+        `local_authority` is ignored.
 
     Returns:
         gpd.GeoDataFrame: polygons of heat network zones in given Local Authority or boundary.
     """
+    # Load all DESNZ heat network zones in England
     hn_gdf = gpd.read_parquet(
         path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
     ).drop(columns="index_right")
     # Assume first column with `ID` substring is the zone ID column
     # Note original ID column retained in case of erroneous ID assignment
     hn_gdf = _extend_gdf_hn_zone_id(hn_gdf)
+    hn_gdf = geo_utils.verify_gdf_crs(gdf=hn_gdf)
 
     if boundary is not None:
+        if local_authority is not None:
+            warnings.warn(
+                "Both `boundary` and `local_authority` arguments have been passed. Using `boundary` only and ignoring `local_authority`."
+            )
         if isinstance(boundary, gpd.GeoDataFrame):
+            boundary = geo_utils.verify_gdf_crs(gdf=boundary)
             hn_gdf = hn_gdf.sjoin(
                 boundary[["geometry"]], how="inner", predicate="intersects"
-            )
+            ).drop(columns="index_right")
         else:
+
             hn_gdf = hn_gdf[hn_gdf["geometry"].intersects(boundary)]
         if hn_gdf.empty:
             print("No heat network zone geodata found within given boundary.")
-        else:
-            return hn_gdf
 
-    else:
+    elif local_authority is not None:
         local_authority_dict = la.get_dict_la_data(local_authority)
+        local_authorities_list = local_authority_dict["valid_local_authorities"]
         boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=local_authority_dict["valid_local_authorities"]
+            select_las=local_authorities_list
         )
 
         hn_gdf = hn_gdf.sjoin(
             boundary_gdf[["geometry"]], how="inner", predicate="intersects"
-        )
+        ).drop(columns="index_right")
         if hn_gdf.empty:
             print(
                 f"No heat network zone geodata found for Local Authority: {local_authority}."
             )
-        else:
-            return hn_gdf.drop(columns="index_right")
+    else:
+        return hn_gdf.drop_duplicates(subset="HNZoneID")
 
 
 def _extend_gdf_hn_zone_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
