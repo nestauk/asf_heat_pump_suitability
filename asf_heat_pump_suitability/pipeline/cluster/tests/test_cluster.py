@@ -261,18 +261,6 @@ class TestGenerateGdfClusters:
         """Create an empty geodataframe."""
         return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
 
-    @pytest.fixture(scope="class")
-    def gdf_anchor_properties(self, gdf_mixed_buildings):
-        """Generate a geodataframe with buildings to act as anchor properties."""
-        non_domestic_ids = ["B03", "B05", "B08"]
-
-        # Apply functions across the dataframe
-        gdf_mixed_buildings["domestic"] = gdf_mixed_buildings["building_id"].apply(
-            utils.assign_bool_domestic_status, args=(non_domestic_ids,)
-        )
-
-        return gdf_mixed_buildings[~gdf_mixed_buildings["domestic"]].copy()
-
     def test_all_buildings_assigned_cluster(
         self,
         gdf_mixed_buildings,
@@ -582,63 +570,3 @@ class TestExtendEdgesGdf:
         expected = gdf_far_apart_polygons.buffer(20, join_style=2).area.sum()
 
         assert results == expected
-
-
-class TestReassignGdfAnchorProperties:
-    def test_cells_within_anchor_radius(self):
-        pass
-
-    def test_cells_outside_anchor_radius(self):
-        pass
-
-    def test_cells_intersecting_anchor_radius(self):
-        pass
-
-
-# class TestOverlayGdfPhysicalBarriers:
-#     @pytest.fixture(scope="class")
-#     def voronoi_gdf(self):
-#         return gpd.GeoDataFrame()
-#
-#     @pytest.fixture(scope="class")
-#     def tech_gdf(self):
-#         return gpd.GeoDataFrame()
-#
-#     @pytest.fixture(scope="class")
-#     def line_overlay_gdf(self):
-#         return gpd.GeoDataFrame()
-#
-#     @pytest.fixture(scope="class")
-#     def polygon_overlay_gdf(self):
-#         return gpd.GeoDataFrame()
-#
-#     @pytest.fixture(scope="class")
-#     def buildings_gdf(self):
-#         return gpd.GeoDataFrame()
-#
-#     def test_cells_entirely_contain_buildings(
-#         self,
-#         voronoi_gdf,
-#         tech_gdf,
-#         line_overlay_gdf,
-#         polygon_overlay_gdf,
-#         buildings_gdf,
-#     ):
-#         # TODO requires an edge case input where overlaying barriers remove all and some of the property (including overlapping and bisecting)
-#         # TODO edge case where original Voronoi cell doesn't completely cover building
-#         """Test Voronoi cells entirely contain buildings after overlaying barriers. This tests the function can handle
-#         edge cases like a barrier completely or partially overlapping a building footprint and thus fragmenting the cell
-#         so that it no longer encases a full building footprint."""
-#         cells_gdf = overlay_gdf_physical_barriers(
-#             voronoi_gdf=voronoi_gdf,
-#             tech_gdf=tech_gdf,
-#             line_overlay_gdf=line_overlay_gdf,
-#             polygon_overlay_gdf=polygon_overlay_gdf,
-#         )
-#
-#         results = cells_gdf.sjoin(buildings_gdf, how="inner", predicate="contains")[
-#             "building_id"
-#         ]
-#         expected = buildings_gdf["building_id"]
-#
-#         assert set(results) == set(expected)
