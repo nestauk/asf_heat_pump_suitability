@@ -199,7 +199,7 @@ def buildings_gdf():
 
 
 @pytest.fixture(scope="module")
-def boundary_gdf(self, buildings_gdf):
+def boundary_gdf(buildings_gdf):
     # Generate site boundary with a 12m buffer
     combined_footprints = buildings_gdf.union_all()
     site_boundary_geom = combined_footprints.buffer(12).convex_hull
