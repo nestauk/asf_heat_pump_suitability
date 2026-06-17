@@ -7,17 +7,9 @@ residential:
 - UPRNs found in the domestic EPC register
 
 To run the script:
-python asf_heat_pump_suitability/pipeline/transform/uprns.py
-
-Set the `local_authorities` parameter to:
-- `plymouth` for Plymouth only
-- `plymouth_similar` for Plymouth and 4 similar local authorities (Liverpool, Portsmouth, Southampton, Swansea)
-- `sampling_areas` for Plymouth and 5 different local authorities for sampling buildings (Bath, Bradford, Glasgow, Manchester, Nottingham)
-- `greater_manchester_las` for all Greater Manchester local authorities (Bolton, Bury, Manchester, Oldham, Rochdale, Salford, Stockport, Tameside, Trafford, Wigan)
+python asf_heat_pump_suitability/pipeline/transform/uprns.py --local_authorities LOCAL_AUTHORITIES
 
 Defaults to `GB` (all of Great Britain), but this is not yet implemented.
-
-Temporary (before we scale): Set up a new local authority or group of local authorities by adding an entry to the `constant` section of the config.yaml file.
 
 Set --save to save the outputs to S3. By default, outputs are not saved.
 """
@@ -30,6 +22,8 @@ import argparse
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 from asf_heat_pump_suitability.utils import geo_utils
+from asf_heat_pump_suitability.schemas import uprns_schema
+import warnings
 
 
 def generate_gdf_uprn_coords(
@@ -93,6 +87,7 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
         df_EW = base_getters.load_df_from_s3(
             config["data"]["epc"][epc_type]["EW"], columns="UPRN"
         )
+
         # Scotland EPC data
         df_S = (
             base_getters.load_df_from_s3(
@@ -115,6 +110,9 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
         .alias("UPRN")
     ).drop_nulls()  # TODO: Scotland commercial EPC data has a lot (37 %) of null UPRNs.
 
+    # Validate the EPC UPRNs
+    df = uprns_schema.EPC_UPRN_Schema.validate(df, lazy=True)
+
     logging.info(
         f"{before - len(df)} invalid UPRNs dropped from {epc_type} EPC register. {len(df)} valid UPRNs remaining"
     )
@@ -126,7 +124,7 @@ def filter_gdf_domestic_uprns(
     uprn_gdf: gpd.GeoDataFrame,
     buildings_gdf: gpd.GeoDataFrame,
     non_residential_buildings_gdf: gpd.GeoDataFrame,
-    local_authority: str,
+    local_authority: str | list[str],
     id_col: str = config["constant"]["id"]["building"],
 ) -> gpd.GeoDataFrame:
     """
@@ -180,7 +178,9 @@ def filter_gdf_domestic_uprns(
 
     # TODO this could be updated to a classification model and scaled
     # This triggers for Plymouth only as the threshold density was calculated from Plymouth data only
-    if local_authority.lower() == "plymouth":
+    if [la.lower() for la in local_authority_dict["valid_local_authorities"]] == [
+        "plymouth"
+    ]:
         # Identify large buildings with low UPRN density which will be labelled non-domestic
         non_domestic_buildings_gdf = _generate_gdf_non_domestic_buildings_by_density(
             domestic_uprns_gdf=domestic_uprn_gdf,
@@ -270,18 +270,16 @@ def map_dict_uprns_to_building_id(
     uprns_gdf: gpd.GeoDataFrame,
     buildings_gdf: gpd.GeoDataFrame,
     id_col: str,
-    predicate: str = "intersects",
     max_distance: float = 1,
 ) -> dict:
     """
-    Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within or intersect with, or the nearest building < 1m away if not located within a building.
+    Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within or intersect
+    with, or the nearest building < 1m away if not located within a building.
 
     Args:
         uprns_gdf (gpd.GeoDataFrame): UPRNs with geospatial point data
         buildings_gdf (gpd.GeoDataFrame): building footprints
         id_col (str): name of building ID column in `buildings_gdf`
-        predicate (str): how to join buildings and UPRNs. Can be one of: `intersects`, which joins UPRNs with building footprints
-        they intersect with, or `within` which joins UPRNs to building footprints they are located within. Default `intersects`.
         max_distance (float): max distance (metres) from which to join UPRNs to a building footprint. Default 1m.
 
     Returns:
@@ -304,7 +302,6 @@ def map_dict_uprns_to_building_id(
     nearest_buildings_uprns = unmatched_uprns.sjoin_nearest(
         buildings_gdf, how="inner", max_distance=max_distance
     )
-
     # combine the two gdfs and turn into a dictionary
     uprns_building_dict = (
         (pd.concat([uprns_inside_buildings, nearest_buildings_uprns]))
@@ -313,6 +310,93 @@ def map_dict_uprns_to_building_id(
     )
 
     return uprns_building_dict
+
+
+def get_dict_census_uprn_range(local_authorities: list[str]) -> dict:
+    """
+    Finds the number of households in a Local Authority from the 2021 (England and Wales) and 2022 (Scotland) census, and returns a min and max expected number of UPRNs at 0.95 and 1.4 times the sum of census counts.
+
+    Args:
+        local_authorities (list[str]): list of Local Authorities to find census counts for.
+
+    Returns:
+        dict: dictionary with minimum and maximum expected UPRNs based on total census counts. Format: {"min": min_uprns, "max": max_uprns}.
+
+    """
+    # rough expected UPRN range for whole of GB. ONS estimates https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/families/bulletins/familiesandhouseholds/2024 ~29 million households in UK.
+    if local_authorities == "gb":
+        min_uprns = 27000000
+        max_uprns = 40000000
+
+    else:
+        la_lower = [la.lower() for la in local_authorities]
+
+        # data on number of households in each LA in England and Wales
+        ew_census_df = pl.read_csv(config["data"]["EW_household_census_data"])
+        # data on number of households in each LA in Scotland
+        # skip first three as they contain information about the data, not any household counts.
+        s_census_df = pl.read_csv(
+            config["data"]["S_household_census_data"], skip_rows=3
+        )
+
+        # Scottish data has some newline characters in header, remove these
+        cleaned_columns = {col: col.replace("\n", "") for col in s_census_df.columns}
+        s_census_df = s_census_df.rename(cleaned_columns)
+
+        # find number of households and sum for LAs in England and Wales
+        ew_matches = ew_census_df.filter(
+            pl.col("Lower Tier Local Authorities").str.to_lowercase().is_in(la_lower)
+        )
+        ew_sum = ew_matches["Observation"].sum() or 0
+
+        # find number of households and sum for LAs in Scotland
+        scot_matches = s_census_df.filter(
+            pl.col("Area name").str.to_lowercase().is_in(la_lower)
+        )
+        scot_sum = (
+            scot_matches["Number of households with at least one usual resident "].sum()
+            or 0
+        )
+
+        # Identify missing LAs
+        ew_found = (
+            ew_matches["Lower Tier Local Authorities"].str.to_lowercase().to_list()
+        )
+        scot_found = scot_matches["Area name"].str.to_lowercase().to_list()
+        all_found = set(ew_found + scot_found)
+
+        # set default min/ max UPRN range for each missing LA
+        # This is roughly the number of households in the smallest and largest LAs, multiplied by 0.95 (min) and 1.4 (max)
+        default_min_uprns = 850
+        default_max_uprns = 593000
+
+        missing_las = [la for la in la_lower if la not in all_found]
+        if missing_las:
+            warnings.warn(
+                f"Could not find census data for LAs: {missing_las}. "
+                f"Adding default range (Min: {default_min_uprns}, Max: {default_max_uprns}) for each."
+            )
+
+        # Combine sums
+        total_census_households = ew_sum + scot_sum
+
+        # +/- 40% buffer on total number of households
+        min_uprns = int(total_census_households * 0.95)
+        max_uprns = int(total_census_households * 1.4)
+
+        # Add the default values for the LAs we did not find
+        min_uprns += len(missing_las) * default_min_uprns
+        max_uprns += len(missing_las) * default_max_uprns
+
+        # Fallback in case empty list is passed or some other edge case
+        if min_uprns == 0 and max_uprns == 0:
+            min_uprns = len(la_lower) * default_min_uprns
+            max_uprns = len(la_lower) * default_max_uprns
+            warnings.warn(
+                f"Could not find census data for any LAs: {local_authorities}"
+            )
+
+    return {"min": min_uprns, "max": max_uprns}
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -326,8 +410,9 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
+        nargs="+",
         default="GB",
         required=False,
     )
@@ -352,12 +437,15 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.pipeline.transform import (
         non_residential_entities,
         poi,
+        local_authority,
     )
     from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
 
-    local_authorities = args.local_authorities.lower()
+    local_authorities = [la.lower() for la in args.local_authorities]
+
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
     uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
@@ -369,15 +457,16 @@ if __name__ == "__main__":
         grid_squares = None
     else:  # Specific local authorities (any number of LAs can be specified in config file)
         print(f"Creating residential UPRN dataset for {local_authorities}...")
-        grid_squares = config["constant"][local_authorities]["grid_squares"]
         la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=config["constant"][local_authorities]["la_names"]
-        )
+            select_las=local_authority_dict["valid_local_authorities"]
+        )  # TODO: add if statement for running with a test script
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
             how="inner",
             predicate="intersects",
-        ).drop(columns="index_right")
+        ).drop(
+            columns="index_right"
+        )  # TODO: will have already cut down uprns so no need for this line when running with a test script
 
     poi_gdf = load_geodata.load_gdf_poi()
     poi_gdf = poi.transform_gdf_poi(
@@ -392,7 +481,7 @@ if __name__ == "__main__":
     # Get layers required for identifying residential UPRNs
     layers = {
         f"{layer}_gdf": load_geodata.load_gdf_os_openmap_layer(
-            layer=layer, grid_squares=grid_squares
+            layer=layer, grid_squares=local_authority_dict["grid_squares"]
         )
         for layer in ["important_building", "railway_station", "building"]
     }
@@ -412,7 +501,9 @@ if __name__ == "__main__":
         uprn_gdf=uprns_gdf,
         buildings_gdf=layers["building_gdf"],
         non_residential_buildings_gdf=non_residential_buildings_gdf,
-        local_authority=args.local_authorities.lower(),
+        local_authority=[
+            la.lower() for la in local_authority_dict["valid_local_authorities"]
+        ],
     )
 
     # Save residential UPRNs to S3
@@ -430,10 +521,27 @@ if __name__ == "__main__":
         ]
     )
 
+    # --- PANDERA VALIDATION ---
+
+    # find acceptable UPRN range
+    uprn_bounds = get_dict_census_uprn_range(local_authorities)
+    # perform validation checks on df
+    schema = uprns_schema.create_domestic_uprn_schema(
+        min_expected_rows=uprn_bounds["min"], max_expected_rows=uprn_bounds["max"]
+    )
+
+    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds["min"]}")
+    print(f"Max Expected (1.4 * household census counts): {uprn_bounds["max"]}")
+    print(f"Actual Rows:  {len(df)}")
+
+    df = schema.validate(df, lazy=True)
+
+    # ---------------------------
+
     if args.save:
         save_utils.save_to_s3(
             df,
             config["output"]["dataset"]["domestic_uprns"].format(
-                local_authority=local_authorities
+                local_authority=local_authority_dict["url_slug"]
             ),
         )

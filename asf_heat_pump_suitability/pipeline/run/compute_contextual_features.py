@@ -8,8 +8,6 @@ Script to compute contextual information for clusters including:
 Run:
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
 
-LOCAL_AUTHORITIES should be one of the options specified in base.yaml's `constant` section, e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.
-
 Add --save to save the output to S3 as a geojson with geometry and contextual features per cluster.
 """
 
@@ -18,6 +16,12 @@ import polars as pl
 import geopandas as gpd
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.pipeline.cluster import cluster
+
+ANCHOR_LOAD_RADIUS = config["constant"]["anchor_radius"]
+COASTLINE_DISTANCE_THRESHOLD_M = config["constant"]["coastline"][
+    "distance_from_coastline_threshold_m"
+]
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -31,8 +35,9 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--local_authorities",
-        help="Local authority or authorities. See base.yaml's `constant` section for options e.g. `plymouth`, `plymouth_similar_cities`, `sampling_areas`, `greater_manchester_las`.",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
+        nargs="+",
         required=True,
     )
 
@@ -44,32 +49,6 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     return parser.parse_args()
-
-
-def filter_df_uprns_to_clusters(
-    uprns_gdf: gpd.GeoDataFrame, clusters_gdf: gpd.GeoDataFrame
-) -> pl.DataFrame:
-    """
-    Filter UPRN geodataframe to only those which are within clusters.
-
-    Args:
-        uprns_gdf (gpd.GeoDataFrame): geodataframe of UPRNs with geometry and EPC features
-        clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
-    Returns:
-        pl.DataFrame: filtered UPRN dataframe with only UPRNs within clusters
-    """
-    print("len uprns before filtering:", len(uprns_gdf))
-    print("len clusters:", len(clusters_gdf))
-    # Get the cluster_id for each UPRN by spatially joining UPRN geodataframe with cluster geodataframe
-    uprns_df = pl.from_pandas(
-        uprns_gdf.sjoin(
-            clusters_gdf[["cluster_id", "geometry"]],
-            how="right",
-            predicate="within",
-        ).drop(columns=["geometry"])
-    )
-    print("len uprns after filtering to clusters:", len(uprns_df))
-    return uprns_df
 
 
 def extend_df_contextual_features(
@@ -89,9 +68,7 @@ def extend_df_contextual_features(
     - number of off-gas properties
     - proximity to coastline flag (within 1500m)
     - protected area flag
-
-    Note that "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` column is added in the cluster.py,
-    so not explicitly included here as it is a feature of the clusters_df input to this function.
+    - within anchor load radius flag
 
     Args:
         clusters_df (pl.DataFrame): dataframe of clusters with cluster_id and `within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` feature
@@ -131,9 +108,31 @@ def extend_df_contextual_features(
         dummy_contextual_feat_df, how="left", on="cluster_id"
     )
 
+    print(uprns_df[["UPRN", "in_listed_building"]])
+
     contextual_feat_clusters_df = (
         uprns_df.group_by("cluster_id")
         .agg(
+            # n_uprns
+            pl.col("UPRN").n_unique().alias("n_UPRNs"),
+            # n_uprns_listed_building
+            pl.col("in_listed_building").sum().alias("n_uprns_in_listed_building"),
+            # n_uprns_missing_listed_building_flag
+            pl.col("in_listed_building")
+            .is_null()
+            .sum()
+            .alias("n_uprns_missing_listed_building_flag"),
+            # n_uprns_solar_pv
+            pl.col("has_solar_pv").sum().alias("n_uprns_solar_pv"),
+            # n_uprns_missing_solar_pv_flag
+            pl.col("has_solar_pv")
+            .is_null()
+            .sum()
+            .alias("n_uprns_missing_solar_pv_flag"),
+            # n_uprns_off_gas
+            pl.col("off_gas").sum().alias("n_uprns_off_gas"),
+            # n_uprns_missing_off_gas_flag
+            pl.col("off_gas").is_null().sum().alias("n_uprns_missing_off_gas_flag"),
             # median estimated energy consumption in 12 months (in kWh/m2)
             pl.col("ENERGY_CONSUMPTION_CURRENT")
             .median()
@@ -143,27 +142,37 @@ def extend_df_contextual_features(
             .median()
             .alias("median_outdoor_space_m2"),
             # in_hn_zone flag
-            pl.when(pl.col("in_hn_zone").any())
-            .then(True)
-            .otherwise(False)
+            pl.when(pl.col("in_hn_zone").is_null().all())
+            .then(pl.lit("Unknown"))
+            .when(pl.col("in_hn_zone").any())
+            .then(pl.lit("Yes"))
+            .otherwise(pl.lit("No"))
             .alias("in_hn_zone"),
             # in_city_centre flag
-            pl.when(pl.col("in_city_centre").any())
-            .then(True)
-            .otherwise(False)
+            pl.when(pl.col("in_city_centre").is_null().all())
+            .then(pl.lit("Unknown"))
+            .when(pl.col("in_city_centre").any())
+            .then(pl.lit("Yes"))
+            .otherwise(pl.lit("No"))
             .alias("in_city_centre"),
-            # n_uprns
-            pl.col("UPRN").n_unique().alias("n_UPRNs"),
-            # n_uprns_listed_building
-            pl.col("in_listed_building").sum().alias("n_uprns_in_listed_building"),
-            # n_uprns_solar_pv
-            pl.col("has_solar_pv").sum().alias("n_uprns_solar_pv"),
-            # n_uprns_off_gas
-            pl.col("off_gas").sum().alias("n_uprns_off_gas"),
             # near_coastline flag
-            pl.col("within_1500m_coastline").any().alias("within_1500m_coastline"),
-            # in_conservation_area flag
-            pl.col("in_protected_area").any().alias("in_protected_area"),
+            pl.when(
+                pl.col(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline")
+                .is_null()
+                .all()
+            )
+            .then(pl.lit("Unknown"))
+            .when(pl.col(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline").any())
+            .then(pl.lit("Yes"))
+            .otherwise(pl.lit("No"))
+            .alias(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"),
+            # in_protected_area flag
+            pl.when(pl.col("in_protected_area").is_null().all())
+            .then(pl.lit("Unknown"))
+            .when(pl.col("in_protected_area").any())
+            .then(pl.lit("Yes"))
+            .otherwise(pl.lit("No"))
+            .alias("in_protected_area"),
             # Counts of UPRNs in HN zone, city centre, near salt water, and in protected areas
             pl.col("in_hn_zone").sum().alias("n_uprns_in_hn_zone"),
             pl.col("in_city_centre").sum().alias("n_uprns_in_city_centre"),
@@ -174,16 +183,19 @@ def extend_df_contextual_features(
         )
         .select(
             [
-                "median_estimated_energy_consumption_12_months_kwh_per_m2",
                 "cluster_id",
+                "n_UPRNs",
+                "n_uprns_in_listed_building",
+                "n_uprns_missing_listed_building_flag",
+                "n_uprns_solar_pv",
+                "n_uprns_missing_solar_pv_flag",
+                "n_uprns_off_gas",
+                "n_uprns_missing_off_gas_flag",
+                "median_estimated_energy_consumption_12_months_kwh_per_m2",
                 "median_outdoor_space_m2",
                 "in_hn_zone",
                 "in_city_centre",
-                "n_UPRNs",
-                "n_uprns_in_listed_building",
-                "n_uprns_solar_pv",
-                "n_uprns_off_gas",
-                "within_1500m_coastline",
+                f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline",
                 "in_protected_area",
                 "n_uprns_in_hn_zone",
                 "n_uprns_in_city_centre",
@@ -197,15 +209,34 @@ def extend_df_contextual_features(
         contextual_feat_clusters_df, how="left", on="cluster_id"
     )
 
+    # Switching from booleans to Yes/No/Unknown `within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load`
+    clusters_df = clusters_df.with_columns(
+        pl.when(pl.col(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load").is_null())
+        .then(pl.lit("Unknown"))
+        .when(pl.col(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"))
+        .then(pl.lit("Yes"))
+        .otherwise(pl.lit("No"))
+        .alias(f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load")
+    )
+
     # Add percentages used for sorting & filtering in the tool
-    # owner occupied, social rented, private rented percentages
+    # Tenure cols: owner occupied, social rented, private rented percentages
     tenure_cols = [
         col for col in dummy_contextual_feat_df.columns if col.startswith("tenure_")
     ]
+    # Adding percentages of properties with solar PV and off-gas, which are also used for filtering in the tool
+    perc_cols = tenure_cols + [
+        "n_uprns_solar_pv",
+        "n_uprns_missing_solar_pv_flag",
+        "n_uprns_off_gas",
+        "n_uprns_missing_off_gas_flag",
+    ]
     clusters_df = clusters_df.with_columns(
         [
-            (pl.col(col) / pl.col("n_UPRNs") * 100).alias("perc_" + col)
-            for col in tenure_cols
+            (pl.col(col) / pl.col("n_UPRNs") * 100).alias(
+                "perc_" + col if col in tenure_cols else "perc_" + col.split("n_")[1]
+            )
+            for col in perc_cols
         ]
     )
 
@@ -213,7 +244,8 @@ def extend_df_contextual_features(
 
 
 if __name__ == "__main__":
-    from asf_heat_pump_suitability.pipeline.transform import uprns
+    from asf_heat_pump_suitability.getters import load_geodata
+    from asf_heat_pump_suitability.pipeline.transform import local_authority
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
 
@@ -221,25 +253,28 @@ if __name__ == "__main__":
     local_authorities = args.local_authorities
     tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
+
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
         config["output"]["dataset"]["domestic_uprns_with_features"].format(
-            local_authority=local_authorities
+            local_authority=local_authority_dict["url_slug"]
         )
     )
-    uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df).to_crs(epsg=27700)
+    buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
+        layer="building", grid_squares=local_authority_dict["grid_squares"]
+    )
 
-    print("Loading opportunity areas...")
-    clusters_gdf = gpd.read_file(
+    print("Loading clusters...")
+    clusters_gdf = gpd.read_parquet(
         config["output"]["dataset"]["tech_clusters"].format(
-            local_authorities=local_authorities,
+            local_authorities=local_authority_dict["url_slug"],
             tolerance_m=tolerance_m,
         ),
     ).to_crs(epsg=27700)
 
-    print("Filtering to clusters...")
-    uprns_df = filter_df_uprns_to_clusters(
-        uprns_gdf=uprns_gdf, clusters_gdf=clusters_gdf
+    uprns_df = cluster.map_df_uprns_to_clusters(
+        uprns_df=uprns_df, buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
     )
 
     print("Calculate remaining features per cluster...")
@@ -248,6 +283,11 @@ if __name__ == "__main__":
             clusters_gdf.drop(columns="geometry")
         ),  # drop geometry for now and use polars
         uprns_df=uprns_df,
+    )
+
+    # TODO identify source of empty clusters and fix - temporary fix to remove empty clusters
+    clusters_with_contextual_features_df = clusters_with_contextual_features_df.filter(
+        pl.col("n_UPRNs").is_not_null()
     )
 
     if args.save:
@@ -263,11 +303,17 @@ if __name__ == "__main__":
         clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
             clusters_with_contextual_features_df, geometry="geometry", crs="EPSG:27700"
         )
+        # Simplify geometries for smaller file size
+        clusters_with_contextual_features_gdf["geometry"] = (
+            clusters_with_contextual_features_gdf["geometry"].simplify(
+                tolerance=tolerance_m
+            )
+        )
 
         save_utils.save_to_s3(
             clusters_with_contextual_features_gdf,
             config["output"]["dataset"]["clusters_tech_contextual_info"].format(
-                local_authorities=local_authorities,
+                local_authorities=local_authority_dict["url_slug"],
                 tolerance_m=tolerance_m,
             ),
         )
