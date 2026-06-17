@@ -12,7 +12,7 @@ from asf_heat_pump_suitability.pipeline.cluster.tests import utils
 
 
 @pytest.fixture(scope="module")
-def buildings_gdf():
+def gdf_mixed_buildings():
     # =====================================================================
     # CASE 1: Wrap-around building scenario
     # =====================================================================
@@ -199,9 +199,9 @@ def buildings_gdf():
 
 
 @pytest.fixture(scope="module")
-def boundary_gdf(buildings_gdf):
+def gdf_enclosing_boundary(gdf_mixed_buildings):
     # Generate site boundary with a 12m buffer
-    combined_footprints = buildings_gdf.union_all()
+    combined_footprints = gdf_mixed_buildings.union_all()
     site_boundary_geom = combined_footprints.buffer(12).convex_hull
 
     return gpd.GeoDataFrame(
@@ -212,7 +212,7 @@ def boundary_gdf(buildings_gdf):
 
 class TestGenerateGdfClusters:
     @pytest.fixture(scope="class")
-    def tech_gdf(self, buildings_gdf):
+    def tech_gdf(self, gdf_mixed_buildings):
         non_domestic_ids = ["B03", "B05", "B08"]
 
         tech_mapping = {
@@ -233,14 +233,14 @@ class TestGenerateGdfClusters:
         }
 
         # Apply functions across the dataframe
-        buildings_gdf["domestic"] = buildings_gdf["building_id"].apply(
+        gdf_mixed_buildings["domestic"] = gdf_mixed_buildings["building_id"].apply(
             utils.assign_bool_domestic_status, args=(non_domestic_ids,)
         )
-        buildings_gdf["assigned_tech"] = buildings_gdf["building_id"].apply(
+        gdf_mixed_buildings["assigned_tech"] = gdf_mixed_buildings["building_id"].apply(
             utils.assign_str_tech_type, args=(tech_mapping,)
         )
 
-        return buildings_gdf
+        return gdf_mixed_buildings
 
     @pytest.fixture(scope="class")
     def polygon_overlay_gdf(self):
@@ -255,20 +255,20 @@ class TestGenerateGdfClusters:
         return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
 
     @pytest.fixture(scope="class")
-    def gdf_anchor_properties(self, buildings_gdf):
+    def gdf_anchor_properties(self, gdf_mixed_buildings):
         non_domestic_ids = ["B03", "B05", "B08"]
 
         # Apply functions across the dataframe
-        buildings_gdf["domestic"] = buildings_gdf["building_id"].apply(
+        gdf_mixed_buildings["domestic"] = gdf_mixed_buildings["building_id"].apply(
             utils.assign_bool_domestic_status, args=(non_domestic_ids,)
         )
 
-        return buildings_gdf[~buildings_gdf["domestic"]].copy()
+        return gdf_mixed_buildings[~gdf_mixed_buildings["domestic"]].copy()
 
     def test_all_buildings_assigned_cluster(
         self,
-        buildings_gdf,
-        boundary_gdf,
+        gdf_mixed_buildings,
+        gdf_enclosing_boundary,
         tech_gdf,
         line_overlay_gdf,
         polygon_overlay_gdf,
@@ -276,8 +276,8 @@ class TestGenerateGdfClusters:
     ):
         """Test each domestic building is assigned to a cluster."""
         clusters_gdf = generate_gdf_clusters(
-            buildings_gdf=buildings_gdf,
-            boundary_gdf=boundary_gdf,
+            buildings_gdf=gdf_mixed_buildings,
+            boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=tech_gdf,
             line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
@@ -289,7 +289,7 @@ class TestGenerateGdfClusters:
         # Check if the uncontained area is effectively zero (e.g., less than 1 square millimeter)
         # This is to account for floating point errors which can cause tiny slivers of building not to be covered by
         # the cluster.
-        uncontained_slivers_gdf = buildings_gdf.overlay(
+        uncontained_slivers_gdf = gdf_mixed_buildings.overlay(
             clusters_gdf, how="difference", keep_geom_type=False
         )
         uncontained_slivers_gdf["area"] = uncontained_slivers_gdf["geometry"].area
@@ -300,8 +300,8 @@ class TestGenerateGdfClusters:
 
     def test_clusters_contain_domestic_only(
         self,
-        buildings_gdf,
-        boundary_gdf,
+        gdf_mixed_buildings,
+        gdf_enclosing_boundary,
         tech_gdf,
         line_overlay_gdf,
         polygon_overlay_gdf,
@@ -313,8 +313,8 @@ class TestGenerateGdfClusters:
         domestic_tech_gdf = tech_gdf[tech_gdf["domestic"]].copy()
 
         clusters_gdf = generate_gdf_clusters(
-            buildings_gdf=buildings_gdf,
-            boundary_gdf=boundary_gdf,
+            buildings_gdf=gdf_mixed_buildings,
+            boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=domestic_tech_gdf,
             line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
@@ -334,13 +334,13 @@ class TestGenerateGdfClusters:
         ), "Some non-domestic building footprints are found in the clusters."
 
         # Check there are no empty clusters
-        empty_clusters_gdf = buildings_gdf.overlay(
+        empty_clusters_gdf = gdf_mixed_buildings.overlay(
             clusters_gdf, how="intersection", keep_geom_type=False
         ).dissolve(by="cluster_id")
         empty_clusters_gdf["area"] = empty_clusters_gdf["geometry"].area
 
         # Find smallest building area and subtract small sliver for floating point errors
-        smallest_building_area = buildings_gdf.area.min() - 1e-5
+        smallest_building_area = gdf_mixed_buildings.area.min() - 1e-5
 
         # Clusters must intersect with at least the area of the smallest building footprint, otherwise they are considered empty
         results = empty_clusters_gdf[
@@ -352,8 +352,8 @@ class TestGenerateGdfClusters:
 
     def test_clusters_not_overlapping(
         self,
-        buildings_gdf,
-        boundary_gdf,
+        gdf_mixed_buildings,
+        gdf_enclosing_boundary,
         tech_gdf,
         line_overlay_gdf,
         polygon_overlay_gdf,
@@ -361,8 +361,8 @@ class TestGenerateGdfClusters:
     ):
         """Test there are no overlapping clusters."""
         results = generate_gdf_clusters(
-            buildings_gdf=buildings_gdf,
-            boundary_gdf=boundary_gdf,
+            buildings_gdf=gdf_mixed_buildings,
+            boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=tech_gdf,
             line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
@@ -471,13 +471,15 @@ class TestExtendEdgesGdf:
             ]
         )
 
-    def test_voronoi_contain_single_polygons(self, buildings_gdf, boundary_gdf):
+    def test_voronoi_contain_single_polygons(
+        self, gdf_mixed_buildings, gdf_enclosing_boundary
+    ):
         """Test one Voronoi polygon contains one building footprint."""
-        boundary = boundary_gdf.geometry.iloc[0]
-        cells_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
+        boundary = gdf_enclosing_boundary.geometry.iloc[0]
+        cells_gdf = extend_edges_gdf(gdf=gdf_mixed_buildings, boundary=boundary)
         # All buildings should match to a cell
         assert set(cells_gdf["building_id"]) == set(
-            buildings_gdf["building_id"]
+            gdf_mixed_buildings["building_id"]
         ), f"Unique building IDs in buildings and Voronoi cells do not match"
 
         cells_gdf["geometry"] = cells_gdf["geometry"].make_valid().normalize()
