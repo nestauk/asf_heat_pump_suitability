@@ -1,6 +1,3 @@
-import geopandas as gpd
-
-
 def assign_bool_domestic_status(b_id: str, non_domestic: list):
     """Returns False for specified non-domestic codes."""
     # Extract prefix (e.g. 'B03') cleanly regardless of lowercase user input
