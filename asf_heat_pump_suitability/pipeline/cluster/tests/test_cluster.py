@@ -13,6 +13,12 @@ from asf_heat_pump_suitability.pipeline.cluster.tests import utils
 
 @pytest.fixture(scope="module")
 def gdf_mixed_buildings():
+    """
+    Generate a geodataframe containing a selection of test building footprints to test clustering across different scenarios:
+    1. A horseshoe-shaped building that wraps around another smaller building on three sides.
+    2. A central cluster of buildings surrounded on all sides by a selection of buildings of different shapes.
+    3. Buildings which are very close to the neighbouring buildings.
+    """
     # =====================================================================
     # CASE 1: Wrap-around building scenario
     # =====================================================================
@@ -34,7 +40,7 @@ def gdf_mixed_buildings():
     )
 
     # =====================================================================
-    # CASE 2: Small cluster surrounded by realistic building types
+    # CASE 2: Small cluster of buildings surrounded by different building types
     # =====================================================================
     b03_cluster1 = Polygon(
         [(400060, 400000), (400070, 400000), (400070, 400010), (400060, 400010)]
@@ -133,7 +139,7 @@ def gdf_mixed_buildings():
     )
 
     # =====================================================================
-    # CASE 3: TIGHT EDGE CASES (B13 & B14)
+    # CASE 3: BUILDINGS WHICH ARE VERY CLOSE TOGETHER
     # =====================================================================
     # B13: L-shaped footprint directly south of B01/B02, 2m away from B02's base
     b13_l_encase = Polygon(
@@ -190,7 +196,6 @@ def gdf_mixed_buildings():
         "B14",
     ]
 
-    # Build the base buildings GeoDataFrame
     gdf = gpd.GeoDataFrame(
         {"building_id": building_ids, "geometry": geometries}, crs="EPSG:27700"
     )
@@ -200,7 +205,9 @@ def gdf_mixed_buildings():
 
 @pytest.fixture(scope="module")
 def gdf_enclosing_boundary(gdf_mixed_buildings):
-    # Generate site boundary with a 12m buffer
+    """
+    Generate a boundary geodataframe with a 12m buffer.
+    """
     combined_footprints = gdf_mixed_buildings.union_all()
     site_boundary_geom = combined_footprints.buffer(12).convex_hull
 
@@ -211,8 +218,13 @@ def gdf_enclosing_boundary(gdf_mixed_buildings):
 
 
 class TestGenerateGdfClusters:
+    """Test the `generate_gdf_clusters` function."""
+
     @pytest.fixture(scope="class")
     def tech_gdf(self, gdf_mixed_buildings):
+        """
+        Assign building footprints a technology type and a boolean to indicate whether or not they are a domestic building.
+        """
         non_domestic_ids = ["B03", "B05", "B08"]
 
         tech_mapping = {
@@ -232,10 +244,12 @@ class TestGenerateGdfClusters:
             "B09": "District heat network",
         }
 
-        # Apply functions across the dataframe
+        # Assign domestic boolean to buildings according to mapping
         gdf_mixed_buildings["domestic"] = gdf_mixed_buildings["building_id"].apply(
             utils.assign_bool_domestic_status, args=(non_domestic_ids,)
         )
+
+        # Assign tech type according to mapping
         gdf_mixed_buildings["assigned_tech"] = gdf_mixed_buildings["building_id"].apply(
             utils.assign_str_tech_type, args=(tech_mapping,)
         )
@@ -243,19 +257,13 @@ class TestGenerateGdfClusters:
         return gdf_mixed_buildings
 
     @pytest.fixture(scope="class")
-    def polygon_overlay_gdf(self):
-        return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
-
-    @pytest.fixture(scope="class")
-    def line_overlay_gdf(self):
-        return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
-
-    @pytest.fixture(scope="class")
-    def gdf_empty_anchors(self):
+    def empty_gdf(self):
+        """Create an empty geodataframe."""
         return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
 
     @pytest.fixture(scope="class")
     def gdf_anchor_properties(self, gdf_mixed_buildings):
+        """Generate a geodataframe with buildings to act as anchor properties."""
         non_domestic_ids = ["B03", "B05", "B08"]
 
         # Apply functions across the dataframe
@@ -270,18 +278,16 @@ class TestGenerateGdfClusters:
         gdf_mixed_buildings,
         gdf_enclosing_boundary,
         tech_gdf,
-        line_overlay_gdf,
-        polygon_overlay_gdf,
-        gdf_empty_anchors,
+        empty_gdf,
     ):
         """Test each domestic building is assigned to a cluster."""
         clusters_gdf = generate_gdf_clusters(
             buildings_gdf=gdf_mixed_buildings,
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=tech_gdf,
-            line_overlay_gdf=line_overlay_gdf,
-            polygon_overlay_gdf=polygon_overlay_gdf,
-            combined_anchor_gdf=gdf_empty_anchors,
+            line_overlay_gdf=empty_gdf,
+            polygon_overlay_gdf=empty_gdf,
+            combined_anchor_gdf=empty_gdf,
             radius=50,
             id_col="building_id",
         )
@@ -303,9 +309,7 @@ class TestGenerateGdfClusters:
         gdf_mixed_buildings,
         gdf_enclosing_boundary,
         tech_gdf,
-        line_overlay_gdf,
-        polygon_overlay_gdf,
-        gdf_empty_anchors,
+        empty_gdf,
     ):
         """Test that there are only domestic building footprints in the clusters (i.e. no non-domestic buildings are
         retained) and test that there are no clusters retained which do not contain a domestic building (i.e. no empty
@@ -316,9 +320,9 @@ class TestGenerateGdfClusters:
             buildings_gdf=gdf_mixed_buildings,
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=domestic_tech_gdf,
-            line_overlay_gdf=line_overlay_gdf,
-            polygon_overlay_gdf=polygon_overlay_gdf,
-            combined_anchor_gdf=gdf_empty_anchors,
+            line_overlay_gdf=empty_gdf,
+            polygon_overlay_gdf=empty_gdf,
+            combined_anchor_gdf=empty_gdf,
             radius=50,
             id_col="building_id",
         )
@@ -355,25 +359,23 @@ class TestGenerateGdfClusters:
         gdf_mixed_buildings,
         gdf_enclosing_boundary,
         tech_gdf,
-        line_overlay_gdf,
-        polygon_overlay_gdf,
-        gdf_empty_anchors,
+        empty_gdf,
     ):
         """Test there are no overlapping clusters."""
         results = generate_gdf_clusters(
             buildings_gdf=gdf_mixed_buildings,
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=tech_gdf,
-            line_overlay_gdf=line_overlay_gdf,
-            polygon_overlay_gdf=polygon_overlay_gdf,
-            combined_anchor_gdf=gdf_empty_anchors,
+            line_overlay_gdf=empty_gdf,
+            polygon_overlay_gdf=empty_gdf,
+            combined_anchor_gdf=empty_gdf,
             radius=50,
             id_col="building_id",
         )
 
         assert round(results["geometry"].area.sum(), 8) == round(
             results["geometry"].union_all().area, 8
-        )
+        ), "Clusters may be overlapping"
 
     def test_neighbouring_clusters_different(self):
         """Check dissolve worked properly"""
@@ -394,6 +396,7 @@ class TestReassignGdfAnchorProperties:
 class TestExtendEdgesGdf:
     @pytest.fixture(scope="class")
     def gdf_polygons_across_boundary(self):
+        """Generate a geodataframe of polygons, some of which are inside; outside; or crossing a boundary."""
         return gpd.GeoDataFrame(
             {
                 "building_id": ["B01", "B02", "B03", "B04", "B_OUTSIDE", "B_CROSSING"],
@@ -462,6 +465,7 @@ class TestExtendEdgesGdf:
 
     @pytest.fixture(scope="class")
     def geometry_boundary_crossed(self):
+        """Generate a shapely.Polygon of a boundary to be crossed."""
         return Polygon(
             [
                 (399978.0, 399880.0),
@@ -502,7 +506,9 @@ class TestExtendEdgesGdf:
         expected = gdf_polygons_across_boundary[
             gdf_polygons_across_boundary["within_boundary"]
         ]["building_id"]
-        assert set(results) == set(expected)
+        assert set(results) == set(
+            expected
+        ), "Polygons outside or crossing boundaries are not handled correctly"
 
 
 #
