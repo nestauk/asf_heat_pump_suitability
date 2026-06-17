@@ -396,7 +396,7 @@ class TestExtendEdgesGdf:
     def gdf_polygons_across_boundary(self):
         return gpd.GeoDataFrame(
             {
-                "id": ["B01", "B02", "B03", "B04", "B_OUTSIDE", "B_CROSSING"],
+                "building_id": ["B01", "B02", "B03", "B04", "B_OUTSIDE", "B_CROSSING"],
                 "within_boundary": [True, True, True, True, False, False],
                 "geometry": [
                     Polygon(
@@ -476,15 +476,15 @@ class TestExtendEdgesGdf:
         boundary = boundary_gdf.geometry.iloc[0]
         cells_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
         # All buildings should match to a cell
-        assert set(cells_gdf["id"]) == set(
-            buildings_gdf["id"]
+        assert set(cells_gdf["building_id"]) == set(
+            buildings_gdf["building_id"]
         ), f"Unique building IDs in buildings and Voronoi cells do not match"
 
         cells_gdf["geometry"] = cells_gdf["geometry"].make_valid().normalize()
         # Buildings and cells should have a 1-1 mapping
         assert (
-            cells_gdf["id"].duplicated().sum() == 0
-        ), f"{cells_gdf['id'].duplicated().sum()} building IDs joined to multiple cells"
+            cells_gdf["building_id"].duplicated().sum() == 0
+        ), f"{cells_gdf['building_id'].duplicated().sum()} building IDs joined to multiple cells"
         assert (
             cells_gdf["geometry"].duplicated().sum() == 0
         ), f"{cells_gdf['geometry'].duplicated().sum()} cells joined to multiple buildings"
@@ -495,10 +495,11 @@ class TestExtendEdgesGdf:
         cells_gdf = extend_edges_gdf(
             gdf=gdf_polygons_across_boundary, boundary=geometry_boundary_crossed
         )
-        results = cells_gdf["id"]
+        print(cells_gdf.columns)
+        results = cells_gdf["building_id"]
         expected = gdf_polygons_across_boundary[
             gdf_polygons_across_boundary["within_boundary"]
-        ]["id"]
+        ]["building_id"]
         assert set(results) == set(expected)
 
 
