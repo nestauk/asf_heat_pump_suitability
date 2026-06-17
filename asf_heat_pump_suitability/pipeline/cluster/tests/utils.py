@@ -12,14 +12,3 @@ def assign_str_tech_type(b_id: str, tech_mapping: dict):
     """Maps technology types based on building ID prefixes."""
     prefix = b_id.split("_")[0].upper()
     return tech_mapping.get(prefix, None)
-
-
-def generate_gdf_slivers(
-    buildings_gdf: gpd.GeoDataFrame,
-    clusters_gdf: gpd.GeoDataFrame,
-    how: str,
-    threshold: float = 1e-5,
-):
-    gdf = gpd.overlay(buildings_gdf, clusters_gdf, how=how, keep_geom_type=False)
-    gdf["area"] = gdf["geometry"].area
-    return gdf[gdf["area"] > threshold]
