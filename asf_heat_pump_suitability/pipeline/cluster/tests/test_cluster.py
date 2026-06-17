@@ -471,17 +471,28 @@ class TestExtendEdgesGdf:
             ]
         )
 
-    def test_voronoi_contain_single_polygons(self, polygon_gdf, boundary):
+    def test_voronoi_contain_single_polygons(self, buildings_gdf, boundary_gdf):
         """Test one Voronoi polygon contains one building footprint."""
-        cells_gdf = extend_edges_gdf(gdf=polygon_gdf, boundary=boundary)
-        results = cells_gdf.sjoin(polygon_gdf, how="inner", predicate="contains")
-        assert len(results) == len(polygon_gdf)
-        assert set(results["id"]) == set(polygon_gdf["id"])
+        boundary = boundary_gdf.geometry.iloc[0]
+        cells_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
+        results = cells_gdf.sjoin(buildings_gdf, how="inner", predicate="contains")
+        assert len(results) == len(
+            buildings_gdf
+        ), f"Number of cells that contain buildings ({len(results)}) != number of buildings ({len(buildings_gdf)})"
+        assert set(results["id"]) == set(
+            buildings_gdf["id"]
+        ), "Unique building IDs found in cells != original unique building IDs"
 
-    def test_polygons_within_boundary(self, polygon_gdf, boundary):
-        cells_gdf = extend_edges_gdf(gdf=polygon_gdf, boundary=boundary)
-        results = cells_gdf.sjoin(polygon_gdf, how="inner", predicate="contains")["id"]
-        expected = polygon_gdf[polygon_gdf["within_boundary"]]["id"]
+    def test_polygons_within_boundary(
+        self, gdf_polygons_across_boundary, geometry_boundary_crossed
+    ):
+        cells_gdf = extend_edges_gdf(
+            gdf=gdf_polygons_across_boundary, boundary=geometry_boundary_crossed
+        )
+        results = cells_gdf["id"]
+        expected = gdf_polygons_across_boundary[
+            gdf_polygons_across_boundary["within_boundary"]
+        ]["id"]
         assert set(results) == set(expected)
 
 
