@@ -562,9 +562,9 @@ class TestExtendEdgesGdf:
     def test_clip_voronoi_to_buffer(
         self, gdf_far_apart_polygons, geometry_far_apart_boundary
     ):
-        """Test clustering with polygons outside or crossing the given boundary."""
+        """Test Voronoi polygons are clipped to the desired buffer."""
         cells_gdf = extend_edges_gdf(
-            gdf=gdf_far_apart_polygons, boundary=geometry_far_apart_boundary
+            gdf=gdf_far_apart_polygons, boundary=geometry_far_apart_boundary, buffer=20
         )
         results = cells_gdf.area.sum()
         expected = gdf_far_apart_polygons.buffer(20, join_style=2).area.sum()
