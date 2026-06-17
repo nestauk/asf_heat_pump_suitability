@@ -1,5 +1,6 @@
 import pytest
 import geopandas as gpd
+import shapely
 from shapely.geometry import Polygon
 from shapely.affinity import rotate
 from asf_heat_pump_suitability.pipeline.cluster.cluster import (
@@ -526,7 +527,6 @@ class TestExtendEdgesGdf:
         cells_gdf = extend_edges_gdf(
             gdf=gdf_polygons_across_boundary, boundary=geometry_boundary_crossed
         )
-        print(cells_gdf.columns)
         results = cells_gdf["building_id"]
         expected = gdf_polygons_across_boundary[
             gdf_polygons_across_boundary["within_boundary"]
@@ -535,8 +535,53 @@ class TestExtendEdgesGdf:
             expected
         ), "Polygons outside or crossing boundaries are not handled correctly"
 
-    def test_voronoi_larger_than_buffer(self):
-        pass
+    @pytest.fixture(scope="class")
+    def gdf_far_apart_polygons(self):
+        """Generate a geodataframe with polygons 100m apart."""
+        # Define two buildings with 100m distance between them
+        # Building A at X=400000, Building B at X=400100
+        return gpd.GeoDataFrame(
+            {
+                "building_id": ["B01", "B02"],
+                "geometry": [
+                    Polygon(
+                        [
+                            (400000, 399995),
+                            (400010, 399995),
+                            (400010, 400005),
+                            (400000, 400005),
+                        ]
+                    ),
+                    Polygon(
+                        [
+                            (400100, 399995),
+                            (400110, 399995),
+                            (400110, 400005),
+                            (400100, 400005),
+                        ]
+                    ),
+                ],
+            },
+            crs="EPSG:27700",
+        )
+
+    @pytest.fixture(scope="class")
+    def geometry_far_apart_boundary(self, gdf_far_apart_polygons):
+        """Generate a boundary geometry with a 30m buffer."""
+        combined_polygon = gdf_far_apart_polygons.geometry.union_all()
+        return shapely.buffer(combined_polygon, distance=30).convex_hull
+
+    def test_clip_voronoi_to_buffer(
+        self, gdf_far_apart_polygons, geometry_far_apart_boundary
+    ):
+        """Test clustering with polygons outside or crossing the given boundary."""
+        cells_gdf = extend_edges_gdf(
+            gdf=gdf_far_apart_polygons, boundary=geometry_far_apart_boundary
+        )
+        results = cells_gdf.area.sum()
+        expected = gdf_far_apart_polygons.buffer(20, join_style=2).area.sum()
+
+        assert results == expected
 
 
 class TestReassignGdfAnchorProperties:
