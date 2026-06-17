@@ -460,8 +460,16 @@ class TestExtendEdgesGdf:
             crs="EPSG:27700",
         )
 
-    def boundary(self):
-        return gpd.GeoDataFrame()
+    @pytest.fixture(scope="class")
+    def geometry_boundary_crossed(self):
+        return Polygon(
+            [
+                (399978.0, 399880.0),
+                (400100.0, 399880.0),
+                (400100.0, 400030.0),
+                (399978.0, 400030.0),
+            ]
+        )
 
     def test_voronoi_contain_single_polygons(self, polygon_gdf, boundary):
         """Test one Voronoi polygon contains one building footprint."""
