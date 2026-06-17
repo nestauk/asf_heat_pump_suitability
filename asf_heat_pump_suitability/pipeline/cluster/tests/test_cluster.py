@@ -393,10 +393,73 @@ class TestReassignGdfAnchorProperties:
 
 class TestExtendEdgesGdf:
     @pytest.fixture(scope="class")
-    def polygon_gdf(self):
-        return gpd.GeoDataFrame()
+    def gdf_polygons_across_boundary(self):
+        return gpd.GeoDataFrame(
+            {
+                "id": ["B01", "B02", "B03", "B04", "B_OUTSIDE", "B_CROSSING"],
+                "within_boundary": [True, True, True, True, False, False],
+                "geometry": [
+                    Polygon(
+                        [
+                            (400000, 399995),
+                            (400010, 399995),
+                            (400010, 399995),
+                            (400000, 400005),
+                        ]
+                    ),
+                    Polygon(
+                        [
+                            (399990, 399990),
+                            (399990, 400015),
+                            (400020, 400015),
+                            (400020, 399990),
+                            (400015, 399990),
+                            (400015, 400010),
+                            (399995, 400010),
+                            (399995, 399990),
+                        ]
+                    ),
+                    Polygon(
+                        [
+                            (400060, 399900),
+                            (400070, 399900),
+                            (400070, 399910),
+                            (400060, 399910),
+                        ]
+                    ),
+                    Polygon(
+                        [
+                            (400075, 399995),
+                            (400085, 399995),
+                            (400085, 399905),
+                            (400080, 400005),
+                            (400080, 400010),
+                            (400075, 400010),
+                        ]
+                    ),
+                    # Outside: Y=400035 to 400045
+                    Polygon(
+                        [
+                            (400070, 400035),
+                            (400080, 400035),
+                            (400080, 400045),
+                            (400070, 400045),
+                        ]
+                    ),
+                    # Crossing: Y=400025 to 400035
+                    Polygon(
+                        [
+                            (400050, 400025),
+                            (400060, 400025),
+                            (400060, 400035),
+                            (400050, 400035),
+                        ]
+                    ),
+                ],
+            },
+            crs="EPSG:27700",
+        )
 
-    @pytest.fixture(scope="class")
     def boundary(self):
         return gpd.GeoDataFrame()
 
