@@ -519,9 +519,10 @@ class TestExtendEdgesGdf:
             cells_gdf["geometry"].duplicated().sum() == 0
         ), f"{cells_gdf['geometry'].duplicated().sum()} cells joined to multiple buildings"
 
-    def test_polygons_within_boundary(
+    def test_polygons_outside_boundary(
         self, gdf_polygons_across_boundary, geometry_boundary_crossed
     ):
+        """Test clustering with polygons outside or crossing the given boundary."""
         cells_gdf = extend_edges_gdf(
             gdf=gdf_polygons_across_boundary, boundary=geometry_boundary_crossed
         )
@@ -534,10 +535,8 @@ class TestExtendEdgesGdf:
             expected
         ), "Polygons outside or crossing boundaries are not handled correctly"
 
-
-#     def test_voronoi_larger_than_buffer(self):
-#         pass
-#
+    def test_voronoi_larger_than_buffer(self):
+        pass
 
 
 class TestReassignGdfAnchorProperties:
