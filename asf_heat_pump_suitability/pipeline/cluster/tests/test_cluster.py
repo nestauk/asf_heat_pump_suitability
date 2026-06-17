@@ -475,10 +475,13 @@ class TestExtendEdgesGdf:
         """Test one Voronoi polygon contains one building footprint."""
         boundary = boundary_gdf.geometry.iloc[0]
         cells_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
+        # All buildings should match to a cell
         assert set(cells_gdf["id"]) == set(
             buildings_gdf["id"]
         ), f"Unique building IDs in buildings and Voronoi cells do not match"
+
         cells_gdf["geometry"] = cells_gdf["geometry"].make_valid().normalize()
+        # Buildings and cells should have a 1-1 mapping
         assert (
             cells_gdf["id"].duplicated().sum() == 0
         ), f"{cells_gdf['id'].duplicated().sum()} building IDs joined to multiple cells"
