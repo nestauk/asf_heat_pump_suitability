@@ -56,7 +56,7 @@ plymouth_la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries
 # %%
 # Existing/planned heat network zones in plymouth
 plymouth_hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(
-    local_authority="plymouth"
+    boundary=plymouth_la_boundaries_gdf
 )
 
 # %%

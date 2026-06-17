@@ -459,12 +459,14 @@ if __name__ == "__main__":
         print(f"Creating residential UPRN dataset for {local_authorities}...")
         la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
             select_las=local_authority_dict["valid_local_authorities"]
-        )
+        )  # TODO: add if statement for running with a test script
         uprns_gdf = uprns_gdf.sjoin(
             la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
             how="inner",
             predicate="intersects",
-        ).drop(columns="index_right")
+        ).drop(
+            columns="index_right"
+        )  # TODO: will have already cut down uprns so no need for this line when running with a test script
 
     poi_gdf = load_geodata.load_gdf_poi()
     poi_gdf = poi.transform_gdf_poi(
