@@ -1,5 +1,4 @@
 import pytest
-import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Polygon
 from shapely.affinity import rotate
@@ -373,24 +372,49 @@ class TestGenerateGdfClusters:
             id_col="building_id",
         )
 
+        # Rounding accounts for tiny errors caused by earlier rounding
         assert round(results["geometry"].area.sum(), 8) == round(
             results["geometry"].union_all().area, 8
         ), "Clusters may be overlapping"
 
-    def test_neighbouring_clusters_different(self):
-        """Check dissolve worked properly"""
-        pass
+    def test_cluster_dissolve(
+        self,
+        gdf_mixed_buildings,
+        gdf_enclosing_boundary,
+        tech_gdf,
+        empty_gdf,
+    ):
+        """Test dissolve of neighbouring clusters worked."""
+        results = generate_gdf_clusters(
+            buildings_gdf=gdf_mixed_buildings,
+            boundary_gdf=gdf_enclosing_boundary,
+            tech_gdf=tech_gdf,
+            line_overlay_gdf=empty_gdf,
+            polygon_overlay_gdf=empty_gdf,
+            combined_anchor_gdf=empty_gdf,
+            radius=50,
+            id_col="building_id",
+        )
 
+        resulting_tech_types = results["assigned_tech"].to_list()
 
-class TestReassignGdfAnchorProperties:
-    def test_cells_within_anchor_radius(self):
-        pass
+        n_expected_clusters = 9
+        expected_tech_types = [
+            "Communal solution",
+            "Communal solution",
+            "Communal solution",
+            "District heat network",
+            "Individual solution",
+            "Individual solution",
+            "Individual solution",
+            "Networked heat pump",
+            "Networked heat pump",
+        ]
 
-    def test_cells_outside_anchor_radius(self):
-        pass
-
-    def test_cells_intersecting_anchor_radius(self):
-        pass
+        assert len(results) == n_expected_clusters, f"Unexpected number of clusters"
+        assert sorted(resulting_tech_types) == sorted(
+            expected_tech_types
+        ), "Test tech types do not match expected tech types"
 
 
 class TestExtendEdgesGdf:
@@ -511,11 +535,22 @@ class TestExtendEdgesGdf:
         ), "Polygons outside or crossing boundaries are not handled correctly"
 
 
-#
 #     def test_voronoi_larger_than_buffer(self):
 #         pass
 #
-#
+
+
+class TestReassignGdfAnchorProperties:
+    def test_cells_within_anchor_radius(self):
+        pass
+
+    def test_cells_outside_anchor_radius(self):
+        pass
+
+    def test_cells_intersecting_anchor_radius(self):
+        pass
+
+
 # class TestOverlayGdfPhysicalBarriers:
 #     @pytest.fixture(scope="class")
 #     def voronoi_gdf(self):
