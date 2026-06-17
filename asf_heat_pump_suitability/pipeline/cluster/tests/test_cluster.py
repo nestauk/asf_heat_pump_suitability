@@ -475,13 +475,16 @@ class TestExtendEdgesGdf:
         """Test one Voronoi polygon contains one building footprint."""
         boundary = boundary_gdf.geometry.iloc[0]
         cells_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
-        results = cells_gdf.sjoin(buildings_gdf, how="inner", predicate="contains")
-        assert len(results) == len(
-            buildings_gdf
-        ), f"Number of cells that contain buildings ({len(results)}) != number of buildings ({len(buildings_gdf)})"
-        assert set(results["id"]) == set(
+        assert set(cells_gdf["id"]) == set(
             buildings_gdf["id"]
-        ), "Unique building IDs found in cells != original unique building IDs"
+        ), f"Unique building IDs in buildings and Voronoi cells do not match"
+        cells_gdf["geometry"] = cells_gdf["geometry"].make_valid().normalize()
+        assert (
+            cells_gdf["id"].duplicated().sum() == 0
+        ), f"{cells_gdf['id'].duplicated().sum()} building IDs joined to multiple cells"
+        assert (
+            cells_gdf["geometry"].duplicated().sum() == 0
+        ), f"{cells_gdf['geometry'].duplicated().sum()} cells joined to multiple buildings"
 
     def test_polygons_within_boundary(
         self, gdf_polygons_across_boundary, geometry_boundary_crossed
