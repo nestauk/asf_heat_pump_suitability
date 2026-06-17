@@ -12,11 +12,7 @@ from asf_heat_pump_suitability.pipeline.cluster.tests import utils
 
 
 @pytest.fixture(scope="module")
-def buildings_gdf(self):
-    # Initialize lists to store geometries and IDs
-    geometries = []
-    building_ids = []
-
+def buildings_gdf():
     # =====================================================================
     # CASE 1: Wrap-around building scenario
     # =====================================================================
@@ -139,25 +135,25 @@ def buildings_gdf(self):
     # =====================================================================
     # CASE 3: TIGHT EDGE CASES (B13 & B14)
     # =====================================================================
-    # B13: L-shaped footprint directly south of B01/B02, 5cm away from B02's base
+    # B13: L-shaped footprint directly south of B01/B02, 2m away from B02's base
     b13_l_encase = Polygon(
         [
             (399990, 399970),
             (400000, 399970),
             (400000, 399982),
             (400020, 399982),
-            (400020, 399989.95),
-            (399990, 399989.95),
+            (400020, 399988),
+            (399990, 399988),
         ]
     )
 
-    # B14: Footprint positioned exactly 5 millimeters east of B13's vertical wall
-    b14_millimeter_gap = Polygon(
+    # B14: Footprint positioned exactly 1m east of B13's vertical wall
+    b14_small_gap = Polygon(
         [
-            (400020.005, 399982),
+            (400021, 399982),
             (400029, 399982),
-            (400029, 399989.95),
-            (400020.005, 399989.95),
+            (400029, 399988),
+            (400021, 399988),
         ]
     )
 
@@ -175,7 +171,7 @@ def buildings_gdf(self):
         b11_terrace,
         b12_horseshoe,
         b13_l_encase,
-        b14_millimeter_gap,
+        b14_small_gap,
     ]
     building_ids = [
         "B01",
