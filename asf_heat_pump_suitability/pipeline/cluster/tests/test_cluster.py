@@ -755,7 +755,9 @@ class TestOverlayGdfPhysicalBarriers:
 
         results = cells_gdf["building_id"]
         expected = domestic_tech_gdf["building_id"]
-        assert set(results) == set(expected)
+        assert set(results) == set(
+            expected
+        ), "Some buildings do not have a cell after overlaying barriers"
 
         # Check if the uncontained area of building footprints is effectively zero (e.g., less than 1 square millimeter)
         # This is to account for floating point errors which can cause tiny slivers of building not to be covered by
@@ -767,4 +769,4 @@ class TestOverlayGdfPhysicalBarriers:
         results = uncontained_slivers_gdf[uncontained_slivers_gdf["area"] > 1e-5]
         assert (
             len(results) == 0
-        ), f"Buildings {set(results['building_id'])} are missing significant coverage in the clustering."
+        ), f"Buildings {set(results['building_id'])} are missing significant coverage of cells after overlay."
