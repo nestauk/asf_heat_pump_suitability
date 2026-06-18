@@ -218,49 +218,50 @@ def gdf_enclosing_boundary(gdf_mixed_buildings):
 
 
 @pytest.fixture(scope="module")
-def empty_gdf(self):
+def empty_gdf():
     """Create an empty geodataframe."""
     return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
 
 
+@pytest.fixture(scope="module")
+def tech_gdf(gdf_mixed_buildings):
+    """
+    Assign building footprints a technology type and a boolean to indicate whether or not they are a domestic building.
+    """
+    non_domestic_ids = ["B03", "B05", "B08"]
+
+    tech_mapping = {
+        "B01": "Individual solution",
+        "B05": "Individual solution",
+        "B06": "Individual solution",
+        "B10": "Individual solution",
+        "B14": "Individual solution",
+        "B07": "Communal solution",
+        "B11": "Communal solution",
+        "B12": "Communal solution",
+        "B13": "Communal solution",
+        "B02": "Networked heat pump",
+        "B03": "Networked heat pump",
+        "B04": "Networked heat pump",
+        "B08": "District heat network",
+        "B09": "District heat network",
+    }
+
+    # Assign domestic boolean to buildings according to mapping
+    gdf_mixed_buildings["domestic"] = gdf_mixed_buildings["building_id"].apply(
+        utils.assign_bool_domestic_status, args=(non_domestic_ids,)
+    )
+
+    # Assign tech type according to mapping
+    gdf_mixed_buildings["assigned_tech"] = gdf_mixed_buildings["building_id"].apply(
+        utils.assign_str_tech_type, args=(tech_mapping,)
+    )
+
+    return gdf_mixed_buildings
+
+
 class TestGenerateGdfClusters:
     """Test the `generate_gdf_clusters` function."""
-
-    @pytest.fixture(scope="class")
-    def tech_gdf(self, gdf_mixed_buildings):
-        """
-        Assign building footprints a technology type and a boolean to indicate whether or not they are a domestic building.
-        """
-        non_domestic_ids = ["B03", "B05", "B08"]
-
-        tech_mapping = {
-            "B01": "Individual solution",
-            "B05": "Individual solution",
-            "B06": "Individual solution",
-            "B10": "Individual solution",
-            "B14": "Individual solution",
-            "B07": "Communal solution",
-            "B11": "Communal solution",
-            "B12": "Communal solution",
-            "B13": "Communal solution",
-            "B02": "Networked heat pump",
-            "B03": "Networked heat pump",
-            "B04": "Networked heat pump",
-            "B08": "District heat network",
-            "B09": "District heat network",
-        }
-
-        # Assign domestic boolean to buildings according to mapping
-        gdf_mixed_buildings["domestic"] = gdf_mixed_buildings["building_id"].apply(
-            utils.assign_bool_domestic_status, args=(non_domestic_ids,)
-        )
-
-        # Assign tech type according to mapping
-        gdf_mixed_buildings["assigned_tech"] = gdf_mixed_buildings["building_id"].apply(
-            utils.assign_str_tech_type, args=(tech_mapping,)
-        )
-
-        return gdf_mixed_buildings
 
     def test_all_buildings_assigned_cluster(
         self,
@@ -596,7 +597,7 @@ class TestOverlayGdfPhysicalBarriers:
     def buildings_gdf(self):
         return gpd.GeoDataFrame()
 
-    def test_cells_entirely_contain_buildings(
+    def test_cells_entirely_contain_buildings_after_overlay(
         self,
         voronoi_gdf,
         tech_gdf,
