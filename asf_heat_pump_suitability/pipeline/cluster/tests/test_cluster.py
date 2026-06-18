@@ -217,6 +217,12 @@ def gdf_enclosing_boundary(gdf_mixed_buildings):
     )
 
 
+@pytest.fixture(scope="module")
+def empty_gdf(self):
+    """Create an empty geodataframe."""
+    return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
+
+
 class TestGenerateGdfClusters:
     """Test the `generate_gdf_clusters` function."""
 
@@ -255,11 +261,6 @@ class TestGenerateGdfClusters:
         )
 
         return gdf_mixed_buildings
-
-    @pytest.fixture(scope="class")
-    def empty_gdf(self):
-        """Create an empty geodataframe."""
-        return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
 
     def test_all_buildings_assigned_cluster(
         self,
