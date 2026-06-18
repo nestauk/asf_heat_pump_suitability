@@ -761,6 +761,10 @@ class TestOverlayGdfPhysicalBarriers:
             expected
         ), "Some buildings do not have a cell after overlaying barriers"
 
+        assert len(cells_gdf) == len(
+            domestic_tech_gdf
+        ), f"Number of Voronoi cells {len(cells_gdf)} != number of domestic buildings {len(domestic_tech_gdf)} after overlay"
+
         # Check if the uncontained area of building footprints is effectively zero (e.g., less than 1 square millimeter)
         # This is to account for floating point errors which can cause tiny slivers of building not to be covered by
         # the cells.
