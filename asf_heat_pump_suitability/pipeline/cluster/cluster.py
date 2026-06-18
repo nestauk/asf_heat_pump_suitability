@@ -283,7 +283,8 @@ def extend_edges_gdf(
     )
     # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
     voronoi_gdf = (
-        voronoi_gdf.sjoin(points_gdf, how="inner", predicate="contains")
+        # Intersects (rather than contains) allows for small floating point errors without dropping Voronois
+        voronoi_gdf.sjoin(points_gdf, how="inner", predicate="intersects")
         .dissolve(by=id_col)
         .reset_index()
     ).clip(boundary)
