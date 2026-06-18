@@ -577,7 +577,9 @@ class TestExtendEdgesGdf:
 
 
 class TestOverlayGdfPhysicalBarriers:
-    """"""
+    """
+    Test the function `overlay_gdf_physical_barriers`.
+    """
 
     @pytest.fixture(scope="class")
     def gdf_mixed_buildings_voronoi(self):
