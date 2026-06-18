@@ -571,3 +571,54 @@ class TestExtendEdgesGdf:
         expected = gdf_far_apart_polygons.buffer(20, join_style=2).area.sum()
 
         assert results == expected
+
+
+class TestOverlayGdfPhysicalBarriers:
+    """"""
+
+    @pytest.fixture(scope="class")
+    def voronoi_gdf(self):
+        return gpd.GeoDataFrame()
+
+    @pytest.fixture(scope="class")
+    def tech_gdf(self):
+        return gpd.GeoDataFrame()
+
+    @pytest.fixture(scope="class")
+    def line_overlay_gdf(self):
+        return gpd.GeoDataFrame()
+
+    @pytest.fixture(scope="class")
+    def polygon_overlay_gdf(self):
+        return gpd.GeoDataFrame()
+
+    @pytest.fixture(scope="class")
+    def buildings_gdf(self):
+        return gpd.GeoDataFrame()
+
+    def test_cells_entirely_contain_buildings(
+        self,
+        voronoi_gdf,
+        tech_gdf,
+        line_overlay_gdf,
+        polygon_overlay_gdf,
+        buildings_gdf,
+    ):
+        # TODO requires an edge case input where overlaying barriers remove all and some of the property (including overlapping and bisecting)
+        # TODO edge case where original Voronoi cell doesn't completely cover building
+        """Test Voronoi cells entirely contain buildings after overlaying barriers. This tests the function can handle
+        edge cases like a barrier completely or partially overlapping a building footprint and thus fragmenting the cell
+        so that it no longer encases a full building footprint."""
+        cells_gdf = overlay_gdf_physical_barriers(
+            voronoi_gdf=voronoi_gdf,
+            tech_gdf=tech_gdf,
+            line_overlay_gdf=line_overlay_gdf,
+            polygon_overlay_gdf=polygon_overlay_gdf,
+        )
+
+        results = cells_gdf.sjoin(buildings_gdf, how="inner", predicate="contains")[
+            "building_id"
+        ]
+        expected = buildings_gdf["building_id"]
+
+        assert set(results) == set(expected)
