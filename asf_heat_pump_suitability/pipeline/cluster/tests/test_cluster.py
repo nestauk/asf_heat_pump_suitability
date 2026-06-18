@@ -1,8 +1,10 @@
+import os
 import pytest
 import geopandas as gpd
 import shapely
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import Polygon
 from shapely.affinity import rotate
+from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.cluster.cluster import (
     extend_edges_gdf,
     generate_gdf_clusters,
@@ -578,8 +580,16 @@ class TestOverlayGdfPhysicalBarriers:
     """"""
 
     @pytest.fixture(scope="class")
-    def voronoi_gdf(self):
-        return gpd.GeoDataFrame()
+    def gdf_mixed_buildings_voronoi(self):
+        """
+        Load Voronoi cells of mixed buildings.
+        """
+        fpath = os.path.join(
+            PROJECT_DIR,
+            "asf_heat_pump_suitability/pipeline/cluster/tests",
+            "voronoi_polygons_test_set.parquet",
+        )
+        return gpd.read_parquet(fpath).set_crs(epsg=27700)
 
     @pytest.fixture(scope="class")
     def gdf_line_overlay_mixed_buildings(self):
@@ -725,31 +735,25 @@ class TestOverlayGdfPhysicalBarriers:
 
     def test_cells_entirely_contain_buildings_after_overlay(
         self,
-        voronoi_gdf,
+        gdf_mixed_buildings_voronoi,
         tech_gdf,
         gdf_line_overlay_mixed_buildings,
         gdf_polygon_overlay_mixed_buildings,
-        gdf_mixed_buildings,
     ):
-        # TODO requires an edge case input where overlaying barriers remove all and some of the property (including
-        #  overlapping and bisecting)
-        # TODO edge case where original Voronoi cell doesn't completely cover building
         """Test Voronoi cells entirely contain buildings after overlaying barriers. This tests the function can handle
         edge cases like a barrier completely or partially overlapping a building footprint and thus fragmenting the cell
         so that it no longer encases a full building footprint."""
         domestic_tech_gdf = tech_gdf[tech_gdf["domestic"]]
 
         cells_gdf = overlay_gdf_physical_barriers(
-            voronoi_gdf=voronoi_gdf,
+            voronoi_gdf=gdf_mixed_buildings_voronoi,
             tech_gdf=domestic_tech_gdf,
             line_overlay_gdf=gdf_line_overlay_mixed_buildings,
             polygon_overlay_gdf=gdf_polygon_overlay_mixed_buildings,
             id_col="building_id",
         )
 
-        results = cells_gdf.sjoin(
-            gdf_mixed_buildings, how="inner", predicate="contains"
-        )["building_id"]
-        expected = gdf_mixed_buildings["building_id"]
+        results = cells_gdf["building_id"]
+        expected = domestic_tech_gdf["building_id"]
 
         assert set(results) == set(expected)
