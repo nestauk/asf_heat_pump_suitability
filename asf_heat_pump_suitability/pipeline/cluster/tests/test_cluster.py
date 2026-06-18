@@ -1,7 +1,7 @@
 import pytest
 import geopandas as gpd
 import shapely
-from shapely.geometry import Polygon
+from shapely.geometry import LineString, Polygon
 from shapely.affinity import rotate
 from asf_heat_pump_suitability.pipeline.cluster.cluster import (
     extend_edges_gdf,
@@ -582,44 +582,174 @@ class TestOverlayGdfPhysicalBarriers:
         return gpd.GeoDataFrame()
 
     @pytest.fixture(scope="class")
-    def tech_gdf(self):
-        return gpd.GeoDataFrame()
+    def gdf_line_overlay_mixed_buildings(self):
+        """
+        Create a geodataframe of line polygons (linestrings converted to polygons) that meet the following criteria:
+        1. One road separates the corner of a building off from the rest of the footprint.
+        2. One road bisects a building.
+        3. The other roads go around and between buildings to separate clusters.
+        The buildings affected are separate from those affected by the overlay polygons.
+        """
+        line_dict = {
+            "geometry": [
+                Polygon(
+                    [
+                        (400017.68, 400121.33),
+                        (400025.87, 400012.34),
+                        (400302.02, 400015.53),
+                        (400302.26, 400016.72),
+                        (400027.79, 400013.53),
+                        (400020.89, 400120.79),
+                        (400017.68, 400121.33),
+                    ]
+                ),
+                Polygon(
+                    [
+                        (400094.55, 400125.95),
+                        (400095.66, 399990.09),
+                        (400073.84, 399990.27),
+                        (400052.29, 399989.81),
+                        (400044.42, 399987.56),
+                        (400034.56, 399985.46),
+                        (400035.32, 399879.01),
+                        (400036.30, 399878.96),
+                        (400035.16, 399984.38),
+                        (400044.23, 399986.65),
+                        (400052.20, 399989.26),
+                        (400096.17, 399989.56),
+                        (400096.69, 400126.13),
+                        (400094.55, 400125.95),
+                    ]
+                ),
+                Polygon(
+                    [
+                        (400025.89, 400012.87),
+                        (400026.00, 400000.50),
+                        (400051.71, 400002.09),
+                        (400052.29, 399989.81),
+                        (400055.18, 399989.75),
+                        (400055.13, 400013.06),
+                        (400051.44, 400012.93),
+                        (400051.53, 400003.60),
+                        (400027.42, 400002.54),
+                        (400027.51, 400012.48),
+                        (400025.89, 400012.87),
+                    ]
+                ),
+            ]
+        }
+
+        # Dissolve overlapping polygons and explode back to one line per polygon
+        return gpd.GeoDataFrame(line_dict, crs="EPSG:27700").dissolve().explode()
 
     @pytest.fixture(scope="class")
-    def line_overlay_gdf(self):
-        return gpd.GeoDataFrame()
+    def gdf_polygon_overlay_mixed_buildings(self):
+        """
+        Create a geodataframe of overlay polygons that meet the following criteria:
+        1. Overlaps with the corner of a building.
+        2. Completely overlaps a building.
+        3. Bisects a building.
+        The buildings affected are separate from those affected by the line polygons.
+        """
+        polygon_dict = {
+            "geometry": [
+                Polygon(
+                    [
+                        (400015.8, 400046.4),
+                        (399978.9, 400042.1),
+                        (399985.0, 400019.7),
+                        (400012.9, 400016.7),
+                        (400027.9, 400023.6),
+                        (400034.6, 400031.1),
+                        (400033.7, 400043.0),
+                        (400015.8, 400046.4),
+                    ]
+                ),
+                Polygon(
+                    [
+                        (399924.5, 400012.3),
+                        (399914.9, 400009.9),
+                        (399920.2, 399998.9),
+                        (399928.7, 399991.5),
+                        (399941.9, 399986.9),
+                        (399950.8, 399979.8),
+                        (399975.7, 399977.0),
+                        (399991.4, 399975.2),
+                        (400004.4, 399973.2),
+                        (400009.9, 399967.0),
+                        (400011.3, 399956.7),
+                        (400010.6, 399945.2),
+                        (400012.9, 399929.9),
+                        (400009.5, 399918.4),
+                        (400003.5, 399907.0),
+                        (399991.0, 399890.9),
+                        (400001.7, 399877.6),
+                        (400010.9, 399896.7),
+                        (400018.1, 399921.6),
+                        (400018.4, 399948.9),
+                        (400016.5, 399965.8),
+                        (400007.2, 399977.3),
+                        (399992.6, 399979.4),
+                        (399978.7, 399982.5),
+                        (399957.4, 399994.5),
+                        (399941.0, 399995.2),
+                        (399924.5, 400012.3),
+                    ]
+                ),
+                Polygon(
+                    [
+                        (400062.2, 400007.4),
+                        (400062.5, 400004.6),
+                        (400065.2, 400004.6),
+                        (400066.1, 400007.0),
+                        (400062.2, 400007.4),
+                    ]
+                ),
+                Polygon(
+                    [
+                        (400021.8, 399989.3),
+                        (400021.8, 399980.4),
+                        (400031.9, 399977.4),
+                        (400038.2, 399977.6),
+                        (400037.3, 399988.0),
+                        (400029.8, 399987.9),
+                        (400029.2, 399989.4),
+                        (400024.0, 399989.7),
+                        (400021.8, 399989.3),
+                    ]
+                ),
+            ]
+        }
 
-    @pytest.fixture(scope="class")
-    def polygon_overlay_gdf(self):
-        return gpd.GeoDataFrame()
-
-    @pytest.fixture(scope="class")
-    def buildings_gdf(self):
-        return gpd.GeoDataFrame()
+        return gpd.GeoDataFrame(polygon_dict, crs="EPSG:27700")
 
     def test_cells_entirely_contain_buildings_after_overlay(
         self,
         voronoi_gdf,
         tech_gdf,
-        line_overlay_gdf,
-        polygon_overlay_gdf,
-        buildings_gdf,
+        gdf_line_overlay_mixed_buildings,
+        gdf_polygon_overlay_mixed_buildings,
+        gdf_mixed_buildings,
     ):
-        # TODO requires an edge case input where overlaying barriers remove all and some of the property (including overlapping and bisecting)
+        # TODO requires an edge case input where overlaying barriers remove all and some of the property (including
+        #  overlapping and bisecting)
         # TODO edge case where original Voronoi cell doesn't completely cover building
         """Test Voronoi cells entirely contain buildings after overlaying barriers. This tests the function can handle
         edge cases like a barrier completely or partially overlapping a building footprint and thus fragmenting the cell
         so that it no longer encases a full building footprint."""
+        domestic_tech_gdf = tech_gdf[tech_gdf["domestic"]]
+
         cells_gdf = overlay_gdf_physical_barriers(
             voronoi_gdf=voronoi_gdf,
-            tech_gdf=tech_gdf,
-            line_overlay_gdf=line_overlay_gdf,
-            polygon_overlay_gdf=polygon_overlay_gdf,
+            tech_gdf=domestic_tech_gdf,
+            line_overlay_gdf=gdf_line_overlay_mixed_buildings,
+            polygon_overlay_gdf=gdf_polygon_overlay_mixed_buildings,
+            id_col="building_id",
         )
 
-        results = cells_gdf.sjoin(buildings_gdf, how="inner", predicate="contains")[
-            "building_id"
-        ]
-        expected = buildings_gdf["building_id"]
+        results = cells_gdf.sjoin(
+            gdf_mixed_buildings, how="inner", predicate="contains"
+        )["building_id"]
+        expected = gdf_mixed_buildings["building_id"]
 
         assert set(results) == set(expected)
