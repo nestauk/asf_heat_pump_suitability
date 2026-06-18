@@ -776,3 +776,18 @@ class TestOverlayGdfPhysicalBarriers:
         assert (
             len(results) == 0
         ), f"Buildings {set(results['building_id'])} are missing significant coverage of cells after overlay."
+
+
+class TestReassignGdfAnchorProperties:
+    """
+    Test `reassign_gdf_anchor_properties` function.
+    """
+
+    def test_cells_within_anchor_radius(self):
+        pass
+
+    def test_cells_outside_anchor_radius(self):
+        pass
+
+    def test_cells_intersecting_anchor_radius(self):
+        pass
