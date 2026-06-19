@@ -786,7 +786,7 @@ class TestReassignGdfAnchorProperties:
 
     @pytest.fixture(scope="class")
     def gdf_anchor_property(self):
-        """Create single anchor property, north of `gdf_mixed_buildings`."""
+        """Create single anchor property, 50m east of easternmost networked heat pump building in `gdf_mixed_buildings`."""
         anchor_property = Polygon(
             [(400135, 399995), (400145, 399995), (400145, 400005), (400135, 400005)]
         )
@@ -796,6 +796,7 @@ class TestReassignGdfAnchorProperties:
         )
 
     def test_cells_within_anchor_radius(self, tech_gdf, gdf_anchor_property):
+        """Test technology reassignment for networked heat pump buildings within anchor property radius."""
         reassigned_gdf = reassign_gdf_near_anchor_properties(
             tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
         )
@@ -810,6 +811,7 @@ class TestReassignGdfAnchorProperties:
         ), "Technology reassignment for building within anchor property radius failed"
 
     def test_cells_outside_anchor_radius(self, tech_gdf, gdf_anchor_property):
+        """Test no technology reassignment occurs for networked heat pump buildings outside anchor property radius."""
         reassigned_gdf = reassign_gdf_near_anchor_properties(
             tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=40
         )
@@ -821,6 +823,7 @@ class TestReassignGdfAnchorProperties:
         ), "Unexpected technology reassignment for building outside anchor property radius"
 
     def test_cells_intersecting_anchor_radius(self, tech_gdf, gdf_anchor_property):
+        """Test technology reassignment for networked heat pump buildings intersecting anchor property radius."""
         reassigned_gdf = reassign_gdf_near_anchor_properties(
             tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=50
         )
