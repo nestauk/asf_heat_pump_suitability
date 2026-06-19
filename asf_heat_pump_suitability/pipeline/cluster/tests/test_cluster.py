@@ -806,12 +806,9 @@ class TestReassignGdfAnchorProperties:
         results = reassigned_gdf.set_index("building_id").to_dict()["assigned_tech"]
         expected = tech_gdf.set_index("building_id").to_dict()["assigned_tech"]
 
-        l = []
-        for k, v in results.items():
-            if v != expected[k]:
-                l.append(f"id: {k}, e: {expected[k]}, r: {v}")
-
-        assert results == expected, f"{l}"
+        assert (
+            results == expected
+        ), "Unexpected technology reassignment for building outside anchor property radius"
 
     def test_cells_intersecting_anchor_radius(self, tech_gdf, gdf_anchor_property):
         reassigned_gdf = reassign_gdf_near_anchor_properties(
@@ -819,10 +816,8 @@ class TestReassignGdfAnchorProperties:
         )
         results = reassigned_gdf.set_index("building_id").to_dict()["assigned_tech"]
         expected = tech_gdf.set_index("building_id").to_dict()["assigned_tech"]
+        expected["B04"] = "Communal solution"
 
-        l = []
-        for k, v in results.items():
-            if v != expected[k]:
-                l.append(f"id: {k}, e: {expected[k]}, r: {v}")
-
-        assert results == expected, f"{l}"
+        assert (
+            results == expected
+        ), "Technology reassignment for building intersecting anchor property radius failed"
