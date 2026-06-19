@@ -758,11 +758,8 @@ class TestOverlayGdfPhysicalBarriers:
             id_col="building_id",
         )
 
-        results = cells_gdf[["geometry"]].sjoin(
-            domestic_tech_gdf, how="inner", predicate="contains"
-        )["building_id"]
+        results = cells_gdf["building_id"]
         expected = domestic_tech_gdf["building_id"]
-
         assert set(results) == set(
             expected
         ), "Some buildings do not have a cell after overlaying barriers"
@@ -770,3 +767,15 @@ class TestOverlayGdfPhysicalBarriers:
         assert len(cells_gdf) == len(
             domestic_tech_gdf
         ), f"Number of Voronoi cells {len(cells_gdf)} != number of domestic buildings {len(domestic_tech_gdf)} after overlay"
+
+        # Check if the uncontained area of building footprints is effectively zero (e.g., less than 1 square millimeter)
+        # This is to account for floating point errors which can cause tiny slivers of building not to be covered by
+        # the cells.
+        uncontained_slivers_gdf = domestic_tech_gdf.overlay(
+            cells_gdf, how="difference", keep_geom_type=False
+        )
+        uncontained_slivers_gdf["area"] = uncontained_slivers_gdf["geometry"].area
+        results = uncontained_slivers_gdf[uncontained_slivers_gdf["area"] > 1e-5]
+        assert (
+            len(results) == 0
+        ), f"Buildings {set(results['building_id'])} are missing significant coverage of cells after overlay."
