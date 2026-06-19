@@ -9,6 +9,7 @@ from asf_heat_pump_suitability.pipeline.cluster.cluster import (
     extend_edges_gdf,
     generate_gdf_clusters,
     overlay_gdf_physical_barriers,
+    reassign_gdf_near_anchor_properties,
 )
 from asf_heat_pump_suitability.pipeline.cluster.tests import utils
 
@@ -787,18 +788,41 @@ class TestReassignGdfAnchorProperties:
     def gdf_anchor_property(self):
         """Create single anchor property, north of `gdf_mixed_buildings`."""
         anchor_property = Polygon(
-            [(400040, 400038), (400050, 400038), (400050, 400048), (400040, 400048)]
+            [(400135, 399995), (400145, 399995), (400145, 400005), (400135, 400005)]
         )
 
         return gpd.GeoDataFrame(
             {"class": ["school"], "geometry": [anchor_property]}, crs="EPSG:27700"
         )
 
-    def test_cells_within_anchor_radius(self):
-        pass
+    #
+    # def test_cells_within_anchor_radius(self, tech_gdf, gdf_anchor_property):
+    #     reassigned_gdf = reassign_gdf_near_anchor_properties(tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=50)
 
-    def test_cells_outside_anchor_radius(self):
-        pass
+    def test_cells_outside_anchor_radius(self, tech_gdf, gdf_anchor_property):
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=40
+        )
+        results = reassigned_gdf.set_index("building_id").to_dict()["assigned_tech"]
+        expected = tech_gdf.set_index("building_id").to_dict()["assigned_tech"]
 
-    def test_cells_intersecting_anchor_radius(self):
-        pass
+        l = []
+        for k, v in results.items():
+            if v != expected[k]:
+                l.append(f"id: {k}, e: {expected[k]}, r: {v}")
+
+        assert results == expected, f"{l}"
+
+    def test_cells_intersecting_anchor_radius(self, tech_gdf, gdf_anchor_property):
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=50
+        )
+        results = reassigned_gdf.set_index("building_id").to_dict()["assigned_tech"]
+        expected = tech_gdf.set_index("building_id").to_dict()["assigned_tech"]
+
+        l = []
+        for k, v in results.items():
+            if v != expected[k]:
+                l.append(f"id: {k}, e: {expected[k]}, r: {v}")
+
+        assert results == expected, f"{l}"
