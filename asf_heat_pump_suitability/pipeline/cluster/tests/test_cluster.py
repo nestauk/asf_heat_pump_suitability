@@ -783,6 +783,17 @@ class TestReassignGdfAnchorProperties:
     Test `reassign_gdf_anchor_properties` function.
     """
 
+    @pytest.fixture(scope="class")
+    def gdf_anchor_property(self):
+        """Create single anchor property, north of `gdf_mixed_buildings`."""
+        anchor_property = Polygon(
+            [(400040, 400038), (400050, 400038), (400050, 400048), (400040, 400048)]
+        )
+
+        return gpd.GeoDataFrame(
+            {"class": ["school"], "geometry": [anchor_property]}, crs="EPSG:27700"
+        )
+
     def test_cells_within_anchor_radius(self):
         pass
 
