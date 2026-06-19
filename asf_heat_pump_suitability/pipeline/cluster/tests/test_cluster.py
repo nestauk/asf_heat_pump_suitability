@@ -795,9 +795,19 @@ class TestReassignGdfAnchorProperties:
             {"class": ["school"], "geometry": [anchor_property]}, crs="EPSG:27700"
         )
 
-    #
-    # def test_cells_within_anchor_radius(self, tech_gdf, gdf_anchor_property):
-    #     reassigned_gdf = reassign_gdf_near_anchor_properties(tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=50)
+    def test_cells_within_anchor_radius(self, tech_gdf, gdf_anchor_property):
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
+        )
+        results = reassigned_gdf.set_index("building_id").to_dict()["assigned_tech"]
+        expected = tech_gdf.set_index("building_id").to_dict()["assigned_tech"]
+        reassigned_buildings = ["B02", "B03", "B04"]
+        for b in reassigned_buildings:
+            expected[b] = "Communal solution"
+
+        assert (
+            results == expected
+        ), "Technology reassignment for building within anchor property radius failed"
 
     def test_cells_outside_anchor_radius(self, tech_gdf, gdf_anchor_property):
         reassigned_gdf = reassign_gdf_near_anchor_properties(
