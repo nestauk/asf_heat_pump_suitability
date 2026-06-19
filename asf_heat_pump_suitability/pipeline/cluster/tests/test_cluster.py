@@ -284,17 +284,14 @@ class TestGenerateGdfClusters:
             id_col="building_id",
         )
 
-        # Check if the uncontained area is effectively zero (e.g., less than 1 square millimeter)
-        # This is to account for floating point errors which can cause tiny slivers of building not to be covered by
-        # the cluster.
-        uncontained_slivers_gdf = gdf_mixed_buildings.overlay(
-            clusters_gdf, how="difference", keep_geom_type=False
-        )
-        uncontained_slivers_gdf["area"] = uncontained_slivers_gdf["geometry"].area
-        results = uncontained_slivers_gdf[uncontained_slivers_gdf["area"] > 1e-5]
+        results = clusters_gdf[["geometry"]].sjoin(
+            gdf_mixed_buildings, how="inner", predicate="contains"
+        )["building_id"]
+        expected = gdf_mixed_buildings["building_id"]
+        missing = set(expected).difference(set(results))
         assert (
-            len(results) == 0
-        ), f"Buildings {set(results['building_id'])} are missing significant coverage in the clustering."
+            not missing
+        ), f"Some buildings not contained by a cluster. Building IDs: {missing}"
 
     def test_clusters_contain_domestic_only(
         self,
@@ -320,31 +317,31 @@ class TestGenerateGdfClusters:
         )
 
         # Check only domestic building IDs are retained
-        non_domestic_gdf = tech_gdf[~tech_gdf["domestic"]]
         results = clusters_gdf.sjoin(
-            non_domestic_gdf, how="inner", predicate="intersects"
+            domestic_tech_gdf, how="inner", predicate="contains"
         )["building_id"]
 
+        expected = domestic_tech_gdf["building_id"]
+        extra = set(results).difference(set(expected))
+        missing = set(expected).difference(set(results))
         assert (
-            len(results) == 0
-        ), "Some non-domestic building footprints are found in the clusters."
-
-        # Check there are no empty clusters
-        empty_clusters_gdf = gdf_mixed_buildings.overlay(
-            clusters_gdf, how="intersection", keep_geom_type=False
-        ).dissolve(by="cluster_id")
-        empty_clusters_gdf["area"] = empty_clusters_gdf["geometry"].area
-
-        # Find smallest building area and subtract small sliver for floating point errors
-        smallest_building_area = gdf_mixed_buildings.area.min() - 1e-5
-
-        # Clusters must intersect with at least the area of the smallest building footprint, otherwise they are considered empty
-        results = empty_clusters_gdf[
-            empty_clusters_gdf["area"] <= smallest_building_area
-        ]
+            not missing
+        ), f"Some domestic buildings not contained by a cluster. Building IDs: {missing}"
         assert (
-            len(results) == 0
-        ), "There are clusters which do not contain any buildings."
+            not extra
+        ), f"Some non-domestic building footprints are found in the clusters. Building IDs: {extra}"
+
+        # Check no clusters are empty
+        results = (
+            clusters_gdf.sjoin(domestic_tech_gdf, how="left", predicate="contains")[
+                "building_id"
+            ]
+            .isna()
+            .sum()
+        )
+        assert (
+            results == 0
+        ), f"{results} clusters do not contain any domestic building footprints"
 
     def test_clusters_not_overlapping(
         self,
@@ -498,10 +495,17 @@ class TestExtendEdgesGdf:
         """Test one Voronoi polygon contains one building footprint."""
         boundary = gdf_enclosing_boundary.geometry.iloc[0]
         cells_gdf = extend_edges_gdf(gdf=gdf_mixed_buildings, boundary=boundary)
+
+        results = cells_gdf[["geometry"]].sjoin(
+            gdf_mixed_buildings, how="inner", predicate="contains"
+        )["building_id"]
+        expected = gdf_mixed_buildings["building_id"]
+        missing = set(expected).difference(set(results))
+
         # All buildings should match to a cell
-        assert set(cells_gdf["building_id"]) == set(
-            gdf_mixed_buildings["building_id"]
-        ), f"Unique building IDs in buildings and Voronoi cells do not match"
+        assert set(results) == set(
+            expected
+        ), f"Some buildings are not contained by a Voronoi polygon. Building IDs: {missing}"
 
         cells_gdf["geometry"] = cells_gdf["geometry"].make_valid().normalize()
         # Buildings and cells should have a 1-1 mapping
@@ -572,8 +576,7 @@ class TestExtendEdgesGdf:
         )
         results = cells_gdf.area.sum()
         expected = gdf_far_apart_polygons.buffer(20, join_style=2).area.sum()
-
-        assert results == expected
+        assert results == expected, "Voronoi not clipped to buffer correctly"
 
 
 class TestOverlayGdfPhysicalBarriers:

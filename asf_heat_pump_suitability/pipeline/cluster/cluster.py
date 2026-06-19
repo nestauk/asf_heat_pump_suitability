@@ -18,7 +18,7 @@ import pandas as pd
 import numpy as np
 import polars as pl
 import shapely
-from shapely.geometry import MultiPoint, Polygon, MultiPolygon
+from shapely.geometry import MultiPoint, Polygon, MultiPolygon, Point
 from asf_heat_pump_suitability.pipeline.transform import local_authority
 import libpysal
 import warnings
@@ -259,6 +259,8 @@ def extend_edges_gdf(
             num_pts = int(np.ceil(exterior.length / spacing))
             # Return a list of points at each segment-distance-interval along the exterior edge of the building
             pts = [exterior.interpolate(i * spacing) for i in range(num_pts)]
+            # Add corner vertices of building into list, dropping the last one which is a duplicate of the starting point
+            pts.extend(Point(coord) for coord in exterior.coords[:-1])
             all_points.extend(pts)
             all_ids.extend([id] * len(pts))
 
@@ -281,7 +283,8 @@ def extend_edges_gdf(
     )
     # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
     voronoi_gdf = (
-        voronoi_gdf.sjoin(points_gdf, how="inner", predicate="contains")
+        # Intersects (rather than contains) allows for small floating point errors without dropping Voronois
+        voronoi_gdf.sjoin(points_gdf, how="inner", predicate="intersects")
         .dissolve(by=id_col)
         .reset_index()
     ).clip(boundary)
