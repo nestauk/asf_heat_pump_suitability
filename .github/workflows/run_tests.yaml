@@ -8,12 +8,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
+      - name: Set up conda environment
+        uses: mamba-org/setup-micromamba@v2
         with:
-          uv-version: "0.4.x"
-          python-version: "3.12"
-      - name: Run tests
+          environment-file: environment.yaml
+          environment-name: asf_heat_pump_suitability
+          cache-environment: true
+      - name: Install package and dev dependencies
         run: |
-          uv sync --all-extras
-          uv run pytest --cov=asf_heat_pump_suitability --cov-report=term-missing
+          pip install -r requirements.txt -r requirements_dev.txt
+          pip install -e .
+        shell: micromamba-shell {0}
+      - name: Run tests
+        run: pytest --cov=asf_heat_pump_suitability --cov-report=term-missing
+        shell: micromamba-shell {0}
