@@ -10,5 +10,6 @@ Sphinx
 sphinxcontrib-napoleon
 sphinx-rtd-theme
 pytest
+pytest-cov
 pre-commit
 pre-commit-hooks
