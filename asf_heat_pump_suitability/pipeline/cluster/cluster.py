@@ -56,7 +56,7 @@ TECH_CODES = {
 NETWORKED = TECH_TYPES["networked"]
 COMMUNAL = TECH_TYPES["communal"]
 
-ANCHOR_REASSINGMENT_MAPPING = {NETWORKED: COMMUNAL}
+ANCHOR_REASSIGNMENT_MAPPING = {NETWORKED: COMMUNAL}
 
 
 def generate_gdf_clusters(
@@ -81,8 +81,7 @@ def generate_gdf_clusters(
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries to separate clusters by.
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
-        poi_gdf (gpd.GeoDataFrame): anchor properties dataframe taken from POI data, with point geometries
-        important_buildings_gdf (gpd.GeoDataFrame): important building footprint polygons
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
         radius (float): radius in metres around anchor property within which communal solutions should be assigned
         id_col (str): building ID column. Default "ID".
 
@@ -522,7 +521,7 @@ def sjoin_gdf_max_intersection(
     )
 
 
-def load_tranform_gdf_linestring_barriers(
+def load_transform_gdf_linestring_barriers(
     grid_squares: Optional[List[str]],
 ) -> gpd.GeoDataFrame:
     """
@@ -685,7 +684,7 @@ def load_transform_anchor_property_gdfs(
     combined_anchor_gdf = pd.concat(
         [anchors_with_footprint, important_building_gdf], join="inner"
     )
-    combined_anchor_gdf["geometry"] = combined_anchor_gdf.normalize()
+    combined_anchor_gdf["geometry"] = combined_anchor_gdf.geometry.normalize()
     combined_anchor_gdf = combined_anchor_gdf.drop_duplicates(["geometry"])
     return combined_anchor_gdf
 
@@ -718,7 +717,7 @@ def reassign_gdf_near_anchor_properties(
     # if distance column is not NaN (i.e. building is within the radius of an anchor), reassign tech type according to the map
     tech_gdf["assigned_tech"] = np.where(
         tech_gdf["distance_m"].notna(),
-        tech_gdf["assigned_tech"].replace(ANCHOR_REASSINGMENT_MAPPING),
+        tech_gdf["assigned_tech"].replace(ANCHOR_REASSIGNMENT_MAPPING),
         tech_gdf["assigned_tech"],
     )
     # add column with True if near anchor, False if not
@@ -859,7 +858,7 @@ if __name__ == "__main__":
     )
 
     # Load and transform physical barriers for clusters
-    line_overlay_gdf = load_tranform_gdf_linestring_barriers(
+    line_overlay_gdf = load_transform_gdf_linestring_barriers(
         local_authority_dict["grid_squares"]
     )
     polygon_overlay_gdf = load_transform_gdf_polygon_barriers(
