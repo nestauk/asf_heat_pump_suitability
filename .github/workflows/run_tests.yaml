@@ -14,7 +14,7 @@ jobs:
           environment-file: environment.yaml
           environment-name: asf_heat_pump_suitability
           cache-environment: true
-          create-args: python=3.11
+          create-args: python=3.12
       - name: Install package and dev dependencies
         run: |
           pip install -r requirements.txt -r requirements_dev.txt
