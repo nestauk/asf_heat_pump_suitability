@@ -158,7 +158,7 @@ def generate_gdf_clusters(
         predicate="contains",
     )
 
-    clusters_gdf = clusters_gdf.groupby("cluster_id").agg(max)
+    clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max")
 
     # TODO move to testing when sample set available
     if round(clusters_gdf["geometry"].area.sum(), 3) > round(
