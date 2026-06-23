@@ -124,6 +124,52 @@ output:
   model:
     block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_building_classifier.pkl"
 
+# Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of proprerties and contextual information about properties within the clusters and surrounding neighbourhood
+metadata:
+  "License": "This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
+  "Development stage": "Alpha - this dataset is in the early stages of development, may contain errors and may change regularly."
+  "Data sources and attributions": "https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme"
+  "GitHub repository": "https://github.com/nestauk/asf_heat_pump_suitability"
+  "Variable names and descriptions":
+    "cluster_id": "Unique identifier for each cluster."
+    "assigned_tech": "Assigned low-carbon heating technology category. Categories are: `Individual solution`, `Networked heat pump`, `Communal solution`, `District heat network`. Can additionally contain `DESNZ_HNZ` values (if the local authority was part of the DESNZ heat network zoning pilot)."
+    "geometry": "Polygon geometry of the cluster"
+    "n_UPRNs": "Number of domestic UPRNs (properties) within the cluster"
+    "n_uprns_in_listed_building": "Number of UPRNs (properties) within the cluster that are in listed buildings"
+    "n_uprns_solar_pv": "Number of UPRNs (properties) within the cluster that have solar PV"
+    "n_uprns_off_gas": "Number of UPRNs (properties) within the cluster that are off-gas"
+    "perc_uprns_solar_pv": "Percentage of UPRNs (properties) within the cluster that have solar PV"
+    "perc_uprns_off_gas": "Percentage of UPRNs (properties) within the cluster that are off-gas"
+    "attachment_detached": "Number of UPRNs (properties) within the cluster that are detached"
+    "attachment_end_terrace": "Number of UPRNs (properties) within the cluster that are end terrace"
+    "attachment_flat": "Number of UPRNs (properties) within the cluster that are flats"
+    "attachment_mid_terrace": "Number of UPRNs (properties) within the cluster that are mid terrace"
+    "attachment_semi_detached": "Number of UPRNs (properties) within the cluster that are semi detached"
+    "attachment_null": "Number of UPRNs (properties) within the cluster with unknown attachment type"
+    "tenure_owner_occupied": "Number of UPRNs (properties) within the cluster that are owner occupied"
+    "tenure_rental_(private)": "Number of UPRNs (properties) within the cluster that are private rental"
+    "tenure_rental_(social)": "Number of UPRNs (properties) within the cluster that are social rental"
+    "tenure_null": "Number of UPRNs (properties) within the cluster with unknown tenure"
+    "perc_tenure_owner_occupied": "Percentage of UPRNs (properties) within the cluster that are owner occupied"
+    "perc_tenure_rental_(private)": "Percentage of UPRNs (properties) within the cluster that are private rental"
+    "perc_tenure_rental_(social)": "Percentage of UPRNs (properties) within the cluster that are social rental"
+    "perc_tenure_null": "Percentage of UPRNs (properties) within the cluster with unknown tenure"
+    "current_energy_rating_a": "Number of UPRNs (properties) within the cluster with energy rating A"
+    "current_energy_rating_b": "Number of UPRNs (properties) within the cluster with energy rating B"
+    "current_energy_rating_c": "Number of UPRNs (properties) within the cluster with energy rating C"
+    "current_energy_rating_d": "Number of UPRNs (properties) within the cluster with energy rating D"
+    "current_energy_rating_e": "Number of UPRNs (properties) within the cluster with energy rating E"
+    "current_energy_rating_f": "Number of UPRNs (properties) within the cluster with energy rating F"
+    "current_energy_rating_g": "Number of UPRNs (properties) within the cluster with energy rating G"
+    "current_energy_rating_null": "Number of UPRNs (properties) within the cluster with unknown energy rating"
+    "median_estimated_energy_consumption_12_months_kwh_per_m2": "Median estimated energy consumption in 12 months (in kWh/m2) of properties within the cluster"
+    "median_outdoor_space_m2": "Median of the maximum contiguous outdoor space in metres squared of properties within the cluster"
+    "in_hn_zone": "Whether any properties within the cluster are in DESNZ heat network zones. You can refer to https://www.gov.uk/government/publications/heat-network-zone-opportunity-reports to view heat network zone locations"
+    "in_city_centre": "Whether any properties within the cluster are in a location classified into one of the following Spatial Signatures Framework pen portraits/signature types https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/transform/city_centres.py#L10-L17"
+    "within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline": "Whether any properties within the cluster are within {COASTLINE_DISTANCE_THRESHOLD_M}m of the coastline"
+    "in_protected_area": "Whether any properties within the cluster are in building conservation areas for England and Wales, or Scottish World Heritage sites."
+    "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load": "Whether the cluster is within a {ANCHOR_LOAD_RADIUS}m radius of an anchor load (a location with high heat demand, e.g. a school or hospital). See a full list of anchor load types in https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/cluster/cluster.py#L28-L46"
+
 #----------------------------------------------------------------#
 # DEPRECATING
 #----------------------------------------------------------------#

@@ -530,8 +530,8 @@ if __name__ == "__main__":
         min_expected_rows=uprn_bounds["min"], max_expected_rows=uprn_bounds["max"]
     )
 
-    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds["min"]}")
-    print(f"Max Expected (1.4 * household census counts): {uprn_bounds["max"]}")
+    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds['min']}")
+    print(f"Max Expected (1.4 * household census counts): {uprn_bounds['max']}")
     print(f"Actual Rows:  {len(df)}")
 
     df = schema.validate(df, lazy=True)
