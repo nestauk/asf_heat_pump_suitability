@@ -133,11 +133,10 @@ def generate_gdf_clusters(
     )
 
     # Create cluster geometries
-    cluster_id = "_internal_cluster_id"
     clusters_gdf = (
         cells_gdf.dissolve(by="assigned_tech")
         .explode()
-        .reset_index(names=cluster_id)[["assigned_tech", "geometry"]]
+        .reset_index()[["assigned_tech", "geometry"]]
     )
 
     # Create an ID for each geometry that starts with the tech code and ends with a unique number
@@ -155,9 +154,9 @@ def generate_gdf_clusters(
         reassigned_gdf[[f"within_{radius}m_from_anchor_load", "geometry"]],
         how="left",
         predicate="contains",
-    )
+    ).drop(columns="index_right")
 
-    clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max")
+    clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max").reset_index()
 
     # TODO move to testing when sample set available
     if round(clusters_gdf["geometry"].area.sum(), 3) > round(
