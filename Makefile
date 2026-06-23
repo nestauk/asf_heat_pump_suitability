@@ -17,7 +17,7 @@ include .cookiecutter/config
 .PHONY: install
 ## Install the project: create virtual environment, install all dependencies, setup git hooks
 install:
-	uv sync
+	uv sync --extra dev
 	uv run pre-commit install --install-hooks
 	@direnv reload
 
@@ -25,7 +25,7 @@ install:
 .PHONY: sync
 ## Sync the virtual environment with pyproject.toml (run after changing dependencies)
 sync:
-	uv sync
+	uv sync --extra dev
 	@direnv reload
 
 .PHONY: check-bucket-path
