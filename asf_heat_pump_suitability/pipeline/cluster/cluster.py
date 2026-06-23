@@ -56,7 +56,7 @@ TECH_CODES = {
 NETWORKED = TECH_TYPES["networked"]
 COMMUNAL = TECH_TYPES["communal"]
 
-TECH_MAPPING = {NETWORKED: COMMUNAL}
+ANCHOR_REASSINGMENT_MAPPING = {NETWORKED: COMMUNAL}
 
 
 def generate_gdf_clusters(
@@ -133,26 +133,12 @@ def generate_gdf_clusters(
         reassigned_gdf.set_index(id_col).to_dict()["assigned_tech"]
     )
 
-    # Add "within_{radius}m_from_anchor_load" as a column to cells_gdf
-    cells_gdf = cells_gdf.merge(
-        reassigned_gdf[[id_col, f"within_{radius}m_from_anchor_load"]],
-        on=id_col,
-        how="left",
-    )
-
-    # Creating the clusters
+    # Create cluster geometries
+    cluster_id = "_internal_cluster_id"
     clusters_gdf = (
-        cells_gdf.dissolve(
-            by="assigned_tech",
-            aggfunc={
-                # If any building in cluster is within anchor load radius, label cluster as within radius
-                f"within_{radius}m_from_anchor_load": "max",
-            },
-        )
+        cells_gdf.dissolve(by="assigned_tech")
         .explode()
-        .reset_index()[
-            ["assigned_tech", "geometry", f"within_{radius}m_from_anchor_load"]
-        ]
+        .reset_index(names=cluster_id)[["assigned_tech", "geometry"]]
     )
 
     # Create an ID for each geometry that starts with the tech code and ends with a unique number
@@ -164,6 +150,15 @@ def generate_gdf_clusters(
         + "_"
         + (clusters_gdf["cluster_id"] + 1).astype(str)
     )
+
+    # Join boolean flag for each building contained in the cluster back to the cluster to aggregate
+    clusters_gdf = clusters_gdf.sjoin(
+        reassigned_gdf[[f"within_{radius}m_from_anchor_load", "geometry"]],
+        how="left",
+        predicate="contains",
+    )
+
+    clusters_gdf = clusters_gdf.groupby("cluster_id").agg(max)
 
     # TODO move to testing when sample set available
     if round(clusters_gdf["geometry"].area.sum(), 3) > round(
@@ -723,7 +718,7 @@ def reassign_gdf_near_anchor_properties(
     # if distance column is not NaN (i.e. building is within the radius of an anchor), reassign tech type according to the map
     tech_gdf["assigned_tech"] = np.where(
         tech_gdf["distance_m"].notna(),
-        tech_gdf["assigned_tech"].replace(TECH_MAPPING),
+        tech_gdf["assigned_tech"].replace(ANCHOR_REASSINGMENT_MAPPING),
         tech_gdf["assigned_tech"],
     )
     # add column with True if near anchor, False if not
