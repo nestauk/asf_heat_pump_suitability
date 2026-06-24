@@ -177,12 +177,7 @@ uprns_of_interest_df = pl.from_pandas(
 
 # Create dummy columns for summing
 dummy_cols = ["ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
-dummy_df = uprns_of_interest_df.select(dummy_cols + ["UPRN"]).to_dummies(
-    columns=dummy_cols
-)
-uprns_of_interest_df = uprns_of_interest_df.join(
-    dummy_df, how="left", on="UPRN"
-).to_pandas()
+uprns_of_interest_df = uprns_of_interest_df.to_dummies(columns=dummy_cols).to_pandas()
 
 avg_cols = [
     "max_contiguous_outdoor_space_area_m2",
