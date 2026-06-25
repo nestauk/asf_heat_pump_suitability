@@ -15,50 +15,11 @@ To run this script, ensure you have the following environment variables set in y
 You can then run this script with `python asf_heat_pump_suitability/pipeline/run/create_manifest.py`
 """
 
-from dotenv import load_dotenv
-import boto3
-from typing import List
-import os
-
-
-def fetch_file_paths_from_s3_folder(
-    s3_client: boto3.client, s3_bucket: str, path_folder: str, file_type: str = None
-) -> List[str]:
-    """
-    Fetches file paths from a specified S3 folder.
-
-    Args:
-        s3_client (boto3.client): An initialized boto3 S3 client.
-        s3_bucket (str): The name of the S3 bucket.
-        path_folder (str): The path to the folder in S3.
-        file_type (str): The type of files to fetch (e.g., ".parquet", ".csv", ".geojson"). If None, fetches all files.
-
-    Returns:
-        List[str]: list of strings with the file paths.
-    """
-    # Normalize prefix: ensuring it ends with '/'
-    if path_folder and not path_folder.endswith("/"):
-        path_folder += "/"
-
-    # Set a paginator to handle large number of files (otherwise only first 1000 files are returned)
-    paginator = s3_client.get_paginator("list_objects_v2")
-    page_iterator = paginator.paginate(Bucket=s3_bucket, Prefix=path_folder)
-
-    file_paths = []
-
-    # Iterate through each page of results and extract file paths
-    for page in page_iterator:
-        for obj in page.get("Contents", []):
-            key = obj["Key"]
-            # Filter to include only files of the specified type (if file_type is provided)
-            if file_type is None or key.endswith(file_type):
-                file_paths.append(key)
-
-    return file_paths
-
-
 if __name__ == "__main__":
-    from asf_heat_pump_suitability.utils import save_utils
+    from dotenv import load_dotenv
+    import boto3
+    import os
+    from asf_heat_pump_suitability.utils import save_utils, s3_utils
 
     # Load environment variables from .env file
     load_dotenv()
@@ -70,7 +31,7 @@ if __name__ == "__main__":
     front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
     front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
 
-    geojson_file_paths_list = fetch_file_paths_from_s3_folder(
+    geojson_file_paths_list = s3_utils.fetch_list_file_paths_from_s3_folder(
         s3_client=s3_client,
         s3_bucket=front_end_s3_bucket,
         path_folder=front_end_staging_s3_path,
