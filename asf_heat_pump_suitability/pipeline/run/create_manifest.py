@@ -20,6 +20,7 @@ if __name__ == "__main__":
     import boto3
     import os
     from asf_heat_pump_suitability.utils import save_utils, s3_utils
+    from asf_heat_pump_suitability import config
 
     # Load environment variables from .env file
     load_dotenv()
@@ -39,19 +40,24 @@ if __name__ == "__main__":
         file_type=".geojson",
     )
 
+    # Create the S3 URL prefix for the geojson files
     geojson_s3_url_prefix = f"https://{front_end_s3_bucket}.s3.eu-west-2.amazonaws.com/{front_end_staging_s3_path}"
+
+    # Determine the suffix of the file names for local authority datasets based on the config
+    file_name_suffix = (
+        config["output"]["dataset"]["clusters_tech_contextual_info"]
+        .format(
+            local_authorities="{local_authorities}",
+            tolerance_m=config["constant"]["clustering"]["tolerance_m"],
+        )
+        .split("{local_authorities}")[-1]
+    )
 
     # Create a list of dictionaries for each local authority dataset
     geojson_dict_list = []
     for file_path in geojson_file_paths_list:
         file_name = file_path.split("/")[-1]
-        local_authority = file_name.split("_clusters")[0]
-
-        # if file name does not follow expected format, raise error
-        if len(local_authority) == len(file_name):
-            raise ValueError(
-                f"File name {file_name} does not follow expected format. Unable to extract local authority name."
-            )
+        local_authority = file_name.split(file_name_suffix)[0]
 
         s3_url = os.path.join(
             geojson_s3_url_prefix,
