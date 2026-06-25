@@ -27,10 +27,11 @@ if __name__ == "__main__":
     # Initialize S3 client
     s3_client = boto3.client("s3")
 
-    # Load file names in s3 path
+    # Get environment variables for S3 bucket and path
     front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
     front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
 
+    # Fetch list of geojson file paths from the front-end S3 bucket
     geojson_file_paths_list = s3_utils.fetch_list_file_paths_from_s3_folder(
         s3_client=s3_client,
         s3_bucket=front_end_s3_bucket,
@@ -40,6 +41,7 @@ if __name__ == "__main__":
 
     geojson_s3_url_prefix = f"https://{front_end_s3_bucket}.s3.eu-west-2.amazonaws.com/{front_end_staging_s3_path}"
 
+    # Create a list of dictionaries for each local authority dataset
     geojson_dict_list = []
     for file_path in geojson_file_paths_list:
         file_name = file_path.split("/")[-1]
