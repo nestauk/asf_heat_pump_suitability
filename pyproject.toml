@@ -65,11 +65,8 @@ dev = [
     "flake8-pyproject",
 ]
 
-[tool.setuptools.packages.find]
-exclude = ["docs*"]
-
-[tool.setuptools.package-data]
-"*" = ["*.txt", "*.yaml"]
+[tool.hatch.build.targets.wheel]
+packages = ["asf_heat_pump_suitability"]
 
 [tool.flake8]
 # flake8 code - explanation - extension requirement
