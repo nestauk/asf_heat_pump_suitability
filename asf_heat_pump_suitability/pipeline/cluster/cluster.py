@@ -156,6 +156,9 @@ def generate_gdf_clusters(
         predicate="contains",
     ).drop(columns="index_right")
 
+    # At this point we have multiple rows of each cluster geometry with one row for every building within the cluster.
+    # We need to flatten the cluster geometries to one row per cluster, aggregating the within_anchor_radius boolean flag.
+    # Selecting `max` of the boolean will mean any clusters containing one building within the anchor radius will be labelled as within the radius.
     clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max").reset_index()
 
     # TODO move to testing when sample set available
