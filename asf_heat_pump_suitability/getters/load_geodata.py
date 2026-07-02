@@ -4,6 +4,7 @@ import os
 import pandas as pd
 from typing import Optional, List
 import boto3
+import pyogrio
 import s3fs
 import shapely
 import logging
@@ -273,7 +274,7 @@ def load_gdf_os_openmap_layer(
             print(f"\nLoading OS OpenMap layer - {layer.title()} file: {file}")
             try:
                 gdfs.append(gpd.read_file(file, **kwargs))
-            except FileNotFoundError as e:
+            except (FileNotFoundError, pyogrio.errors.DataSourceError) as e:
                 # dealing with non-existing layers (e.g. no bodies of water in the grid square so no surface water area layer)
                 print(
                     f"Error loading OS OpenMap layer - {layer.title()} file {file}: {e}"
