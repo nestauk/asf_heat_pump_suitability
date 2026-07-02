@@ -67,6 +67,7 @@ def generate_gdf_clusters(
     polygon_overlay_gdf: gpd.GeoDataFrame,
     combined_anchor_gdf: gpd.GeoDataFrame,
     radius: float,
+    local_authorities_slug: str,
     id_col: str = "ID",
 ) -> gpd.GeoDataFrame:
     """
@@ -83,6 +84,7 @@ def generate_gdf_clusters(
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
         combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
         radius (float): radius in metres around anchor property within which communal solutions should be assigned
+        local_authorities_slug (str): slug of local authority to generate clusters for. Used to create unique cluster IDs.
         id_col (str): building ID column. Default "ID".
 
     Returns:
@@ -147,6 +149,7 @@ def generate_gdf_clusters(
         clusters_gdf["assigned_tech"].map(TECH_CODES)
         + "_"
         + (clusters_gdf["cluster_id"] + 1).astype(str)
+        + local_authorities_slug
     )
 
     # Join boolean flag for each building contained in the cluster back to the cluster to aggregate
@@ -880,6 +883,7 @@ if __name__ == "__main__":
         polygon_overlay_gdf=polygon_overlay_gdf,
         combined_anchor_gdf=combined_anchor_gdf,
         radius=ANCHOR_RADIUS,
+        local_authorities_slug=local_authority_dict["url_slug"],
     )
 
     # Add heat network zones to clusters_gdf, if they exist
