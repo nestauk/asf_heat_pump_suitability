@@ -178,6 +178,13 @@ def extend_df_contextual_features(
             .then(pl.lit("Yes"))
             .otherwise(pl.lit("No"))
             .alias("in_protected_area"),
+            # Counts of UPRNs in HN zone, city centre, near salt water, and in protected areas
+            pl.col("in_hn_zone").sum().alias("n_uprns_in_hn_zone"),
+            pl.col("in_city_centre").sum().alias("n_uprns_in_city_centre"),
+            pl.col("within_1500m_coastline")
+            .sum()
+            .alias("n_uprns_within_1500m_of_coastline"),
+            pl.col("in_protected_area").sum().alias("n_uprns_in_protected_area"),
         )
         .select(
             [
@@ -195,6 +202,10 @@ def extend_df_contextual_features(
                 "in_city_centre",
                 f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline",
                 "in_protected_area",
+                "n_uprns_in_hn_zone",
+                "n_uprns_in_city_centre",
+                "n_uprns_within_1500m_of_coastline",
+                "n_uprns_in_protected_area",
             ]
         )
     )
@@ -301,8 +312,27 @@ def create_json_contextual_features_metadata(
         "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
         "Local authority": local_authorities,
     }
+
     # append metadata from config base.yaml
     metadata.update(config["metadata"])
+    metadata["Variable names and descriptions"][
+        f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"
+    ] = (
+        metadata["Variable names and descriptions"]
+        # Pop deletes the original key and returns the value
+        .pop("within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline").format(
+            COASTLINE_DISTANCE_THRESHOLD_M=COASTLINE_DISTANCE_THRESHOLD_M
+        )
+    )
+    metadata["Variable names and descriptions"][
+        f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
+    ] = (
+        metadata["Variable names and descriptions"]
+        # Pop deletes the original key and returns the value
+        .pop("within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load").format(
+            ANCHOR_LOAD_RADIUS=ANCHOR_LOAD_RADIUS
+        )
+    )
     geojson_file["metadata"] = metadata
 
     return geojson_file

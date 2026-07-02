@@ -56,7 +56,7 @@ TECH_CODES = {
 NETWORKED = TECH_TYPES["networked"]
 COMMUNAL = TECH_TYPES["communal"]
 
-TECH_MAPPING = {NETWORKED: COMMUNAL}
+ANCHOR_REASSIGNMENT_MAPPING = {NETWORKED: COMMUNAL}
 
 
 def generate_gdf_clusters(
@@ -81,8 +81,7 @@ def generate_gdf_clusters(
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries to separate clusters by.
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
-        poi_gdf (gpd.GeoDataFrame): anchor properties dataframe taken from POI data, with point geometries
-        important_buildings_gdf (gpd.GeoDataFrame): important building footprint polygons
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
         radius (float): radius in metres around anchor property within which communal solutions should be assigned
         id_col (str): building ID column. Default "ID".
 
@@ -133,26 +132,11 @@ def generate_gdf_clusters(
         reassigned_gdf.set_index(id_col).to_dict()["assigned_tech"]
     )
 
-    # Add "within_{radius}m_from_anchor_load" as a column to cells_gdf
-    cells_gdf = cells_gdf.merge(
-        reassigned_gdf[[id_col, f"within_{radius}m_from_anchor_load"]],
-        on=id_col,
-        how="left",
-    )
-
-    # Creating the clusters
+    # Create cluster geometries
     clusters_gdf = (
-        cells_gdf.dissolve(
-            by="assigned_tech",
-            aggfunc={
-                # If any building in cluster is within anchor load radius, label cluster as within radius
-                f"within_{radius}m_from_anchor_load": "max",
-            },
-        )
+        cells_gdf.dissolve(by="assigned_tech")
         .explode()
-        .reset_index()[
-            ["assigned_tech", "geometry", f"within_{radius}m_from_anchor_load"]
-        ]
+        .reset_index()[["assigned_tech", "geometry"]]
     )
 
     # Create an ID for each geometry that starts with the tech code and ends with a unique number
@@ -164,6 +148,18 @@ def generate_gdf_clusters(
         + "_"
         + (clusters_gdf["cluster_id"] + 1).astype(str)
     )
+
+    # Join boolean flag for each building contained in the cluster back to the cluster to aggregate
+    clusters_gdf = clusters_gdf.sjoin(
+        reassigned_gdf[[f"within_{radius}m_from_anchor_load", "geometry"]],
+        how="left",
+        predicate="contains",
+    ).drop(columns="index_right")
+
+    # At this point we have multiple rows of each cluster geometry with one row for every building within the cluster.
+    # We need to flatten the cluster geometries to one row per cluster, aggregating the within_anchor_radius boolean flag.
+    # Selecting `max` of the boolean will mean any clusters containing one building within the anchor radius will be labelled as within the radius.
+    clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max").reset_index()
 
     # TODO move to testing when sample set available
     if round(clusters_gdf["geometry"].area.sum(), 3) > round(
@@ -527,7 +523,7 @@ def sjoin_gdf_max_intersection(
     )
 
 
-def load_tranform_gdf_linestring_barriers(
+def load_transform_gdf_linestring_barriers(
     grid_squares: Optional[List[str]],
 ) -> gpd.GeoDataFrame:
     """
@@ -690,7 +686,7 @@ def load_transform_anchor_property_gdfs(
     combined_anchor_gdf = pd.concat(
         [anchors_with_footprint, important_building_gdf], join="inner"
     )
-    combined_anchor_gdf["geometry"] = combined_anchor_gdf.normalize()
+    combined_anchor_gdf["geometry"] = combined_anchor_gdf.geometry.normalize()
     combined_anchor_gdf = combined_anchor_gdf.drop_duplicates(["geometry"])
     return combined_anchor_gdf
 
@@ -723,7 +719,7 @@ def reassign_gdf_near_anchor_properties(
     # if distance column is not NaN (i.e. building is within the radius of an anchor), reassign tech type according to the map
     tech_gdf["assigned_tech"] = np.where(
         tech_gdf["distance_m"].notna(),
-        tech_gdf["assigned_tech"].replace(TECH_MAPPING),
+        tech_gdf["assigned_tech"].replace(ANCHOR_REASSIGNMENT_MAPPING),
         tech_gdf["assigned_tech"],
     )
     # add column with True if near anchor, False if not
@@ -855,14 +851,16 @@ if __name__ == "__main__":
     )
 
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        select_las=local_authority_dict["valid_local_authorities"]
+        select_las=local_authority_dict[
+            "valid_local_authorities"
+        ]  # TODO add if statement for running with test dataset (would just take the geometry of the input polygons)
     )
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=local_authority_dict["grid_squares"]
     )
 
     # Load and transform physical barriers for clusters
-    line_overlay_gdf = load_tranform_gdf_linestring_barriers(
+    line_overlay_gdf = load_transform_gdf_linestring_barriers(
         local_authority_dict["grid_squares"]
     )
     polygon_overlay_gdf = load_transform_gdf_polygon_barriers(
@@ -885,15 +883,12 @@ if __name__ == "__main__":
     )
 
     # Add heat network zones to clusters_gdf, if they exist
-    hn_zones_gdf_list = [
-        load_geodata.load_gdf_heat_network_zones(local_authority=la)
-        for la in local_authority_dict["valid_local_authorities"]
-    ]
-    hn_zones_gdf = pd.concat(hn_zones_gdf_list, ignore_index=True)
+    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(boundary=boundary_gdf)
 
-    clusters_gdf = append_gdf_heat_network_zone_layer(
-        clusters_gdf=clusters_gdf, hn_zones_gdf=hn_zones_gdf
-    )
+    if hn_zones_gdf is not None:
+        clusters_gdf = append_gdf_heat_network_zone_layer(
+            clusters_gdf=clusters_gdf, hn_zones_gdf=hn_zones_gdf
+        )
 
     if args.save:
         save_utils.save_to_s3(
