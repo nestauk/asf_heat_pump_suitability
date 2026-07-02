@@ -149,6 +149,7 @@ def generate_gdf_clusters(
         clusters_gdf["assigned_tech"].map(TECH_CODES)
         + "_"
         + (clusters_gdf["cluster_id"] + 1).astype(str)
+        + "_"
         + local_authorities_slug
     )
 
