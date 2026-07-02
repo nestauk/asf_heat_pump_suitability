@@ -401,8 +401,11 @@ if __name__ == "__main__":
 
         # Save to front-end S3 bucket for use in the tool
         front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
+        front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
         file_name = s3_file_path.split("/")[-1]
         save_utils.save_to_s3(
             geojson_file,
-            os.path.join(front_end_staging_s3_path, file_name),
+            os.path.join(
+                "s3://", front_end_s3_bucket, front_end_staging_s3_path, file_name
+            ),
         )
