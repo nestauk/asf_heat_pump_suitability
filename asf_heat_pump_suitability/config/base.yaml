@@ -93,11 +93,15 @@ constant:
     networked: "Networked heat pump"
     communal: "Communal solution"
     heat_networks: "District heat network"
+    individual_or_networked: "Individual or Networked heat pump"
+    individual_or_heat_network: "Individual or Heat Network"
   tech_type_codes:
     individual: "IND"
     networked: "NHP"
     communal: "COM"
     heat_networks: "DHNZ"
+    individual_or_networked: "IND_or_NHP"
+    individual_or_heat_network: "IND_or_DHNZ"
   anchor_radius: 50 # radius in metres around anchor properties within which we are reassigning N-GSHP to communal
   coastline:
     distance_from_coastline_threshold_m: 1500 # distance in metres from coastline threshold

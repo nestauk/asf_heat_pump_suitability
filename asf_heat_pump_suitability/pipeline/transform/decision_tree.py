@@ -280,10 +280,13 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
             .then(pl.lit(TECH_TYPES["communal"]))
             .when(pl.col("assigned_tech").list.contains(TECH_TYPES["heat_networks"]))
             .then(pl.lit(TECH_TYPES["heat_networks"]))
+            # networked heat pump
             .when(pl.col("assigned_tech").list.contains(TECH_TYPES["networked"]))
             .then(pl.lit(TECH_TYPES["networked"]))
+            # communal solution
             .when(pl.col("assigned_tech").list.contains(TECH_TYPES["communal"]))
             .then(pl.lit(TECH_TYPES["communal"]))
+            # when outdoor space is unknown
             .when(
                 pl.col("assigned_tech").list.contains(
                     f"{TECH_TYPES['individual']} or {TECH_TYPES['networked']}"
@@ -291,14 +294,17 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
             )
             .then(
                 pl.when(
-                    (pl.col("perc_properties_available_outdoor_space_data") >= 50)
+                    (
+                        pl.col("perc_properties_available_outdoor_space_data")
+                        >= 2 / 3 * 100
+                    )  # at least 2/3 of properties in the building footprint have outdoor space data available
                     & (
                         pl.col("median_contiguous_outdoor_space_area_m2")
                         > OUTDOOR_SPACE_THRESHOLD_M2.get("outside_hn_zone")
                     )  # Using your column name from previous step
                 )
                 .then(pl.lit(TECH_TYPES["individual"]))
-                .otherwise(pl.lit(TECH_TYPES["networked"]))
+                .otherwise(pl.lit("Individual or Networked heat pump"))
             )
             .when(
                 pl.col("assigned_tech").list.contains(
@@ -307,14 +313,17 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
             )
             .then(
                 pl.when(
-                    (pl.col("perc_properties_available_outdoor_space_data") >= 50)
+                    (
+                        pl.col("perc_properties_available_outdoor_space_data")
+                        >= 2 / 3 * 100
+                    )  # at least 2/3 of properties in the building footprint have outdoor space data available
                     & (
                         pl.col("median_contiguous_outdoor_space_area_m2")
                         > OUTDOOR_SPACE_THRESHOLD_M2.get("within_hn_zone")
                     )
                 )
                 .then(pl.lit(TECH_TYPES["individual"]))
-                .otherwise(pl.lit(TECH_TYPES["heat_networks"]))
+                .otherwise(pl.lit("Individual or Heat Network"))
             )
             .otherwise(pl.lit("Unexpected combination"))
         )
