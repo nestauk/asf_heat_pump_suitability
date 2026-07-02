@@ -70,7 +70,7 @@ def save_to_s3(df: pl.DataFrame | gpd.GeoDataFrame, path: str) -> None:
     elif isinstance(df, dict):
         if file_type == "geojson":
             with fsspec.open(path, "w") as f:
-                json.dump(df, f, indent=4, ensure_ascii=False)
+                json.dump(df, f, ensure_ascii=False)
         else:
             raise ValueError(
                 "Save to S3 can only save dict as .geojson file types."
@@ -79,7 +79,7 @@ def save_to_s3(df: pl.DataFrame | gpd.GeoDataFrame, path: str) -> None:
     elif isinstance(df, list):
         if file_type == "json":
             with fsspec.open(path, "w") as f:
-                json.dump(df, f, indent=4, ensure_ascii=False)
+                json.dump(df, f, ensure_ascii=False)
         else:
             raise ValueError(
                 "Save to S3 can only save list as .json file types."
