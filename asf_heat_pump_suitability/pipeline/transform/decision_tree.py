@@ -90,9 +90,9 @@ def identify_dict_most_suitable_tech(
             }
     else:
         if city_centre_or_hnz:
-            if not outdoor_space:
+            if pd.isna(outdoor_space):
                 return {
-                    "assigned_tech": f"{TECH_TYPES['individual']} or {TECH_TYPES['heat_networks']}",
+                    "assigned_tech": f"{TECH_TYPES['individual_or_heat_network']}",
                     "decision_tree_path": "Not in block of flats. Unknown outdoor space in city centre",
                 }
             elif outdoor_space > OUTDOOR_SPACE_THRESHOLD_M2.get("within_hn_zone"):
@@ -106,9 +106,9 @@ def identify_dict_most_suitable_tech(
                     "decision_tree_path": "4. not in blocks of flats, in city centre, small or no outdoor space",
                 }
         else:
-            if not outdoor_space:
+            if pd.isna(outdoor_space):
                 return {
-                    "assigned_tech": f"{TECH_TYPES['individual']} or {TECH_TYPES['networked']}",
+                    "assigned_tech": f"{TECH_TYPES['individual_or_networked']}",
                     "decision_tree_path": "Not in block of flats. Unknown outdoor space not in city centre/ HN zone",
                 }
             elif outdoor_space > OUTDOOR_SPACE_THRESHOLD_M2.get("outside_hn_zone"):
@@ -289,7 +289,7 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
             # when outdoor space is unknown
             .when(
                 pl.col("assigned_tech").list.contains(
-                    f"{TECH_TYPES['individual']} or {TECH_TYPES['networked']}"
+                    f"{TECH_TYPES['individual_or_networked']}"
                 )
             )
             .then(
@@ -301,14 +301,14 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
                     & (
                         pl.col("median_contiguous_outdoor_space_area_m2")
                         > OUTDOOR_SPACE_THRESHOLD_M2.get("outside_hn_zone")
-                    )  # Using your column name from previous step
+                    )
                 )
                 .then(pl.lit(TECH_TYPES["individual"]))
-                .otherwise(pl.lit("Individual or Networked heat pump"))
+                .otherwise(pl.lit(TECH_TYPES["individual_or_networked"]))
             )
             .when(
                 pl.col("assigned_tech").list.contains(
-                    f"{TECH_TYPES['individual']} or {TECH_TYPES['heat_networks']}"
+                    f"{TECH_TYPES['individual_or_heat_network']}"
                 )
             )
             .then(
@@ -323,7 +323,7 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
                     )
                 )
                 .then(pl.lit(TECH_TYPES["individual"]))
-                .otherwise(pl.lit("Individual or Heat Network"))
+                .otherwise(pl.lit(TECH_TYPES["individual_or_heat_network"]))
             )
             .otherwise(pl.lit("Unexpected combination"))
         )
