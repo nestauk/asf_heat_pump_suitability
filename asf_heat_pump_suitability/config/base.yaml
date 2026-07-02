@@ -94,7 +94,7 @@ constant:
     communal: "Communal solution"
     heat_networks: "District heat network"
     individual_or_networked: "Individual or Networked heat pump"
-    individual_or_heat_network: "Individual or Heat Network"
+    individual_or_heat_network: "Individual or District heat network"
   tech_type_codes:
     individual: "IND"
     networked: "NHP"
