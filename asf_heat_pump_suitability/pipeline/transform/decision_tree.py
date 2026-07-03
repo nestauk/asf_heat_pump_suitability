@@ -286,30 +286,29 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
             # communal solution
             .when(pl.col("assigned_tech").list.contains(TECH_TYPES["communal"]))
             .then(pl.lit(TECH_TYPES["communal"]))
-            # when outdoor space is unknown
+            # Could either be individual or networked HP: outdoor space is unknown for some properties in the building
             .when(
                 pl.col("assigned_tech").list.contains(
                     f"{TECH_TYPES['individual_or_networked']}"
                 )
             )
             .then(
-                pl.when(
-                    pl.col("median_contiguous_outdoor_space_area_m2")
-                    > OUTDOOR_SPACE_THRESHOLD_M2.get("outside_hn_zone")
-                )
+                # Properties with known outdoor space are guaranteed to exceed the threshold.
+                # Therefore, we only need to check that the area is not null/unknown.
+                pl.when(pl.col("median_contiguous_outdoor_space_area_m2").is_not_null())
                 .then(pl.lit(TECH_TYPES["individual"]))
                 .otherwise(pl.lit(TECH_TYPES["individual_or_networked"]))
             )
+            # Could either be individual or heat network: outdoor space is unknown for some properties in the building
             .when(
                 pl.col("assigned_tech").list.contains(
                     f"{TECH_TYPES['individual_or_heat_network']}"
                 )
             )
             .then(
-                pl.when(
-                    pl.col("median_contiguous_outdoor_space_area_m2")
-                    > OUTDOOR_SPACE_THRESHOLD_M2.get("within_hn_zone")
-                )
+                # Properties with known outdoor space are guaranteed to exceed the threshold.
+                # Therefore, we only need to check that the area is not null/unknown.
+                pl.when(pl.col("median_contiguous_outdoor_space_area_m2").is_not_null())
                 .then(pl.lit(TECH_TYPES["individual"]))
                 .otherwise(pl.lit(TECH_TYPES["individual_or_heat_network"]))
             )
