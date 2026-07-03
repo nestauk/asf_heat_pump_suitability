@@ -294,14 +294,8 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
             )
             .then(
                 pl.when(
-                    (
-                        pl.col("perc_properties_available_outdoor_space_data")
-                        >= 2 / 3 * 100
-                    )  # at least 2/3 of properties in the building footprint have outdoor space data available
-                    & (
-                        pl.col("median_contiguous_outdoor_space_area_m2")
-                        > OUTDOOR_SPACE_THRESHOLD_M2.get("outside_hn_zone")
-                    )
+                    pl.col("median_contiguous_outdoor_space_area_m2")
+                    > OUTDOOR_SPACE_THRESHOLD_M2.get("outside_hn_zone")
                 )
                 .then(pl.lit(TECH_TYPES["individual"]))
                 .otherwise(pl.lit(TECH_TYPES["individual_or_networked"]))
@@ -313,14 +307,8 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
             )
             .then(
                 pl.when(
-                    (
-                        pl.col("perc_properties_available_outdoor_space_data")
-                        >= 2 / 3 * 100
-                    )  # at least 2/3 of properties in the building footprint have outdoor space data available
-                    & (
-                        pl.col("median_contiguous_outdoor_space_area_m2")
-                        > OUTDOOR_SPACE_THRESHOLD_M2.get("within_hn_zone")
-                    )
+                    pl.col("median_contiguous_outdoor_space_area_m2")
+                    > OUTDOOR_SPACE_THRESHOLD_M2.get("within_hn_zone")
                 )
                 .then(pl.lit(TECH_TYPES["individual"]))
                 .otherwise(pl.lit(TECH_TYPES["individual_or_heat_network"]))
