@@ -341,7 +341,7 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     id_col: str,
     uprns_gdf: gpd.GeoDataFrame,
     save: bool,
-    release_date: str | None = None,
+    release_date: str,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Main function to identify the most suitable tech for each UPRN and building in the specified local authority or authorities.
@@ -354,8 +354,8 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
         id_col (str): The name of the column in `buildings_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
         save (bool): Whether to save outputs to S3.
-        release_date (str | None): release date in YYYYMMDD format used for the dated output
-            directory. Defaults to today's date.
+        release_date (str): release date in YYYYMMDD format used for the dated output
+            directory, as returned by `save_utils.get_str_release_date`.
 
     Returns:
         tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]: A tuple containing:
@@ -434,7 +434,6 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     )
 
     if save:
-        release_date = save_utils.get_str_release_date(release_date)
         uprns_gdf.to_parquet(
             config["output"]["dataset"]["uprns_most_suitable_tech"].format(
                 local_authorities=local_authorities,

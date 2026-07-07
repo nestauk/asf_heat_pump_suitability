@@ -19,7 +19,7 @@ def get_str_release_date(release_date: str | None = None) -> str:
         release_date (str | None): release date in YYYYMMDD format, or None to use today's date
 
     Returns:
-        str: release date in YYYYMMDD format
+        str: release date normalised to zero-padded YYYYMMDD format
 
     Raises:
         ValueError: if `release_date` is not a valid YYYYMMDD date
@@ -27,12 +27,12 @@ def get_str_release_date(release_date: str | None = None) -> str:
     if release_date is None:
         return datetime.today().strftime(RELEASE_DATE_FORMAT)
     try:
-        datetime.strptime(release_date, RELEASE_DATE_FORMAT)
+        parsed_date = datetime.strptime(release_date, RELEASE_DATE_FORMAT)
     except ValueError:
         raise ValueError(
             f"release_date must be a valid date in YYYYMMDD format, got '{release_date}'."
         )
-    return release_date
+    return parsed_date.strftime(RELEASE_DATE_FORMAT)
 
 
 def save_model_to_pkl_s3(model: BaseEstimator, path: str) -> None:

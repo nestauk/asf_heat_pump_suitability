@@ -458,6 +458,8 @@ if __name__ == "__main__":
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
+    release_date = save_utils.get_str_release_date(args.release_date)
+
     uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
 
@@ -554,6 +556,6 @@ if __name__ == "__main__":
             df,
             config["output"]["dataset"]["domestic_uprns"].format(
                 local_authority=local_authority_dict["url_slug"],
-                release_date=save_utils.get_str_release_date(args.release_date),
+                release_date=release_date,
             ),
         )
