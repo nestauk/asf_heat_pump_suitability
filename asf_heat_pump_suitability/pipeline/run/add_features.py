@@ -11,6 +11,9 @@ python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authoritie
 Set -- `--detail "simplified"` to use simplified spatial signature polygons to label city centres. The default is "full" which uses the fully detailed spatial signatures framework.
 
 To save outputs to S3, add --save flag.
+
+Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
+save outputs to. Defaults to today's date.
 """
 
 import argparse
@@ -46,6 +49,14 @@ def parse_arguments() -> argparse.Namespace:
         help="If --save is set, it saves outputs to S3.",
         required=False,
         action="store_true",
+    )
+
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
+        type=str,
+        default=None,
+        required=False,
     )
 
     return parser.parse_args()
@@ -87,8 +98,10 @@ if __name__ == "__main__":
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
     detail_level = args.detail
+    release_date = save_utils.get_str_release_date(args.release_date)
     uprns_path = config["output"]["dataset"]["domestic_uprns"].format(
-        local_authority=local_authority_dict["url_slug"]
+        local_authority=local_authority_dict["url_slug"],
+        release_date=release_date,
     )
 
     # Load UPRN data
@@ -341,6 +354,7 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             features_df,
             path=config["output"]["dataset"]["domestic_uprns_with_features"].format(
-                local_authority=local_authority_dict["url_slug"]
+                local_authority=local_authority_dict["url_slug"],
+                release_date=release_date,
             ),
         )

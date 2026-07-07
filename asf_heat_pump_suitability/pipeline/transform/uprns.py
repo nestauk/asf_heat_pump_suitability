@@ -12,6 +12,9 @@ python asf_heat_pump_suitability/pipeline/transform/uprns.py --local_authorities
 Defaults to `GB` (all of Great Britain), but this is not yet implemented.
 
 Set --save to save the outputs to S3. By default, outputs are not saved.
+
+Set --release_date to specify the YYYYMMDD dated release directory to save outputs to.
+Defaults to today's date.
 """
 
 import geopandas as gpd
@@ -424,6 +427,14 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
     )
 
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated output directory. Defaults to today's date.",
+        type=str,
+        default=None,
+        required=False,
+    )
+
     return parser.parse_args()
 
 
@@ -542,6 +553,7 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             df,
             config["output"]["dataset"]["domestic_uprns"].format(
-                local_authority=local_authority_dict["url_slug"]
+                local_authority=local_authority_dict["url_slug"],
+                release_date=save_utils.get_str_release_date(args.release_date),
             ),
         )

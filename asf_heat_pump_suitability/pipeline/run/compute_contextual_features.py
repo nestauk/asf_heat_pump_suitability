@@ -9,6 +9,9 @@ Run:
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
 
 Add --save to save the output to S3 as a geojson with geometry and contextual features per cluster.
+
+Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
+save outputs to. Defaults to today's date.
 """
 
 import argparse
@@ -48,6 +51,14 @@ def parse_arguments() -> argparse.Namespace:
         help="Whether to save the output to S3.",
         action="store_true",
         default=False,
+    )
+
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
+        type=str,
+        default=None,
+        required=False,
     )
 
     return parser.parse_args()
@@ -285,6 +296,7 @@ def create_gdf_contextual_features(
 def create_json_contextual_features_metadata(
     clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
     local_authorities: str,
+    release_date: str,
 ) -> json:
     """
     Create json with cluster level data and associated metadata.
@@ -292,6 +304,7 @@ def create_json_contextual_features_metadata(
     Args:
         clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
         local_authorities (str): local authority or authorities for which the data was generated
+        release_date (str): release date in YYYYMMDD format of the dated release directory the data belongs to
 
     Returns:
        json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
@@ -305,6 +318,7 @@ def create_json_contextual_features_metadata(
     )
     metadata = {
         "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
+        "Release date": release_date,
         "Local authority": local_authorities,
     }
 
@@ -345,10 +359,13 @@ if __name__ == "__main__":
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
+    release_date = save_utils.get_str_release_date(args.release_date)
+
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
         config["output"]["dataset"]["domestic_uprns_with_features"].format(
-            local_authority=local_authority_dict["url_slug"]
+            local_authority=local_authority_dict["url_slug"],
+            release_date=release_date,
         )
     )
 
@@ -361,6 +378,7 @@ if __name__ == "__main__":
         config["output"]["dataset"]["tech_clusters"].format(
             local_authorities=local_authority_dict["url_slug"],
             tolerance_m=tolerance_m,
+            release_date=release_date,
         ),
     ).to_crs(epsg=27700)
 
@@ -375,7 +393,7 @@ if __name__ == "__main__":
 
     print("Creating json with contextual features for each cluster and metadata...")
     geojson_file = create_json_contextual_features_metadata(
-        clusters_with_contextual_features_gdf, local_authorities
+        clusters_with_contextual_features_gdf, local_authorities, release_date
     )
 
     if args.save:
@@ -386,5 +404,6 @@ if __name__ == "__main__":
             config["output"]["dataset"]["clusters_tech_contextual_info"].format(
                 local_authorities=local_authority_dict["url_slug"],
                 tolerance_m=tolerance_m,
+                release_date=release_date,
             ),
         )

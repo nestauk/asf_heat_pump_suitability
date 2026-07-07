@@ -4,8 +4,35 @@ import polars as pl
 import geopandas as gpd
 import logging
 import boto3
+from datetime import datetime
 from sklearn.base import BaseEstimator
 import pickle
+
+RELEASE_DATE_FORMAT = "%Y%m%d"
+
+
+def get_str_release_date(release_date: str | None = None) -> str:
+    """
+    Validate a release date string or default to today's date.
+
+    Args:
+        release_date (str | None): release date in YYYYMMDD format, or None to use today's date
+
+    Returns:
+        str: release date in YYYYMMDD format
+
+    Raises:
+        ValueError: if `release_date` is not a valid YYYYMMDD date
+    """
+    if release_date is None:
+        return datetime.today().strftime(RELEASE_DATE_FORMAT)
+    try:
+        datetime.strptime(release_date, RELEASE_DATE_FORMAT)
+    except ValueError:
+        raise ValueError(
+            f"release_date must be a valid date in YYYYMMDD format, got '{release_date}'."
+        )
+    return release_date
 
 
 def save_model_to_pkl_s3(model: BaseEstimator, path: str) -> None:
