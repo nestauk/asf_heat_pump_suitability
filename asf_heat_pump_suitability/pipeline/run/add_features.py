@@ -54,9 +54,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--release_date",
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
-        type=str,
-        default=None,
-        required=False,
     )
 
     return parser.parse_args()
@@ -99,9 +96,11 @@ if __name__ == "__main__":
 
     detail_level = args.detail
     release_date = save_utils.get_str_release_date(args.release_date)
-    uprns_path = config["output"]["dataset"]["domestic_uprns"].format(
-        local_authority=local_authority_dict["url_slug"],
+    uprns_path = save_utils.get_str_output_path(
+        "domestic_uprns",
         release_date=release_date,
+        check_exists=True,
+        local_authority=local_authority_dict["url_slug"],
     )
 
     # Load UPRN data
@@ -353,8 +352,9 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             features_df,
-            path=config["output"]["dataset"]["domestic_uprns_with_features"].format(
-                local_authority=local_authority_dict["url_slug"],
+            path=save_utils.get_str_output_path(
+                "domestic_uprns_with_features",
                 release_date=release_date,
+                local_authority=local_authority_dict["url_slug"],
             ),
         )

@@ -837,9 +837,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--release_date",
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
-        type=str,
-        default=None,
-        required=False,
     )
 
     return parser.parse_args()
@@ -855,9 +852,11 @@ if __name__ == "__main__":
 
     tech_gdf = (
         gpd.read_parquet(
-            config["output"]["dataset"]["buildings_most_suitable_tech"].format(
-                local_authorities=local_authority_dict["url_slug"],
+            save_utils.get_str_output_path(
+                "buildings_most_suitable_tech",
                 release_date=release_date,
+                check_exists=True,
+                local_authorities=local_authority_dict["url_slug"],
             )
         )
         .set_geometry("geometry")
@@ -907,8 +906,9 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             clusters_gdf,
-            config["output"]["dataset"]["tech_clusters"].format(
-                local_authorities=local_authority_dict["url_slug"],
+            save_utils.get_str_output_path(
+                "tech_clusters",
                 release_date=release_date,
+                local_authorities=local_authority_dict["url_slug"],
             ),
         )

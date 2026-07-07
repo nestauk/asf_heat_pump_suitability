@@ -64,9 +64,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--release_date",
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
-        type=str,
-        default=None,
-        required=False,
     )
 
     return parser.parse_args()
@@ -435,15 +432,17 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
 
     if save:
         uprns_gdf.to_parquet(
-            config["output"]["dataset"]["uprns_most_suitable_tech"].format(
-                local_authorities=local_authorities,
+            save_utils.get_str_output_path(
+                "uprns_most_suitable_tech",
                 release_date=release_date,
+                local_authorities=local_authorities,
             )
         )
         solutions_per_footprint_gdf.to_parquet(
-            config["output"]["dataset"]["buildings_most_suitable_tech"].format(
-                local_authorities=local_authorities,
+            save_utils.get_str_output_path(
+                "buildings_most_suitable_tech",
                 release_date=release_date,
+                local_authorities=local_authorities,
             )
         )
 
@@ -465,9 +464,11 @@ if __name__ == "__main__":
     release_date = save_utils.get_str_release_date(args.release_date)
 
     uprns_with_features_df = pl.read_parquet(
-        config["output"]["dataset"]["domestic_uprns_with_features"].format(
-            local_authority=local_authority_dict["url_slug"],
+        save_utils.get_str_output_path(
+            "domestic_uprns_with_features",
             release_date=release_date,
+            check_exists=True,
+            local_authority=local_authority_dict["url_slug"],
         )
     )
     uprns_with_features_gdf = uprns.generate_gdf_uprn_coords(df=uprns_with_features_df)

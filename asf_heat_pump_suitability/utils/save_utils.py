@@ -8,6 +8,8 @@ from datetime import datetime
 from sklearn.base import BaseEstimator
 import pickle
 
+from asf_heat_pump_suitability import config
+
 RELEASE_DATE_FORMAT = "%Y%m%d"
 
 
@@ -33,6 +35,40 @@ def get_str_release_date(release_date: str | None = None) -> str:
             f"release_date must be a valid date in YYYYMMDD format, got '{release_date}'."
         )
     return parsed_date.strftime(RELEASE_DATE_FORMAT)
+
+
+def get_str_output_path(
+    dataset: str,
+    release_date: str | None = None,
+    check_exists: bool = False,
+    **format_kwargs,
+) -> str:
+    """
+    Build the S3 path for an output dataset in its dated release directory.
+
+    Args:
+        dataset (str): key of the output dataset path template in `config["output"]["dataset"]`
+        release_date (str | None): release date in YYYYMMDD format, or None to use today's date
+        check_exists (bool): if True, raise FileNotFoundError when no file exists at the path.
+            Set when reading upstream pipeline outputs to fail fast on a missing release.
+        **format_kwargs: values for the remaining placeholders in the path template, e.g.
+            `local_authority` or `local_authorities`
+
+    Returns:
+        str: S3 path to the output dataset file
+
+    Raises:
+        FileNotFoundError: if `check_exists` is True and no file exists at the path
+    """
+    path = config["output"]["dataset"][dataset].format(
+        release_date=get_str_release_date(release_date), **format_kwargs
+    )
+    if check_exists and not s3fs.S3FileSystem().exists(path):
+        raise FileNotFoundError(
+            f"No file found at {path}. Has the upstream pipeline stage been run for this "
+            "release date, or did you mean to pass --release_date for an existing release?"
+        )
+    return path
 
 
 def save_model_to_pkl_s3(model: BaseEstimator, path: str) -> None:

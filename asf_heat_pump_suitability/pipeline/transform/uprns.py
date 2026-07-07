@@ -430,9 +430,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--release_date",
         help="Release date in YYYYMMDD format used for the dated output directory. Defaults to today's date.",
-        type=str,
-        default=None,
-        required=False,
     )
 
     return parser.parse_args()
@@ -554,8 +551,9 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             df,
-            config["output"]["dataset"]["domestic_uprns"].format(
-                local_authority=local_authority_dict["url_slug"],
+            save_utils.get_str_output_path(
+                "domestic_uprns",
                 release_date=release_date,
+                local_authority=local_authority_dict["url_slug"],
             ),
         )

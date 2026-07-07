@@ -56,9 +56,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--release_date",
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
-        type=str,
-        default=None,
-        required=False,
     )
 
     return parser.parse_args()
@@ -363,9 +360,11 @@ if __name__ == "__main__":
 
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
-        config["output"]["dataset"]["domestic_uprns_with_features"].format(
-            local_authority=local_authority_dict["url_slug"],
+        save_utils.get_str_output_path(
+            "domestic_uprns_with_features",
             release_date=release_date,
+            check_exists=True,
+            local_authority=local_authority_dict["url_slug"],
         )
     )
 
@@ -375,10 +374,11 @@ if __name__ == "__main__":
 
     print("Loading clusters...")
     clusters_gdf = gpd.read_parquet(
-        config["output"]["dataset"]["tech_clusters"].format(
-            local_authorities=local_authority_dict["url_slug"],
-            tolerance_m=tolerance_m,
+        save_utils.get_str_output_path(
+            "tech_clusters",
             release_date=release_date,
+            check_exists=True,
+            local_authorities=local_authority_dict["url_slug"],
         ),
     ).to_crs(epsg=27700)
 
@@ -401,9 +401,10 @@ if __name__ == "__main__":
         # Save to S3 as geojson
         save_utils.save_to_s3(
             geojson_file,
-            config["output"]["dataset"]["clusters_tech_contextual_info"].format(
+            save_utils.get_str_output_path(
+                "clusters_tech_contextual_info",
+                release_date=release_date,
                 local_authorities=local_authority_dict["url_slug"],
                 tolerance_m=tolerance_m,
-                release_date=release_date,
             ),
         )
