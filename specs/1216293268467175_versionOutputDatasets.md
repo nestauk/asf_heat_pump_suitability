@@ -45,7 +45,11 @@ Introduce a versioning scheme for the pipeline's output datasets on S3 (`s3://as
 2. **Where does the release date come from at runtime — auto-derived from the run date, or supplied explicitly?**
    **DECIDED (Aidan, 2026-07-07): run-date default with an explicit override option** (`--release_date` CLI arg). Without the override, a single release would scatter across several `{YYYYMMDD}` directories when stages run on different days (as the listing above shows they do).
 3. **Does the front-end tool need a stable "latest" path, and who owns updating its pointer?**
-   **DECIDED for now (Aidan, 2026-07-07): keep writing the current undated paths as "latest"** alongside the dated copies; confirm downstream dependencies with the team — the frontend dev may be copying the geojson into his own bucket.
+   ~~DECIDED for now (Aidan, 2026-07-07): keep writing the current undated paths as "latest"~~
+   **REVERSED (Aidan, 2026-07-07, during implementation): only write the dated release
+   directories — do not touch the undated "latest" copies.** The existing undated files stay
+   on S3 as-is (frozen); consumers pin a dated release. Still confirm downstream dependencies
+   with the team — the frontend dev may be copying the geojson into his own bucket.
 4. **Should S3 bucket versioning be enabled underneath as a safety net?**
    **DECIDED (Aidan, 2026-07-07): no — not worth it.** The date directories already give rollback.
 
