@@ -109,9 +109,6 @@ constant:
 
 output:
   dataset:
-    # Outputs are versioned as dated release directories, {local_authority}/{release_date}, where
-    # release_date is YYYYMMDD (the run date by default; pass --release_date to pipeline scripts
-    # to pin all stages of a multi-day run to one release).
     # Residential UPRNs and their point geometries
     domestic_uprns: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{release_date}/{local_authority}_domestic_uprns.parquet"
     # Residential UPRNs with all features for modelling, mapping and aggregation
