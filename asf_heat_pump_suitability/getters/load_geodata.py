@@ -11,6 +11,7 @@ import warnings
 
 from tenacity import retry, stop_after_attempt
 from osbng import grids
+from pyogrio.errors import DataSourceError
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import geo_utils
@@ -278,6 +279,13 @@ def load_gdf_os_openmap_layer(
                 print(
                     f"Error loading OS OpenMap layer - {layer.title()} file {file}: {e}"
                 )
+            except DataSourceError as e:
+                # pyogrio raises DataSourceError for files missing from S3; skip those only
+                if "does not exist" not in str(e):
+                    raise
+                print(
+                    f"Error loading OS OpenMap layer - {layer.title()} file {file}: {e}"
+                )
 
         gdf = pd.concat(gdfs)
         id_col = "ID" if "ID" in gdf.columns else "id"
@@ -318,7 +326,13 @@ def load_gdf_os_openroad(
 
         for file in files:
             print(f"\nLoading OS OpenRoad file: {file}")
-            gdfs.append(gpd.read_file(file))
+            try:
+                gdfs.append(gpd.read_file(file))
+            except (FileNotFoundError, DataSourceError) as e:
+                # skip grid squares with no road data (e.g. sea-only squares)
+                if isinstance(e, DataSourceError) and "does not exist" not in str(e):
+                    raise
+                print(f"Error loading OS OpenRoad file {file}: {e}")
 
         gdf = pd.concat(gdfs)
 
