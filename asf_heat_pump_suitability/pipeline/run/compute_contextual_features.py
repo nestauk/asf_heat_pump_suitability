@@ -284,7 +284,7 @@ def create_gdf_contextual_features(
 
     return gpd.GeoDataFrame(
         clusters_with_contextual_features_gdf, geometry="geometry", crs="EPSG:27700"
-    ).to_crs(epsg=4326)
+    )
 
 
 def create_json_contextual_features_metadata(
@@ -376,6 +376,18 @@ if __name__ == "__main__":
     print("Computing contextual features for clusters...")
     clusters_with_contextual_features_gdf = create_gdf_contextual_features(
         uprns_df=uprns_df, clusters_gdf=clusters_gdf
+    )
+
+    print("Simplifying geometries using tolerance_m...")
+    clusters_with_contextual_features_gdf["geometry"] = (
+        clusters_with_contextual_features_gdf["geometry"].simplify(
+            tolerance=tolerance_m, preserve_topology=True
+        )
+    )
+
+    print("Converting to EPSG:4326 for geojson output...")
+    clusters_with_contextual_features_gdf = (
+        clusters_with_contextual_features_gdf.to_crs(epsg=4326)
     )
 
     print("Creating json with contextual features for each cluster and metadata...")
