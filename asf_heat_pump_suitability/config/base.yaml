@@ -4,16 +4,16 @@ data:
     uk_osopen_uprn: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_csv.zip"
     # OpenMap Local Geopackage
     gb_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_gb.gpkg"
-    # OpenMap Local layers for certain grid squares
-    grid_square_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/v202510_OSOpenMapLocal_geometries_selected/{square}/{square}_{layer}.shp"
+    # OpenMap Local layers per 100km grid square, all GB (April 2026 release)
+    grid_square_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_essh_gb/20260708/data/{square}/{square}_{layer}.shp"
     # OpenMap Green space Geopackage
     gb_os_openmap_greenspace: "s3://asf-local-heat-planning-tool/inputs/geodata/opgrsp_gb.gpkg"
-    # OpenMap Green space layers for certain grid squares
-    grid_square_os_openmap_greenspace: "s3://asf-local-heat-planning-tool/inputs/geodata/v202510_OSOpenMapGreenspace_geometries_selected/{square}/{square}_{layer}.shp"
+    # Open Greenspace layers per 100km grid square, all GB (April 2026 release)
+    grid_square_os_openmap_greenspace: "s3://asf-local-heat-planning-tool/inputs/geodata/opgrsp_essh_gb/20260709/{square}/data/{square}_{layer}.shp"
     # OpenRoad Local road data for GB
-    gb_os_openroad: "s3://asf-local-heat-planning-tool/inputs/geodata/oproad_essh_gb/"
-    # OpenRoad Local road data for certain grid squares
-    grid_square_os_openroad: "s3://asf-local-heat-planning-tool/inputs/geodata/oproad_essh_gb/{square}_RoadLink.shp"
+    gb_os_openroad: "s3://asf-local-heat-planning-tool/inputs/geodata/oproad_essh_gb/20260708/data/"
+    # OpenRoad road data per 100km grid square, all GB (April 2026 release)
+    grid_square_os_openroad: "s3://asf-local-heat-planning-tool/inputs/geodata/oproad_essh_gb/20260708/data/{square}_RoadLink.shp"
     # UK Points of Interest
     UK_poi_locations: "s3://asf-local-heat-planning-tool/inputs/geodata/poi_uk.gpkg"
     # OpenMap Code Point GB data for postcode lookup
