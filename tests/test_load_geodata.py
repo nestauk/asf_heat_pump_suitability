@@ -30,6 +30,7 @@ def _fake_read_file_missing_square(missing_square: str):
 
 
 def test_load_gdf_os_openmap_layer_skips_missing_square(monkeypatch):
+    """Squares whose layer file is missing from S3 are skipped; the rest are returned."""
     monkeypatch.setattr(gpd, "read_file", _fake_read_file_missing_square("HX"))
     gdf = load_geodata.load_gdf_os_openmap_layer(
         "important_building", grid_squares=["ND", "HX"]
@@ -38,6 +39,7 @@ def test_load_gdf_os_openmap_layer_skips_missing_square(monkeypatch):
 
 
 def test_load_gdf_os_openroad_skips_missing_square(monkeypatch):
+    """Squares whose road file is missing from S3 are skipped; the rest are returned."""
     monkeypatch.setattr(gpd, "read_file", _fake_read_file_missing_square("HX"))
     gdf = load_geodata.load_gdf_os_openroad(grid_squares=["HY", "HX"])
     assert len(gdf) == 1
