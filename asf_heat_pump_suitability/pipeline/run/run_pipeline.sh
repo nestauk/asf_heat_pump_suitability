@@ -1,4 +1,7 @@
 #!/bin/bash
+# This script runs the entire pipeline for a list of local authorities. It executes each step in sequence and checks for errors after each step.
+# To make the script executable, run: chmod +x asf_heat_pump_suitability/pipeline/run/run_pipeline.sh
+# You can then run the script with: ./asf_heat_pump_suitability/pipeline/run/run_pipeline.sh
 
 local_authorities=(
     "plymouth"
@@ -12,7 +15,7 @@ local_authorities=(
 
 for la in "${local_authorities[@]}"; do
     echo "=================================================="
-    echo "Starting pipeline for: ${la^^}"
+    echo "Starting pipeline for: $la"
     echo "=================================================="
 
     # Step 1: Domestic UPRNs
