@@ -17,7 +17,7 @@ from asf_heat_pump_suitability.utils import save_utils
 def test_get_str_release_date_defaults_to_today():
     """None defaults to today's date in YYYYMMDD format."""
     assert save_utils.get_str_release_date(None) == datetime.today().strftime(
-        save_utils.RELEASE_DATE_FORMAT
+        config["constant"]["release_date_format"]
     )
 
 

@@ -10,8 +10,6 @@ import pickle
 
 from asf_heat_pump_suitability import config
 
-RELEASE_DATE_FORMAT = "%Y%m%d"
-
 
 def get_str_release_date(release_date: str | None = None) -> str:
     """
@@ -26,15 +24,16 @@ def get_str_release_date(release_date: str | None = None) -> str:
     Raises:
         ValueError: if `release_date` is not a valid YYYYMMDD date
     """
+    date_format = config["constant"]["release_date_format"]
     if release_date is None:
-        return datetime.today().strftime(RELEASE_DATE_FORMAT)
+        return datetime.today().strftime(date_format)
     try:
-        parsed_date = datetime.strptime(release_date, RELEASE_DATE_FORMAT)
+        parsed_date = datetime.strptime(release_date, date_format)
     except ValueError:
         raise ValueError(
             f"release_date must be a valid date in YYYYMMDD format, got '{release_date}'."
         )
-    return parsed_date.strftime(RELEASE_DATE_FORMAT)
+    return parsed_date.strftime(date_format)
 
 
 def get_str_output_path(

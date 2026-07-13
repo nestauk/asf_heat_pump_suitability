@@ -88,6 +88,7 @@ constant:
       - "ST"
       - "SX"
   target_crs: 27700 # British National Grid
+  release_date_format: "%Y%m%d" # strftime format for {release_date} in output dataset paths
   tech_types:
     individual: "Individual solution"
     networked: "Networked heat pump"
