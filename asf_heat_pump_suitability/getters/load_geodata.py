@@ -271,7 +271,13 @@ def load_gdf_os_openmap_layer(
 
         for file in files:
             print(f"\nLoading OS OpenMap layer - {layer.title()} file: {file}")
-            gdfs.append(gpd.read_file(file, **kwargs))
+            try:
+                gdfs.append(gpd.read_file(file, **kwargs))
+            except FileNotFoundError as e:
+                # dealing with non-existing layers (e.g. no bodies of water in the grid square so no surface water area layer)
+                print(
+                    f"Error loading OS OpenMap layer - {layer.title()} file {file}: {e}"
+                )
 
         gdf = pd.concat(gdfs)
         id_col = "ID" if "ID" in gdf.columns else "id"
