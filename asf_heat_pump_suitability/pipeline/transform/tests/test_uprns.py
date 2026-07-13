@@ -170,6 +170,23 @@ class TestMapDictUPRNsBuildingToID:
 
         return gpd.GeoDataFrame(uprns_data, crs="EPSG:27700")
 
+    @pytest.fixture()
+    def gdf_uprn_equidistant_b2_b3(self):
+        """Create test UPRN geometry equidistant from B2 and B3, located between them.
+
+        B2's northern edge is at y=200010; B3's southern edge starts at y=200020.
+        The midpoint y=200015 gives a distance of 5m to each building.
+        """
+        uprns_data = [
+            {
+                "UPRN": "P_equidistant_B2_B3",
+                "description": "Equidistant from B2 and B3, between them",
+                "geometry": Point(500015, 200015),
+            },
+        ]
+
+        return gpd.GeoDataFrame(uprns_data, crs="EPSG:27700")
+
     def test_uprn_inside_building(self, buildings_gdf, gdf_one_uprn_inside_building):
         """Test one UPRN maps to the building ID it is located within."""
         results = map_dict_uprns_to_building_id(
@@ -277,4 +294,18 @@ class TestMapDictUPRNsBuildingToID:
         )
 
         expected = {"P3": "B1"}
+        assert results == expected
+
+    def test_equidistant_uprn_joined_to_single_building(
+        self, buildings_gdf, gdf_uprn_equidistant_b2_b3
+    ):
+        """Test UPRN equidistant from two buildings maps to only one building."""
+        results = map_dict_uprns_to_building_id(
+            buildings_gdf=buildings_gdf,
+            uprns_gdf=gdf_uprn_equidistant_b2_b3,
+            id_col="building_id",
+            max_distance=5,
+        )
+
+        expected = {"P_equidistant_B2_B3": "B2"}
         assert results == expected
