@@ -53,4 +53,19 @@ Introduce a versioning scheme for the pipeline's output datasets on S3 (`s3://as
 4. **Should S3 bucket versioning be enabled underneath as a safety net?**
    **DECIDED (Aidan, 2026-07-07): no — not worth it.** The date directories already give rollback.
 
+## PR notes (2026-07-07)
+
+- **Note in PR description:** four research scripts still format the now-dated output templates
+  without `release_date` and will crash with `KeyError` if run:
+  `research/exploratory/domestic_filtering/domestic_filtering.py:47`,
+  `research/exploratory/domestic_filtering/council_tax_domestic_filtering.py:29`,
+  `research/exploratory/city_centre_identification/20251205_identify_city_centre_spatial_signatures.py:44`,
+  `research/exploratory/decision_tree_categorisation/applying_decision_tree.py:122,160`.
+  Deliberately not fixed here — they read the old undated Plymouth outputs, which are now frozen,
+  so pointing them at dated paths is a separate decision.
+- **Question for reviewers:** `decision_tree.py` saves via raw `gdf.to_parquet()` while every other
+  stage routes through `save_utils.save_to_s3` (which has handled GeoDataFrames since 2026-03-05,
+  eight days before these calls were written in the notebook refactor — parallel work, not a
+  capability gap). Should it switch to `save_to_s3` for the logging chokepoint?
+
 <!-- asana-sync: 2026-07-07T09:32:08.044Z -->
