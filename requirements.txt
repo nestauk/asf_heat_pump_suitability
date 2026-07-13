@@ -33,3 +33,4 @@ smart-open~=7.3
 osbng
 libpysal
 momepy
+python-dotenv

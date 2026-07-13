@@ -15,10 +15,15 @@ import argparse
 import polars as pl
 import geopandas as gpd
 import json
+import os
+from dotenv import load_dotenv
 from datetime import datetime
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.cluster import cluster
+
+# Load environment variables from .env file
+load_dotenv()
 
 ANCHOR_LOAD_RADIUS = config["constant"]["anchor_radius"]
 COASTLINE_DISTANCE_THRESHOLD_M = config["constant"]["coastline"][
@@ -381,10 +386,26 @@ if __name__ == "__main__":
     if args.save:
         print("Saving geojson to S3... ")
         # Save to S3 as geojson
+        s3_file_path = config["output"]["dataset"][
+            "clusters_tech_contextual_info"
+        ].format(
+            local_authorities=local_authority_dict["url_slug"],
+            tolerance_m=tolerance_m,
+        )
+
+        # Save to data science S3 bucket
         save_utils.save_to_s3(
             geojson_file,
-            config["output"]["dataset"]["clusters_tech_contextual_info"].format(
-                local_authorities=local_authority_dict["url_slug"],
-                tolerance_m=tolerance_m,
+            s3_file_path,
+        )
+
+        # Save to front-end S3 bucket for use in the tool
+        front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
+        front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
+        file_name = s3_file_path.split("/")[-1]
+        save_utils.save_to_s3(
+            geojson_file,
+            os.path.join(
+                "s3://", front_end_s3_bucket, front_end_staging_s3_path, file_name
             ),
         )
