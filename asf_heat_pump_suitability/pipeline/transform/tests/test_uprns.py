@@ -207,6 +207,20 @@ class TestMapDictUPRNsBuildingToID:
         expected = {"P4": "B2"}
         assert results == expected
 
+    def test_uprn_max_distance_outside_building(
+        self, buildings_gdf, gdf_one_uprn_outside_building
+    ):
+        """Test one UPRN maps to the building ID it is located exactly the maximum distance away from."""
+        results = map_dict_uprns_to_building_id(
+            buildings_gdf=buildings_gdf,
+            uprns_gdf=gdf_one_uprn_outside_building,
+            id_col="building_id",
+            max_distance=3,
+        )
+
+        expected = {"P4": "B2"}
+        assert results == expected
+
     def test_uprn_no_building_match(
         self, buildings_gdf, gdf_one_uprn_far_outside_building
     ):
