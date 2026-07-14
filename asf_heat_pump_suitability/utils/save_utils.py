@@ -43,7 +43,7 @@ def get_str_release_date(release_date: str | None = None) -> str:
 
 def get_str_output_path(
     dataset: str,
-    release_date: str | None = None,
+    release_date: str,
     check_exists: bool = False,
     **format_kwargs,
 ) -> str:
@@ -52,7 +52,8 @@ def get_str_output_path(
 
     Args:
         dataset (str): key of the output dataset path template in `config["output"]["dataset"]`
-        release_date (str | None): release date in YYYYMMDD format, or None to use today's date
+        release_date (str): release date in YYYYMMDD format, resolved once per run
+            via `get_str_release_date` at the script entrypoint
         check_exists (bool): if True, raise FileNotFoundError when no file exists at the path.
             Set when reading upstream pipeline outputs to fail fast on a missing release.
         **format_kwargs: values for the remaining placeholders in the path template, e.g.
