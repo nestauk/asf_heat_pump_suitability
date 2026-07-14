@@ -41,7 +41,6 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# Lowercase keys to avoid case-sensitivity bugs with multi-word inputs
 la_code_mapping = {
     "babergh": "E07000200",
     "wiltshire": "E06000054",
@@ -76,11 +75,14 @@ if __name__ == "__main__":
         )
     )
 
+    # Load buildings geodataframe for the local authority
+    print(f"Loading {local_authority} buildings geodataframe...")
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=local_authority_dict["grid_squares"]
     )
 
-    print("Loading clusters...")
+    # Load clusters geodataframe for the local authority
+    print(f"Loading {local_authority} clusters ...")
     clusters_gdf = gpd.read_parquet(
         config["output"]["dataset"]["tech_clusters"].format(
             local_authorities=local_authority_dict["url_slug"],
@@ -88,17 +90,16 @@ if __name__ == "__main__":
         ),
     ).to_crs(epsg=27700)
 
+    # Map UPRNs to clusters
+    print(f"Mapping {local_authority} UPRNs to clusters...")
     uprns_df = cluster.map_df_uprns_to_clusters(
         uprns_df=uprns_df, buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
     )
 
-    print(len(uprns_df))
-    # Drop cluster_ids starting with DESNZ_HNZ
+    # Dropping UPRNs in HN zone
     uprns_df = uprns_df.filter(~pl.col("cluster_id").str.starts_with("DESNZ_HNZ"))
-    print(len(uprns_df))
 
-    # Map each UPRN to its postcode
-    print("Mapping UPRNs to postcodes...")
+    print("Loading UPRN to postcode mapping from S3...")
     s3_client = boto3.client("s3")
 
     path = config["data"]["geodata"]["gb_uprn_country_mapping"]
@@ -121,7 +122,7 @@ if __name__ == "__main__":
         pl.col("lad25cd") == la_code_mapping[local_authority]
     )
 
-    # Merge the UPRN to country mapping with the UPRNs DataFrame
+    # Extend uprns_df with postcode information
     uprns_df = uprns_df.join(
         uprn_to_postcode_df.select(["UPRN", "postcode"]),
         on="UPRN",
@@ -133,12 +134,12 @@ if __name__ == "__main__":
         pl.col("UPRN").count().over("postcode").alias("n_domestic_uprns_in_postcode")
     )
 
-    # Number of UPRNs per postcode overall
+    # Aggregate UPRN counts per postcode
     uprns_per_postcode_df = uprn_to_postcode_df.group_by("postcode").agg(
         pl.col("UPRN").count().alias("n_uprns_in_postcode")
     )
 
-    # Merge overall UPRN counts
+    # Extend uprns_df with overall UPRN counts per postcode
     uprns_df = uprns_df.join(
         uprns_per_postcode_df.select(["postcode", "n_uprns_in_postcode"]),
         on="postcode",
@@ -146,12 +147,14 @@ if __name__ == "__main__":
     )
 
     # Identify suitability flags
+    # Suitable for individual solutions if cluster_id starts with "IND"
     uprns_df = uprns_df.with_columns(
         pl.col("cluster_id")
         .str.starts_with("IND")
         .alias("suitable_for_individual_solutions")
     )
 
+    # Less suitable for individual solutions if cluster_id starts with "NHP", "COM", or "DESNZ"
     uprns_df = uprns_df.with_columns(
         (
             pl.col("cluster_id").str.starts_with("NHP")
