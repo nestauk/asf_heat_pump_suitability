@@ -11,7 +11,7 @@ Required args:
 --save - Set to save output GeoDataFrame to S3.
 
 Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
-save outputs to. Defaults to today's date.
+save outputs to. Defaults to running the pipeline using today's date.
 """
 
 from typing import Optional, List
