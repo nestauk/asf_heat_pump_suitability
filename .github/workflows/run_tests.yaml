@@ -15,4 +15,4 @@ jobs:
       - name: Install package and dev dependencies
         run: uv sync --extra dev
       - name: Run tests
-        run: uv run pytest --cov=asf_heat_pump_suitability --cov-report=term-missing
+        run: uv run pytest --cov --cov-report=term-missing
