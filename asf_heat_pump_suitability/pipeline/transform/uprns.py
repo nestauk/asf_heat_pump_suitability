@@ -305,6 +305,9 @@ def map_dict_uprns_to_building_id(
     # combine the two gdfs and turn into a dictionary
     uprns_building_dict = (
         (pd.concat([uprns_inside_buildings, nearest_buildings_uprns]))
+        # Handle edge cases reproducibly where UPRNs on the edge of multiple buildings get joined to more than one building
+        .sort_values(by=id_col, ascending=True)
+        .drop_duplicates(subset="UPRN")
         .set_index("UPRN")
         .to_dict()[id_col]
     )
@@ -530,8 +533,8 @@ if __name__ == "__main__":
         min_expected_rows=uprn_bounds["min"], max_expected_rows=uprn_bounds["max"]
     )
 
-    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds["min"]}")
-    print(f"Max Expected (1.4 * household census counts): {uprn_bounds["max"]}")
+    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds['min']}")
+    print(f"Max Expected (1.4 * household census counts): {uprn_bounds['max']}")
     print(f"Actual Rows:  {len(df)}")
 
     df = schema.validate(df, lazy=True)

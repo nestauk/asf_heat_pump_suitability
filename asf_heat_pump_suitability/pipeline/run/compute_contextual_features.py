@@ -15,10 +15,15 @@ import argparse
 import polars as pl
 import geopandas as gpd
 import json
+import os
+from dotenv import load_dotenv
 from datetime import datetime
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.cluster import cluster
+
+# Load environment variables from .env file
+load_dotenv()
 
 ANCHOR_LOAD_RADIUS = config["constant"]["anchor_radius"]
 COASTLINE_DISTANCE_THRESHOLD_M = config["constant"]["coastline"][
@@ -173,6 +178,13 @@ def extend_df_contextual_features(
             .then(pl.lit("Yes"))
             .otherwise(pl.lit("No"))
             .alias("in_protected_area"),
+            # Counts of UPRNs in HN zone, city centre, near salt water, and in protected areas
+            pl.col("in_hn_zone").sum().alias("n_uprns_in_hn_zone"),
+            pl.col("in_city_centre").sum().alias("n_uprns_in_city_centre"),
+            pl.col("within_1500m_coastline")
+            .sum()
+            .alias("n_uprns_within_1500m_of_coastline"),
+            pl.col("in_protected_area").sum().alias("n_uprns_in_protected_area"),
         )
         .select(
             [
@@ -190,6 +202,10 @@ def extend_df_contextual_features(
                 "in_city_centre",
                 f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline",
                 "in_protected_area",
+                "n_uprns_in_hn_zone",
+                "n_uprns_in_city_centre",
+                "n_uprns_within_1500m_of_coastline",
+                "n_uprns_in_protected_area",
             ]
         )
     )
@@ -370,10 +386,26 @@ if __name__ == "__main__":
     if args.save:
         print("Saving geojson to S3... ")
         # Save to S3 as geojson
+        s3_file_path = config["output"]["dataset"][
+            "clusters_tech_contextual_info"
+        ].format(
+            local_authorities=local_authority_dict["url_slug"],
+            tolerance_m=tolerance_m,
+        )
+
+        # Save to data science S3 bucket
         save_utils.save_to_s3(
             geojson_file,
-            config["output"]["dataset"]["clusters_tech_contextual_info"].format(
-                local_authorities=local_authority_dict["url_slug"],
-                tolerance_m=tolerance_m,
+            s3_file_path,
+        )
+
+        # Save to front-end S3 bucket for use in the tool
+        front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
+        front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
+        file_name = s3_file_path.split("/")[-1]
+        save_utils.save_to_s3(
+            geojson_file,
+            os.path.join(
+                "s3://", front_end_s3_bucket, front_end_staging_s3_path, file_name
             ),
         )
