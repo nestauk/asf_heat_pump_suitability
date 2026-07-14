@@ -14,9 +14,16 @@ Add --save to save the output to S3 as a geojson with geometry and contextual fe
 import argparse
 import polars as pl
 import geopandas as gpd
+import json
+import os
+from dotenv import load_dotenv
+from datetime import datetime
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.cluster import cluster
+
+# Load environment variables from .env file
+load_dotenv()
 
 ANCHOR_LOAD_RADIUS = config["constant"]["anchor_radius"]
 COASTLINE_DISTANCE_THRESHOLD_M = config["constant"]["coastline"][
@@ -108,8 +115,6 @@ def extend_df_contextual_features(
         dummy_contextual_feat_df, how="left", on="cluster_id"
     )
 
-    print(uprns_df[["UPRN", "in_listed_building"]])
-
     contextual_feat_clusters_df = (
         uprns_df.group_by("cluster_id")
         .agg(
@@ -173,6 +178,13 @@ def extend_df_contextual_features(
             .then(pl.lit("Yes"))
             .otherwise(pl.lit("No"))
             .alias("in_protected_area"),
+            # Counts of UPRNs in HN zone, city centre, near salt water, and in protected areas
+            pl.col("in_hn_zone").sum().alias("n_uprns_in_hn_zone"),
+            pl.col("in_city_centre").sum().alias("n_uprns_in_city_centre"),
+            pl.col("within_1500m_coastline")
+            .sum()
+            .alias("n_uprns_within_1500m_of_coastline"),
+            pl.col("in_protected_area").sum().alias("n_uprns_in_protected_area"),
         )
         .select(
             [
@@ -190,6 +202,10 @@ def extend_df_contextual_features(
                 "in_city_centre",
                 f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline",
                 "in_protected_area",
+                "n_uprns_in_hn_zone",
+                "n_uprns_in_city_centre",
+                "n_uprns_within_1500m_of_coastline",
+                "n_uprns_in_protected_area",
             ]
         )
     )
@@ -232,6 +248,96 @@ def extend_df_contextual_features(
     return clusters_df
 
 
+def create_gdf_contextual_features(
+    uprns_df: pl.DataFrame, clusters_gdf: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """
+    Create geodataframe with cluster_id, geometry and contextual features for each cluster
+
+    Args:
+        uprns_df (pl.DataFrame): dataframe of UPRNs and UPRN-level features
+        clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
+    Returns:
+        gpd.GeoDataFrame: geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
+    """
+
+    clusters_with_contextual_features_df = extend_df_contextual_features(
+        clusters_df=pl.from_pandas(
+            clusters_gdf.drop(columns="geometry")
+        ),  # drop geometry for now and use polars
+        uprns_df=uprns_df,
+    )
+
+    # TODO identify source of empty clusters and fix - temporary fix to remove empty clusters
+    clusters_with_contextual_features_df = clusters_with_contextual_features_df.filter(
+        pl.col("n_UPRNs").is_not_null()
+    )
+
+    # Adding the geometry back to the clusters dataframe
+    clusters_with_contextual_features_gdf = (
+        clusters_with_contextual_features_df.to_pandas().merge(
+            clusters_gdf[["cluster_id", "geometry"]],
+            how="left",
+            on="cluster_id",
+        )
+    )
+
+    return gpd.GeoDataFrame(
+        clusters_with_contextual_features_gdf, geometry="geometry", crs="EPSG:27700"
+    ).to_crs(epsg=4326)
+
+
+def create_json_contextual_features_metadata(
+    clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
+    local_authorities: str,
+) -> json:
+    """
+    Create json with cluster level data and associated metadata.
+
+    Args:
+        clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
+        local_authorities (str): local authority or authorities for which the data was generated
+
+    Returns:
+       json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
+
+    """
+
+    print("Adding metadata and converting to geojson format...")
+    # Convert to geojson format and add metadata
+    geojson_file = json.loads(
+        clusters_with_contextual_features_gdf.to_json(drop_id=True)
+    )
+    metadata = {
+        "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
+        "Local authority": local_authorities,
+    }
+
+    # append metadata from config base.yaml
+    metadata.update(config["metadata"])
+    metadata["Variable names and descriptions"][
+        f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"
+    ] = (
+        metadata["Variable names and descriptions"]
+        # Pop deletes the original key and returns the value
+        .pop("within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline").format(
+            COASTLINE_DISTANCE_THRESHOLD_M=COASTLINE_DISTANCE_THRESHOLD_M
+        )
+    )
+    metadata["Variable names and descriptions"][
+        f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
+    ] = (
+        metadata["Variable names and descriptions"]
+        # Pop deletes the original key and returns the value
+        .pop("within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load").format(
+            ANCHOR_LOAD_RADIUS=ANCHOR_LOAD_RADIUS
+        )
+    )
+    geojson_file["metadata"] = metadata
+
+    return geojson_file
+
+
 if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import load_geodata
     from asf_heat_pump_suitability.pipeline.transform import local_authority
@@ -250,6 +356,7 @@ if __name__ == "__main__":
             local_authority=local_authority_dict["url_slug"]
         )
     )
+
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=local_authority_dict["grid_squares"]
     )
@@ -266,43 +373,39 @@ if __name__ == "__main__":
         uprns_df=uprns_df, buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
     )
 
-    print("Calculate remaining features per cluster...")
-    clusters_with_contextual_features_df = extend_df_contextual_features(
-        clusters_df=pl.from_pandas(
-            clusters_gdf.drop(columns="geometry")
-        ),  # drop geometry for now and use polars
-        uprns_df=uprns_df,
+    print("Computing contextual features for clusters...")
+    clusters_with_contextual_features_gdf = create_gdf_contextual_features(
+        uprns_df=uprns_df, clusters_gdf=clusters_gdf
     )
 
-    # TODO identify source of empty clusters and fix - temporary fix to remove empty clusters
-    clusters_with_contextual_features_df = clusters_with_contextual_features_df.filter(
-        pl.col("n_UPRNs").is_not_null()
+    print("Creating json with contextual features for each cluster and metadata...")
+    geojson_file = create_json_contextual_features_metadata(
+        clusters_with_contextual_features_gdf, local_authorities
     )
 
     if args.save:
-        # Adding the geometry back to the clusters dataframe
-        clusters_with_contextual_features_df = (
-            clusters_with_contextual_features_df.to_pandas().merge(
-                clusters_gdf[["cluster_id", "geometry"]],
-                how="left",
-                on="cluster_id",
-            )
+        print("Saving geojson to S3... ")
+        # Save to S3 as geojson
+        s3_file_path = config["output"]["dataset"][
+            "clusters_tech_contextual_info"
+        ].format(
+            local_authorities=local_authority_dict["url_slug"],
+            tolerance_m=tolerance_m,
         )
 
-        clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
-            clusters_with_contextual_features_df, geometry="geometry", crs="EPSG:27700"
-        )
-        # Simplify geometries for smaller file size
-        clusters_with_contextual_features_gdf["geometry"] = (
-            clusters_with_contextual_features_gdf["geometry"].simplify(
-                tolerance=tolerance_m
-            )
-        )
-
+        # Save to data science S3 bucket
         save_utils.save_to_s3(
-            clusters_with_contextual_features_gdf,
-            config["output"]["dataset"]["clusters_tech_contextual_info"].format(
-                local_authorities=local_authority_dict["url_slug"],
-                tolerance_m=tolerance_m,
+            geojson_file,
+            s3_file_path,
+        )
+
+        # Save to front-end S3 bucket for use in the tool
+        front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
+        front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
+        file_name = s3_file_path.split("/")[-1]
+        save_utils.save_to_s3(
+            geojson_file,
+            os.path.join(
+                "s3://", front_end_s3_bucket, front_end_staging_s3_path, file_name
             ),
         )

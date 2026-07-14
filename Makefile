@@ -14,15 +14,19 @@ export
 # Import config variables
 include .cookiecutter/config
 
-# Ensure directory to track and log setup state exists
-$(shell mkdir -p .cookiecutter/state)
-$(shell touch .cookiecutter/state/conda-create.log)
-
 .PHONY: install
-## Install a project: remove existing conda env (if exists); create conda env; install local package; setup git hooks
-install: conda-remove .cookiecutter/state/conda-create .cookiecutter/state/setup-git
-	@direnv reload  # Now the conda env exists, reload to activate it
+## Install the project: create virtual environment, install all dependencies, setup git hooks
+install:
+	uv sync --extra dev
+	uv run pre-commit install --install-hooks
+	@direnv reload
 
+
+.PHONY: sync
+## Sync the virtual environment with pyproject.toml (run after changing dependencies)
+sync:
+	uv sync --extra dev
+	@direnv reload
 
 .PHONY: check-bucket-path
 check-bucket-path:
@@ -50,25 +54,6 @@ docs-clean:
 docs-open:
 	$(OPEN) docs/_build/index.html
 
-.PHONY: conda-update
-## Update the conda-environment based on changes to `environment.yaml`
-conda-update:
-	conda env update -n ${REPO_NAME} -f environment.yaml
-	$(MAKE) -s pip-install
-	direnv reload
-
-.PHONY: pip-install
-## Install our package and requirements in editable mode (including development dependencies)
-pip-install:
-	@pip install -e ".[dev]"
-
-.PHONY: conda-remove
-## Remove the conda-environment cleanly, using -f so works even if no environment to be removed
-conda-remove:
-	conda env remove -n ${REPO_NAME}
-	rm -f .cookiecutter/state/conda-create*
-	@direnv reload
-
 .PHONY: clean
 ## Delete all compiled Python files
 clean:
@@ -77,36 +62,12 @@ clean:
 
 
 #################################################################################
-# Helper Commands (no need to explicitly document)                              #
+# Self Documenting Commands (no need to explicitly document)                    #
 #################################################################################
 
 define err
 	(echo "$1, check $@.log for more info" && exit 1)
 endef
-
-.cookiecutter/state/conda-create:
-	@echo -n "Creating environment ${REPO_NAME} and installing all dependencies"
-	@(conda env create -q -n ${REPO_NAME} -f environment.yaml\
-	  && eval "$$(conda shell.bash activate "${REPO_NAME}")"\
-	  && pip install -e ".[dev]")\
-	 > $@.log 2>&1\
-	 || $(call err,Python environment setup failed)
-	@touch $@
-	@echo " DONE"
-
-.cookiecutter/state/setup-git:
-	@echo -n "Installing and configuring git pre-commit hooks"
-	@(eval "$$(conda shell.bash activate "${REPO_NAME}")"\
-	 &&pre-commit install --install-hooks)\
-	 > $@.log 2>&1\
-	 || $(call err,Git pre-commit setup failed)
-	@touch $@
-	@echo " DONE"
-
-
-#################################################################################
-# Self Documenting Commands                                                     #
-#################################################################################
 
 .DEFAULT_GOAL := help
 
