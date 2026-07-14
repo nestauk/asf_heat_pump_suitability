@@ -7,6 +7,7 @@ import boto3
 from datetime import datetime
 from sklearn.base import BaseEstimator
 import pickle
+import json
 
 from asf_heat_pump_suitability import config
 
@@ -135,17 +136,24 @@ def save_to_s3(df: pl.DataFrame | gpd.GeoDataFrame, path: str) -> None:
     elif isinstance(df, dict):
         if file_type == "geojson":
             with fsspec.open(path, "w") as f:
-                import json
-
-                json.dump(df, f, indent=4, ensure_ascii=False)
+                json.dump(df, f, ensure_ascii=False)
         else:
             raise ValueError(
                 "Save to S3 can only save dict as .geojson file types."
                 "Please ensure the `path` argument contains .geojson file type."
             )
+    elif isinstance(df, list):
+        if file_type == "json":
+            with fsspec.open(path, "w") as f:
+                json.dump(df, f, ensure_ascii=False)
+        else:
+            raise ValueError(
+                "Save to S3 can only save list as .json file types."
+                "Please ensure the `path` argument contains .json file type."
+            )
     else:
         raise TypeError(
-            f"Can only save polars.DataFrame, geopandas.GeoDataFrame, or dict, not {type(df)}"
+            f"Can only save polars.DataFrame, geopandas.GeoDataFrame, dict, or list, not {type(df)}"
         )
 
 
