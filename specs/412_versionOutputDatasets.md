@@ -1,4 +1,13 @@
-# Versioning the output datasets (Asana 1216293268467175, due 2026-07-15)
+---
+title: Version output datasets by release date
+status: in-review
+github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/412
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/413
+asana: https://app.asana.com/1/5571817120120/project/1214222223606748/task/1216293268467175
+created: 2026-07-07
+---
+
+# Versioning the output datasets
 
 > **Updated 2026-07-07:** versioning scheme DECIDED — no version tokens; outputs get a
 > dated release directory laid out as **`{LA_slug}/{YYYYMMDD}`** (Sofia's proposal, e.g.
@@ -68,4 +77,21 @@ Introduce a versioning scheme for the pipeline's output datasets on S3 (`s3://as
   eight days before these calls were written in the notebook refactor — parallel work, not a
   capability gap). Should it switch to `save_to_s3` for the logging chokepoint?
 
-<!-- asana-sync: 2026-07-07T09:32:08.044Z -->
+## Open follow-ups (folded in from the 2026-07-13 review briefing)
+
+Updated 2026-07-14: consolidated from the near-duplicate briefing
+`1216293268467175_versioningOutputDatasets.md`, now deleted.
+
+1. **How do the front end / manifest discover the latest release?** Best guess: unchanged for
+   now — the front-end bucket copy in `compute_contextual_features.py` stays undated ("latest")
+   and `create_manifest.py` lists it as before; a dated staging layout + manifest `release_date`
+   field is a follow-up issue.
+2. **Backfill existing undated outputs into dated dirs?** Best guess: no — #413 deliberately
+   freezes them; at most copy the current set into one dated dir as a baseline before deleting
+   the undated paths later.
+3. **Four research scripts will `KeyError` on the now-dated templates** (listed in the PR body).
+   Best guess: accept as known breakage (they read frozen undated Plymouth outputs) and repoint
+   in a separate small PR.
+4. **Retention/pruning of old release dirs?** Best guess: out of scope; revisit if S3 costs grow.
+
+<!-- asana-sync: 2026-07-13T08:54:31.405Z -->
