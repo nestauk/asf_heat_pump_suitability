@@ -58,7 +58,8 @@ class TestMapDictUPRNsBuildingToID:
 
         return gpd.GeoDataFrame(buildings_data, crs="EPSG:27700")
 
-    @pytest.fixture()
+    @pytest.fixture(scope="class")
+    @classmethod
     def buildings_gdf_wgs84(self):
         """Create test building footprints in WGS84."""
         buildings_data_wgs84 = [
@@ -78,7 +79,8 @@ class TestMapDictUPRNsBuildingToID:
 
         return gpd.GeoDataFrame(buildings_data_wgs84, crs="EPSG:4326")
 
-    @pytest.fixture()
+    @pytest.fixture(scope="class")
+    @classmethod
     def gdf_one_uprn_inside_building(self):
         """Create test UPRN geometry inside building."""
         uprns_data = [
@@ -91,7 +93,8 @@ class TestMapDictUPRNsBuildingToID:
 
         return gpd.GeoDataFrame(uprns_data, crs="EPSG:27700")
 
-    @pytest.fixture()
+    @pytest.fixture(scope="class")
+    @classmethod
     def gdf_one_uprn_outside_building(self):
         """Create test UPRN geometry just outside building."""
         uprns_data = [
@@ -104,7 +107,8 @@ class TestMapDictUPRNsBuildingToID:
 
         return gpd.GeoDataFrame(uprns_data, crs="EPSG:27700")
 
-    @pytest.fixture()
+    @pytest.fixture(scope="class")
+    @classmethod
     def gdf_one_uprn_far_outside_building(self):
         """Create test UPRN geometry far outside building (>10m)."""
         uprns_data = [
@@ -119,7 +123,8 @@ class TestMapDictUPRNsBuildingToID:
 
         return gpd.GeoDataFrame(uprns_data, crs="EPSG:27700")
 
-    @pytest.fixture()
+    @pytest.fixture(scope="class")
+    @classmethod
     def gdf_many_uprn_to_one_building(self):
         """Create multiple test UPRN geometries to join to one building."""
         uprns_data = [
@@ -145,7 +150,8 @@ class TestMapDictUPRNsBuildingToID:
 
         return gpd.GeoDataFrame(uprns_data, crs="EPSG:27700")
 
-    @pytest.fixture()
+    @pytest.fixture(scope="class")
+    @classmethod
     def gdf_uprn_intersecting_boundary(self):
         """Create test UPRN geometry intersecting boundary of a building."""
         uprns_data = [
@@ -158,7 +164,8 @@ class TestMapDictUPRNsBuildingToID:
 
         return gpd.GeoDataFrame(uprns_data, crs="EPSG:27700")
 
-    @pytest.fixture()
+    @pytest.fixture(scope="class")
+    @classmethod
     def gdf_uprn_on_shared_edge(self):
         """Create test UPRN geometry on shared edge of two buildings."""
         uprns_data = [
@@ -171,7 +178,8 @@ class TestMapDictUPRNsBuildingToID:
 
         return gpd.GeoDataFrame(uprns_data, crs="EPSG:27700")
 
-    @pytest.fixture()
+    @pytest.fixture(scope="class")
+    @classmethod
     def gdf_uprn_equidistant_b2_b3(self):
         """Create test UPRN geometry equidistant from B2 and B3, located between them.
 
