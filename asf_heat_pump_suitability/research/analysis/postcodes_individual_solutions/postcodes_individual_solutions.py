@@ -86,7 +86,6 @@ if __name__ == "__main__":
     clusters_gdf = gpd.read_parquet(
         config["output"]["dataset"]["tech_clusters"].format(
             local_authorities=local_authority_dict["url_slug"],
-            tolerance_m=tolerance_m,
         ),
     ).to_crs(epsg=27700)
 
@@ -192,17 +191,31 @@ if __name__ == "__main__":
         uprns_df.group_by("postcode")
         .agg(
             [
-                pl.col("n_domestic_uprns_in_postcode")
-                .first()
-                .alias("n_domestic_uprns_in_postcode"),
-                pl.col("n_uprns_in_postcode").first().alias("n_uprns_in_postcode"),
+                pl.col("n_domestic_uprns_in_postcode").first(),
+                pl.col("n_uprns_in_postcode").first(),
                 pl.col("suitable_for_individual_solutions")
                 .any()
                 .alias("one_uprn_or_more_suitable_for_individual_solutions"),
                 pl.col("less_suitable_for_individual_solutions")
                 .any()
                 .alias("one_uprn_or_more_less_suitable_for_individual_solutions"),
-                pl.col("TENURE").eq("owner-occupied").sum().alias("n_owner-occupied"),
+                pl.col("suitable_for_individual_solutions")
+                .count()
+                .alias("n_suitable_for_individual_solutions"),
+                pl.col("less_suitable_for_individual_solutions")
+                .count()
+                .alias("n_less_suitable_for_individual_solutions"),
+                (
+                    pl.col("n_suitable_for_individual_solutions")
+                    / pl.col("n_domestic_uprns_in_postcode")
+                    * 100
+                ).alias("percent_suitable_for_individual_solutions"),
+                (
+                    pl.col("n_less_suitable_for_individual_solutions")
+                    / pl.col("n_domestic_uprns_in_postcode")
+                    * 100
+                ).alias("percent_less_suitable_for_individual_solutions"),
+                pl.col("TENURE").eq("owner-occupied").sum().alias("n_owner_occupied"),
                 pl.col("TENURE").is_null().sum().alias("n_unknown_tenure"),
                 pl.col("max_contiguous_outdoor_space_area_m2")
                 .mean()
@@ -213,7 +226,7 @@ if __name__ == "__main__":
             [
                 # Percent UPRNs in owner-occupied tenure
                 (
-                    pl.col("n_owner-occupied")
+                    pl.col("n_owner_occupied")
                     / pl.col("n_domestic_uprns_in_postcode")
                     * 100
                 ).alias("percent_domestic_owner_occupied"),
@@ -223,10 +236,14 @@ if __name__ == "__main__":
                     / pl.col("n_domestic_uprns_in_postcode")
                     * 100
                 ).alias("percent_unknown_tenure"),
-                # Postcode suitability for individual solutions: True if at least one UPRN is suitable for individual solutions, False otherwise
+                # Postcode suitable for individual solutions: True if at least one UPRN is suitable for individual solutions, False otherwise
+                pl.col("one_uprn_or_more_suitable_for_individual_solutions").alias(
+                    "postcode_suitable_for_individual_solutions"
+                ),
+                # Postcode less suitable for individual solutions: True if at least one UPRN is less suitable for individual solutions and no UPRNs are suitable for individual solutions, False otherwise
                 (
-                    pl.col("one_uprn_or_more_suitable_for_individual_solutions")
-                    & ~pl.col("one_uprn_or_more_less_suitable_for_individual_solutions")
+                    ~pl.col("one_uprn_or_more_suitable_for_individual_solutions")
+                    & pl.col("one_uprn_or_more_less_suitable_for_individual_solutions")
                 ).alias("postcode_less_suitable_for_individual_solutions"),
             ]
         )
@@ -246,3 +263,12 @@ if __name__ == "__main__":
             f"summary_{local_authority}_postcode_suitability_individual_solutions_{datetime.today().strftime('%Y%m%d')}.csv",
         )
     )
+
+    # Check that postcodes in postcodes_less_suitable_individual_df are the postcodes in summary_per_postcode_df where postcode_less_suitable_for_individual_solutions is True
+    postcodes_less_suitable_individual_df_check = summary_per_postcode_df.filter(
+        pl.col("postcode_less_suitable_for_individual_solutions")
+    ).select("postcode")
+
+    assert postcodes_less_suitable_individual_df.frame_equal(
+        postcodes_less_suitable_individual_df_check
+    ), "Postcodes in postcodes_less_suitable_individual_df do not match postcodes in summary_per_postcode_df where postcode_less_suitable_for_individual_solutions is True"
