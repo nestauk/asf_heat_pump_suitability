@@ -13,7 +13,8 @@ Set -- `--detail "simplified"` to use simplified spatial signature polygons to l
 To save outputs to S3, add --save flag.
 
 Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
-save outputs to. Defaults to running the pipeline using today's date.
+save outputs to. Defaults to running the pipeline using today's date. Multi-day runs
+should pass the same --release_date to every stage.
 """
 
 import argparse

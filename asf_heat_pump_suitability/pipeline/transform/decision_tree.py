@@ -13,7 +13,8 @@ python asf_heat_pump_suitability/pipeline/transform/decision_tree.py --local_aut
 Use --save if you want to save the outputs to S3.
 
 Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
-save outputs to. Defaults to running the pipeline using today's date.
+save outputs to. Defaults to running the pipeline using today's date. Multi-day runs
+should pass the same --release_date to every stage.
 """
 
 # package imports

@@ -11,7 +11,8 @@ python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --l
 Add --save to save the output to S3 as a geojson with geometry and contextual features per cluster.
 
 Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
-save outputs to. Defaults to running the pipeline using today's date.
+save outputs to. Defaults to running the pipeline using today's date. Multi-day runs
+should pass the same --release_date to every stage.
 """
 
 import argparse

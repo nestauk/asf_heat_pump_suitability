@@ -14,7 +14,8 @@ Defaults to `GB` (all of Great Britain), but this is not yet implemented.
 Set --save to save the outputs to S3. By default, outputs are not saved.
 
 Set --release_date to specify the YYYYMMDD dated release directory to save outputs to.
-Defaults to running the pipeline using today's date.
+Defaults to running the pipeline using today's date. Multi-day runs should pass the
+same --release_date to every stage.
 """
 
 import geopandas as gpd
