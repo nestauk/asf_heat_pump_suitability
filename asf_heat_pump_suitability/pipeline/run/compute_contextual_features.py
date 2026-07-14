@@ -18,7 +18,6 @@ import argparse
 import polars as pl
 import geopandas as gpd
 import json
-from datetime import datetime
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.cluster import cluster
@@ -314,7 +313,6 @@ def create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf.to_json(drop_id=True)
     )
     metadata = {
-        "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
         "Release date": release_date,
         "Local authority": local_authorities,
     }
