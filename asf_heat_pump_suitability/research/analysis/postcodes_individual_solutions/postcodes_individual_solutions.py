@@ -187,7 +187,7 @@ if __name__ == "__main__":
         )
     )
 
-    # Group and generate summary DataFrame
+    # Group and generate summary df
     summary_per_postcode_df = (
         uprns_df.group_by("postcode")
         .agg(
@@ -211,7 +211,7 @@ if __name__ == "__main__":
         )
         .with_columns(
             [
-                # Percent UPRNs in owner-occupied tenure (with safety for division-by-zero)
+                # Percent UPRNs in owner-occupied tenure
                 (
                     pl.col("n_owner-occupied")
                     / pl.col("n_domestic_uprns_in_postcode")
@@ -223,7 +223,7 @@ if __name__ == "__main__":
                     / pl.col("n_domestic_uprns_in_postcode")
                     * 100
                 ).alias("percent_unknown_tenure"),
-                # Properly aliased boolean suitability column
+                # Postcode suitability for individual solutions: True if at least one UPRN is suitable for individual solutions, False otherwise
                 (
                     pl.col("one_uprn_or_more_suitable_for_individual_solutions")
                     & ~pl.col("one_uprn_or_more_less_suitable_for_individual_solutions")
@@ -238,7 +238,7 @@ if __name__ == "__main__":
         )
     )
 
-    # Save summary per postcode DF locally as a CSV file
+    # Save summary per postcode df locally as a CSV file
     summary_per_postcode_df.write_csv(
         os.path.join(
             PROJECT_DIR,
