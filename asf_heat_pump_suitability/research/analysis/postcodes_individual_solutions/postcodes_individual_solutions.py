@@ -1,18 +1,25 @@
 """
 Analysis of postcodes most suitable for individual solutions.
 
-Run with: python asf_heat_pump_suitability/research/analysis/postcodes_individual_solutions/postcodes_individual_solutions.py --local_authorities LOCAL_AUTHORITY
+Run with: python asf_heat_pump_suitability/research/analysis/postcodes_individual_solutions/postcodes_individual_solutions.py --local_authority LOCAL_AUTHORITY
 
-where LOCAL_AUTHORITY is the name of the local authority to run the analysis for, e.g. "plymouth" or "glasgow city".
+where LOCAL_AUTHORITY is the name of the local authority to run the analysis for, e.g. "plymouth" or "east suffolk".
 """
 
+# package imports
 import argparse
 import polars as pl
 import geopandas as gpd
-import pandas as pd
+import os
+import boto3
+from datetime import datetime
 
+# local imports
+from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.cluster import cluster
+from asf_heat_pump_suitability.getters import load_geodata
+from asf_heat_pump_suitability.pipeline.transform import local_authority as tla
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -25,28 +32,44 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--local_authorities",
-        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
+        "--local_authority",
+        help="Local authority to run the analysis for, e.g. 'plymouth' or 'glasgow city'.",
         type=str,
-        nargs="+",
         required=True,
     )
 
     return parser.parse_args()
 
 
+# Lowercase keys to avoid case-sensitivity bugs with multi-word inputs
+la_code_mapping = {
+    "babergh": "E07000200",
+    "wiltshire": "E06000054",
+    "east suffolk": "E07000244",
+    "ipswich": "E07000202",
+    "mid suffolk": "E07000203",
+    "west suffolk": "E07000245",
+    "breckland": "E07000143",
+    "west berkshire": "E06000037",
+    "somerset": "E06000066",
+    "dorset": "E06000059",
+    "plymouth": "E06000026",
+}
+
 if __name__ == "__main__":
-    from asf_heat_pump_suitability.getters import load_geodata
-    from asf_heat_pump_suitability.pipeline.transform import local_authority
-    from asf_heat_pump_suitability import config
-
     args = parse_arguments()
-    local_authorities = args.local_authorities
+    local_authority = args.local_authority.strip().lower()
+
+    if local_authority not in la_code_mapping:
+        raise ValueError(
+            f"Local authority '{local_authority}' is not present in la_code_mapping. "
+            f"Available options: {list(la_code_mapping.keys())}"
+        )
+
     tolerance_m = config["constant"]["clustering"]["tolerance_m"]
+    local_authority_dict = tla.get_dict_la_data(local_authority)
 
-    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
-
-    print(f"Loading {local_authorities} domestic UPRNs...")
+    print(f"Loading {local_authority} domestic UPRNs...")
     uprns_df = pl.read_parquet(
         config["output"]["dataset"]["domestic_uprns_with_features"].format(
             local_authority=local_authority_dict["url_slug"]
@@ -69,13 +92,13 @@ if __name__ == "__main__":
         uprns_df=uprns_df, buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
     )
 
+    print(len(uprns_df))
     # Drop cluster_ids starting with DESNZ_HNZ
-    uprns_df = uprns_df.filter(~uprns_df["cluster_id"].str.startswith("DESNZ_HNZ"))
+    uprns_df = uprns_df.filter(~pl.col("cluster_id").str.starts_with("DESNZ_HNZ"))
+    print(len(uprns_df))
 
     # Map each UPRN to its postcode
     print("Mapping UPRNs to postcodes...")
-    import boto3
-
     s3_client = boto3.client("s3")
 
     path = config["data"]["geodata"]["gb_uprn_country_mapping"]
@@ -89,86 +112,123 @@ if __name__ == "__main__":
         if obj["Key"].endswith(".csv")
     ]
 
-    uprn_to_country_df = pd.concat(
-        [pd.read_csv(file, usecols=["UPRN", "PCDS"]) for file in files],
-        ignore_index=True,
-    )
+    uprn_to_postcode_df = pl.concat(
+        [pl.read_csv(file, columns=["UPRN", "PCDS", "lad25cd"]) for file in files]
+    ).rename({"PCDS": "postcode"})
 
-    # Number of UPRNs per postcode
-    uprn_to_country_df = (
-        uprn_to_country_df.groupby("PCDS").agg({"UPRN": "count"}).reset_index()
-    )
-    uprn_to_country_df.rename(
-        columns={"UPRN": "n_uprns", "PCDS": "postcode"}, inplace=True
+    # Filter the UPRN to country mapping to only include UPRNs in the local authority
+    uprn_to_postcode_df = uprn_to_postcode_df.filter(
+        pl.col("lad25cd") == la_code_mapping[local_authority]
     )
 
     # Merge the UPRN to country mapping with the UPRNs DataFrame
     uprns_df = uprns_df.join(
-        pl.DataFrame(uprn_to_country_df),
+        uprn_to_postcode_df.select(["UPRN", "postcode"]),
+        on="UPRN",
+        how="left",
+    )
+
+    # Add n_domestic_uprns_in_postcode as a column in uprns_df
+    uprns_df = uprns_df.with_columns(
+        pl.col("UPRN").count().over("postcode").alias("n_domestic_uprns_in_postcode")
+    )
+
+    # Number of UPRNs per postcode overall
+    uprns_per_postcode_df = uprn_to_postcode_df.group_by("postcode").agg(
+        pl.col("UPRN").count().alias("n_uprns_in_postcode")
+    )
+
+    # Merge overall UPRN counts
+    uprns_df = uprns_df.join(
+        uprns_per_postcode_df.select(["postcode", "n_uprns_in_postcode"]),
         on="postcode",
         how="left",
     )
 
-    # Identify postcodes most suitable for individual solutions, those with cluster_id starting with "IND"
+    # Identify suitability flags
     uprns_df = uprns_df.with_columns(
-        pl.when(uprns_df["cluster_id"].str.startswith("IND"))
-        .then(pl.lit(True))
-        .otherwise(pl.lit(False))
+        pl.col("cluster_id")
+        .str.starts_with("IND")
         .alias("suitable_for_individual_solutions")
     )
 
-    # Identify postcodes less suitable for individual solutions, those with cluster_id starting with "NHP", "COM" or "DESNZ"
     uprns_df = uprns_df.with_columns(
-        pl.when(
-            uprns_df["cluster_id"].str.startswith("NHP")
-            | uprns_df["cluster_id"].str.startswith("COM")
-            | uprns_df["cluster_id"].str.startswith("DESNZ")
-        )
-        .then(pl.lit(True))
-        .otherwise(pl.lit(False))
-        .alias("less_suitable_for_individual_solutions")
+        (
+            pl.col("cluster_id").str.starts_with("NHP")
+            | pl.col("cluster_id").str.starts_with("COM")
+            | pl.col("cluster_id").str.starts_with("DESNZ")
+        ).alias("less_suitable_for_individual_solutions")
     )
 
     # Get df of postcodes where less_suitable_for_individual_solutions is True and suitable_for_individual_solutions is False
-    postcodes_df = uprns_df.filter(
-        (uprns_df["less_suitable_for_individual_solutions"])
-        & ~(uprns_df["suitable_for_individual_solutions"])
-    ).select(["postcode"])
+    postcodes_df = (
+        uprns_df.filter(
+            pl.col("less_suitable_for_individual_solutions")
+            & ~pl.col("suitable_for_individual_solutions")
+        )
+        .select(["postcode"])
+        .unique()
+    )
 
-    # TODO: use all postcodes in the local authority, not just those with UPRNs
+    # Save postcodes_df locally as a CSV file
+    postcodes_df.write_csv(
+        os.path.join(
+            PROJECT_DIR,
+            "outputs",
+            f"postcodes_{local_authority}_less_suitable_for_individual_solutions_{datetime.today().strftime('%Y%m%d')}.csv",
+        )
+    )
 
-    # for each postcode, get the number of UPRNs and the number of UPRNs
-    uprns_df.select(
-        [
-            "postcode",
-            "n_uprns",
-            "suitable_for_individual_solutions",
-            "TNURE",
-            "max_contiguous_outdoor_space_area_m2",
-        ]
-    ).groupby("postcode").agg(
-        [
-            pl.first("n_uprns").alias("total_uprns"),
-            pl.any("suitable_for_individual_solutions").alias(
-                "is_suitable_for_individual_solutions"
-            ),
-            pl.sum(
-                pl.when(uprns_df["TNURE"] == "owner-occupied").then(1).otherwise(0)
-            ).alias("n_owner-occupied"),
-            pl.sum(pl.when(uprns_df["TNURE"].is_null()).then(1).otherwise(0)).alias(
-                "n_unknown_tenure"
-            ),
-            pl.mean("max_contiguous_outdoor_space_area_m2").alias(
-                "mean_max_contiguous_outdoor_space_area_m2"
-            ),
-        ]
-    ).with_columns(
-        # percent uprns in owner-occupied tenure
-        (pl.col("n_owner-occupied") / pl.col("total_uprns") * 100).alias(
-            "percent_owner_occupied"
-        ),
-        # percent uprns with unknown tenure
-        (pl.col("n_unknown_tenure") / pl.col("total_uprns") * 100).alias(
-            "percent_unknown_tenure"
-        ),
+    # Group and generate summary DataFrame
+    summary_per_postcode_df = (
+        uprns_df.select(
+            [
+                "postcode",
+                "n_domestic_uprns_in_postcode",
+                "n_uprns_in_postcode",
+                "suitable_for_individual_solutions",
+                "TENURE",
+                "max_contiguous_outdoor_space_area_m2",
+            ]
+        )
+        .group_by("postcode")
+        .agg(
+            [
+                pl.col("n_domestic_uprns_in_postcode")
+                .first()
+                .alias("n_domestic_uprns_in_postcode"),
+                pl.col("n_uprns_in_postcode").first().alias("n_uprns_in_postcode"),
+                pl.col("suitable_for_individual_solutions")
+                .any()
+                .alias("is_suitable_for_individual_solutions"),
+                pl.col("TENURE").eq("owner-occupied").sum().alias("n_owner-occupied"),
+                pl.col("TENURE").is_null().sum().alias("n_unknown_tenure"),
+                pl.col("max_contiguous_outdoor_space_area_m2")
+                .mean()
+                .alias("mean_max_contiguous_outdoor_space_area_m2"),
+            ]
+        )
+        .with_columns(
+            # Percent UPRNs in owner-occupied tenure
+            (
+                pl.col("n_owner-occupied")
+                / pl.col("n_domestic_uprns_in_postcode")
+                * 100
+            ).alias("percent_owner_occupied"),
+            # Percent UPRNs with unknown tenure
+            (
+                pl.col("n_unknown_tenure")
+                / pl.col("n_domestic_uprns_in_postcode")
+                * 100
+            ).alias("percent_unknown_tenure"),
+        )
+    )
+
+    # Save summary per postcode DF locally as a CSV file
+    summary_per_postcode_df.write_csv(
+        os.path.join(
+            PROJECT_DIR,
+            "outputs",
+            f"summary_{local_authority}_less_suitable_for_individual_solutions_{datetime.today().strftime('%Y%m%d')}.csv",
+        )
     )
