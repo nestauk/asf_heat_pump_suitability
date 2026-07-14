@@ -10,6 +10,7 @@ class TestMapDictUPRNsBuildingToID:
     """Tests for `map_dict_uprns_to_building_id`."""
 
     @pytest.fixture(scope="class")
+    @classmethod
     def buildings_gdf(self):
         """Create test building footprints."""
         buildings_data = [
