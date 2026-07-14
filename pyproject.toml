@@ -1,0 +1,105 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "asf_heat_pump_suitability"
+version = "2.0.0"
+description = "Project to identify which small areas in Great Britain are likely to be suitable (or unsuitable) for which types of heating technology."
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Nesta"}]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "polars-lts-cpu==1.5.0",
+    "jupytext~=1.17",
+    "fastexcel~=0.13",
+    "scikit-learn~=1.7",
+    "matplotlib~=3.10.2",
+    "tqdm~=4.67",
+    "geopandas~=1.0",
+    "shapely~=2.1",
+    "pyGeoTile~=1.0",
+    "pyproj~=3.7",
+    "pandas~=2.0",
+    "geojson~=3.2",
+    "requests>=2.32.4",
+    "convertbng~=0.7",
+    "pyogrio~=0.10",
+    "regex~=2024.11",
+    "xlsx2csv~=0.8",
+    "s3fs>=2024.10.0",
+    "boto3>=1.35.0",
+    "tenacity~=9.1",
+    "numpy<2.0.0",
+    "fiona~=1.1",
+    "bs4~=0.0",
+    "pandera~=0.24",
+    "metaflow",
+    "folium",
+    "seaborn",
+    "scipy",
+    "pyarrow",
+    "simplekml",
+    "smart-open~=7.3",
+    "osbng",
+    "libpysal",
+    "momepy",
+    "python-dotenv"
+]
+
+[project.optional-dependencies]
+dev = [
+    "ipykernel",
+    "flake8",
+    "flake8-black",
+    "flake8-import-order",
+    "flake8-bandit",
+    "flake8-bugbear",
+    "black",
+    "Sphinx",
+    "sphinxcontrib-napoleon",
+    "sphinx-rtd-theme",
+    "pytest",
+    "pre-commit",
+    "pre-commit-hooks",
+    "flake8-pyproject",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["asf_heat_pump_suitability"]
+
+[tool.flake8]
+# flake8 code - explanation - extension requirement
+# =================================================
+# ANN - annotations - flake8-annotations
+# B,B9 - Bugbear - flake8-bugbear
+# BLK - Black - flake8-black
+# C - complexity - n/a
+# D - docstrings - flake8-docstrings
+# DAR - darglint (checks docstrings) - darglint
+# E - pycodestyle errors - n/a
+# F - pyflakes - n/a
+# I - Import order - flake8-import-order
+# N - PEP8 naming - pep8-naming
+# W - pycodestyle warnings - n/a
+select = "B,B9,BLK,C,D,DAR,E,F,I,N,W"
+
+# E203 - whitespace before ':'
+# E501 - line length (dealt with by bugbear)
+# W503 - linebreak before binary op
+# S101 - warns about assert being removed when compiled
+ignore = ["E203", "E501", "W503", "S101"]
+
+max-complexity = 10
+max-line-length = 80
+application-import-names = "asf_heat_pump_suitability"
+import-order-style = "smarkets"
+docstring-convention = "google"
+exclude = ["*/notebooks/"]
+per-file-ignores = {"tests/*" = ["S"]}
+
+[tool.darglint]
+# Don't pester about parameters for a one-line docstring
+strictness = "short"
+docstring_style = "google"
