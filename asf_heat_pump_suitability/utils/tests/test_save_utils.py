@@ -3,7 +3,7 @@ Tests for asf_heat_pump_suitability.utils.save_utils and the dated release
 directory convention for output datasets.
 
 Run:
-pytest tests/test_save_utils.py
+pytest asf_heat_pump_suitability/utils/tests/test_save_utils.py
 """
 
 from datetime import datetime
