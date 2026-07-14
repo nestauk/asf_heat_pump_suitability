@@ -45,7 +45,8 @@ dependencies = [
     "osbng",
     "libpysal",
     "momepy",
-    "python-dotenv"
+    "python-dotenv",
+    "pytest-cov"
 ]
 
 [project.optional-dependencies]
