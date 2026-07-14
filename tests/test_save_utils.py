@@ -28,7 +28,7 @@ def test_get_str_release_date_returns_valid_date_unchanged():
 
 @pytest.mark.parametrize(
     "invalid_release_date",
-    ["2026-07-08", "8 July 2026", "202607", "20261332", ""],
+    ["2026-07-08", "8 July 2026", "202607", "20261332", "", "08072026", "080726"],
 )
 def test_get_str_release_date_raises_for_invalid_date(invalid_release_date):
     """Strings that are not valid YYYYMMDD dates raise ValueError."""

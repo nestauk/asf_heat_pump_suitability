@@ -19,7 +19,7 @@ def get_str_release_date(release_date: str | None = None) -> str:
         release_date (str | None): release date in YYYYMMDD format, or None to use today's date
 
     Returns:
-        str: release date normalised to zero-padded YYYYMMDD format
+        str: validated release date in zero-padded YYYYMMDD format
 
     Raises:
         ValueError: if `release_date` is not a valid YYYYMMDD date
@@ -29,11 +29,15 @@ def get_str_release_date(release_date: str | None = None) -> str:
         return datetime.today().strftime(date_format)
     try:
         parsed_date = datetime.strptime(release_date, date_format)
+        # strptime is lenient (e.g. "080726" parses as year 807); require an exact
+        # round-trip so only strict zero-padded YYYYMMDD strings are accepted
+        if parsed_date.strftime(date_format) != release_date:
+            raise ValueError
     except ValueError:
         raise ValueError(
             f"release_date must be a valid date in YYYYMMDD format, got '{release_date}'."
         )
-    return parsed_date.strftime(date_format)
+    return release_date
 
 
 def get_str_output_path(
