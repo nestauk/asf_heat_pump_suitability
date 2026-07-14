@@ -216,7 +216,7 @@ if __name__ == "__main__":
                     pl.col("n_owner-occupied")
                     / pl.col("n_domestic_uprns_in_postcode")
                     * 100
-                ).alias("percent_owner_occupied"),
+                ).alias("percent_domestic_owner_occupied"),
                 # Percent UPRNs with unknown tenure
                 (
                     pl.col("n_unknown_tenure")
