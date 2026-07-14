@@ -146,15 +146,15 @@ if __name__ == "__main__":
         how="left",
     )
 
-    # Identify suitability flags
-    # Suitable for individual solutions if cluster_id starts with "IND"
+    # Identify suitability flags at UPRN level based on cluster_id prefixes
+    # 1) Suitable for individual solutions if cluster_id starts with "IND"
     uprns_df = uprns_df.with_columns(
         pl.col("cluster_id")
         .str.starts_with("IND")
         .alias("suitable_for_individual_solutions")
     )
 
-    # Less suitable for individual solutions if cluster_id starts with "NHP", "COM", or "DESNZ"
+    # 2) Less suitable for individual solutions if cluster_id starts with "NHP", "COM", or "DESNZ"
     uprns_df = uprns_df.with_columns(
         (
             pl.col("cluster_id").str.starts_with("NHP")
@@ -163,18 +163,33 @@ if __name__ == "__main__":
         ).alias("less_suitable_for_individual_solutions")
     )
 
-    # Get df of postcodes where less_suitable_for_individual_solutions is True and suitable_for_individual_solutions is False
-    postcodes_df = (
-        uprns_df.filter(
-            pl.col("less_suitable_for_individual_solutions")
-            & ~pl.col("suitable_for_individual_solutions")
+    # Suitability at postcode level
+    # Less suitable for Individual solutions at postcode level: if less_suitable_for_individual_solutions is True and suitable_for_individual_solutions is False
+    # Essentially, if there is at least one UPRN suitable for individual solutions in the postcode, then the postcode is considered suitable for individual solutions.
+    postcodes_less_suitabe_individual_df = (
+        uprns_df.group_by("postcode")
+        # aggregate so that less_suitable_for_individual_solutions is True and suitable_for_individual_solutions is False, then the postcode is considered less suitable for individual solutions
+        .agg(
+            [
+                pl.col("less_suitable_for_individual_solutions")
+                .any()
+                .alias("less_suitable_for_individual_solutions"),
+                pl.col("suitable_for_individual_solutions")
+                .any()
+                .alias("suitable_for_individual_solutions"),
+            ]
         )
-        .select(["postcode"])
-        .unique()
-    )
+        .with_columns(
+            (
+                pl.col("less_suitable_for_individual_solutions")
+                & ~pl.col("suitable_for_individual_solutions")
+            ).alias("postcode_less_suitable_for_individual_solutions")
+        )
+        .filter(pl.col("postcode_less_suitable_for_individual_solutions"))
+    ).select(["postcode"])
 
     # Save postcodes_df locally as a CSV file
-    postcodes_df.write_csv(
+    postcodes_less_suitabe_individual_df.write_csv(
         os.path.join(
             PROJECT_DIR,
             "outputs",
@@ -203,7 +218,10 @@ if __name__ == "__main__":
                 pl.col("n_uprns_in_postcode").first().alias("n_uprns_in_postcode"),
                 pl.col("suitable_for_individual_solutions")
                 .any()
-                .alias("is_suitable_for_individual_solutions"),
+                .alias("one_uprn_or_more_suitable_for_individual_solutions"),
+                pl.col("less_suitable_for_individual_solutions")
+                .any()
+                .alias("one_uprn_or_more_less_suitable_for_individual_solutions"),
                 pl.col("TENURE").eq("owner-occupied").sum().alias("n_owner-occupied"),
                 pl.col("TENURE").is_null().sum().alias("n_unknown_tenure"),
                 pl.col("max_contiguous_outdoor_space_area_m2")
@@ -224,7 +242,16 @@ if __name__ == "__main__":
                 / pl.col("n_domestic_uprns_in_postcode")
                 * 100
             ).alias("percent_unknown_tenure"),
+            # postcode suitability for individual solutions if at least one UPRN in the postcode is suitable for individual solutions and none are less suitable for individual solutions.
+            pl.col("one_uprn_or_more_suitable_for_individual_solutions")
+            & ~pl.col("one_uprn_or_more_less_suitable_for_individual_solutions"),
         )
+        .alias("postcode_less_suitable_for_individual_solutions")
+    ).drop(
+        [
+            "n_owner-occupied",
+            "n_unknown_tenure",
+        ]
     )
 
     # Save summary per postcode DF locally as a CSV file
