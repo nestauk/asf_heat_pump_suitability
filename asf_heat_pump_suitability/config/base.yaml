@@ -1,7 +1,9 @@
 data:
   geodata:
-    # OpenMap UPRN with coordinates
-    uk_osopen_uprn: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_csv.zip"
+    # OpenMap UPRN with coordinates in original format, useful to load original data for conversion to parquet
+    uk_osopen_uprn_raw: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_csv.zip"
+    # OpenMap UPRN with coordinates in parquet format
+    uk_osopen_uprn_parquet: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510.parquet"
     # OpenMap Local Geopackage
     gb_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares

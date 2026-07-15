@@ -21,27 +21,32 @@ from asf_heat_pump_suitability.pipeline.transform import local_authority as la
 _BNG_GRID_100KM_FEATURES = None
 
 
-def load_df_osopen_uprn(**kwargs) -> pl.DataFrame:
+def load_df_osopen_uprn(parquet: bool = True, **kwargs) -> pl.DataFrame:
     """
     Get raw OS (Ordnance Survey) Open UPRN dataset containing latitude and longitude and British National Grid X and Y
     coordinates for all UPRNs in Great Britain.
 
     Args:
-        **kwargs for pl.read_csv
+        parquet (bool): set to `True` to load `parquet` file for speed gains, or `False` to load original CSV+ZIP format. Default True.
+        **kwargs for pl.read_csv or pl.read_parquet
 
     Returns:
         pl.DataFrame: raw OS Open UPRN dataset with lat/lon and x/y coordinates for every UPRN
     """
     print("Loading OSOpen UPRNs...")
-    path = config["data"]["geodata"]["uk_osopen_uprn"]
-    filename = os.path.basename(path).split("_csv")[0]
-    df = base_getters.get_df_from_zip_csv_s3(
-        path,
-        extract_file=f"{filename}.csv",
-        **kwargs,
-    )
+    if parquet:
+        path = config["data"]["geodata"]["uk_osopen_uprn_parquet"]
+        return pl.read_parquet(path, **kwargs)
+    else:
+        path = config["data"]["geodata"]["uk_osopen_uprn_raw"]
+        filename = os.path.basename(path).split("_csv")[0]
+        df = base_getters.get_df_from_zip_csv_s3(
+            path,
+            extract_file=f"{filename}.csv",
+            **kwargs,
+        )
 
-    return df
+        return df
 
 
 def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
