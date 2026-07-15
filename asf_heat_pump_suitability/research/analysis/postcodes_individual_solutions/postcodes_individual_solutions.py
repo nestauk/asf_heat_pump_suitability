@@ -153,12 +153,12 @@ if __name__ == "__main__":
         .alias("suitable_for_individual_solutions")
     )
 
-    # 2) Less suitable for individual solutions if cluster_id starts with "NHP", "COM", or "DESNZ"
+    # 2) Less suitable for individual solutions if cluster_id starts with "NHP", "COM", or "DHNZ"
     uprns_df = uprns_df.with_columns(
         (
             pl.col("cluster_id").str.starts_with("NHP")
             | pl.col("cluster_id").str.starts_with("COM")
-            | pl.col("cluster_id").str.starts_with("DESNZ")
+            | pl.col("cluster_id").str.starts_with("DHNZ")
         ).alias("less_suitable_for_individual_solutions")
     )
 
@@ -205,16 +205,6 @@ if __name__ == "__main__":
                 pl.col("less_suitable_for_individual_solutions")
                 .count()
                 .alias("n_less_suitable_for_individual_solutions"),
-                (
-                    pl.col("n_suitable_for_individual_solutions")
-                    / pl.col("n_domestic_uprns_in_postcode")
-                    * 100
-                ).alias("percent_suitable_for_individual_solutions"),
-                (
-                    pl.col("n_less_suitable_for_individual_solutions")
-                    / pl.col("n_domestic_uprns_in_postcode")
-                    * 100
-                ).alias("percent_less_suitable_for_individual_solutions"),
                 pl.col("TENURE").eq("owner-occupied").sum().alias("n_owner_occupied"),
                 pl.col("TENURE").is_null().sum().alias("n_unknown_tenure"),
                 pl.col("max_contiguous_outdoor_space_area_m2")
@@ -224,6 +214,18 @@ if __name__ == "__main__":
         )
         .with_columns(
             [
+                # Percent UPRNs suitable for individual solutions
+                (
+                    pl.col("n_suitable_for_individual_solutions")
+                    / pl.col("n_domestic_uprns_in_postcode")
+                    * 100
+                ).alias("percent_suitable_for_individual_solutions"),
+                # Percent UPRNs less suitable for individual solutions
+                (
+                    pl.col("n_less_suitable_for_individual_solutions")
+                    / pl.col("n_domestic_uprns_in_postcode")
+                    * 100
+                ).alias("percent_less_suitable_for_individual_solutions"),
                 # Percent UPRNs in owner-occupied tenure
                 (
                     pl.col("n_owner_occupied")
@@ -265,10 +267,34 @@ if __name__ == "__main__":
     )
 
     # Check that postcodes in postcodes_less_suitable_individual_df are the postcodes in summary_per_postcode_df where postcode_less_suitable_for_individual_solutions is True
-    postcodes_less_suitable_individual_df_check = summary_per_postcode_df.filter(
-        pl.col("postcode_less_suitable_for_individual_solutions")
-    ).select("postcode")
+    postcodes_less_suitable_individual_set_check = set(
+        summary_per_postcode_df.filter(
+            pl.col("postcode_less_suitable_for_individual_solutions")
+        )
+        .select("postcode")
+        .to_series()
+    )
+    postcodes_less_suitable_individual_set = set(
+        postcodes_less_suitable_individual_df.select("postcode").to_series()
+    )
+    assert (
+        postcodes_less_suitable_individual_set
+        == postcodes_less_suitable_individual_set_check
+    ), "Postcodes in postcodes_less_suitable_individual_df do not match postcodes in summary_per_postcode_df where postcode_less_suitable_for_individual_solutions is True."
 
-    assert postcodes_less_suitable_individual_df.frame_equal(
-        postcodes_less_suitable_individual_df_check
-    ), "Postcodes in postcodes_less_suitable_individual_df do not match postcodes in summary_per_postcode_df where postcode_less_suitable_for_individual_solutions is True"
+    # check that no postcode have both postcode_suitable_for_individual_solutions and postcode_less_suitable_for_individual_solutions as True or as False
+    assert (
+        summary_per_postcode_df.filter(
+            pl.col("postcode_suitable_for_individual_solutions")
+            & pl.col("postcode_less_suitable_for_individual_solutions")
+        ).height
+        == 0
+    ), "Some postcodes have both postcode_suitable_for_individual_solutions and postcode_less_suitable_for_individual_solutions as True."
+
+    assert (
+        summary_per_postcode_df.filter(
+            ~pl.col("postcode_suitable_for_individual_solutions")
+            & ~pl.col("postcode_less_suitable_for_individual_solutions")
+        ).height
+        == 0
+    ), "Some postcodes have both postcode_suitable_for_individual_solutions and postcode_less_suitable_for_individual_solutions as False."
