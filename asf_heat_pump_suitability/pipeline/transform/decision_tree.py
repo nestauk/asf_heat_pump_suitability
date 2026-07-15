@@ -278,38 +278,42 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
                 & pl.col("assigned_tech").list.contains(TECH_TYPES["networked"])
             )
             .then(pl.lit(TECH_TYPES["communal"]))
+            # heat network takes precedence
             .when(pl.col("assigned_tech").list.contains(TECH_TYPES["heat_networks"]))
             .then(pl.lit(TECH_TYPES["heat_networks"]))
-            # networked heat pump
+            # networked heat pump takes precedence
             .when(pl.col("assigned_tech").list.contains(TECH_TYPES["networked"]))
             .then(pl.lit(TECH_TYPES["networked"]))
-            # communal solution
+            # communal solution takes precedence
             .when(pl.col("assigned_tech").list.contains(TECH_TYPES["communal"]))
             .then(pl.lit(TECH_TYPES["communal"]))
-            # Could either be individual or networked HP: outdoor space is unknown for some properties in the building
+            # When outdoor space is unknown for some properties in the building
+            # At this point, some properties in the building might be assigned "individual", while others are assigned "individual_or_networked" if the outdoor space is missing
             .when(
                 pl.col("assigned_tech").list.contains(
                     f"{TECH_TYPES['individual_or_networked']}"
                 )
             )
             .then(
-                # Properties with known outdoor space are guaranteed to exceed the threshold.
-                # Therefore, we only need to check that the area is not null/unknown.
-                pl.when(pl.col("median_contiguous_outdoor_space_area_m2").is_not_null())
-                .then(pl.lit(TECH_TYPES["individual"]))
+                # If median outdoor space is known, it means there's at least one known outdoor space within the building (and it's above the threshold)
+                pl.when(
+                    pl.col("median_contiguous_outdoor_space_area_m2").is_not_null()
+                ).then(pl.lit(TECH_TYPES["individual"]))
+                # In this case, the outdoor space is unknown for all properties in the building, so we assign "individual_or_networked"
                 .otherwise(pl.lit(TECH_TYPES["individual_or_networked"]))
             )
-            # Could either be individual or heat network: outdoor space is unknown for some properties in the building
+            # When outdoor space is unknown for some properties in the building
             .when(
                 pl.col("assigned_tech").list.contains(
                     f"{TECH_TYPES['individual_or_heat_network']}"
                 )
             )
             .then(
-                # Properties with known outdoor space are guaranteed to exceed the threshold.
-                # Therefore, we only need to check that the area is not null/unknown.
-                pl.when(pl.col("median_contiguous_outdoor_space_area_m2").is_not_null())
-                .then(pl.lit(TECH_TYPES["individual"]))
+                # If median outdoor space is known, it means there's at least one known outdoor space within the building (and it's above the threshold)
+                pl.when(
+                    pl.col("median_contiguous_outdoor_space_area_m2").is_not_null()
+                ).then(pl.lit(TECH_TYPES["individual"]))
+                # In this case, the outdoor space is unknown for all properties in the building, so we assign "individual_or_heat_network"
                 .otherwise(pl.lit(TECH_TYPES["individual_or_heat_network"]))
             )
             .otherwise(pl.lit("Unexpected combination"))
