@@ -14,6 +14,7 @@ Defaults to `GB` (all of Great Britain), but this is not yet implemented.
 Set --save to save the outputs to S3. By default, outputs are not saved.
 """
 
+import numpy as np
 import geopandas as gpd
 import pandas as pd
 import polars as pl
@@ -65,7 +66,7 @@ def generate_gdf_uprn_coords(
     return gdf
 
 
-def load_set_valid_epc_uprns(epc_type: str) -> set:
+def load_arr_valid_epc_uprns(epc_type: str) -> np.array:
     """
     Load set of valid EPC UPRNs from either commercial or domestic EPC registers.
 
@@ -73,7 +74,7 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
         epc_type (str): {"commercial", "domestic"} the type of EPC to load valid UPRNs from
 
     Returns:
-        set: valid UPRNs from specified EPC dataset
+        np.array: valid UPRNs from specified EPC dataset
     """
     print(f"Loading UPRNs from {epc_type} EPC register...")
     if epc_type == "domestic":
@@ -117,7 +118,7 @@ def load_set_valid_epc_uprns(epc_type: str) -> set:
         f"{before - len(df)} invalid UPRNs dropped from {epc_type} EPC register. {len(df)} valid UPRNs remaining"
     )
 
-    return set(df["UPRN"])
+    return df["UPRN"].to_numpy()
 
 
 def filter_gdf_domestic_uprns(
@@ -156,7 +157,7 @@ def filter_gdf_domestic_uprns(
     )
 
     # Get valid non-residential EPC UPRNs
-    non_residential_uprns.update(load_set_valid_epc_uprns(epc_type="commercial"))
+    non_residential_uprns.update(load_arr_valid_epc_uprns(epc_type="commercial"))
 
     # Find UPRNs which are in any building (i.e. remove UPRNs which represent outdoor addressable locations)
     uprns_in_buildings = set(
@@ -164,7 +165,7 @@ def filter_gdf_domestic_uprns(
     )
 
     # Get valid residential UPRNs
-    domestic_epc_uprns = load_set_valid_epc_uprns(epc_type="domestic")
+    domestic_epc_uprns = load_arr_valid_epc_uprns(epc_type="domestic")
 
     domestic_uprn_gdf = uprn_gdf[
         (

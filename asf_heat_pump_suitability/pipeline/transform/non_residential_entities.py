@@ -208,7 +208,7 @@ def generate_gdf_non_residential_buildings(
     exclude_buildings_gdf = exclude_buildings_gdf.drop_duplicates(subset=["geometry"])
 
     # Get locations of UPRNs in domestic EPC
-    include_uprns = uprns.load_set_valid_epc_uprns(epc_type="domestic")
+    include_uprns = uprns.load_arr_valid_epc_uprns(epc_type="domestic")
     uprns_gdf = uprns_gdf[uprns_gdf["UPRN"].isin(include_uprns)].copy()
 
     # Find buildings that contain a domestic UPRN
