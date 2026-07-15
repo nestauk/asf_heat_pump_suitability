@@ -270,9 +270,7 @@ if __name__ == "__main__":
     postcodes_less_suitable_individual_set_check = set(
         summary_per_postcode_df.filter(
             pl.col("postcode_less_suitable_for_individual_solutions")
-        )
-        .select("postcode")
-        .to_series()
+        ).get_column("postcode")
     )
     postcodes_less_suitable_individual_set = set(
         postcodes_less_suitable_individual_df.select("postcode").to_series()
