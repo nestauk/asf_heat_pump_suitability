@@ -3,6 +3,9 @@
 # To make the script executable, run: chmod +x asf_heat_pump_suitability/pipeline/run/run_pipeline.sh
 # You can then run the script with: ./asf_heat_pump_suitability/pipeline/run/run_pipeline.sh
 
+# Run from the repo root regardless of where the script is invoked from
+cd "$(dirname "$0")/../../.." || exit 1
+
 local_authorities=(
     "plymouth"
     "dudley"
