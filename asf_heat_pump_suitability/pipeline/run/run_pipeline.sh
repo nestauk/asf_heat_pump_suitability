@@ -47,10 +47,11 @@ for la in "${local_authorities[@]}"; do
     if [ $? -ne 0 ]; then echo "Error in compute_contextual_features.py for $la. Skipping..."; continue; fi
 
     echo "Successfully finished pipeline for: $la"
+    succeeded=$((succeeded+1))
     echo ""
 done
 
-echo "All local authorities data generated!"
+echo "Pipeline completed for ${succeeded:-0} of ${#local_authorities[@]} local authorities."
 echo "=================================================="
 
 echo "--> Generating manifest.json: create_manifest.py"
