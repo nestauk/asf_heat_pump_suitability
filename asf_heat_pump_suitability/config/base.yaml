@@ -4,6 +4,8 @@ data:
     uk_osopen_uprn_raw: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_csv.zip"
     # OpenMap UPRN with coordinates in parquet format
     uk_osopen_uprn_parquet: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510.parquet"
+    # OpenMap UPRN partitioned by 100km BNG grid square for fast spatial reads
+    uk_osopen_uprn_partitioned: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_partitioned/{grid_square}/uprns.parquet"
     # OpenMap Local Geopackage
     gb_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares

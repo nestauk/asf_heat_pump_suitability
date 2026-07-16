@@ -450,30 +450,30 @@ if __name__ == "__main__":
     local_authorities = [la.lower() for la in args.local_authorities]
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
-    uprns_df = load_geodata.load_df_osopen_uprn()
-
     if local_authorities == "gb":  # All of GB
         # TODO this may not work due to scaling and may require chunking of datasets.
         # TODO Adding here as placeholder to assist scaling later
         print("Creating residential UPRN dataset for all of GB...")
-        grid_squares = None
+        uprns_df = load_geodata.load_df_osopen_uprn()
+        uprns_gdf = generate_gdf_uprn_coords(uprns_df)
+        del uprns_df
     else:  # Specific local authorities (any number of LAs can be specified in config file)
         print(f"Creating residential UPRN dataset for {local_authorities}...")
         la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
             select_las=local_authority_dict["valid_local_authorities"]
-        )  # TODO: add if statement for running with a test script
-
-        # Filter UPRNs to those within LA boundaries
-        bounds = la_boundaries_gdf.total_bounds  # (minx, miny, maxx, maxy)
-        uprns_df = uprns_df.filter(
-            (pl.col("X_COORDINATE") >= bounds[0])
-            & (pl.col("X_COORDINATE") <= bounds[2])
-            & (pl.col("Y_COORDINATE") >= bounds[1])
-            & (pl.col("Y_COORDINATE") <= bounds[3])
         )
+        uprns_df = load_geodata.load_df_osopen_uprn(
+            grid_squares=local_authority_dict["grid_squares"]
+        )
+        uprns_gdf = generate_gdf_uprn_coords(uprns_df)
+        del uprns_df
 
-    uprns_gdf = generate_gdf_uprn_coords(uprns_df)
-    del uprns_df
+        # Reduce UPRNs to only those within the LA boundaries and join LA code and name for later use
+        uprns_gdf = uprns_gdf.sjoin(
+            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
+            how="inner",
+            predicate="intersects",
+        ).drop(columns="index_right")
 
     poi_gdf = load_geodata.load_gdf_poi()
     poi_gdf = poi.transform_gdf_poi(

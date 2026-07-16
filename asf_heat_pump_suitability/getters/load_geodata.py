@@ -21,13 +21,20 @@ from asf_heat_pump_suitability.pipeline.transform import local_authority as la
 _BNG_GRID_100KM_FEATURES = None
 
 
-def load_df_osopen_uprn(parquet: bool = True, **kwargs) -> pl.DataFrame:
+def load_df_osopen_uprn(
+    parquet: bool = True,
+    grid_squares: Optional[List[str]] = None,
+    **kwargs,
+) -> pl.DataFrame:
     """
     Get raw OS (Ordnance Survey) Open UPRN dataset containing latitude and longitude and British National Grid X and Y
     coordinates for all UPRNs in Great Britain.
 
     Args:
         parquet (bool): set to `True` to load `parquet` file for speed gains, or `False` to load original CSV+ZIP format. Default True.
+        grid_squares (Optional[List[str]]): 100km BNG grid square codes (e.g. ["SX", "SY"]) to load from the
+            partitioned Parquet dataset. When provided, only UPRNs in those grid squares are loaded, which is
+            significantly faster than loading the full GB dataset. Ignored when `parquet=False`.
         **kwargs for pl.read_csv or pl.read_parquet
 
     Returns:
@@ -35,6 +42,14 @@ def load_df_osopen_uprn(parquet: bool = True, **kwargs) -> pl.DataFrame:
     """
     print("Loading OSOpen UPRNs...")
     if parquet:
+        if grid_squares:
+            paths = [
+                config["data"]["geodata"]["uk_osopen_uprn_partitioned"].format(
+                    grid_square=sq
+                )
+                for sq in grid_squares
+            ]
+            return pl.read_parquet(paths, **kwargs)
         path = config["data"]["geodata"]["uk_osopen_uprn_parquet"]
         return pl.read_parquet(path, **kwargs)
     else:
