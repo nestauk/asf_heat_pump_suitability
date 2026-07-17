@@ -5,7 +5,7 @@ data:
     # OpenMap UPRN with coordinates in parquet format
     uk_osopen_uprn_parquet: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510.parquet"
     # OpenMap UPRN partitioned by 100km BNG grid square for fast spatial reads
-    uk_osopen_uprn_partitioned: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_partitioned/{grid_square}/uprns.parquet"
+    uk_osopen_uprn_partitioned: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_partitioned/{grid_square}_uprns.parquet"
     # OpenMap Local Geopackage
     gb_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_gb.gpkg"
     # OpenMap Local layers for certain grid squares
@@ -20,6 +20,8 @@ data:
     grid_square_os_openroad: "s3://asf-local-heat-planning-tool/inputs/geodata/oproad_essh_gb/{square}_RoadLink.shp"
     # UK Points of Interest
     UK_poi_locations: "s3://asf-local-heat-planning-tool/inputs/geodata/poi_uk.gpkg"
+    UK_poi_locations_parquet: "s3://asf-local-heat-planning-tool/inputs/geodata/poi_uk.parquet"
+    UK_poi_locations_partitioned: "s3://asf-local-heat-planning-tool/inputs/geodata/poi_uk_partitioned/{grid_square}_poi_uk.parquet"
     # OpenMap Code Point GB data for postcode lookup
     # TODO: move this file to a different S3 location as it's not just Plymouth data - it's GB data
     gb_code_points: "s3://asf-local-heat-planning-tool/inputs/geodata/codepo_gb.gpkg"
