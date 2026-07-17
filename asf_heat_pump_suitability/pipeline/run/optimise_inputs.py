@@ -92,46 +92,62 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
         required=False,
     )
+
+    parser.add_argument(
+        "--datasets",
+        help="Datasets to process of: UPRN, POI, EPC. Defaults to all datasets with optimisation options.",
+        type=str,
+        nargs="+",
+        default=None,
+        required=False,
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_arguments()
-
-    uprns_df = load_geodata.load_df_osopen_uprn(parquet=False)
-
-    # Generate parquet file
-    save_utils.save_to_s3(uprns_df, config["data"]["geodata"]["uk_osopen_uprn_parquet"])
-    uprns_df = assign_df_grid_squares(
-        uprns_df, x_col="X_COORDINATE", y_col="Y_COORDINATE"
+    datasets = args.datasets
+    grid_squares = (
+        args.grid_squares or load_geodata.load_gdf_bng_grid_squares()["bng_ref"]
     )
 
-    null_count = uprns_df["grid_square"].null_count()
-    if null_count > 0:
-        logging.warning(
-            f"{null_count} UPRNs could not be assigned to a grid square and will be skipped."
+    if "UPRN" in datasets:
+        uprns_df = load_geodata.load_df_osopen_uprn(parquet=False)
+
+        # Generate parquet file
+        save_utils.save_to_s3(
+            uprns_df, config["data"]["geodata"]["uk_osopen_uprn_parquet"]
         )
-        uprns_df = uprns_df.drop_nulls(subset=["grid_square"])
+        uprns_df = assign_df_grid_squares(
+            uprns_df, x_col="X_COORDINATE", y_col="Y_COORDINATE"
+        )
 
-    grid_squares = args.grid_squares or sorted(
-        uprns_df["grid_square"].unique().to_list()
-    )
-    s3_fname = config["data"]["geodata"]["uk_osopen_uprn_partitioned"]
-    partition_geofile_to_grid_squares(
-        df=uprns_df, grid_squares=grid_squares, fname=s3_fname
-    )
-    del uprns_df
+        null_count = uprns_df["grid_square"].null_count()
+        if null_count > 0:
+            logging.warning(
+                f"{null_count} UPRNs could not be assigned to a grid square and will be skipped."
+            )
+            uprns_df = uprns_df.drop_nulls(subset=["grid_square"])
 
-    # POI data
-    poi_gdf = load_geodata.load_gdf_poi(parquet=False).to_crs(
-        config["constant"]["target_crs"]
-    )
-    poi_df = geo_utils.convert_gdf_to_df(poi_gdf)
-    poi_df = assign_df_grid_squares(poi_df)
-    save_utils.save_to_s3(poi_df, config["data"]["geodata"]["UK_poi_locations_parquet"])
+        s3_fname = config["data"]["geodata"]["uk_osopen_uprn_partitioned"]
+        partition_geofile_to_grid_squares(
+            df=uprns_df, grid_squares=grid_squares, fname=s3_fname
+        )
+        del uprns_df
 
-    s3_fname = config["data"]["geodata"]["UK_poi_locations_partitioned"]
-    partition_geofile_to_grid_squares(
-        df=poi_df, grid_squares=grid_squares, fname=s3_fname
-    )
-    del poi_df
+    if "POI" in datasets:
+        # POI data
+        poi_gdf = load_geodata.load_gdf_poi(parquet=False).to_crs(
+            config["constant"]["target_crs"]
+        )
+        poi_df = geo_utils.convert_gdf_to_df(poi_gdf)
+        poi_df = assign_df_grid_squares(poi_df)
+        save_utils.save_to_s3(
+            poi_df, config["data"]["geodata"]["UK_poi_locations_parquet"]
+        )
+
+        s3_fname = config["data"]["geodata"]["UK_poi_locations_partitioned"]
+        partition_geofile_to_grid_squares(
+            df=poi_df, grid_squares=grid_squares, fname=s3_fname
+        )
+        del poi_df
