@@ -109,7 +109,7 @@ def load_arr_valid_epc_uprns(epc_type: str) -> np.array:
         .cast(pl.Float64, strict=False)
         .cast(pl.Int64)
         .alias("UPRN")
-    ).drop_nulls()  # TODO: Scotland commercial EPC data has a lot (37 %) of null UPRNs.
+    ).drop_nulls()  # TODO: Scotland commercial EPC data has a lot (37%) of null UPRNs.
 
     # Validate the EPC UPRNs
     df = uprns_schema.EPC_UPRN_Schema.validate(df, lazy=True)
@@ -475,7 +475,11 @@ if __name__ == "__main__":
             predicate="intersects",
         ).drop(columns="index_right")
 
-    poi_gdf = load_geodata.load_gdf_poi()
+    poi_df = load_geodata.load_gdf_poi(
+        grid_squares=local_authority_dict["grid_squares"]
+    )
+    poi_gdf = generate_gdf_uprn_coords(poi_df, x_col="X", y_col="Y")
+    del poi_df
     poi_gdf = poi.transform_gdf_poi(
         poi_gdf,
         filter_categories=None,
