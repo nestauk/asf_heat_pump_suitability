@@ -86,13 +86,14 @@ def load_arr_valid_epc_uprns(epc_type: str) -> np.array:
     else:
         # England and Wales EPC data
         df_EW = base_getters.load_df_from_s3(
-            config["data"]["epc"][epc_type]["EW"], columns="UPRN"
+            config["data"]["epc"][epc_type]["EW_parquet"], columns="UPRN"
         )
 
         # Scotland EPC data
         df_S = (
             base_getters.load_df_from_s3(
-                config["data"]["epc"][epc_type]["S"], columns="OSG_REFERENCE_NUMBER"
+                config["data"]["epc"][epc_type]["S_parquet"],
+                columns="OSG_REFERENCE_NUMBER",
             )
             .rename({"OSG_REFERENCE_NUMBER": "UPRN"})
             .cast(pl.Float64, strict=False)
