@@ -105,13 +105,15 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    from asf_heat_pump_suitability.getters import base_getters
+
     args = parse_arguments()
     datasets = args.datasets
     grid_squares = (
         args.grid_squares or load_geodata.load_gdf_bng_grid_squares()["bng_ref"]
     )
 
-    if "UPRN" in datasets:
+    if not datasets or "UPRN" in datasets:
         uprns_df = load_geodata.load_df_osopen_uprn(parquet=False)
 
         # Generate parquet file
@@ -135,7 +137,7 @@ if __name__ == "__main__":
         )
         del uprns_df
 
-    if "POI" in datasets:
+    if not datasets or "POI" in datasets:
         # POI data
         poi_gdf = load_geodata.load_gdf_poi(parquet=False).to_crs(
             config["constant"]["target_crs"]
@@ -151,3 +153,21 @@ if __name__ == "__main__":
             df=poi_df, grid_squares=grid_squares, fname=s3_fname
         )
         del poi_df
+
+    if not datasets or "EPC" in datasets:
+        # England and Wales register
+        commercial_epc_df = base_getters.load_df_from_s3(
+            config["data"]["epc"]["commercial"]["EW"],
+            infer_schema_length=10000,
+        )
+        save_utils.save_to_s3(
+            commercial_epc_df, config["data"]["epc"]["commercial"]["EW_parquet"]
+        )
+
+        # Scotland register
+        commercial_epc_df = base_getters.load_df_from_s3(
+            config["data"]["epc"]["commercial"]["S"]
+        )
+        save_utils.save_to_s3(
+            commercial_epc_df, config["data"]["epc"]["commercial"]["S_parquet"]
+        )
