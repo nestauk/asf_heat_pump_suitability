@@ -62,6 +62,7 @@ dev = [
     "sphinxcontrib-napoleon",
     "sphinx-rtd-theme",
     "pytest",
+    "pytest-cov",
     "pre-commit",
     "pre-commit-hooks",
     "flake8-pyproject",
@@ -99,6 +100,13 @@ import-order-style = "smarkets"
 docstring-convention = "google"
 exclude = ["*/notebooks/"]
 per-file-ignores = {"tests/*" = ["S"]}
+
+[tool.coverage.run]
+source = [
+    "asf_heat_pump_suitability/getters",
+    "asf_heat_pump_suitability/pipeline",
+    "asf_heat_pump_suitability/utils",
+]
 
 [tool.darglint]
 # Don't pester about parameters for a one-line docstring
