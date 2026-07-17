@@ -17,9 +17,6 @@ from asf_heat_pump_suitability.utils import geo_utils
 from asf_heat_pump_suitability.getters import base_getters, load_boundaries
 from asf_heat_pump_suitability.pipeline.transform import local_authority as la
 
-# Instantiate variable to fill with list from iterator in `load_gdf_bng_grid_squares`
-_BNG_GRID_100KM_FEATURES = None
-
 
 def load_df_osopen_uprn(
     parquet: bool = True,
@@ -71,15 +68,9 @@ def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: British National Grid square codes and their corresponding polygons
     """
-    global _BNG_GRID_100KM_FEATURES
-
-    # Materialize the iterator into a reusable list only once
-    # This is required to make multiple calls to this function in the same session
-    # Otherwise it will raise errors due to iterator exhaustion
-    if _BNG_GRID_100KM_FEATURES is None:
-        _BNG_GRID_100KM_FEATURES = list(grids.bng_grid_100km)
-
-    return gpd.GeoDataFrame.from_features(_BNG_GRID_100KM_FEATURES, crs=27700)
+    return gpd.GeoDataFrame.from_features(
+        grids.bbox_to_bng_iterfeatures(*grids.BNG_BOUNDS, "100km"), crs=27700
+    )
 
 
 def load_gdf_heat_network_zones(
@@ -345,7 +336,9 @@ def load_gdf_os_openroad(
     return gdf
 
 
-def load_gdf_poi() -> gpd.GeoDataFrame:
+def load_gdf_poi(
+    parquet: bool = True, grid_squares: Optional[List[str]] = None, **kwargs
+) -> pl.DataFrame | gpd.GeoDataFrame:
     """
     Load and process Points of Interest data. CRS EPSG 4326.
 
@@ -364,12 +357,26 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
         "alternate_category",
         "geometry",
     ]
-    poi = gpd.read_file(
-        filename=config["data"]["geodata"]["UK_poi_locations"],
-        columns=required_columns,
-        layer="poi_uk",
-    ).to_crs("EPSG:4326")
-    print(f"POI CRS: {poi.crs}")
+
+    if parquet:
+        if grid_squares:
+            paths = [
+                config["data"]["geodata"]["UK_poi_locations_partitioned"].format(
+                    grid_square=sq
+                )
+                for sq in grid_squares
+            ]
+            return pl.read_parquet(paths, **kwargs)
+        path = config["data"]["geodata"]["UK_poi_locations_partitioned"]
+        return pl.read_parquet(path, **kwargs)
+
+    else:
+        poi = gpd.read_file(
+            filename=config["data"]["geodata"]["UK_poi_locations"],
+            columns=required_columns,
+            layer="poi_uk",
+        ).to_crs("EPSG:4326")
+        print(f"POI CRS: {poi.crs}")
 
     return poi
 
