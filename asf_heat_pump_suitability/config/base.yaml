@@ -57,6 +57,8 @@ data:
     commercial:
       EW: "s3://asf-local-heat-planning-tool/inputs/epc/v092025_EPC_NonDomestic_EW.csv"
       S: "s3://asf-local-heat-planning-tool/inputs/epc/v122025_EPC_NonDomestic_S.csv"
+      EW_parquet: "s3://asf-local-heat-planning-tool/inputs/epc/v092025_EPC_NonDomestic_EW.parquet"
+      S_parquet: "s3://asf-local-heat-planning-tool/inputs/epc/v122025_EPC_NonDomestic_S.parquet"
 
   # Preprocessed data
   processed:
