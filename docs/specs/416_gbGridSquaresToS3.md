@@ -21,6 +21,11 @@ work is config/getter wiring + acceptance test. Supersedes the original upload-f
 - `oproad_essh_gb/20260708/data/{square}_RoadLink.shp` — Open Roads, flat layout, **51 squares**
   (missing only HW/HX/OV, which are effectively sea-only; getter derives squares from LA
   boundaries so these never get requested).
+  Updated 2026-07-20: the "never get requested" claim is wrong — verified by deriving squares
+  for all GB LAs: HW (Na h-Eileanan Siar), HX (Orkney) and OV (North Yorkshire's 1km buffer)
+  ARE requested and rely on the getter's missing-file skip; NI LAs in the UK-wide boundary
+  file additionally pull in NQ/NV/SA/SB, which OS GB products never cover. Evidence posted to
+  the PR #424 skip-logic thread.
 - `opgrsp_essh_gb/20260709/{square}/data/{square}_GreenspaceSite.shp` — Greenspace per-square,
   **all 52 tiles OS offers** (renamed from OS download folder names + 5 missing island squares
   HP/HT/HU/HY/HZ fetched from the OS Downloads API, 2026-07-09). HW/HX/OV not offered (sea-only).
@@ -43,6 +48,11 @@ work is config/getter wiring + acceptance test. Supersedes the original upload-f
    - `grid_square_os_openmap_greenspace` → `.../opgrsp_essh_gb/20260709/{square}/data/{square}_GreenspaceSite.shp`
 2. `getters/load_geodata.py` — **no change needed**: greenspace is per-square again (resolved
    2026-07-09; the earlier bbox-read idea is obsolete).
+   Updated 2026-07-20: the `origin/dev` merge (27e9029) had stacked dev's blanket
+   `except (FileNotFoundError, pyogrio.errors.DataSourceError)` (from #408) above this branch's
+   stricter handler (55427da), leaving the re-raise logic unreachable. Fixed in f32fa71 by
+   restoring this branch's reviewed two-clause version, which already covers the S3-missing
+   case #408 addressed.
 3. `config/README.md` — update the three dataset rows (release date, config key names if changed).
 4. Acceptance test: run `pipeline/transform/uprns.py` and the clustering step (exercises roads +
    greenspace + OpenMap layers) for an LA **outside** the old 15 squares — e.g. a London LA (TQ)
