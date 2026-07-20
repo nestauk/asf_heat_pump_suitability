@@ -95,7 +95,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--datasets",
-        help="Datasets to process of: UPRN, POI, EPC. Defaults to all datasets with optimisation options.",
+        help="Datasets to process of: UPRN; POI; EPC_domestic; EPC_commercial. Defaults to all datasets with optimisation options.",
         type=str,
         nargs="+",
         default=None,
@@ -113,7 +113,7 @@ if __name__ == "__main__":
         args.grid_squares or load_geodata.load_gdf_bng_grid_squares()["bng_ref"]
     )
 
-    if not datasets or "UPRN" in datasets:
+    if not datasets or "UPRN" in datasets or "EPC_domestic" in datasets:
         uprns_df = load_geodata.load_df_osopen_uprn(parquet=False)
 
         # Generate parquet file
@@ -131,10 +131,37 @@ if __name__ == "__main__":
             )
             uprns_df = uprns_df.drop_nulls(subset=["grid_square"])
 
-        s3_fname = config["data"]["geodata"]["uk_osopen_uprn_partitioned"]
-        partition_geofile_to_grid_squares(
-            df=uprns_df, grid_squares=grid_squares, fname=s3_fname
-        )
+        if not datasets or "UPRN" in datasets:
+            s3_fname = config["data"]["geodata"]["uk_osopen_uprn_partitioned"]
+            partition_geofile_to_grid_squares(
+                df=uprns_df, grid_squares=grid_squares, fname=s3_fname
+            )
+
+        if not datasets or "EPC_domestic" in datasets:
+            # Some UPRNs don't have coordinates so they will be dropped here.
+            # This is fine because we can't use them in the pipeline because we don't know where they are located.
+            # Note this would change if we use address to match UPRNs to buildings.
+            epc_df = (
+                base_getters.load_df_from_s3(config["data"]["epc"]["domestic"])
+                .with_columns(
+                    pl.col("UPRN")
+                    .cast(pl.Float64, strict=False)
+                    .cast(pl.Int64)
+                    .alias("UPRN")
+                )
+                .join(
+                    uprns_df.select(
+                        ["UPRN", "X_COORDINATE", "Y_COORDINATE", "grid_square"]
+                    ),
+                    how="left",
+                    on="UPRN",
+                )
+            )
+            s3_fname = config["data"]["epc"]["domestic_partitioned"]
+            partition_geofile_to_grid_squares(
+                df=epc_df, grid_squares=grid_squares, fname=s3_fname
+            )
+            del epc_df
         del uprns_df
 
     if not datasets or "POI" in datasets:
@@ -154,7 +181,7 @@ if __name__ == "__main__":
         )
         del poi_df
 
-    if not datasets or "EPC" in datasets:
+    if not datasets or "EPC_commercial" in datasets:
         # England and Wales register
         commercial_epc_df = base_getters.load_df_from_s3(
             config["data"]["epc"]["commercial"]["EW"],
