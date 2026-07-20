@@ -66,7 +66,7 @@ def generate_gdf_uprn_coords(
     return gdf
 
 
-def load_arr_valid_epc_uprns(epc_type: str) -> np.array:
+def load_arr_valid_epc_uprns(epc_type: str, grid_squares=None) -> np.array:
     """
     Load set of valid EPC UPRNs from either commercial or domestic EPC registers.
 
@@ -78,9 +78,16 @@ def load_arr_valid_epc_uprns(epc_type: str) -> np.array:
     """
     print(f"Loading UPRNs from {epc_type} EPC register...")
     if epc_type == "domestic":
-        df = base_getters.load_df_from_s3(
-            config["data"]["epc"][epc_type], columns="UPRN"
-        )
+        if grid_squares:
+            paths = [
+                config["data"]["epc"]["domestic_partitioned"].format(grid_square=sq)
+                for sq in grid_squares
+            ]
+            df = pl.read_parquet(paths, columns="UPRN")
+        else:
+            df = base_getters.load_df_from_s3(
+                config["data"]["epc"][epc_type], columns="UPRN"
+            )
         before = len(df)
 
     else:
@@ -126,7 +133,8 @@ def filter_gdf_domestic_uprns(
     uprn_gdf: gpd.GeoDataFrame,
     buildings_gdf: gpd.GeoDataFrame,
     non_residential_buildings_gdf: gpd.GeoDataFrame,
-    local_authority: str | list[str],
+    domestic_epc_uprns: np.array,
+    local_authority_dict: dict,
     id_col: str = config["constant"]["id"]["building"],
 ) -> gpd.GeoDataFrame:
     """
@@ -143,7 +151,7 @@ def filter_gdf_domestic_uprns(
         buildings_gdf (gpd.GeoDataFrame): all building footprints in area of interest.
         non_residential_buildings_gdf (gpd.GeoDataFrame): polygons of buildings which are unlikely to contain residential
         properties.
-        local_authority (str): name of local authority the domestic UPRNs are being identified for.
+        local_authority_dict (dict): name of local authority the domestic UPRNs are being identified for.
         id_col (str): name of ID column in `buildings_gdf`. Defaults to ID column defined in config.
 
     Returns:
@@ -164,9 +172,6 @@ def filter_gdf_domestic_uprns(
     uprns_in_buildings = set(
         uprn_gdf.sjoin(buildings_gdf, how="inner", predicate="intersects")["UPRN"]
     )
-
-    # Get valid residential UPRNs
-    domestic_epc_uprns = load_arr_valid_epc_uprns(epc_type="domestic")
 
     domestic_uprn_gdf = uprn_gdf[
         (
@@ -498,6 +503,10 @@ if __name__ == "__main__":
         for layer in ["important_building", "railway_station", "building"]
     }
 
+    domestic_epc_uprns = load_arr_valid_epc_uprns(
+        epc_type="domestic", grid_squares=local_authority_dict["grid_squares"]
+    )
+
     # Identify assumed non-residential buildings
     non_residential_buildings_gdf = (
         non_residential_entities.generate_gdf_non_residential_buildings(
@@ -505,6 +514,7 @@ if __name__ == "__main__":
             non_domestic_poi_gdf=non_domestic_poi_gdf,
             poi_gdf=poi_gdf,
             uprns_gdf=uprns_gdf,
+            domestic_epc_uprns=domestic_epc_uprns,
         )
     )
 
@@ -512,10 +522,9 @@ if __name__ == "__main__":
     domestic_uprns_gdf = filter_gdf_domestic_uprns(
         uprn_gdf=uprns_gdf,
         buildings_gdf=layers["building_gdf"],
+        domestic_epc_uprns=domestic_epc_uprns,
         non_residential_buildings_gdf=non_residential_buildings_gdf,
-        local_authority=[
-            la.lower() for la in local_authority_dict["valid_local_authorities"]
-        ],
+        local_authority_dict=local_authority_dict,
     )
 
     # Save residential UPRNs to S3
