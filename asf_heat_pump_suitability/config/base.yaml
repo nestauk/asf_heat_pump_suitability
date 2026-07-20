@@ -54,6 +54,7 @@ data:
 
   epc:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
+    domestic_partitioned: "s3://asf-local-heat-planning-tool/inputs/epc/domestic_partitioned/{grid_square}_epc_domestic.parquet"
     commercial:
       EW: "s3://asf-local-heat-planning-tool/inputs/epc/v092025_EPC_NonDomestic_EW.csv"
       S: "s3://asf-local-heat-planning-tool/inputs/epc/v122025_EPC_NonDomestic_S.csv"
