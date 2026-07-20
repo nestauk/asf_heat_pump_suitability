@@ -23,15 +23,16 @@ Source code for v1.0.0 is available under [Releases](https://github.com/nestauk/
 
 ## Setup
 
-- Meet the data science cookiecutter [requirements](http://nestauk.github.io/ds-cookiecutter/quickstart), in brief:
-  - Install: `direnv` and `conda`
+- Install prerequisites:
+  - [`uv`](https://docs.astral.sh/uv/getting-started/installation/) (Python package and project manager)
+  - [`direnv`](https://direnv.net/) (environment variable management)
 - Clone the repo and navigate to your local repo folder
 - Run `direnv allow`
 - Run `make install` to configure the development environment:
-  - Setup the conda environment
+  - Create the `.venv` virtual environment with all dependencies
   - Configure `pre-commit`
-  - Install requirements
-- Run `conda activate asf_heat_pump_suitability`
+- The virtual environment activates automatically when you enter the repo directory (via direnv)
+- To update the environment after changing dependencies in `pyproject.toml`, run `make sync`
 - Instructions to run pipeline scripts can be found in [asf_heat_pump_suitability/pipeline/README.md](https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/pipeline#readme)
 
 ## Repository structure
