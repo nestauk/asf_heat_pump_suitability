@@ -63,6 +63,7 @@ dev = [
     "sphinx-rtd-theme",
     "pytest",
     "pytest-cov",
+    "pytest-mock",
     "pre-commit",
     "pre-commit-hooks",
     "flake8-pyproject",
