@@ -15,6 +15,8 @@ from sklearn.metrics import (
     mean_squared_error,
     mean_absolute_percentage_error,
     root_mean_squared_log_error,
+    classification_report,
+    confusion_matrix,
 )
 from sklearn.neighbors import NearestNeighbors
 from sklearn.cluster import KMeans  #
@@ -44,11 +46,23 @@ def _get_gdf_5nn_spatial_features(gdf, unique_id_col):
 
     # get just the known garden sizes and the centroids of them
     known_gardens = gdf.dropna(subset=["max_contiguous_outdoor_space_area_m2"])
-    known_centroids = np.column_stack(
-        (known_gardens.geometry.centroid.x, known_gardens.geometry.centroid.y)
+
+    known_gardens["coord_round"] = (
+        known_gardens.geometry.centroid.x.round(4).astype(str)
+        + "_"
+        + known_gardens.geometry.centroid.y.round(4).astype(str)
     )
-    known_sizes = known_gardens["max_contiguous_outdoor_space_area_m2"].values
-    known_ids = known_gardens[unique_id_col].values
+
+    known_gardens_unique = known_gardens.drop_duplicates(subset=["coord_round"])
+
+    known_centroids = np.column_stack(
+        (
+            known_gardens_unique.geometry.centroid.x,
+            known_gardens_unique.geometry.centroid.y,
+        )
+    )
+    known_sizes = known_gardens_unique["max_contiguous_outdoor_space_area_m2"].values
+    known_ids = known_gardens_unique[unique_id_col].values
 
     # find the 6 nearest garden sizes and the distance to them. We need 6 so that we can drop the self-match later
     nn = NearestNeighbors(n_neighbors=6, algorithm="kd_tree")
@@ -107,6 +121,9 @@ def _get_gdf_5nn_spatial_features(gdf, unique_id_col):
     gdf["nn4_distance_m"] = nn4_dist
     gdf["nn5_distance_m"] = nn5_dist
 
+    if "coord_sig" in gdf.columns:
+        gdf = gdf.drop(columns=["coord_round"])
+
     return gdf
 
 
@@ -130,7 +147,7 @@ def _get_gdf_number_uprns_within_radius(gdf, radius_m=100, return_uprn_level=Fal
         # Each row represents a building.
         # The unique identifier is the ID column, and the 'UPRN' column holds the count.
         unique_id_col = "ID"
-        gdf["uprn_weight"] = gdf["uprns_in_building"]
+        gdf["uprn_weight"] = gdf["n_uprns_in_building"]
 
     # Create buffers around the centroids
     buffers = gpd.GeoDataFrame(
@@ -327,7 +344,7 @@ def engineer_gdf_features(local_authorities, return_uprn_level=False):
     # add building level features
     buildings_gdf["building_area_m2"] = buildings_gdf.area
     buildings_gdf["building_perimeter_m"] = buildings_gdf.length
-    buildings_gdf = _calculate_gdf_plot_ratio_proxy(buildings_gdf)
+    buildings_gdf = _calculate_gdf_plot_ratio_proxy(buildings_gdf=buildings_gdf)
 
     # get convex hull
     convex_hull_areas = buildings_gdf.geometry.convex_hull.area
@@ -364,7 +381,7 @@ def engineer_gdf_features(local_authorities, return_uprn_level=False):
 
         # add column of UPRNs per building footprint
         uprn_counts = (
-            uprns_df.groupby("ID").size().reset_index(name="uprns_in_building")
+            uprns_df.groupby("ID").size().reset_index(name="n_uprns_in_building")
         )
         uprns_df = uprns_df.merge(uprn_counts, on="ID", how="left")
         df_with_features = pd.merge(uprns_df, buildings_gdf, on="ID", how="left")
@@ -384,7 +401,7 @@ def engineer_gdf_features(local_authorities, return_uprn_level=False):
 
         # uprns per building footprint and aggregate uprn features to building level
         uprn_counts = uprns_df.groupby("ID").agg(aggregation_rules).reset_index()
-        uprn_counts.rename(columns={"UPRN": "uprns_in_building"}, inplace=True)
+        uprn_counts.rename(columns={"UPRN": "n_uprns_in_building"}, inplace=True)
 
         gdf_with_features = pd.merge(uprn_counts, buildings_gdf, on="ID", how="left")
 
@@ -394,7 +411,7 @@ def engineer_gdf_features(local_authorities, return_uprn_level=False):
         unique_id_col = "ID"
 
     gdf_with_features["area_per_uprn"] = (
-        gdf_with_features["building_area_m2"] / gdf_with_features["uprns_in_building"]
+        gdf_with_features["building_area_m2"] / gdf_with_features["n_uprns_in_building"]
     )
     gdf_with_features["perimeter_to_area_ratio"] = (
         gdf_with_features["building_perimeter_m"]
@@ -402,7 +419,7 @@ def engineer_gdf_features(local_authorities, return_uprn_level=False):
     )
 
     gdf_with_features = _compute_voronoi_area(
-        gdf_with_features, grid_squares, boundary_gdf
+        gdf=gdf_with_features, grid_squares=grid_squares, boundary=boundary_gdf
     )
 
     # convert spatial signature types to be one column per spatial signature type, with 1 being True and 0 being False
@@ -421,7 +438,9 @@ def engineer_gdf_features(local_authorities, return_uprn_level=False):
     gdf_with_features = pd.get_dummies(
         gdf_with_features, columns=["ATTACHMENT"], prefix="ATTACHMENT", dtype=int
     )
-    gdf_with_features = _get_gdf_5nn_spatial_features(gdf_with_features, unique_id_col)
+    gdf_with_features = _get_gdf_5nn_spatial_features(
+        gdf=gdf_with_features, unique_id_col=unique_id_col
+    )
 
     uprn_sums = _get_gdf_number_uprns_within_radius(
         gdf=gdf_with_features, return_uprn_level=return_uprn_level
@@ -506,7 +525,7 @@ local_authorities = ["Plymouth"]
 # %%
 correlation_cols = [
     "max_contiguous_outdoor_space_area_m2",
-    "uprns_in_building",
+    "n_uprns_in_building",
     "building_area_m2",
     "area_per_uprn",
     "spatial_signature_Accessible suburbia",
@@ -548,7 +567,7 @@ correlation_cols = [
 
 # %%
 feature_cols = [
-    "uprns_in_building",
+    "n_uprns_in_building",
     "building_area_m2",
     "area_per_uprn",
     "spatial_signature_Accessible suburbia",
@@ -730,6 +749,9 @@ plt.show()
 uprn_df = engineer_gdf_features(
     local_authorities=local_authorities, return_uprn_level=True
 )
+
+# %%
+uprn_df
 
 # %%
 features_uprn = [col for col in uprn_df.columns if col in correlation_cols]
@@ -916,6 +938,71 @@ plt.title("Top 15 Most Important Predictors for Garden Size (BDT)")
 plt.xlabel("Relative Importance (Adds up to 1.0)")
 plt.ylabel("Feature")
 plt.tight_layout()
+plt.show()
+
+# %%
+plt.figure(figsize=(8, 8))
+
+plt.scatter(
+    x=test_predictions_uprn,  # predicted garden sizes
+    y=y_test_clipped,  # actual garden sizes
+    alpha=0.5,
+    edgecolor="white",
+    color="#1f77b4",
+)
+
+# reference line
+plt.plot(
+    [0, 70],
+    [0, 70],
+    color="red",
+    linestyle="--",
+    linewidth=2,
+    label="Perfect Prediction",
+)
+
+# focussing on the smaller gardens where we care about this prediction more
+plt.xlim(0, 70)
+plt.ylim(0, 70)
+
+
+plt.title("Actual vs Predicted Garden Size (0-70m²)", fontsize=14, pad=15)
+plt.xlabel("Model's Predicted Size (m²)", fontsize=12)
+plt.ylabel("True Garden Size (m²)", fontsize=12)
+plt.grid(True, linestyle="--", alpha=0.6)
+plt.legend()
+
+plt.show()
+
+# %%
+bins = [-np.inf, 30, 70, np.inf]
+bucket_names = ["< 30m²", "30-70m²", "> 70m²"]
+
+# Convert the continuous target arrays into categorical buckets
+y_test_binned = pd.cut(y_test_clipped, bins=bins, labels=bucket_names)
+y_pred_binned = pd.cut(test_predictions_uprn, bins=bins, labels=bucket_names)
+
+print("--- Garden Size Classification Report ---")
+print(classification_report(y_test_binned, y_pred_binned, target_names=bucket_names))
+
+# Generate and plot the Confusion Matrix
+cm = confusion_matrix(
+    y_test_binned, y_pred_binned, labels=bucket_names, normalize="true"
+)
+
+plt.figure(figsize=(8, 6))
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt=".1%",
+    cmap="Blues",
+    xticklabels=bucket_names,
+    yticklabels=bucket_names,
+)
+
+plt.title("Garden Size Bucket Predictions: True vs Predicted", pad=20, fontsize=14)
+plt.ylabel("TRUE Real-World Size", fontsize=12, fontweight="bold")
+plt.xlabel("MODEL Predicted Size", fontsize=12, fontweight="bold")
 plt.show()
 
 # %%
