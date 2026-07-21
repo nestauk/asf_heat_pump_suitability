@@ -121,7 +121,7 @@ def _get_gdf_5nn_spatial_features(gdf, unique_id_col):
     gdf["nn4_distance_m"] = nn4_dist
     gdf["nn5_distance_m"] = nn5_dist
 
-    if "coord_sig" in gdf.columns:
+    if "coord_round" in gdf.columns:
         gdf = gdf.drop(columns=["coord_round"])
 
     return gdf
@@ -197,28 +197,16 @@ def _calculate_gdf_plot_ratio_proxy(buildings_gdf, buffer_radius=100):
 
     # Create the buffers
     buffers = buildings_gdf.geometry.centroid.buffer(buffer_radius)
-    buffers_gdf = gpd.GeoDataFrame(geometry=buffers, index=buildings_gdf.index)
+    buffers_gdf = gpd.GeoDataFrame(geometry=buffers, crs=buildings_gdf.crs)
+    buffers_gdf["buffer_id"] = buildings_gdf.index
 
-    # find buildings within buffer circles and keep the buffer geometry
-    joined = gpd.sjoin(buffers_gdf, buildings_gdf, how="inner", predicate="intersects")
-
-    left_geoms = joined.geometry  # These are the buffer circles
-
-    # get building polygons that are within the buffer circles
-    # the geometry will be of the full building (not just the bit inside the circle)
-    # explicitly give them the exact same index as the 'joined' dataframe.
-    right_geoms = gpd.GeoSeries(
-        buildings_gdf.loc[joined["index_right"], "geometry"].values, index=joined.index
-    )
-
-    # now clip building geometries to just what is within the buffer circle areas
-    exact_intersections = left_geoms.intersection(right_geoms)
+    intersections_gdf = gpd.overlay(buffers_gdf, buildings_gdf, how="intersection")
 
     # Calculate the area of just those clipped pieces
-    joined["clipped_area"] = exact_intersections.area
+    intersections_gdf["clipped_area"] = intersections_gdf.area
 
     # Group by the buffer's index and sum the clipped areas
-    total_exact_area = joined.groupby(joined.index)["clipped_area"].sum()
+    total_exact_area = intersections_gdf.groupby("buffer_id")["clipped_area"].sum()
 
     # Calculate the ratio and assign it back to the main dataframe
     buildings_gdf["plot_ratio_proxy"] = total_exact_area / buffer_area
