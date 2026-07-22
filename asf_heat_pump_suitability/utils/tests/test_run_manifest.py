@@ -36,23 +36,51 @@ class TestGetStrGitCommit:
 class TestGenerateDictInputVersions:
     """Tests for `generate_dict_input_versions`."""
 
-    def test_flattens_nested_config_to_dot_separated_keys(self):
-        """Nested dataset path config flattens to one dot-separated key per path."""
-        nested = {
-            "epc": {"domestic": "s3://a", "commercial": {"EW": "s3://b"}},
-            "top_level": "s3://c",
-        }
-        assert run_manifest.generate_dict_input_versions(nested) == {
-            "epc.domestic": "s3://a",
-            "epc.commercial.EW": "s3://b",
-            "top_level": "s3://c",
+    def test_resolves_exactly_the_requested_keys(self):
+        """Returns the resolved path string for each requested key and nothing else."""
+        assert run_manifest.generate_dict_input_versions(
+            ["epc.domestic", "geodata.boundaries.UK_ons_lad_bounds"]
+        ) == {
+            "epc.domestic": config["data"]["epc"]["domestic"],
+            "geodata.boundaries.UK_ons_lad_bounds": config["data"]["geodata"][
+                "boundaries"
+            ]["UK_ons_lad_bounds"],
         }
 
-    def test_defaults_to_config_data_path_strings(self):
-        """With no argument, returns the resolved path strings from config["data"]."""
-        input_versions = run_manifest.generate_dict_input_versions()
-        assert input_versions["epc.domestic"] == config["data"]["epc"]["domestic"]
-        assert all(isinstance(path, str) for path in input_versions.values())
+    def test_unknown_key_raises_keyerror(self):
+        """A key path missing from config["data"] fails loudly at run time rather
+        than silently omitting lineage."""
+        with pytest.raises(KeyError, match="epc.nonexistent"):
+            run_manifest.generate_dict_input_versions(["epc.nonexistent"])
+
+    def test_subtree_key_raises_keyerror(self):
+        """A key path resolving to a config subtree rather than a dataset path
+        string is a curated-list mistake and fails loudly."""
+        with pytest.raises(KeyError, match="subtree"):
+            run_manifest.generate_dict_input_versions(["epc"])
+
+
+class TestStageInputKeys:
+    """Tests for the curated `STAGE_INPUT_KEYS` lists."""
+
+    def test_covers_the_five_pipeline_stages(self):
+        """One curated list exists per pipeline entrypoint."""
+        assert set(run_manifest.STAGE_INPUT_KEYS) == {
+            "uprns",
+            "add_features",
+            "decision_tree",
+            "cluster",
+            "compute_contextual_features",
+        }
+
+    def test_every_curated_key_resolves_to_a_path_string(self):
+        """Every curated key resolves in config["data"] to a path string, so a
+        config rename cannot silently break a stage's lineage."""
+        for stage, input_keys in run_manifest.STAGE_INPUT_KEYS.items():
+            input_versions = run_manifest.generate_dict_input_versions(input_keys)
+            assert all(
+                isinstance(path, str) for path in input_versions.values()
+            ), f"Non-string dataset path in curated keys for stage: {stage}"
 
 
 @pytest.fixture(scope="module")
@@ -63,6 +91,7 @@ def manifest():
         local_authority="plymouth",
         row_count=123,
         params={"local_authorities": ["plymouth"], "release_date": "20260722"},
+        input_keys=run_manifest.STAGE_INPUT_KEYS["uprns"],
     )
 
 
@@ -102,10 +131,10 @@ class TestGenerateDictRunManifest:
             or manifest["git_commit"] == "unknown"
         )
 
-    def test_input_versions_snapshot_config_data(self, manifest):
-        """input_versions records the resolved config["data"] path strings."""
+    def test_input_versions_resolve_the_curated_stage_keys(self, manifest):
+        """input_versions records exactly the curated input keys the caller passed."""
         assert manifest["input_versions"] == run_manifest.generate_dict_input_versions(
-            config["data"]
+            run_manifest.STAGE_INPUT_KEYS["uprns"]
         )
 
     def test_manifest_is_json_serialisable(self, manifest):
