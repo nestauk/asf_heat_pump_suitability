@@ -11,9 +11,12 @@ import pytest
 from pyogrio.errors import DataSourceError
 from shapely.geometry import Point
 
+from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import load_geodata
 
-SAMPLE_GDF = gpd.GeoDataFrame({"ID": [1], "geometry": [Point(0, 0)]}, crs=27700)
+SAMPLE_GDF = gpd.GeoDataFrame(
+    {"ID": [1], "geometry": [Point(0, 0)]}, crs=config["constant"]["target_crs"]
+)
 
 
 def read_file_missing_hx_side_effect(path, **kwargs):
