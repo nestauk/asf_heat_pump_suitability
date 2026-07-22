@@ -90,7 +90,7 @@ def extend_df_contextual_features(
             pl.col(col)
             .cast(pl.String)  # ensure it's a string column
             .str.to_lowercase()  # null and NULL will be converted to "null" string, so we can group them under "unknown"
-            .str.strip_chars()
+            .str.strip_chars()  # strip leading and trailing white space
             # Group all nulls under "unknown"
             .map_elements(
                 lambda val: "unknown" if val in (None, "null", "") else val,
