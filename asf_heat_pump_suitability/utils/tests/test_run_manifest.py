@@ -6,6 +6,7 @@ pytest asf_heat_pump_suitability/utils/tests/test_run_manifest.py
 """
 
 import json
+import logging
 import re
 from datetime import datetime
 
@@ -139,3 +140,21 @@ class TestGetStrManifestPath:
         path = run_manifest.get_str_manifest_path("s3://bucket/dir/output.parquet")
         assert path.split("/")[-1] != "manifest.json"
         assert path.endswith(".manifest.json")
+
+
+class TestSaveManifestToS3:
+    """Tests for `save_manifest_to_s3`."""
+
+    def test_write_failure_is_swallowed_and_logged(self, monkeypatch, caplog):
+        """A failed manifest write logs a warning naming the manifest path
+        instead of raising, so it can never abort a pipeline run."""
+
+        def raise_oserror(*args, **kwargs):
+            raise OSError("S3 write failed")
+
+        monkeypatch.setattr(run_manifest.fsspec, "open", raise_oserror)
+        with caplog.at_level(logging.WARNING):
+            run_manifest.save_manifest_to_s3(
+                {"stage": "uprns"}, "s3://bucket/dir/output.parquet"
+            )
+        assert "s3://bucket/dir/output.manifest.json" in caplog.text

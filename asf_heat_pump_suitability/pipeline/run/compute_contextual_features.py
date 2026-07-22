@@ -416,9 +416,21 @@ if __name__ == "__main__":
             s3_file_path,
         )
 
+        # Save to front-end S3 bucket for use in the tool
+        front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
+        front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
+        file_name = s3_file_path.split("/")[-1]
+        save_utils.save_to_s3(
+            geojson_file,
+            os.path.join(
+                "s3://", front_end_s3_bucket, front_end_staging_s3_path, file_name
+            ),
+        )
+
         # Only the dated data-science copy gets a run manifest; the undated
-        # front-end copy below is overwritten every run and has no version
-        # history to attach lineage to
+        # front-end copy above is overwritten every run and has no version
+        # history to attach lineage to. Written after both saves so even a
+        # non-fatal manifest failure log cannot sit between them.
         run_manifest.save_manifest_to_s3(
             run_manifest.generate_dict_run_manifest(
                 stage="compute_contextual_features",
@@ -430,15 +442,4 @@ if __name__ == "__main__":
                 },
             ),
             s3_file_path,
-        )
-
-        # Save to front-end S3 bucket for use in the tool
-        front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
-        front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
-        file_name = s3_file_path.split("/")[-1]
-        save_utils.save_to_s3(
-            geojson_file,
-            os.path.join(
-                "s3://", front_end_s3_bucket, front_end_staging_s3_path, file_name
-            ),
         )

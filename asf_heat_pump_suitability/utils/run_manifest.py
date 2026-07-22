@@ -130,6 +130,11 @@ def save_manifest_to_s3(manifest: dict, output_path: str) -> None:
     """
     Save run manifest as JSON next to the output file it describes.
 
+    A manifest write failure never aborts a pipeline run: any exception raised
+    by the write is caught and logged as a warning naming the manifest path,
+    and the function returns without raising. Lineage degrades rather than
+    failing the run, mirroring the `get_str_git_commit` "unknown" fallback.
+
     Args:
         manifest (dict): run manifest, as returned by `generate_dict_run_manifest`
         output_path (str): S3 path of the output file the manifest describes
@@ -139,5 +144,12 @@ def save_manifest_to_s3(manifest: dict, output_path: str) -> None:
     """
     manifest_path = get_str_manifest_path(output_path)
     logging.info(f"Saving run manifest to {manifest_path}")
-    with fsspec.open(manifest_path, "w") as f:
-        json.dump(manifest, f, ensure_ascii=False, indent=2)
+    try:
+        with fsspec.open(manifest_path, "w") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+    except Exception:
+        logging.warning(
+            "Failed to write run manifest to %s; continuing without it.",
+            manifest_path,
+            exc_info=True,
+        )
