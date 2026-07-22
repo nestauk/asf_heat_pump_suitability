@@ -206,10 +206,10 @@ def _calculate_gdf_plot_ratio_proxy(buildings_gdf, buffer_radius=100):
     intersections_gdf["clipped_area"] = intersections_gdf.area
 
     # Group by the buffer's index and sum the clipped areas
-    total_exact_area = intersections_gdf.groupby("buffer_id")["clipped_area"].sum()
+    total_area = intersections_gdf.groupby("buffer_id")["clipped_area"].sum()
 
     # Calculate the ratio and assign it back to the main dataframe
-    buildings_gdf["plot_ratio_proxy"] = total_exact_area / buffer_area
+    buildings_gdf["plot_ratio_proxy"] = total_area / buffer_area
 
     # Fill NaNs with 0 (in case a point had zero intersecting buildings)
     buildings_gdf["plot_ratio_proxy"] = buildings_gdf["plot_ratio_proxy"].fillna(0)
