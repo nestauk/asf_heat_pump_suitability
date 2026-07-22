@@ -70,20 +70,25 @@ Decisions settled during kickoff interview (2026-07-22):
 
 ## Open questions
 
-- Whether the existence-check helper belongs in `utils/s3_utils.py`
-  (reusable by future validation checks) or stays inline in
-  `pipeline/validate/check_inputs.py` (self-contained) — low-stakes, easily
-  changed later; left to `/implement`'s judgment.
+- ~~Whether the existence-check helper belongs in `utils/s3_utils.py` or
+  stays inline in `pipeline/validate/check_inputs.py`~~ — resolved at
+  implementation: placed in `utils/s3_utils.py` as
+  `get_bool_s3_path_exists`, alongside the existing `list_objects_v2`-based
+  helper, reusable by future validation checks.
 - Noticed but not in scope: `run_pipeline.sh:19` has a pre-existing bug
   unrelated to this issue (`succeeded = 0` — invalid bash syntax due to
   spaces around `=`). Flagging so it isn't lost, not fixing here.
 
 ## Verification
 
-- [ ] Checks every configured S3 input path under `config["data"]`,
-      resolving templated paths to their prefix
-- [ ] Reports all missing paths in one pass and exits non-zero
-- [ ] Wired into `run_pipeline.sh` as its first step, before the
+- [x] Checks every configured S3 input path under `config["data"]`,
+      resolving templated paths to their prefix (27 paths checked in the
+      acceptance run)
+- [x] Reports all missing paths in one pass and exits non-zero — the
+      acceptance run surfaced a genuinely missing configured input
+      (`inputs/geodata/council_tax/PLYMOUTH_CTBANDS_ONSUD_202512.csv`; the
+      S3 folder is empty) and exited 1
+- [x] Wired into `run_pipeline.sh` as its first step, before the
       local-authority loop
-- [ ] Unit tests cover at least one missing-path case and one all-present
+- [x] Unit tests cover at least one missing-path case and one all-present
       case (`pipeline/validate/tests/test_check_inputs.py`)
