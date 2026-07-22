@@ -280,6 +280,12 @@ def load_gdf_os_openmap_layer(
                     f"Error loading OS OpenMap layer - {layer.title()} file {file}: {e}"
                 )
 
+        if not gdfs:
+            logging.warning(
+                f"No {layer} files found for grid squares {grid_squares}. Returning empty GeoDataFrame."
+            )
+            return gpd.GeoDataFrame(geometry=[], crs=27700)
+
         gdf = pd.concat(gdfs)
         id_col = "ID" if "ID" in gdf.columns else "id"
 
