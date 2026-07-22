@@ -36,6 +36,12 @@ def get_list_s3_paths(config_section: dict) -> list:
     for value in config_section.values():
         if isinstance(value, dict):
             paths.extend(get_list_s3_paths(value))
+        elif isinstance(value, list):
+            paths.extend(
+                item
+                for item in value
+                if isinstance(item, str) and item.startswith("s3://")
+            )
         elif isinstance(value, str) and value.startswith("s3://"):
             paths.append(value)
     return paths
