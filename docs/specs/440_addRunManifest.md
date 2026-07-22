@@ -69,13 +69,6 @@ Decisions settled during implementation (2026-07-22):
 - **Manifest code lives in `utils/run_manifest.py`** (1:1 tests in
   `utils/tests/test_run_manifest.py`), keeping `save_utils` focused on
   output writing.
-- **`input_versions` is a flat snapshot of the whole `config["data"]` tree**
-  (dot-separated keys → path strings, e.g. `"epc.domestic": "s3://..."`),
-  identical for every stage. Stages pull datasets through nested getters, so
-  a hand-curated per-stage list would be fragile and silently rot as code
-  changes which datasets it reads; the uniform snapshot is the direct
-  reading of "read from the dated prefixes already hardcoded in
-  `config["data"]`" and diffs cleanly across runs.
 - **`git_commit` falls back to an `"unknown"` sentinel** when
   `git rev-parse HEAD` fails (resolves the open question below) — a run
   still completes with incomplete lineage rather than hard-failing. The
@@ -87,6 +80,29 @@ Decisions settled during implementation (2026-07-22):
   function's previously discarded return value — one manifest per output
   file, each with its own `row_count` — leaving the non-standard
   `gdf.to_parquet` save path untouched as decided above.
+
+Decisions settled at review (Aidan's call, 2026-07-22):
+
+- **Manifest writes are non-fatal.** A lineage sidecar must never abort a
+  pipeline run that just produced its output: `save_manifest_to_s3` catches
+  any exception around the write, logs a warning naming the manifest path,
+  and returns — the same degrade-don't-fail philosophy as the `git_commit`
+  `"unknown"` fallback. The docstring states the contract. In
+  `compute_contextual_features` the manifest write moves after the
+  front-end "latest" publish so even the (now merely cosmetic) failure log
+  cannot sit between the two output saves; the manifest still describes
+  the dated data-science copy only.
+- **`input_versions` is a curated per-stage list, not a flat snapshot of
+  the whole `config["data"]` tree.** Each stage's manifests record only
+  the datasets that stage actually reads (traced through its getters and
+  transform modules), so diffs between runs point at inputs that could
+  have changed the output rather than burying them in ~27 identical keys.
+  The lists live in one greppable place (`STAGE_INPUT_KEYS` in
+  `utils/run_manifest.py`, one commented entry per dataset naming its
+  loader) and `generate_dict_input_versions` raises `KeyError` on a key
+  that is missing from `config["data"]` or resolves to a subtree — a typo
+  in a curated list fails loudly at run time instead of silently omitting
+  lineage. Legacy `config["data_source"]` (v1) reads stay out of scope.
 
 ## Alternatives considered
 
@@ -100,6 +116,14 @@ Decisions settled during implementation (2026-07-22):
   diff into code it doesn't need to touch.
 - **Extracted version token via per-dataset regex** — rejected; no shared
   naming convention exists today to write a single regex against.
+- **Flat `input_versions` snapshot of the whole `config["data"]` tree**
+  (identical for every stage) — the original implementation choice, on the
+  reasoning that stages pull datasets through nested getters so a
+  hand-curated per-stage list would be fragile and silently rot as code
+  changes which datasets it reads. Superseded at review (2026-07-22) by
+  the curated per-stage lists above: per-stage signal beats
+  rot-resistance, and the loud-failure key resolution plus a test that
+  every curated key resolves in config contain the rot risk.
 
 ## Out of scope
 
@@ -130,5 +154,8 @@ Decisions settled during implementation (2026-07-22):
       `TestGetStrManifestPath` (derived name always keeps the output
       basename, so it can never be the bare `manifest.json`)
 - [x] Unit test covers manifest dict content for at least one entrypoint —
-      `utils/tests/test_run_manifest.py` (13 tests) covers dict content,
-      input-version flattening, git-commit fallback and path derivation
+      `utils/tests/test_run_manifest.py` (17 tests) covers dict content,
+      curated input-version resolution (exact selection; loud `KeyError`
+      on unknown or subtree keys; every `STAGE_INPUT_KEYS` entry resolves),
+      the swallowed-and-logged manifest write failure, git-commit fallback
+      and path derivation
