@@ -32,10 +32,11 @@ def build_df_grid_square_lookup() -> pl.DataFrame:
     """
     grid_gdf = load_geodata.load_gdf_bng_grid_squares()
     bounds = grid_gdf.geometry.bounds
+    # Convert easting and northing to single digit integers (100km values)
     return pl.DataFrame(
         {
-            "easting_100km": (bounds["minx"] / 100000).astype(int).tolist(),
-            "northing_100km": (bounds["miny"] / 100000).astype(int).tolist(),
+            "easting_100km": (bounds["minx"] // 100000).astype(int).tolist(),
+            "northing_100km": (bounds["miny"] // 100000).astype(int).tolist(),
             "grid_square": grid_gdf["bng_ref"].tolist(),
         }
     ).with_columns(cs.numeric().cast(pl.Int32))
@@ -57,6 +58,7 @@ def assign_df_grid_squares(
     return (
         df.with_columns(
             [
+                # Convert X and Y coordinates to single digit easting and northing values
                 (pl.col(x_col) // 100000).cast(pl.Int32).alias("easting_100km"),
                 (pl.col(y_col) // 100000).cast(pl.Int32).alias("northing_100km"),
             ]
