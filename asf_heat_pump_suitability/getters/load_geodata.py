@@ -4,7 +4,6 @@ import os
 import pandas as pd
 from typing import Optional, List
 import boto3
-import pyogrio
 import s3fs
 import shapely
 import logging
@@ -12,6 +11,7 @@ import warnings
 
 from tenacity import retry, stop_after_attempt
 from osbng import grids
+from pyogrio.errors import DataSourceError
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import geo_utils
@@ -213,6 +213,11 @@ def load_gdf_os_openmap_layer(
     Load specified OS OpenMap Local or Greenspace layer for Great Britain or optionally for a specific grid square.
     CRS British National Grid (27700).
 
+    In grid square mode, files missing from S3 are skipped with a warning (OS only ships a layer file for squares
+    containing that feature, e.g. no tidal water file for inland squares), so the result may cover fewer squares
+    than requested. TODO: if all requested squares lack the layer, pd.concat raises ValueError; return an empty
+    GeoDataFrame instead.
+
     Find full list of green space sites here: https://docs.os.uk/os-downloads/products/land-and-terrain-portfolio/os-open-greenspace/os-open-greenspace-technical-specification/code-lists/functionvalue#code-list-functionvalue
 
     Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
@@ -284,10 +289,17 @@ def load_gdf_os_openmap_layer(
             print(f"\nLoading OS OpenMap layer - {layer.title()} file: {file}")
             try:
                 gdfs.append(gpd.read_file(file, **kwargs))
-            except (FileNotFoundError, pyogrio.errors.DataSourceError) as e:
+            except FileNotFoundError as e:
                 # dealing with non-existing layers (e.g. no bodies of water in the grid square so no surface water area layer)
                 print(
                     f"Error loading OS OpenMap layer - {layer.title()} file {file}: {e}"
+                )
+            except DataSourceError as e:
+                # pyogrio raises DataSourceError for files missing from S3; skip those only
+                if "does not exist" not in str(e):
+                    raise
+                logging.warning(
+                    f"Skipping missing OS OpenMap layer - {layer.title()} file {file}: {e}"
                 )
 
         gdf = pd.concat(gdfs)
@@ -302,6 +314,10 @@ def load_gdf_os_openroad(
     """
     Load road link data from OS OpenRoad for Great Britain or optionally for a specific grid square (or list of grid squares). CRS British National Grid (27700).
     Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
+
+    In grid square mode, files missing from S3 are skipped with a warning (e.g. sea-only squares have no road data),
+    so the result may cover fewer squares than requested. TODO: if all requested squares lack road data, pd.concat
+    raises ValueError; return an empty GeoDataFrame instead.
 
     Args:
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded. Default None to load whole GB.
@@ -329,7 +345,13 @@ def load_gdf_os_openroad(
 
         for file in files:
             print(f"\nLoading OS OpenRoad file: {file}")
-            gdfs.append(gpd.read_file(file))
+            try:
+                gdfs.append(gpd.read_file(file))
+            except (FileNotFoundError, DataSourceError) as e:
+                # skip grid squares with no road data (e.g. sea-only squares)
+                if isinstance(e, DataSourceError) and "does not exist" not in str(e):
+                    raise
+                logging.warning(f"Skipping missing OS OpenRoad file {file}: {e}")
 
         gdf = pd.concat(gdfs)
 
