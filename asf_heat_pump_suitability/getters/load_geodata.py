@@ -30,9 +30,8 @@ def load_df_osopen_uprn(
 
     Args:
         parquet (bool): set to `True` to load `parquet` file for speed gains, or `False` to load original CSV+ZIP format. Default True.
-        grid_squares (Optional[List[str]]): 100km BNG grid square codes (e.g. ["SX", "SY"]) to load from the
-            partitioned Parquet dataset. When provided, only UPRNs in those grid squares are loaded, which is
-            significantly faster than loading the full GB dataset. Ignored when `parquet=False`.
+        grid_squares (Optional[List[str]]): 100km BNG grid square codes (e.g. ["SX", "SY"]) to load UPRN data for.
+        Ignored when `parquet=False`.
         **kwargs for pl.read_csv or pl.read_parquet
 
     Returns:

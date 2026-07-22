@@ -1,24 +1,22 @@
 """
-Converts raw OS Open UPRN data from ZIP+CSV to Hive-partitioned Parquet by 100km BNG grid square.
-
-This is a one-time preprocessing step. The partitioned output enables fast spatial reads by grid square,
-so downstream pipeline runs load only the UPRNs relevant to the target local authority rather than
-the full ~36M-row GB dataset.
+Script to optimise input datasets for speed and memory gains during pipeline runs. Converts heavy file types into
+more efficient parquet files and, where possible, partitions geospatial data by grid square.
 
 To run (all grid squares):
     python asf_heat_pump_suitability/pipeline/run/optimise_inputs.py
 
 To run for specific grid squares only (e.g. to re-process or test):
     python asf_heat_pump_suitability/pipeline/run/optimise_inputs.py --grid_squares SX SY
+
+To run for specific datasets only:
+    python asf_heat_pump_suitability/pipeline/run/optimise_inputs.py --datasets EPC POI
 """
 
 import argparse
 import logging
 
-import geopandas as gpd
 import polars as pl
 import polars.selectors as cs
-from osbng import grids
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import load_geodata
@@ -27,14 +25,10 @@ from asf_heat_pump_suitability.utils import save_utils, geo_utils
 
 def build_df_grid_square_lookup() -> pl.DataFrame:
     """
-    Build a Polars lookup table mapping 100km BNG tile indices to grid square reference codes.
-
-    The BNG letter codes (e.g. SX, NT) don't follow a simple arithmetic formula, so this derives
-    the mapping from the osbng grid square bounds and joins it against integer tile indices computed
-    from raw easting/northing coordinates.
+    Build a Polars lookup table mapping 100km BNG tiles to grid square letter codes (e.g. SX, NT).
 
     Returns:
-        pl.DataFrame: lookup with columns easting_100km (Int32), northing_100km (Int32), grid_square (Utf8)
+        pl.DataFrame: lookup with easting_100km and northing_100km coordinates to their corresponding grid square values
     """
     grid_gdf = load_geodata.load_gdf_bng_grid_squares()
     bounds = grid_gdf.geometry.bounds
@@ -51,14 +45,13 @@ def assign_df_grid_squares(
     df: pl.DataFrame, x_col: str = "X", y_col: str = "Y"
 ) -> pl.DataFrame:
     """
-    Add a grid_square column to a UPRN DataFrame by joining against the 100km BNG tile lookup.
+    Join a grid square column to a UPRN DataFrame using X and Y coordinate information.
 
     Args:
         df (pl.DataFrame): UPRN data with X_COORDINATE and Y_COORDINATE columns in BNG (EPSG:27700).
 
     Returns:
-        pl.DataFrame: input DataFrame with an additional grid_square column (Utf8). Rows outside
-        the BNG extent will have a null grid_square.
+        pl.DataFrame: UPRNs with their corresponding grid square
     """
     lookup = build_df_grid_square_lookup()
     return (
@@ -73,13 +66,24 @@ def assign_df_grid_squares(
     )
 
 
-def partition_geofile_to_grid_squares(df: pl.DataFrame, grid_squares: list, fname: str):
+def partition_geofile_to_grid_squares(
+    df: pl.DataFrame, grid_squares: list, fpath: str
+) -> None:
+    """
+    Partition a single dataframe containing geospatial information into GB 100km grid squares and save to S3.
+
+    Args:
+        df (pl.DataFrame): dataframe to partition containing `grid_square` column
+        grid_squares (list): all grid squares contained in `df`
+        fpath (str): generic path to save partitioned files to. String must contain `{grid_square}` for formatting corresponding
+        grid square for each file.
+    """
     for grid_square in grid_squares:
         partition = df.filter(pl.col("grid_square") == grid_square).drop("grid_square")
         print(
-            f"Saving {len(partition):,} rows for grid square {grid_square} to {fname.format(grid_square=grid_square)}..."
+            f"Saving {len(partition):,} rows for grid square {grid_square} to {fpath.format(grid_square=grid_square)}..."
         )
-        save_utils.save_to_s3(partition, fname.format(grid_square=grid_square))
+        save_utils.save_to_s3(partition, fpath.format(grid_square=grid_square))
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -134,7 +138,7 @@ if __name__ == "__main__":
         if not datasets or "UPRN" in datasets:
             s3_fname = config["data"]["geodata"]["uk_osopen_uprn_partitioned"]
             partition_geofile_to_grid_squares(
-                df=uprns_df, grid_squares=grid_squares, fname=s3_fname
+                df=uprns_df, grid_squares=grid_squares, fpath=s3_fname
             )
 
         if not datasets or "EPC_domestic" in datasets:
@@ -159,7 +163,7 @@ if __name__ == "__main__":
             )
             s3_fname = config["data"]["epc"]["domestic_partitioned"]
             partition_geofile_to_grid_squares(
-                df=epc_df, grid_squares=grid_squares, fname=s3_fname
+                df=epc_df, grid_squares=grid_squares, fpath=s3_fname
             )
             del epc_df
         del uprns_df
@@ -177,7 +181,7 @@ if __name__ == "__main__":
 
         s3_fname = config["data"]["geodata"]["UK_poi_locations_partitioned"]
         partition_geofile_to_grid_squares(
-            df=poi_df, grid_squares=grid_squares, fname=s3_fname
+            df=poi_df, grid_squares=grid_squares, fpath=s3_fname
         )
         del poi_df
 
