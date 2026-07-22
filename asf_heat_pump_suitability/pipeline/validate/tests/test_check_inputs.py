@@ -1,3 +1,5 @@
+"""Tests for the S3 input preflight check in `pipeline.validate.check_inputs`."""
+
 import pytest
 
 from asf_heat_pump_suitability.pipeline.validate.check_inputs import (
@@ -50,6 +52,17 @@ class TestGetListS3Paths:
         }
         assert get_list_s3_paths(config_section) == ["s3://bucket/file.csv"]
 
+    def test_collects_s3_paths_inside_lists(self):
+        """s3:// strings inside list values are collected, not silently skipped."""
+        config_section = {
+            "regions": ["s3://bucket/inputs/north.csv", "s3://bucket/inputs/south.csv"],
+            "mixed": ["not a path", 42],
+        }
+        assert get_list_s3_paths(config_section) == [
+            "s3://bucket/inputs/north.csv",
+            "s3://bucket/inputs/south.csv",
+        ]
+
 
 class TestGetStrCheckablePrefix:
     """Tests for `get_str_checkable_prefix`."""
@@ -69,6 +82,7 @@ class TestGetListMissingS3Paths:
     """Tests for `get_list_missing_s3_paths`."""
 
     @pytest.fixture(scope="class")
+    @classmethod
     def s3_client(self) -> FakeS3Client:
         """Fake S3 with two objects, one under a templated dataset's prefix."""
         return FakeS3Client(
