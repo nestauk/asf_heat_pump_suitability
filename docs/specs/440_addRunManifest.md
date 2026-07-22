@@ -64,6 +64,30 @@ Decisions settled during kickoff interview (2026-07-22):
   `tmp_path` or mocked-file-write precedent exists anywhere in this repo's
   test suite, so this issue doesn't introduce one.
 
+Decisions settled during implementation (2026-07-22):
+
+- **Manifest code lives in `utils/run_manifest.py`** (1:1 tests in
+  `utils/tests/test_run_manifest.py`), keeping `save_utils` focused on
+  output writing.
+- **`input_versions` is a flat snapshot of the whole `config["data"]` tree**
+  (dot-separated keys → path strings, e.g. `"epc.domestic": "s3://..."`),
+  identical for every stage. Stages pull datasets through nested getters, so
+  a hand-curated per-stage list would be fragile and silently rot as code
+  changes which datasets it reads; the uniform snapshot is the direct
+  reading of "read from the dated prefixes already hardcoded in
+  `config["data"]`" and diffs cleanly across runs.
+- **`git_commit` falls back to an `"unknown"` sentinel** when
+  `git rev-parse HEAD` fails (resolves the open question below) — a run
+  still completes with incomplete lineage rather than hard-failing. The
+  subprocess runs with `cwd=PROJECT_DIR` so the hash reflects the imported
+  package, not the caller's working directory.
+- **`params` records the resolved `release_date`** (the actual YYYYMMDD
+  dated directory used), not the raw CLI value, which may be `None`.
+- **`decision_tree` manifests are written in `__main__`** from the
+  function's previously discarded return value — one manifest per output
+  file, each with its own `row_count` — leaving the non-standard
+  `gdf.to_parquet` save path untouched as decided above.
+
 ## Alternatives considered
 
 - **Fixed name `run_manifest.json` per directory** — rejected; ambiguous
@@ -87,19 +111,24 @@ Decisions settled during kickoff interview (2026-07-22):
 
 ## Open questions
 
-- What `git_commit` should record when `git rev-parse HEAD` isn't available
-  (e.g. a deployed environment without a `.git` directory) — no fallback
-  behaviour decided yet; deferred to `/implement`'s judgment (e.g. an
-  `"unknown"` sentinel rather than a hard failure, since a run should still
-  complete even if lineage is incomplete).
+- ~~What `git_commit` should record when `git rev-parse HEAD` isn't
+  available~~ — resolved during implementation: an `"unknown"` sentinel
+  with a logged warning, never a hard failure.
 
 ## Verification
 
-- [ ] A manifest JSON is written next to each of the five entrypoints'
+- [x] A manifest JSON is written next to each of the five entrypoints'
       outputs (uprns, add_features, decision_tree, cluster,
-      compute_contextual_features), gated on `--save`
-- [ ] Manifest includes: stage, local_authority, run_at, git_commit,
-      input_versions, row_count, params
-- [ ] Filename (`{output_basename}.manifest.json`) avoids collision with
-      the existing `create_manifest.py` output
-- [ ] Unit test covers manifest dict content for at least one entrypoint
+      compute_contextual_features), gated on `--save` — each write sits in
+      the same `if args.save:` block as the output write (decision_tree:
+      six manifests total across the five stages, since it has two outputs)
+- [x] Manifest includes: stage, local_authority, run_at, git_commit,
+      input_versions, row_count, params — pinned by
+      `TestGenerateDictRunManifest::test_contains_exactly_the_expected_keys`
+- [x] Filename (`{output_basename}.manifest.json`) avoids collision with
+      the existing `create_manifest.py` output — pinned by
+      `TestGetStrManifestPath` (derived name always keeps the output
+      basename, so it can never be the bare `manifest.json`)
+- [x] Unit test covers manifest dict content for at least one entrypoint —
+      `utils/tests/test_run_manifest.py` (13 tests) covers dict content,
+      input-version flattening, git-commit fallback and path derivation
