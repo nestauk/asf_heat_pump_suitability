@@ -87,7 +87,13 @@ Decisions settled during kickoff interview (2026-07-22):
 - [x] Reports all missing paths in one pass and exits non-zero — the
       acceptance run surfaced a genuinely missing configured input
       (`inputs/geodata/council_tax/PLYMOUTH_CTBANDS_ONSUD_202512.csv`; the
-      S3 folder is empty) and exited 1
+      S3 folder is empty) and exited 1. Resolved (Aidan, 2026-07-22): the
+      file was never uploaded and only two research/exploratory scripts read
+      the key (already broken in practice), so the stale
+      `geodata.council_tax_data` config entry was removed rather than the
+      dataset sourced; the preflight then passes (all 26 paths exist, exit
+      0). The `config/README.md` citation row is kept as provenance for the
+      past domestic-filtering research that used the data.
 - [x] Wired into `run_pipeline.sh` as its first step, before the
       local-authority loop
 - [x] Unit tests cover at least one missing-path case and one all-present

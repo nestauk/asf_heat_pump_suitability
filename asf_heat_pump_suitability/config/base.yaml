@@ -38,10 +38,6 @@ data:
       # UrbanGrammarAI Spatial Signatures GB detailed
       full: "s3://asf-local-heat-planning-tool/inputs/geodata/v202301_UrbanGrammarAI_SpatialSignatures_GB/spatial_signatures_GB.gpkg"
 
-    council_tax_data:
-      # plymouth council tax data
-      plymouth: "s3://asf-local-heat-planning-tool/inputs/geodata/council_tax/PLYMOUTH_CTBANDS_ONSUD_202512.csv"
-
   # Number of households in each LA recorded in 2021 census
   EW_household_census_data: "s3://asf-local-heat-planning-tool/inputs/testing/v2021_census_households_EW.csv"
   S_household_census_data: "s3://asf-local-heat-planning-tool/inputs/testing/v2022_census_households_S.csv"
