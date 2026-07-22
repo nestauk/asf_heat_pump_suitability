@@ -93,7 +93,12 @@ Decisions settled during kickoff interview (2026-07-22):
       `geodata.council_tax_data` config entry was removed rather than the
       dataset sourced; the preflight then passes (all 26 paths exist, exit
       0). The `config/README.md` citation row is kept as provenance for the
-      past domestic-filtering research that used the data.
+      past domestic-filtering research that used the data. Convention
+      established from this (Aidan, 2026-07-22), recorded as comments on the
+      `data:` section in `base.yaml` and in the module docstring:
+      `config["data"]` is production-pipeline inputs only — every path in it
+      is preflight-gated, so datasets read only by research/exploratory
+      scripts keep their paths in the script or a research-local config.
 - [x] Wired into `run_pipeline.sh` as its first step, before the
       local-authority loop
 - [x] Unit tests cover at least one missing-path case and one all-present

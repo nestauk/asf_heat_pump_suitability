@@ -1,3 +1,8 @@
+# Production pipeline inputs only. Every s3 path under `data` is treated as a
+# required input: the preflight (pipeline/validate/check_inputs.py) checks each
+# one exists before any pipeline run and aborts if any are missing. Datasets
+# used only by research/exploratory scripts must not live here — keep their
+# paths in the script or a research-local config.
 data:
   geodata:
     # OpenMap UPRN with coordinates

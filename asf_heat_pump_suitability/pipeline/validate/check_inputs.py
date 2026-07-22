@@ -9,6 +9,10 @@ are missing, so run_pipeline.sh can abort before the local-authority loop
 starts. Templated paths are checked at prefix level only, not resolved per
 grid square or local authority.
 
+Corollary: every path under `config["data"]` is treated as a required
+production input. Datasets read only by research/exploratory scripts must
+not be configured there, or a research-only gap will block pipeline runs.
+
 Usage:
     python asf_heat_pump_suitability/pipeline/validate/check_inputs.py
 """
