@@ -88,7 +88,7 @@ def extend_df_contextual_features(
     for col in dummy_cols:
         uprns_df = uprns_df.with_columns(
             pl.col(col)
-            .cast(pl.Utf8)  # ensure it's a string column
+            .cast(pl.String)  # ensure it's a string column
             .str.to_lowercase()  # null and NULL will be converted to "null" string, so we can group them under "unknown"
             .str.strip_chars()
             # Group all nulls under "unknown"
