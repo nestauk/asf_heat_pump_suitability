@@ -49,6 +49,21 @@ class TestLoadGdfOsOpenmapLayer:
                 "important_building", grid_squares=["ND"]
             )
 
+    def test_returns_empty_gdf_when_all_squares_missing(self, mocker):
+        """When the layer file is missing from every requested square, an empty GeoDataFrame is returned."""
+        mocker.patch(
+            "geopandas.read_file",
+            side_effect=DataSourceError(
+                "'path' does not exist in the file system, and is not recognized as a supported dataset name."
+            ),
+        )
+        gdf = load_geodata.load_gdf_os_openmap_layer(
+            "important_building", grid_squares=["ND", "HX"]
+        )
+        assert gdf.empty
+        assert "geometry" in gdf.columns
+        assert gdf.crs.to_epsg() == 27700
+
 
 class TestLoadGdfOsOpenroad:
     """Tests for `load_gdf_os_openroad`."""

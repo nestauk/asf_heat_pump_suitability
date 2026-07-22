@@ -205,8 +205,7 @@ def load_gdf_os_openmap_layer(
 
     In grid square mode, files missing from S3 are skipped with a warning (OS only ships a layer file for squares
     containing that feature, e.g. no tidal water file for inland squares), so the result may cover fewer squares
-    than requested. TODO: if all requested squares lack the layer, pd.concat raises ValueError; return an empty
-    GeoDataFrame instead.
+    than requested. If all requested squares lack the layer, an empty GeoDataFrame is returned.
 
     Find full list of green space sites here: https://docs.os.uk/os-downloads/products/land-and-terrain-portfolio/os-open-greenspace/os-open-greenspace-technical-specification/code-lists/functionvalue#code-list-functionvalue
 
