@@ -30,7 +30,7 @@ from asf_heat_pump_suitability.getters.load_geodata import (
 )
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.transform import local_authority
-from asf_heat_pump_suitability.utils import save_utils
+from asf_heat_pump_suitability.utils import run_manifest, save_utils
 
 OUTDOOR_SPACE_THRESHOLD_M2 = config["constant"]["threshold"][
     "outdoor_space_threshold_m2"
@@ -480,11 +480,35 @@ if __name__ == "__main__":
         | uprns_with_features_gdf["in_hn_zone"]
     )
 
-    identify_gdf_tuple_most_suitable_tech_uprn_and_building(
-        local_authorities=local_authority_dict["url_slug"],
-        buildings_gdf=buildings_gdf,
-        id_col="ID",
-        uprns_gdf=uprns_with_features_gdf,
-        save=args.save,
-        release_date=release_date,
+    uprns_tech_gdf, buildings_tech_gdf = (
+        identify_gdf_tuple_most_suitable_tech_uprn_and_building(
+            local_authorities=local_authority_dict["url_slug"],
+            buildings_gdf=buildings_gdf,
+            id_col="ID",
+            uprns_gdf=uprns_with_features_gdf,
+            save=args.save,
+            release_date=release_date,
+        )
     )
+
+    if args.save:
+        for dataset, output_gdf in [
+            ("uprns_most_suitable_tech", uprns_tech_gdf),
+            ("buildings_most_suitable_tech", buildings_tech_gdf),
+        ]:
+            run_manifest.save_manifest_to_s3(
+                run_manifest.generate_dict_run_manifest(
+                    stage="decision_tree",
+                    local_authority=local_authority_dict["url_slug"],
+                    row_count=len(output_gdf),
+                    params={
+                        "local_authorities": args.local_authorities,
+                        "release_date": release_date,
+                    },
+                ),
+                save_utils.get_str_output_path(
+                    dataset,
+                    release_date=release_date,
+                    local_authorities=local_authority_dict["url_slug"],
+                ),
+            )

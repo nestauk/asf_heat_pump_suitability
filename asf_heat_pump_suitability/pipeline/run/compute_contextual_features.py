@@ -352,7 +352,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import load_geodata
     from asf_heat_pump_suitability.pipeline.transform import local_authority
     from asf_heat_pump_suitability import config
-    from asf_heat_pump_suitability.utils import save_utils
+    from asf_heat_pump_suitability.utils import run_manifest, save_utils
 
     args = parse_arguments()
     local_authorities = args.local_authorities
@@ -413,6 +413,22 @@ if __name__ == "__main__":
         # Save to data science S3 bucket
         save_utils.save_to_s3(
             geojson_file,
+            s3_file_path,
+        )
+
+        # Only the dated data-science copy gets a run manifest; the undated
+        # front-end copy below is overwritten every run and has no version
+        # history to attach lineage to
+        run_manifest.save_manifest_to_s3(
+            run_manifest.generate_dict_run_manifest(
+                stage="compute_contextual_features",
+                local_authority=local_authority_dict["url_slug"],
+                row_count=len(clusters_with_contextual_features_gdf),
+                params={
+                    "local_authorities": args.local_authorities,
+                    "release_date": release_date,
+                },
+            ),
             s3_file_path,
         )
 
