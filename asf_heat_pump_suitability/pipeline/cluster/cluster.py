@@ -279,11 +279,9 @@ def extend_edges_gdf(
         "Joining Voronois to original building footprints and dissolving per footprint..."
     )
     # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
-    voronoi_gdf = (
-        voronoi_gdf.sjoin(points_gdf, how="inner", predicate="contains")
-        .dissolve(by=id_col)
-        .reset_index()
-    ).clip(boundary)
+    voronoi_gdf = voronoi_gdf.sjoin(points_gdf, how="inner", predicate="contains")
+    voronoi_gdf.geometry = voronoi_gdf.geometry.make_valid()
+    voronoi_gdf = (voronoi_gdf.dissolve(by=id_col).reset_index()).clip(boundary)
 
     # Clip Voronoi cells to a max buffer
     print("Clip Voronoi cells to maximum buffer...")
