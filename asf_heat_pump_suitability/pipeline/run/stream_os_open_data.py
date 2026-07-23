@@ -319,7 +319,8 @@ def main() -> None:
                 f"{product}: shapefile downloads do not match the product's "
                 f"offered areas: {area_diff}"
             )
-            sys.exit(1)
+            failed_products.append(product)
+            continue
 
         total_mb = sum(entry["size"] for entry in selected) / 1e6
         logging.info(
