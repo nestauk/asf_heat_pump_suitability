@@ -7,6 +7,7 @@ keeps every download format the API offers for areas HW, HT and GB, so the
 tests pin down both the shapefile-format filter and the per-area vs GB split.
 """
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -163,6 +164,35 @@ class TestGenerateKeyZipMember:
             stream_os_open_data.generate_key_zip_member(
                 "OpenRivers", "HW", "data/HW_River.shp"
             )
+
+
+class TestVerifyZipMd5:
+    """Tests for `verify_zip_md5`."""
+
+    def test_matching_md5_passes(self):
+        """Content whose md5 matches the API listing passes silently."""
+        content = b"os tile bytes"
+        expected = hashlib.md5(content).hexdigest()
+        stream_os_open_data.verify_zip_md5(content, expected, "opmplc_essh_hw.zip")
+
+    def test_mismatched_md5_raises(self):
+        """Corrupted content fails loudly, naming the file."""
+        with pytest.raises(ValueError, match="opmplc_essh_hw.zip"):
+            stream_os_open_data.verify_zip_md5(
+                b"corrupted bytes", "0" * 32, "opmplc_essh_hw.zip"
+            )
+
+
+class TestGetTupleS3BucketPrefix:
+    """Tests for `get_tuple_s3_bucket_prefix`."""
+
+    def test_uri_split_into_bucket_and_prefix(self):
+        """An s3:// URI splits into bucket name and key prefix."""
+        bucket, prefix = stream_os_open_data.get_tuple_s3_bucket_prefix(
+            "s3://asf-local-heat-planning-tool/inputs/geodata/oproad_essh_gb/2026-04/"
+        )
+        assert bucket == "asf-local-heat-planning-tool"
+        assert prefix == "inputs/geodata/oproad_essh_gb/2026-04/"
 
 
 class TestGenerateDictReconciliation:
