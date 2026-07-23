@@ -2,7 +2,7 @@
 title: Run manifest for pipeline output lineage
 status: draft
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/440
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/449
 asana:
 created: 2026-07-22
 ---
