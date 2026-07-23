@@ -85,6 +85,22 @@ def extend_df_contextual_features(
     """
 
     dummy_cols = ["ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
+
+    unknowns_mapping = {
+        "": "unknown",
+        "null": "unknown",
+    }
+
+    uprns_df = uprns_df.with_columns(
+        pl.col(col)
+        .cast(pl.String)
+        .str.to_lowercase()
+        .str.strip_chars()
+        .replace(unknowns_mapping)
+        .fill_null("unknown")
+        for col in dummy_cols
+    )
+
     # Get value counts per feature
     dummy_contextual_feat_df = (
         uprns_df.select(dummy_cols + ["cluster_id"])
@@ -97,7 +113,7 @@ def extend_df_contextual_features(
     dummy_cols_to_keep = [
         col
         for col in dummy_contextual_feat_df.columns
-        if any(col.startswith(prefix) for prefix in dummy_cols)
+        if any(col.lower().startswith(prefix.lower()) for prefix in dummy_cols)
     ]
     dummy_contextual_feat_df = dummy_contextual_feat_df.select(
         ["cluster_id"] + dummy_cols_to_keep
