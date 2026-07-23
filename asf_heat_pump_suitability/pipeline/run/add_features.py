@@ -367,7 +367,6 @@ if __name__ == "__main__":
                     "release_date": release_date,
                     "detail": args.detail,
                 },
-                input_keys=manifest_utils.STAGE_INPUT_KEYS["add_features"],
             ),
             output_path,
         )

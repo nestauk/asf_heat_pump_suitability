@@ -98,12 +98,16 @@ Decisions settled at review (Aidan's call, 2026-07-22):
   the datasets that stage actually reads (traced through its getters and
   transform modules), so diffs between runs point at inputs that could
   have changed the output rather than burying them in ~27 identical keys.
-  The lists live in one greppable place (`STAGE_INPUT_KEYS` in
-  `utils/manifest_utils.py`, one commented entry per dataset naming its
-  loader) and `generate_dict_input_versions` raises `KeyError` on a key
-  that is missing from `config["data"]` or resolves to a subtree — a typo
-  in a curated list fails loudly at run time instead of silently omitting
-  lineage. Legacy `config["data_source"]` (v1) reads stay out of scope.
+  The lists live in `base.yaml` under `run_manifest.stage_input_keys`
+  (dataset knowledge belongs in config, next to the dataset definitions;
+  moved from a hardcoded `manifest_utils.py` dict in review), exposed as
+  `manifest_utils.STAGE_INPUT_KEYS`. `generate_dict_run_manifest` defaults
+  `input_keys` to the stage's list, so callers cannot pass a mismatched
+  stage/keys pair, and `generate_dict_input_versions` raises `KeyError` on
+  a key that is missing from `config["data"]` or resolves to a subtree — a
+  typo in a curated list fails loudly at run time instead of silently
+  omitting lineage. Legacy `config["data_source"]` (v1) reads stay out of
+  scope.
 
 ## Alternatives considered
 

@@ -339,3 +339,52 @@ tech_types:
   - "SGL_N"
   - "HN_S"
   - "HN_N"
+
+run_manifest:
+  # config["data"] datasets each pipeline entrypoint reads (directly or via
+  # the getters/transform modules it calls), recorded as `input_versions` in
+  # that stage's run manifests. Update a list when its stage starts or stops
+  # reading a dataset.
+  stage_input_keys:
+    uprns:
+      - "geodata.uk_osopen_uprn"
+      - "geodata.boundaries.UK_ons_lad_bounds"
+      - "geodata.UK_poi_locations"
+      - "geodata.grid_square_os_openmap_local"
+      - "processed.non_domestic_poi_categories"
+      - "processed.valid_la_names"
+      - "epc.domestic"
+      - "epc.commercial.EW"
+      - "epc.commercial.S"
+      - "EW_household_census_data"
+      - "S_household_census_data"
+    add_features:
+      - "geodata.boundaries.UK_ons_lad_bounds"
+      - "geodata.grid_square_os_openmap_local"
+      - "processed.valid_la_names"
+      - "processed.manually_labelled_block_of_flats"
+      - "geodata.heat_network_zones.desnz_files"
+      - "geodata.heat_network_zones.desnz_polygons"
+      - "geodata.gb_spatial_signatures.full"
+      - "geodata.gb_spatial_signatures.simplified"
+      - "processed.inspire_file_names"
+      - "epc.domestic"
+      - "geodata.gb_code_points"
+      - "geodata.gb_coast_boundaries"
+      - "geodata.gb_uprn_country_mapping"
+    decision_tree:
+      - "geodata.boundaries.UK_ons_lad_bounds"
+      - "geodata.grid_square_os_openmap_local"
+      - "processed.valid_la_names"
+    cluster:
+      - "geodata.boundaries.UK_ons_lad_bounds"
+      - "geodata.grid_square_os_openmap_local"
+      - "geodata.grid_square_os_openmap_greenspace"
+      - "geodata.grid_square_os_openroad"
+      - "processed.poi_anchor_properties"
+      - "geodata.heat_network_zones.desnz_polygons"
+      - "processed.valid_la_names"
+    compute_contextual_features:
+      - "geodata.boundaries.UK_ons_lad_bounds"
+      - "geodata.grid_square_os_openmap_local"
+      - "processed.valid_la_names"

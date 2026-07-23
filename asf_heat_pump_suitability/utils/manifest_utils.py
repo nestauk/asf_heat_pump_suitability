@@ -20,59 +20,7 @@ from asf_heat_pump_suitability import PROJECT_DIR, config
 MANIFEST_SUFFIX = ".manifest.json"
 UNKNOWN_GIT_COMMIT = "unknown"
 
-# The config["data"] datasets each entrypoint reads (directly or via the
-# getters/transform modules it calls), recorded as `input_versions` in that
-# stage's manifests. Update a list when its stage starts or stops reading a
-# dataset. Legacy config["data_source"] (v1) is out of scope.
-STAGE_INPUT_KEYS = {
-    "uprns": [
-        "geodata.uk_osopen_uprn",  # load_geodata.load_df_osopen_uprn
-        "geodata.boundaries.UK_ons_lad_bounds",  # load_boundaries.load_gdf_local_authority_boundaries
-        "geodata.UK_poi_locations",  # load_geodata.load_gdf_poi
-        "geodata.grid_square_os_openmap_local",  # load_gdf_os_openmap_layer: important_building, railway_station, building
-        "processed.non_domestic_poi_categories",  # poi.load_set_non_domestic_poi_categories
-        "processed.valid_la_names",  # local_authority.resolve_list_la_names
-        "epc.domestic",  # uprns.load_set_valid_epc_uprns (also via non_residential_entities)
-        "epc.commercial.EW",  # uprns.load_set_valid_epc_uprns
-        "epc.commercial.S",  # uprns.load_set_valid_epc_uprns
-        "EW_household_census_data",  # uprns.get_dict_census_uprn_range
-        "S_household_census_data",  # uprns.get_dict_census_uprn_range
-    ],
-    "add_features": [
-        "geodata.boundaries.UK_ons_lad_bounds",  # load_boundaries.load_gdf_local_authority_boundaries
-        "geodata.grid_square_os_openmap_local",  # load_gdf_os_openmap_layer: building
-        "processed.valid_la_names",  # local_authority.resolve_list_la_names
-        "processed.manually_labelled_block_of_flats",  # read directly in add_features
-        "geodata.heat_network_zones.desnz_files",  # geo_utils.concat_gdfs reads this directory
-        "geodata.heat_network_zones.desnz_polygons",  # load_geodata.load_gdf_heat_network_zones
-        "geodata.gb_spatial_signatures.full",  # load_gdf_spatial_signatures_gb; --detail picks
-        "geodata.gb_spatial_signatures.simplified",  # one of the two, params.detail records which
-        "processed.inspire_file_names",  # read directly; lists the INSPIRE parcel files to load
-        "epc.domestic",  # read directly in add_features
-        "geodata.gb_code_points",  # load_geodata.load_gdf_code_points
-        "geodata.gb_coast_boundaries",  # load_geodata.load_gdf_gb_coast_boundaries
-        "geodata.gb_uprn_country_mapping",  # load_geodata.load_transform_dict_uprn_to_country_mapping
-    ],
-    "decision_tree": [
-        "geodata.boundaries.UK_ons_lad_bounds",  # via local_authority.get_dict_la_data
-        "geodata.grid_square_os_openmap_local",  # load_gdf_os_openmap_layer: building
-        "processed.valid_la_names",  # local_authority.resolve_list_la_names
-    ],
-    "cluster": [
-        "geodata.boundaries.UK_ons_lad_bounds",  # load_boundaries.load_gdf_local_authority_boundaries
-        "geodata.grid_square_os_openmap_local",  # load_gdf_os_openmap_layer: building, railway_track, woodland, surface_water_area, tidal_water, important_building
-        "geodata.grid_square_os_openmap_greenspace",  # load_gdf_os_openmap_layer: greenspace_site
-        "geodata.grid_square_os_openroad",  # load_geodata.load_gdf_os_openroad
-        "processed.poi_anchor_properties",  # cluster.load_transform_anchor_property_gdfs
-        "geodata.heat_network_zones.desnz_polygons",  # load_geodata.load_gdf_heat_network_zones
-        "processed.valid_la_names",  # local_authority.resolve_list_la_names
-    ],
-    "compute_contextual_features": [
-        "geodata.boundaries.UK_ons_lad_bounds",  # via local_authority.get_dict_la_data
-        "geodata.grid_square_os_openmap_local",  # load_gdf_os_openmap_layer: building
-        "processed.valid_la_names",  # local_authority.resolve_list_la_names
-    ],
-}
+STAGE_INPUT_KEYS = config["run_manifest"]["stage_input_keys"]
 
 
 def get_str_git_commit() -> str:
@@ -141,7 +89,7 @@ def generate_dict_run_manifest(
     local_authority: str,
     row_count: int,
     params: dict,
-    input_keys: list[str],
+    input_keys: list[str] | None = None,
 ) -> dict:
     """
     Generate run manifest dict recording the lineage of one pipeline output.
@@ -151,12 +99,15 @@ def generate_dict_run_manifest(
         local_authority (str): local authority slug the output was generated for
         row_count (int): number of rows (or geojson features) in the output
         params (dict): CLI arguments the entrypoint was run with
-        input_keys (list[str]): config["data"] key paths of the datasets the
-            stage reads, typically `STAGE_INPUT_KEYS[stage]`
+        input_keys (list[str], optional): config["data"] key paths of the
+            datasets the stage reads; defaults to the stage's curated list in
+            `STAGE_INPUT_KEYS`
 
     Returns:
         dict: run manifest
     """
+    if input_keys is None:
+        input_keys = STAGE_INPUT_KEYS[stage]
     return {
         "stage": stage,
         "local_authority": local_authority,

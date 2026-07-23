@@ -439,9 +439,6 @@ if __name__ == "__main__":
                     "local_authorities": args.local_authorities,
                     "release_date": release_date,
                 },
-                input_keys=manifest_utils.STAGE_INPUT_KEYS[
-                    "compute_contextual_features"
-                ],
             ),
             s3_file_path,
         )

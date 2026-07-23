@@ -79,13 +79,13 @@ class TestStageInputKeys:
 
 @pytest.fixture(scope="module")
 def manifest():
-    """Run manifest built once with hand-crafted entrypoint arguments."""
+    """Run manifest built once with hand-crafted entrypoint arguments,
+    exercising the default per-stage input_keys lookup."""
     return manifest_utils.generate_dict_run_manifest(
         stage="uprns",
         local_authority="plymouth",
         row_count=123,
         params={"local_authorities": ["plymouth"], "release_date": "20260722"},
-        input_keys=manifest_utils.STAGE_INPUT_KEYS["uprns"],
     )
 
 

@@ -920,7 +920,6 @@ if __name__ == "__main__":
                     "local_authorities": args.local_authorities,
                     "release_date": release_date,
                 },
-                input_keys=manifest_utils.STAGE_INPUT_KEYS["cluster"],
             ),
             output_path,
         )
