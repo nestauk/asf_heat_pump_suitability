@@ -52,9 +52,10 @@ Decisions, each settled in the kickoff interview (2026-07-23):
    Rationale: match what is already on S3 so consumers and reviewers see only
    the dated segment change. All shapefile sidecars (`.shp`, `.dbf`, `.prj`,
    `.shx`, `.cpg`, …) are uploaded, not just `.shp`. The zips' `licence.txt`
-   and `readme.txt` are also kept in their current on-S3 locations: at the
-   dated prefix root for OpenMap Local and Open Roads, under each `{square}/`
-   for Open Greenspace.
+   and `readme.txt` are also kept in their current on-S3 locations: for
+   OpenMap Local and Open Roads, `readme.txt` at the dated prefix root and
+   `licence.txt` under `doc/` beside it; for Open Greenspace, both under
+   each `{square}/`.
 
 4. **Roads fan-out** — the API offers no per-square downloads for OpenRoads,
    only a single ~606 MB GB shapefile zip whose members are per-square files;
