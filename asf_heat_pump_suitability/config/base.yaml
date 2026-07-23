@@ -63,6 +63,21 @@ data:
     # Valid local authority names, taken from the 'LAD23NM' column of the UK_ons_lad_bound file
     valid_la_names: "s3://asf-local-heat-planning-tool/inputs/processed/valid_la_names.csv"
 
+# OS Downloads API ingestion of per-grid-square OS OpenData products
+# (pipeline/run/stream_os_open_data.py)
+os_downloads:
+  # Public OS Downloads API; no auth required for OpenData products
+  api_url: "https://api.os.uk/downloads/v1"
+  # Destination root for the product prefixes below; overridable at the CLI
+  # (--destination_root) for test rehearsals
+  s3_destination_root: "s3://asf-local-heat-planning-tool/inputs/geodata/"
+  # Per-product S3 prefix templates; {version} is filled verbatim with the
+  # API's product version (e.g. "2026-04") so the prefix names the OS release
+  products:
+    OpenMapLocal: "opmplc_essh_gb/{version}/"
+    OpenRoads: "oproad_essh_gb/{version}/"
+    OpenGreenspace: "opgrsp_essh_gb/{version}/"
+
 constant:
   id:
     building: "ID"
