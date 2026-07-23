@@ -51,7 +51,10 @@ Decisions, each settled in the kickoff interview (2026-07-23):
 
    Rationale: match what is already on S3 so consumers and reviewers see only
    the dated segment change. All shapefile sidecars (`.shp`, `.dbf`, `.prj`,
-   `.shx`, `.cpg`, …) are uploaded, not just `.shp`.
+   `.shx`, `.cpg`, …) are uploaded, not just `.shp`. The zips' `licence.txt`
+   and `readme.txt` are also kept in their current on-S3 locations: at the
+   dated prefix root for OpenMap Local and Open Roads, under each `{square}/`
+   for Open Greenspace.
 
 4. **Roads fan-out** — the API offers no per-square downloads for OpenRoads,
    only a single ~606 MB GB shapefile zip whose members are per-square files;
@@ -111,20 +114,27 @@ Decisions, each settled in the kickoff interview (2026-07-23):
 
 ## Verification
 
-- [ ] Dry run (no `--save`) lists per-product tile names, sizes and the API
-      `version` without writing to S3.
+- [x] Dry run (no `--save`) lists per-product tile names, sizes and the API
+      `version` without writing to S3. (Run 2026-07-23 with AWS credentials
+      nulled: OpenMapLocal 2026-04, 55 zips / 2455.4 MB; OpenRoads 2026-04,
+      1 GB zip / 606.1 MB; OpenGreenspace 2026-04, 52 zips / 39.9 MB; island
+      tiles HP/HT/HU/HY/HZ all listed; exit 0.)
 - [ ] Test-prefix run uploads via the destination override; getters load
       grid-square data from the test prefix end-to-end; test prefix deleted
       afterwards.
 - [ ] Production run populates version-named prefixes for all three products
       in their current layouts, all sidecar files included.
-- [ ] Reconciliation compares S3 against the API's offered areas (roads: GB
+- [x] Reconciliation compares S3 against the API's offered areas (roads: GB
       zip members) and exits non-zero with a clear message on mismatch.
+      (Diff helper unit-tested; failure path demonstrated 2026-07-23 with
+      mocked S3 — a missing island tile plus a stray `.DS_Store` produced a
+      clear ERROR naming both keys and `SystemExit(1)`.)
 - [ ] `base.yaml` repointed to the new prefixes as the final commit;
       `load_gdf_os_openmap_layer` and `load_gdf_os_openroad` load spot-check
       squares via config alone.
-- [ ] API base URL and prefix templates read from `base.yaml`; no hard-coded
-      S3 paths or magic values in the script.
-- [ ] Unit tests (fixture JSON, no network) for the pure helpers: API response
+- [x] API base URL and prefix templates read from `base.yaml`; no hard-coded
+      S3 paths or magic values in the script (`os_downloads` section:
+      `api_url`, `s3_destination_root`, per-product prefix templates).
+- [x] Unit tests (fixture JSON, no network) for the pure helpers: API response
       → download list, zip member → S3 key mapping per product, reconciliation
       diff. 1:1 test module `pipeline/run/tests/test_stream_os_open_data.py`.
