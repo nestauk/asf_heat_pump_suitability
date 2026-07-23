@@ -170,17 +170,15 @@ class TestVerifyZipMd5:
     """Tests for `verify_zip_md5`."""
 
     def test_matching_md5_passes(self):
-        """Content whose md5 matches the API listing passes silently."""
-        content = b"os tile bytes"
-        expected = hashlib.md5(content).hexdigest()
-        stream_os_open_data.verify_zip_md5(content, expected, "opmplc_essh_hw.zip")
+        """A digest matching the API listing passes silently."""
+        digest = hashlib.md5(b"os tile bytes").hexdigest()
+        stream_os_open_data.verify_zip_md5(digest, digest, "opmplc_essh_hw.zip")
 
     def test_mismatched_md5_raises(self):
-        """Corrupted content fails loudly, naming the file."""
+        """A digest differing from the API listing fails loudly, naming the file."""
+        digest = hashlib.md5(b"corrupted bytes").hexdigest()
         with pytest.raises(ValueError, match="opmplc_essh_hw.zip"):
-            stream_os_open_data.verify_zip_md5(
-                b"corrupted bytes", "0" * 32, "opmplc_essh_hw.zip"
-            )
+            stream_os_open_data.verify_zip_md5(digest, "0" * 32, "opmplc_essh_hw.zip")
 
 
 class TestGetTupleS3BucketPrefix:

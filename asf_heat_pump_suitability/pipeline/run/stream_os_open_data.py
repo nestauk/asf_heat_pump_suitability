@@ -33,9 +33,9 @@ a test prefix such as
 
 import argparse
 import hashlib
-import io
 import logging
 import sys
+import tempfile
 import zipfile
 from typing import Iterable, Optional
 
@@ -230,24 +230,46 @@ def get_list_s3_keys(s3_client, bucket: str, prefix: str) -> list:
     return keys
 
 
-def verify_zip_md5(content: bytes, expected_md5: str, file_name: str) -> None:
+def verify_zip_md5(actual_md5: str, expected_md5: str, file_name: str) -> None:
     """
-    Verify downloaded zip content against the md5 from the API listing.
+    Verify a downloaded zip's md5 digest against the API listing.
 
     Args:
-        content: downloaded zip bytes
+        actual_md5: md5 hex digest of the downloaded content
         expected_md5: md5 hex digest from the API download entry
         file_name: zip file name, for the error message
 
     Raises:
         ValueError: if the digests do not match
     """
-    actual_md5 = hashlib.md5(content).hexdigest()
     if actual_md5 != expected_md5:
         raise ValueError(
             f"MD5 mismatch for {file_name}: API listing says {expected_md5}, "
             f"downloaded content is {actual_md5}."
         )
+
+
+def stream_zip_download_to_file(download: dict, file_obj) -> str:
+    """
+    Stream a download into a file object, hashing as chunks arrive.
+
+    Keeps peak memory at one chunk rather than the whole zip (the OpenRoads
+    GB zip is ~600 MB).
+
+    Args:
+        download: OS Downloads API download entry
+        file_obj: writable binary file object
+
+    Returns:
+        str: md5 hex digest of the downloaded content
+    """
+    md5 = hashlib.md5()
+    with requests.get(download["url"], stream=True, timeout=60) as response:
+        response.raise_for_status()
+        for chunk in response.iter_content(chunk_size=1 << 20):
+            md5.update(chunk)
+            file_obj.write(chunk)
+    return md5.hexdigest()
 
 
 def stream_zip_members_to_s3(
@@ -269,19 +291,19 @@ def stream_zip_members_to_s3(
     logging.info(
         f"Downloading {download['fileName']} ({download['size'] / 1e6:.1f} MB)"
     )
-    response = requests.get(download["url"], timeout=3600)
-    response.raise_for_status()
-    verify_zip_md5(response.content, download["md5"], download["fileName"])
-    zip_file = zipfile.ZipFile(io.BytesIO(response.content))
     uploaded = set()
-    for member in zip_file.namelist():
-        relative_key = generate_key_zip_member(product, download["area"], member)
-        if relative_key is None:
-            continue
-        key = f"{prefix}{relative_key}"
-        with zip_file.open(member) as file_obj:
-            s3_client.upload_fileobj(Fileobj=file_obj, Bucket=bucket, Key=key)
-        uploaded.add(key)
+    with tempfile.TemporaryFile() as tmp:
+        actual_md5 = stream_zip_download_to_file(download, tmp)
+        verify_zip_md5(actual_md5, download["md5"], download["fileName"])
+        zip_file = zipfile.ZipFile(tmp)
+        for member in zip_file.namelist():
+            relative_key = generate_key_zip_member(product, download["area"], member)
+            if relative_key is None:
+                continue
+            key = f"{prefix}{relative_key}"
+            with zip_file.open(member) as file_obj:
+                s3_client.upload_fileobj(Fileobj=file_obj, Bucket=bucket, Key=key)
+            uploaded.add(key)
     return uploaded
 
 
