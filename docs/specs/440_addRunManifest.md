@@ -66,9 +66,10 @@ Decisions settled during kickoff interview (2026-07-22):
 
 Decisions settled during implementation (2026-07-22):
 
-- **Manifest code lives in `utils/run_manifest.py`** (1:1 tests in
-  `utils/tests/test_run_manifest.py`), keeping `save_utils` focused on
-  output writing.
+- **Manifest code lives in `utils/manifest_utils.py`** (1:1 tests in
+  `utils/tests/test_manifest_utils.py`), keeping `save_utils` focused on
+  output writing. Renamed from `run_manifest.py` in review to match the
+  `{domain}_utils.py` convention every other `utils/` module follows.
 - **`git_commit` falls back to an `"unknown"` sentinel** when
   `git rev-parse HEAD` fails (resolves the open question below) — a run
   still completes with incomplete lineage rather than hard-failing. The
@@ -98,7 +99,7 @@ Decisions settled at review (Aidan's call, 2026-07-22):
   transform modules), so diffs between runs point at inputs that could
   have changed the output rather than burying them in ~27 identical keys.
   The lists live in one greppable place (`STAGE_INPUT_KEYS` in
-  `utils/run_manifest.py`, one commented entry per dataset naming its
+  `utils/manifest_utils.py`, one commented entry per dataset naming its
   loader) and `generate_dict_input_versions` raises `KeyError` on a key
   that is missing from `config["data"]` or resolves to a subtree — a typo
   in a curated list fails loudly at run time instead of silently omitting
@@ -154,7 +155,7 @@ Decisions settled at review (Aidan's call, 2026-07-22):
       `TestGetStrManifestPath` (derived name always keeps the output
       basename, so it can never be the bare `manifest.json`)
 - [x] Unit test covers manifest dict content for at least one entrypoint —
-      `utils/tests/test_run_manifest.py` (17 tests) covers dict content,
+      `utils/tests/test_manifest_utils.py` (17 tests) covers dict content,
       curated input-version resolution (exact selection; loud `KeyError`
       on unknown or subtree keys; every `STAGE_INPUT_KEYS` entry resolves),
       the swallowed-and-logged manifest write failure, git-commit fallback

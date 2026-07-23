@@ -1,8 +1,8 @@
 """
-Tests for asf_heat_pump_suitability.utils.run_manifest.
+Tests for asf_heat_pump_suitability.utils.manifest_utils.
 
 Run:
-pytest asf_heat_pump_suitability/utils/tests/test_run_manifest.py
+pytest asf_heat_pump_suitability/utils/tests/test_manifest_utils.py
 """
 
 import json
@@ -13,13 +13,13 @@ from datetime import datetime
 import pytest
 
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.utils import run_manifest
+from asf_heat_pump_suitability.utils import manifest_utils
 
 
 class TestGetStrGitCommit:
     def test_returns_current_commit_hash(self):
         """Returns the 40-character hex hash of the repo's HEAD commit."""
-        assert re.fullmatch(r"[0-9a-f]{40}", run_manifest.get_str_git_commit())
+        assert re.fullmatch(r"[0-9a-f]{40}", manifest_utils.get_str_git_commit())
 
     def test_returns_unknown_sentinel_when_git_unavailable(self, monkeypatch):
         """Falls back to "unknown" rather than raising when git cannot run."""
@@ -27,14 +27,14 @@ class TestGetStrGitCommit:
         def raise_oserror(*args, **kwargs):
             raise OSError("git not found")
 
-        monkeypatch.setattr(run_manifest.subprocess, "run", raise_oserror)
-        assert run_manifest.get_str_git_commit() == "unknown"
+        monkeypatch.setattr(manifest_utils.subprocess, "run", raise_oserror)
+        assert manifest_utils.get_str_git_commit() == "unknown"
 
 
 class TestGenerateDictInputVersions:
     def test_resolves_exactly_the_requested_keys(self):
         """Returns the resolved path string for each requested key and nothing else."""
-        assert run_manifest.generate_dict_input_versions(
+        assert manifest_utils.generate_dict_input_versions(
             ["epc.domestic", "geodata.boundaries.UK_ons_lad_bounds"]
         ) == {
             "epc.domestic": config["data"]["epc"]["domestic"],
@@ -47,19 +47,19 @@ class TestGenerateDictInputVersions:
         """A key path missing from config["data"] fails loudly at run time rather
         than silently omitting lineage."""
         with pytest.raises(KeyError, match="epc.nonexistent"):
-            run_manifest.generate_dict_input_versions(["epc.nonexistent"])
+            manifest_utils.generate_dict_input_versions(["epc.nonexistent"])
 
     def test_subtree_key_raises_keyerror(self):
         """A key path resolving to a config subtree rather than a dataset path
         string is a curated-list mistake and fails loudly."""
         with pytest.raises(KeyError, match="subtree"):
-            run_manifest.generate_dict_input_versions(["epc"])
+            manifest_utils.generate_dict_input_versions(["epc"])
 
 
 class TestStageInputKeys:
     def test_covers_the_five_pipeline_stages(self):
         """One curated list exists per pipeline entrypoint."""
-        assert set(run_manifest.STAGE_INPUT_KEYS) == {
+        assert set(manifest_utils.STAGE_INPUT_KEYS) == {
             "uprns",
             "add_features",
             "decision_tree",
@@ -70,8 +70,8 @@ class TestStageInputKeys:
     def test_every_curated_key_resolves_to_a_path_string(self):
         """Every curated key resolves in config["data"] to a path string, so a
         config rename cannot silently break a stage's lineage."""
-        for stage, input_keys in run_manifest.STAGE_INPUT_KEYS.items():
-            input_versions = run_manifest.generate_dict_input_versions(input_keys)
+        for stage, input_keys in manifest_utils.STAGE_INPUT_KEYS.items():
+            input_versions = manifest_utils.generate_dict_input_versions(input_keys)
             assert all(
                 isinstance(path, str) for path in input_versions.values()
             ), f"Non-string dataset path in curated keys for stage: {stage}"
@@ -80,12 +80,12 @@ class TestStageInputKeys:
 @pytest.fixture(scope="module")
 def manifest():
     """Run manifest built once with hand-crafted entrypoint arguments."""
-    return run_manifest.generate_dict_run_manifest(
+    return manifest_utils.generate_dict_run_manifest(
         stage="uprns",
         local_authority="plymouth",
         row_count=123,
         params={"local_authorities": ["plymouth"], "release_date": "20260722"},
-        input_keys=run_manifest.STAGE_INPUT_KEYS["uprns"],
+        input_keys=manifest_utils.STAGE_INPUT_KEYS["uprns"],
     )
 
 
@@ -125,8 +125,10 @@ class TestGenerateDictRunManifest:
 
     def test_input_versions_resolve_the_curated_stage_keys(self, manifest):
         """input_versions records exactly the curated input keys the caller passed."""
-        assert manifest["input_versions"] == run_manifest.generate_dict_input_versions(
-            run_manifest.STAGE_INPUT_KEYS["uprns"]
+        assert manifest[
+            "input_versions"
+        ] == manifest_utils.generate_dict_input_versions(
+            manifest_utils.STAGE_INPUT_KEYS["uprns"]
         )
 
     def test_manifest_is_json_serialisable(self, manifest):
@@ -138,7 +140,7 @@ class TestGetStrManifestPath:
     def test_replaces_parquet_extension(self):
         """A parquet output maps to a co-located {basename}.manifest.json."""
         assert (
-            run_manifest.get_str_manifest_path(
+            manifest_utils.get_str_manifest_path(
                 "s3://bucket/outputs/data/plymouth/20260722/plymouth_domestic_uprns.parquet"
             )
             == "s3://bucket/outputs/data/plymouth/20260722/plymouth_domestic_uprns.manifest.json"
@@ -147,7 +149,7 @@ class TestGetStrManifestPath:
     def test_replaces_geojson_extension(self):
         """A geojson output maps to a co-located {basename}.manifest.json."""
         assert (
-            run_manifest.get_str_manifest_path(
+            manifest_utils.get_str_manifest_path(
                 "s3://bucket/outputs/data/plymouth/20260722/plymouth_clusters_contextual_features_5m.geojson"
             )
             == "s3://bucket/outputs/data/plymouth/20260722/plymouth_clusters_contextual_features_5m.manifest.json"
@@ -156,7 +158,7 @@ class TestGetStrManifestPath:
     def test_filename_never_collides_with_front_end_manifest_json(self):
         """The derived filename keeps the output basename, so it can never be the
         bare `manifest.json` owned by pipeline/run/create_manifest.py."""
-        path = run_manifest.get_str_manifest_path("s3://bucket/dir/output.parquet")
+        path = manifest_utils.get_str_manifest_path("s3://bucket/dir/output.parquet")
         assert path.split("/")[-1] != "manifest.json"
         assert path.endswith(".manifest.json")
 
@@ -169,9 +171,9 @@ class TestSaveManifestToS3:
         def raise_oserror(*args, **kwargs):
             raise OSError("S3 write failed")
 
-        monkeypatch.setattr(run_manifest.fsspec, "open", raise_oserror)
+        monkeypatch.setattr(manifest_utils.fsspec, "open", raise_oserror)
         with caplog.at_level(logging.WARNING):
-            run_manifest.save_manifest_to_s3(
+            manifest_utils.save_manifest_to_s3(
                 {"stage": "uprns"}, "s3://bucket/dir/output.parquet"
             )
         assert "s3://bucket/dir/output.manifest.json" in caplog.text

@@ -30,7 +30,7 @@ from asf_heat_pump_suitability.getters.load_geodata import (
 )
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.transform import local_authority
-from asf_heat_pump_suitability.utils import run_manifest, save_utils
+from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 
 OUTDOOR_SPACE_THRESHOLD_M2 = config["constant"]["threshold"][
     "outdoor_space_threshold_m2"
@@ -496,8 +496,8 @@ if __name__ == "__main__":
             ("uprns_most_suitable_tech", uprns_tech_gdf),
             ("buildings_most_suitable_tech", buildings_tech_gdf),
         ]:
-            run_manifest.save_manifest_to_s3(
-                run_manifest.generate_dict_run_manifest(
+            manifest_utils.save_manifest_to_s3(
+                manifest_utils.generate_dict_run_manifest(
                     stage="decision_tree",
                     local_authority=local_authority_dict["url_slug"],
                     row_count=len(output_gdf),
@@ -505,7 +505,7 @@ if __name__ == "__main__":
                         "local_authorities": args.local_authorities,
                         "release_date": release_date,
                     },
-                    input_keys=run_manifest.STAGE_INPUT_KEYS["decision_tree"],
+                    input_keys=manifest_utils.STAGE_INPUT_KEYS["decision_tree"],
                 ),
                 save_utils.get_str_output_path(
                     dataset,

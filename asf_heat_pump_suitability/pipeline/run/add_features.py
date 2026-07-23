@@ -66,7 +66,7 @@ if __name__ == "__main__":
     import pandas as pd
 
     from asf_heat_pump_suitability import config
-    from asf_heat_pump_suitability.utils import geo_utils, run_manifest, save_utils
+    from asf_heat_pump_suitability.utils import geo_utils, manifest_utils, save_utils
     from asf_heat_pump_suitability.getters import (
         base_getters,
         load_geodata,
@@ -357,8 +357,8 @@ if __name__ == "__main__":
             local_authority=local_authority_dict["url_slug"],
         )
         save_utils.save_to_s3(features_df, path=output_path)
-        run_manifest.save_manifest_to_s3(
-            run_manifest.generate_dict_run_manifest(
+        manifest_utils.save_manifest_to_s3(
+            manifest_utils.generate_dict_run_manifest(
                 stage="add_features",
                 local_authority=local_authority_dict["url_slug"],
                 row_count=len(features_df),
@@ -367,7 +367,7 @@ if __name__ == "__main__":
                     "release_date": release_date,
                     "detail": args.detail,
                 },
-                input_keys=run_manifest.STAGE_INPUT_KEYS["add_features"],
+                input_keys=manifest_utils.STAGE_INPUT_KEYS["add_features"],
             ),
             output_path,
         )
