@@ -17,8 +17,6 @@ from asf_heat_pump_suitability.utils import run_manifest
 
 
 class TestGetStrGitCommit:
-    """Tests for `get_str_git_commit`."""
-
     def test_returns_current_commit_hash(self):
         """Returns the 40-character hex hash of the repo's HEAD commit."""
         assert re.fullmatch(r"[0-9a-f]{40}", run_manifest.get_str_git_commit())
@@ -34,8 +32,6 @@ class TestGetStrGitCommit:
 
 
 class TestGenerateDictInputVersions:
-    """Tests for `generate_dict_input_versions`."""
-
     def test_resolves_exactly_the_requested_keys(self):
         """Returns the resolved path string for each requested key and nothing else."""
         assert run_manifest.generate_dict_input_versions(
@@ -61,8 +57,6 @@ class TestGenerateDictInputVersions:
 
 
 class TestStageInputKeys:
-    """Tests for the curated `STAGE_INPUT_KEYS` lists."""
-
     def test_covers_the_five_pipeline_stages(self):
         """One curated list exists per pipeline entrypoint."""
         assert set(run_manifest.STAGE_INPUT_KEYS) == {
@@ -96,8 +90,6 @@ def manifest():
 
 
 class TestGenerateDictRunManifest:
-    """Tests for `generate_dict_run_manifest`."""
-
     def test_contains_exactly_the_expected_keys(self, manifest):
         """Manifest has the seven keys pinned by the spec and no others."""
         assert set(manifest) == {
@@ -143,8 +135,6 @@ class TestGenerateDictRunManifest:
 
 
 class TestGetStrManifestPath:
-    """Tests for `get_str_manifest_path`."""
-
     def test_replaces_parquet_extension(self):
         """A parquet output maps to a co-located {basename}.manifest.json."""
         assert (
@@ -172,8 +162,6 @@ class TestGetStrManifestPath:
 
 
 class TestSaveManifestToS3:
-    """Tests for `save_manifest_to_s3`."""
-
     def test_write_failure_is_swallowed_and_logged(self, monkeypatch, caplog):
         """A failed manifest write logs a warning naming the manifest path
         instead of raising, so it can never abort a pipeline run."""

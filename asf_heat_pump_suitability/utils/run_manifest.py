@@ -1,11 +1,11 @@
 """
-Functions to build and save run manifests recording pipeline output lineage.
+Build and save run manifests recording pipeline output lineage.
 
 Each pipeline entrypoint writes a companion `{output_basename}.manifest.json`
 next to every output it saves to S3, recording which input versions, git
-commit and parameters produced that output. The `.manifest.json` suffix keeps
-the output basename, so it never collides with the front-end `manifest.json`
-written by pipeline/run/create_manifest.py.
+commit and parameters produced it. Keeping the output basename in the filename
+avoids colliding with the front-end `manifest.json` from
+pipeline/run/create_manifest.py.
 """
 
 import json
@@ -20,14 +20,10 @@ from asf_heat_pump_suitability import PROJECT_DIR, config
 MANIFEST_SUFFIX = ".manifest.json"
 UNKNOWN_GIT_COMMIT = "unknown"
 
-# Curated lists of the config["data"] datasets each pipeline entrypoint reads
-# (directly or through the getters and transform modules it calls), as
-# dot-separated key paths. Recorded as `input_versions` in that stage's run
-# manifests. Update a stage's list when it starts or stops reading a dataset.
-# Legacy config["data_source"] (v1) inputs are out of scope for lineage.
-# All stages resolve local authorities via
-# pipeline.transform.local_authority.get_dict_la_data, which reads
-# processed.valid_la_names and (through load_boundaries) the LA boundaries.
+# The config["data"] datasets each entrypoint reads (directly or via the
+# getters/transform modules it calls), recorded as `input_versions` in that
+# stage's manifests. Update a list when its stage starts or stops reading a
+# dataset. Legacy config["data_source"] (v1) is out of scope.
 STAGE_INPUT_KEYS = {
     "uprns": [
         "geodata.uk_osopen_uprn",  # load_geodata.load_df_osopen_uprn
@@ -81,14 +77,13 @@ STAGE_INPUT_KEYS = {
 
 def get_str_git_commit() -> str:
     """
-    Get the git commit hash of the currently checked-out code.
+    Get the git commit hash of the checked-out code.
 
-    Runs `git rev-parse HEAD` in the project directory so the hash reflects
-    the imported package, not the caller's working directory.
+    Runs in the project directory so the hash reflects the imported package,
+    not the caller's working directory.
 
     Returns:
         str: 40-character commit hash, or "unknown" if git is unavailable
-            (e.g. a deployed environment without a .git directory)
     """
     try:
         return subprocess.run(
@@ -108,23 +103,19 @@ def get_str_git_commit() -> str:
 
 def generate_dict_input_versions(input_keys: list[str]) -> dict:
     """
-    Resolve curated config["data"] key paths to their input dataset path strings.
-
-    Records the raw resolved path strings (whose dated prefixes carry the input
-    versions) under their dot-separated keys, e.g. `{"epc.domestic": "s3://..."}`.
+    Resolve config["data"] key paths to their dataset path strings, whose
+    dated prefixes carry the input versions.
 
     Args:
         input_keys (list[str]): dot-separated key paths into `config["data"]`,
-            e.g. "geodata.uk_osopen_uprn" — typically one of the curated
-            per-stage lists in `STAGE_INPUT_KEYS`
+            typically one of the `STAGE_INPUT_KEYS` lists
 
     Returns:
-        dict: mapping of each dot-separated dataset key to its path string
+        dict: mapping of each key to its path string
 
     Raises:
-        KeyError: if a key path does not exist in `config["data"]` or resolves
-            to a config subtree rather than a dataset path string — a typo in a
-            curated list must fail loudly at run time, not silently omit lineage
+        KeyError: if a key is missing or resolves to a config subtree — a typo
+            in a curated list must fail loudly, not silently omit lineage
     """
     input_versions = {}
     for dot_key in input_keys:
@@ -156,17 +147,15 @@ def generate_dict_run_manifest(
     Generate run manifest dict recording the lineage of one pipeline output.
 
     Args:
-        stage (str): name of the pipeline entrypoint that produced the output,
-            e.g. "uprns" or "decision_tree"
+        stage (str): pipeline entrypoint that produced the output, e.g. "uprns"
         local_authority (str): local authority slug the output was generated for
         row_count (int): number of rows (or geojson features) in the output
         params (dict): CLI arguments the entrypoint was run with
-        input_keys (list[str]): dot-separated config["data"] key paths of the
-            datasets the stage reads, typically `STAGE_INPUT_KEYS[stage]`
+        input_keys (list[str]): config["data"] key paths of the datasets the
+            stage reads, typically `STAGE_INPUT_KEYS[stage]`
 
     Returns:
-        dict: run manifest with keys stage, local_authority, run_at, git_commit,
-            input_versions, row_count, params
+        dict: run manifest
     """
     return {
         "stage": stage,
@@ -183,15 +172,11 @@ def get_str_manifest_path(output_path: str) -> str:
     """
     Get the S3 path of the run manifest for an output file.
 
-    The manifest is co-located with the output and named
-    `{output_basename}.manifest.json`, e.g. `plymouth_domestic_uprns.parquet`
-    -> `plymouth_domestic_uprns.manifest.json`.
-
     Args:
         output_path (str): S3 path of the output file the manifest describes
 
     Returns:
-        str: S3 path of the companion run manifest
+        str: co-located path ending `.manifest.json`
     """
     return output_path.rsplit(".", 1)[0] + MANIFEST_SUFFIX
 
@@ -200,17 +185,12 @@ def save_manifest_to_s3(manifest: dict, output_path: str) -> None:
     """
     Save run manifest as JSON next to the output file it describes.
 
-    A manifest write failure never aborts a pipeline run: any exception raised
-    by the write is caught and logged as a warning naming the manifest path,
-    and the function returns without raising. Lineage degrades rather than
-    failing the run, mirroring the `get_str_git_commit` "unknown" fallback.
+    Write failures are logged and swallowed: lineage degrades rather than
+    aborting a pipeline run.
 
     Args:
         manifest (dict): run manifest, as returned by `generate_dict_run_manifest`
         output_path (str): S3 path of the output file the manifest describes
-
-    Returns:
-        None
     """
     manifest_path = get_str_manifest_path(output_path)
     logging.info(f"Saving run manifest to {manifest_path}")

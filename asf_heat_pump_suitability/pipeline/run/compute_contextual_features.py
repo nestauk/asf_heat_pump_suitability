@@ -428,9 +428,8 @@ if __name__ == "__main__":
         )
 
         # Only the dated data-science copy gets a run manifest; the undated
-        # front-end copy above is overwritten every run and has no version
-        # history to attach lineage to. Written after both saves so even a
-        # non-fatal manifest failure log cannot sit between them.
+        # front-end copy above is overwritten every run, so there is no
+        # version history to attach lineage to.
         run_manifest.save_manifest_to_s3(
             run_manifest.generate_dict_run_manifest(
                 stage="compute_contextual_features",
