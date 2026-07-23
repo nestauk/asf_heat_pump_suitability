@@ -1,8 +1,8 @@
 ---
 title: Stream OS open data grid squares from the OS Downloads API to S3
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/419
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/450
 asana: TBD
 created: 2026-07-23
 ---
