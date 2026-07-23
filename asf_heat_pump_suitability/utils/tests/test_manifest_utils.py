@@ -17,21 +17,21 @@ from asf_heat_pump_suitability.utils import manifest_utils
 
 
 class TestGetStrGitCommit:
+    """Tests for `get_str_git_commit`."""
+
     def test_returns_current_commit_hash(self):
         """Returns the 40-character hex hash of the repo's HEAD commit."""
         assert re.fullmatch(r"[0-9a-f]{40}", manifest_utils.get_str_git_commit())
 
-    def test_returns_unknown_sentinel_when_git_unavailable(self, monkeypatch):
+    def test_returns_unknown_sentinel_when_git_unavailable(self, mocker):
         """Falls back to "unknown" rather than raising when git cannot run."""
-
-        def raise_oserror(*args, **kwargs):
-            raise OSError("git not found")
-
-        monkeypatch.setattr(manifest_utils.subprocess, "run", raise_oserror)
+        mocker.patch("subprocess.run", side_effect=OSError("git not found"))
         assert manifest_utils.get_str_git_commit() == "unknown"
 
 
 class TestGenerateDictInputVersions:
+    """Tests for `generate_dict_input_versions`."""
+
     def test_resolves_exactly_the_requested_keys(self):
         """Returns the resolved path string for each requested key and nothing else."""
         assert manifest_utils.generate_dict_input_versions(
@@ -57,6 +57,8 @@ class TestGenerateDictInputVersions:
 
 
 class TestStageInputKeys:
+    """Tests for the curated `STAGE_INPUT_KEYS` lists."""
+
     def test_covers_the_five_pipeline_stages(self):
         """One curated list exists per pipeline entrypoint."""
         assert set(manifest_utils.STAGE_INPUT_KEYS) == {
@@ -77,7 +79,7 @@ class TestStageInputKeys:
             ), f"Non-string dataset path in curated keys for stage: {stage}"
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="class")
 def manifest():
     """Run manifest built once with hand-crafted entrypoint arguments,
     exercising the default per-stage input_keys lookup."""
@@ -90,6 +92,8 @@ def manifest():
 
 
 class TestGenerateDictRunManifest:
+    """Tests for `generate_dict_run_manifest`."""
+
     def test_contains_exactly_the_expected_keys(self, manifest):
         """Manifest has the seven keys pinned by the spec and no others."""
         assert set(manifest) == {
@@ -137,6 +141,8 @@ class TestGenerateDictRunManifest:
 
 
 class TestGetStrManifestPath:
+    """Tests for `get_str_manifest_path`."""
+
     def test_replaces_parquet_extension(self):
         """A parquet output maps to a co-located {basename}.manifest.json."""
         assert (
@@ -164,14 +170,12 @@ class TestGetStrManifestPath:
 
 
 class TestSaveManifestToS3:
-    def test_write_failure_is_swallowed_and_logged(self, monkeypatch, caplog):
+    """Tests for `save_manifest_to_s3`."""
+
+    def test_write_failure_is_swallowed_and_logged(self, mocker, caplog):
         """A failed manifest write logs a warning naming the manifest path
         instead of raising, so it can never abort a pipeline run."""
-
-        def raise_oserror(*args, **kwargs):
-            raise OSError("S3 write failed")
-
-        monkeypatch.setattr(manifest_utils.fsspec, "open", raise_oserror)
+        mocker.patch("fsspec.open", side_effect=OSError("S3 write failed"))
         with caplog.at_level(logging.WARNING):
             manifest_utils.save_manifest_to_s3(
                 {"stage": "uprns"}, "s3://bucket/dir/output.parquet"
