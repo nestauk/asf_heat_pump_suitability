@@ -1,8 +1,8 @@
 ---
 title: Input preflight check before pipeline runs
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/434
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/448
 asana:
 created: 2026-07-22
 ---
