@@ -176,6 +176,25 @@ def generate_key_zip_member(product: str, area: str, member: str) -> Optional[st
     raise ValueError(f"No S3 layout mapping defined for product '{product}'.")
 
 
+def get_set_offered_areas(details: dict, product: str) -> set:
+    """
+    Get the download areas a product's shapefile listing must cover.
+
+    Products in GB_ZIP_PRODUCTS offer a single GB zip; all other products
+    offer per-area zips, excluding the GB roll-up.
+
+    Args:
+        details: product details from the OS Downloads API
+        product: OS Downloads API product ID
+
+    Returns:
+        set: expected area codes
+    """
+    if product in GB_ZIP_PRODUCTS:
+        return {GB_AREA}
+    return set(details["areas"]) - {GB_AREA}
+
+
 def generate_dict_reconciliation(
     expected_keys: Iterable, actual_keys: Iterable
 ) -> dict:
@@ -328,11 +347,7 @@ def main() -> None:
         destination = destination_root + prefix_template.format(version=version)
 
         # The downloads listing must cover exactly the areas the product offers
-        offered_areas = (
-            {GB_AREA}
-            if product in GB_ZIP_PRODUCTS
-            else set(details["areas"]) - {GB_AREA}
-        )
+        offered_areas = get_set_offered_areas(details, product)
         area_diff = generate_dict_reconciliation(
             offered_areas, {entry["area"] for entry in selected}
         )

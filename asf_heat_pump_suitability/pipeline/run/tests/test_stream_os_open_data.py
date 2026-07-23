@@ -57,6 +57,28 @@ class TestFilterListShapefileDownloads:
         assert result[0]["fileName"] == "opgrsp_essh_ht.zip"
 
 
+class TestGetSetOfferedAreas:
+    """Tests for `get_set_offered_areas`."""
+
+    def test_per_area_product_offers_areas_minus_gb(self, api_fixture):
+        """OpenMapLocal expects every listed area except the GB roll-up."""
+        details = api_fixture["OpenMapLocal"]["product"]
+        result = stream_os_open_data.get_set_offered_areas(details, "OpenMapLocal")
+        assert result == set(details["areas"]) - {"GB"}
+        assert len(result) == 55
+
+    def test_gb_zip_product_offers_only_gb(self, api_fixture):
+        """OpenRoads expects the single GB zip regardless of listed areas."""
+        details = api_fixture["OpenRoads"]["product"]
+        assert stream_os_open_data.get_set_offered_areas(details, "OpenRoads") == {"GB"}
+
+    def test_island_tiles_expected_for_greenspace(self, api_fixture):
+        """The island squares missed by the manual refresh are all expected."""
+        details = api_fixture["OpenGreenspace"]["product"]
+        result = stream_os_open_data.get_set_offered_areas(details, "OpenGreenspace")
+        assert {"HP", "HT", "HU", "HY", "HZ"} <= result
+
+
 class TestGenerateKeyZipMember:
     """Tests for `generate_key_zip_member`."""
 
