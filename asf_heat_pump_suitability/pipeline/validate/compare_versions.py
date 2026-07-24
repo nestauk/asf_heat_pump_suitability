@@ -258,14 +258,30 @@ def generate_list_commit_log(
 
     Returns:
         list[str]: one "short-hash subject" line per commit, or None when a
-            recorded commit is the "unknown" sentinel or absent from local
-            git history (e.g. an unfetched branch)
+            recorded commit is the "unknown" sentinel, absent from local git
+            history (e.g. an unfetched branch), or not an ancestor of the
+            newer commit (`old..new` would silently omit its side's commits)
     """
     if manifest_utils.UNKNOWN_GIT_COMMIT in (commit_old, commit_new):
         logging.warning("A recorded commit is unknown; cannot build a commit log.")
         return None
     if commit_old == commit_new:
         return []
+    try:
+        subprocess.run(
+            ["git", "merge-base", "--is-ancestor", commit_old, commit_new],
+            cwd=PROJECT_DIR,
+            capture_output=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, OSError):
+        logging.warning(
+            "%s is not an ancestor of %s (or a commit is unfetched); "
+            "old..new would silently omit commits, so the log is skipped.",
+            commit_old,
+            commit_new,
+        )
+        return None
     try:
         result = subprocess.run(
             [

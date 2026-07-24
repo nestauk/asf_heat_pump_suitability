@@ -313,12 +313,18 @@ class TestGenerateListCommitLog:
     """Tests for `generate_list_commit_log`."""
 
     def test_scopes_git_log_to_the_stages_module_paths(self, mocker):
-        """git log runs over old..new restricted to the stage's curated paths."""
+        """git log runs over old..new restricted to the stage's curated
+        paths, after confirming old is an ancestor of new."""
         run = mocker.patch(
             "subprocess.run",
-            return_value=subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="abc1234 Fix tree\ndef5678 Tune zones\n"
-            ),
+            side_effect=[
+                subprocess.CompletedProcess(args=[], returncode=0),  # merge-base
+                subprocess.CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout="abc1234 Fix tree\ndef5678 Tune zones\n",
+                ),
+            ],
         )
         commits = compare_versions.generate_list_commit_log(
             "a" * 40, "b" * 40, "decision_tree"
@@ -346,16 +352,36 @@ class TestGenerateListCommitLog:
         )
         run.assert_not_called()
 
-    def test_commits_missing_from_local_history_return_none(self, mocker):
-        """Commits not present locally (unfetched branch) degrade to None."""
-        mocker.patch(
+    def test_commit_old_not_an_ancestor_of_commit_new_returns_none(self, mocker):
+        """`old..new` silently omits commits when old isn't an ancestor of
+        new (e.g. old came from a since-rebased branch); this must degrade
+        to None rather than return an incomplete log, and must not run
+        `git log` at all once the ancestor check has failed."""
+        run = mocker.patch(
             "subprocess.run",
-            side_effect=subprocess.CalledProcessError(128, "git log"),
+            side_effect=subprocess.CalledProcessError(1, "git merge-base"),
         )
         assert (
             compare_versions.generate_list_commit_log("a" * 40, "b" * 40, "uprns")
             is None
         )
+        run.assert_called_once()
+
+    def test_commits_missing_from_local_history_return_none(self, mocker):
+        """git log itself failing after a successful ancestor check (e.g. a
+        shallow clone missing older history) degrades to None."""
+        run = mocker.patch(
+            "subprocess.run",
+            side_effect=[
+                subprocess.CompletedProcess(args=[], returncode=0),  # merge-base
+                subprocess.CalledProcessError(128, "git log"),
+            ],
+        )
+        assert (
+            compare_versions.generate_list_commit_log("a" * 40, "b" * 40, "uprns")
+            is None
+        )
+        assert run.call_count == 2
 
 
 class TestGetStrStageOutputPath:
