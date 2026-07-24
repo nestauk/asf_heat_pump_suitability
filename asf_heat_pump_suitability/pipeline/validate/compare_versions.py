@@ -198,14 +198,14 @@ def generate_df_tech_transitions(
     """
     if TECH_COL not in df_old.columns or TECH_COL not in df_new.columns:
         return None
-    old = df_old.unique(subset=[UPRN_COL], keep="first").select(
+    old = df_old.select(
         _expr_uprn_canonical(),
         pl.col(TECH_COL).fill_null("(null)").alias("assigned_tech_old"),
-    )
-    new = df_new.unique(subset=[UPRN_COL], keep="first").select(
+    ).unique(subset=[UPRN_COL], keep="first")
+    new = df_new.select(
         _expr_uprn_canonical(),
         pl.col(TECH_COL).fill_null("(null)").alias("assigned_tech_new"),
-    )
+    ).unique(subset=[UPRN_COL], keep="first")
     return (
         old.join(new, on=UPRN_COL, how="inner")
         .group_by("assigned_tech_old", "assigned_tech_new")
