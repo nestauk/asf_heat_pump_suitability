@@ -341,6 +341,7 @@ tech_types:
   - "HN_N"
 
 run_manifest:
+  # Remember to update stage_input_keys below when a stage starts reading a new input data source.
   stage_input_keys:
     uprns:
       - "geodata.uk_osopen_uprn"
