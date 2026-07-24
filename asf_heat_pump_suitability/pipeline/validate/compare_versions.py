@@ -353,13 +353,15 @@ def get_str_stage_output_path(
     )
 
 
-def load_df_stage_output(path: str) -> pl.DataFrame:
+def load_transform_df_stage_output(path: str) -> pl.DataFrame:
     """
     Load a stage output as a plain DataFrame for tabular comparison.
 
     Geometry columns are dropped: the base checks are tabular, and polars
     cannot read the geoarrow extension columns geopandas-written outputs
     carry. Geojson outputs are loaded with geopandas (EPSG:4326, as saved).
+    A geojson with zero features (e.g. every cluster filtered out for a
+    local authority) degrades to an empty DataFrame instead of raising.
 
     Args:
         path: S3 path of the stage output (.parquet or .geojson)
@@ -381,7 +383,11 @@ def load_df_stage_output(path: str) -> pl.DataFrame:
         ]
         return pl.from_arrow(pq.read_table(path, columns=tabular))
     if path.endswith(".geojson"):
-        gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
+        try:
+            gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
+        except ValueError:
+            logging.warning("No features in geojson at %s; comparing as empty.", path)
+            return pl.DataFrame()
         return pl.from_pandas(gdf.drop(columns="geometry"))
     raise ValueError(f"Cannot compare file type of {path}; expected parquet/geojson.")
 
@@ -654,8 +660,8 @@ def main(args: argparse.Namespace) -> None:
     path_new = get_str_stage_output_path(
         args.stage, args.local_authority, release_date_new, check_exists=True
     )
-    df_old = load_df_stage_output(path_old)
-    df_new = load_df_stage_output(path_new)
+    df_old = load_transform_df_stage_output(path_old)
+    df_new = load_transform_df_stage_output(path_new)
     report = generate_str_report(
         df_old,
         df_new,

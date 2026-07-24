@@ -598,8 +598,8 @@ class TestGenerateStrReport:
         assert "WARNING" in report
 
 
-class TestLoadDfStageOutput:
-    """Tests for `load_df_stage_output`."""
+class TestLoadTransformDfStageOutput:
+    """Tests for `load_transform_df_stage_output`."""
 
     def test_loads_geoparquet_without_the_geometry_column(self, tmp_path):
         """Geopandas-written outputs carry geoarrow extension columns polars
@@ -613,7 +613,7 @@ class TestLoadDfStageOutput:
             geometry=[Point(0, 0), Point(1, 1)],
             crs="EPSG:27700",
         ).to_parquet(path)
-        df = compare_versions.load_df_stage_output(str(path))
+        df = compare_versions.load_transform_df_stage_output(str(path))
         assert "geometry" not in df.columns
         assert df["UPRN"].to_list() == [1, 2]
 
@@ -621,6 +621,22 @@ class TestLoadDfStageOutput:
         """Polars-written outputs have no geometry and load as-is."""
         path = tmp_path / "output.parquet"
         pl.DataFrame({"UPRN": [1, 2], "in_hn_zone": [True, False]}).write_parquet(path)
-        df = compare_versions.load_df_stage_output(str(path))
+        df = compare_versions.load_transform_df_stage_output(str(path))
         assert df.columns == ["UPRN", "in_hn_zone"]
         assert df.height == 2
+
+    def test_zero_feature_geojson_degrades_to_an_empty_dataframe(self, mocker):
+        """A geojson with every feature filtered out (e.g. compute_contextual
+        features' documented empty-cluster temporary fix) must not crash the
+        comparison; it degrades to an empty output instead."""
+        mocker.patch(
+            "asf_heat_pump_suitability.getters.base_getters.load_gdf_from_s3_geojson",
+            side_effect=ValueError(
+                "Assigning CRS to a GeoDataFrame without a geometry column "
+                "is not supported"
+            ),
+        )
+        df = compare_versions.load_transform_df_stage_output(
+            "s3://bucket/dir/output.geojson"
+        )
+        assert df.is_empty()
