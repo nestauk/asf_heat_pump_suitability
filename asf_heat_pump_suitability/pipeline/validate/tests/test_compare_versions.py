@@ -238,6 +238,28 @@ class TestGenerateDfTechTransitions:
         assert nulled["assigned_tech_old"].to_list() == ["Individual solution"]
         assert transitions["assigned_tech_new"].null_count() == 0
 
+    def test_returns_none_without_tech_column(self, df_old, df_new_identical):
+        """A version missing `assigned_tech` must degrade to None rather than
+        raise `ColumnNotFoundError` — this data function must be as safe to
+        call directly as its `generate_dict_*` siblings."""
+        df_new = df_new_identical.drop("assigned_tech")
+        assert compare_versions.generate_df_tech_transitions(df_old, df_new) is None
+
+    def test_duplicate_uprns_do_not_inflate_transition_counts(self, df_old):
+        """A duplicated UPRN in one version must not cross-product into an
+        inflated transition count; each version is deduplicated on UPRN
+        first."""
+        df_new = pl.concat([df_old, df_old.head(1)])  # UPRN 1 appears twice
+        transitions = compare_versions.generate_df_tech_transitions(df_old, df_new)
+        assert transitions["n_uprns"].sum() == 4
+
+    def test_matches_uprns_across_int_and_float_dtypes(self, df_old):
+        """An Int64-vs-Float64 UPRN mismatch must not read as churn here
+        either, since the transition matrix joins on the same UPRN key."""
+        df_new = df_old.with_columns(pl.col("UPRN").cast(pl.Float64))
+        transitions = compare_versions.generate_df_tech_transitions(df_old, df_new)
+        assert transitions["n_uprns"].sum() == 4
+
 
 class TestLoadDictManifest:
     """Tests for `load_dict_manifest`."""
@@ -547,6 +569,24 @@ class TestGenerateStrReport:
         df_new = df_old.with_columns((pl.col("UPRN") + 100).alias("UPRN"))
         report = generate_report(df_old, df_new, *manifests)
         assert "No UPRNs retained across versions; matrix skipped." in report
+
+    def test_transition_matrix_survives_a_colliding_tech_label(
+        self, df_old, manifests, mocker
+    ):
+        """A real tech label equal to the pivot's own index column name
+        ("assigned_tech_old") must not crash the matrix — the pivot renames
+        its index to an internal column first."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        df_new = df_old.with_columns(
+            pl.when(pl.col("UPRN") == 1)
+            .then(pl.lit("assigned_tech_old"))
+            .otherwise(pl.col("assigned_tech"))
+            .alias("assigned_tech")
+        )
+        report = generate_report(df_old, df_new, *manifests)
+        assert "assigned_tech_old" in report
 
     def test_unexpected_uprn_loss_warning_appears(self, df_old, manifests, mocker):
         """UPRN loss above the rubric tolerance surfaces as a warning line."""

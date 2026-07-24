@@ -176,12 +176,16 @@ def generate_str_churn_note(churn: dict, max_removed_share: float) -> str | None
 
 def generate_df_tech_transitions(
     df_old: pl.DataFrame, df_new: pl.DataFrame
-) -> pl.DataFrame:
+) -> pl.DataFrame | None:
     """
     Count tech-assignment transitions for UPRNs present in both versions.
 
     Null tech assignments are labelled "(null)" so they appear as a regular
-    matrix row/column.
+    matrix row/column. Each version is deduplicated on UPRN first, so a
+    duplicate UPRN (a data-quality regression, not expected but not
+    prevented upstream either) can't cross-product into inflated counts —
+    the count/churn checks already flag a rows-vs-UPRNs mismatch when one
+    occurs.
 
     Args:
         df_old: older version of the UPRN-level decision-tree output
@@ -189,14 +193,17 @@ def generate_df_tech_transitions(
 
     Returns:
         pl.DataFrame: one row per (assigned_tech_old, assigned_tech_new) pair
-            with its UPRN count, largest first
+            with its UPRN count, largest first, or None when either version
+            has no tech-assignment column
     """
-    old = df_old.select(
-        pl.col(UPRN_COL).cast(pl.Utf8),
+    if TECH_COL not in df_old.columns or TECH_COL not in df_new.columns:
+        return None
+    old = df_old.unique(subset=[UPRN_COL], keep="first").select(
+        _expr_uprn_canonical(),
         pl.col(TECH_COL).fill_null("(null)").alias("assigned_tech_old"),
     )
-    new = df_new.select(
-        pl.col(UPRN_COL).cast(pl.Utf8),
+    new = df_new.unique(subset=[UPRN_COL], keep="first").select(
+        _expr_uprn_canonical(),
         pl.col(TECH_COL).fill_null("(null)").alias("assigned_tech_new"),
     )
     return (
@@ -448,29 +455,34 @@ def _generate_str_transitions_section(
 ) -> str:
     """Render the UPRN-level tech transition matrix as a markdown section."""
     lines = ["## Tech-assignment transitions (UPRN-level)", ""]
-    if TECH_COL not in df_old.columns or TECH_COL not in df_new.columns:
+    transitions = generate_df_tech_transitions(df_old, df_new)
+    if transitions is None:
         lines.append(
             f"Skipped: `{TECH_COL}` column missing from one or both versions "
             "(see schema diff)."
         )
         return "\n".join(lines)
-    transitions = generate_df_tech_transitions(df_old, df_new)
     if transitions.is_empty():
         lines.append("No UPRNs retained across versions; matrix skipped.")
         return "\n".join(lines)
-    matrix = transitions.pivot(
-        on="assigned_tech_new", index="assigned_tech_old", values="n_uprns"
-    ).fill_null(0)
-    new_techs = sorted(col for col in matrix.columns if col != "assigned_tech_old")
+    # Pivot the index under an internal name: a real tech label equal to
+    # "assigned_tech_old" would otherwise collide with the pivoted index
+    # column and crash the pivot.
+    matrix = (
+        transitions.rename({"assigned_tech_old": "_old_tech"})
+        .pivot(on="assigned_tech_new", index="_old_tech", values="n_uprns")
+        .fill_null(0)
+    )
+    new_techs = sorted(col for col in matrix.columns if col != "_old_tech")
     lines.extend(
         [
             "| Old tech \\ New tech | " + " | ".join(new_techs) + " |",
             "| --- |" + " --- |" * len(new_techs),
         ]
     )
-    for row in matrix.sort("assigned_tech_old").iter_rows(named=True):
+    for row in matrix.sort("_old_tech").iter_rows(named=True):
         cells = " | ".join(str(row[tech]) for tech in new_techs)
-        lines.append(f"| {row['assigned_tech_old']} | {cells} |")
+        lines.append(f"| {row['_old_tech']} | {cells} |")
     return "\n".join(lines)
 
 
