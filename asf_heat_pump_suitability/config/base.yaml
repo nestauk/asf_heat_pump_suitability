@@ -341,10 +341,6 @@ tech_types:
   - "HN_N"
 
 run_manifest:
-  # config["data"] datasets each pipeline entrypoint reads (directly or via
-  # the getters/transform modules it calls), recorded as `input_versions` in
-  # that stage's run manifests. Update a list when its stage starts or stops
-  # reading a dataset.
   stage_input_keys:
     uprns:
       - "geodata.uk_osopen_uprn"
