@@ -25,6 +25,7 @@ from pathlib import Path
 
 import fsspec
 import polars as pl
+import pyarrow.parquet as pq
 
 from asf_heat_pump_suitability import PROJECT_DIR, config
 from asf_heat_pump_suitability.getters import base_getters
@@ -168,6 +169,9 @@ def generate_df_tech_transitions(
     """
     Count tech-assignment transitions for UPRNs present in both versions.
 
+    Null tech assignments are labelled "(null)" so they appear as a regular
+    matrix row/column.
+
     Args:
         df_old: older version of the UPRN-level decision-tree output
         df_new: newer version of the UPRN-level decision-tree output
@@ -178,11 +182,11 @@ def generate_df_tech_transitions(
     """
     old = df_old.select(
         pl.col(UPRN_COL).cast(pl.Utf8),
-        pl.col(TECH_COL).alias("assigned_tech_old"),
+        pl.col(TECH_COL).fill_null("(null)").alias("assigned_tech_old"),
     )
     new = df_new.select(
         pl.col(UPRN_COL).cast(pl.Utf8),
-        pl.col(TECH_COL).alias("assigned_tech_new"),
+        pl.col(TECH_COL).fill_null("(null)").alias("assigned_tech_new"),
     )
     return (
         old.join(new, on=UPRN_COL, how="inner")
@@ -319,8 +323,9 @@ def load_df_stage_output(path: str) -> pl.DataFrame:
     """
     Load a stage output as a plain DataFrame for tabular comparison.
 
-    Geojson outputs (saved in EPSG:4326 by save_utils) are loaded with
-    geopandas and their geometry dropped: the base checks are tabular.
+    Geometry columns are dropped: the base checks are tabular, and polars
+    cannot read the geoarrow extension columns geopandas-written outputs
+    carry. Geojson outputs are loaded with geopandas (EPSG:4326, as saved).
 
     Args:
         path: S3 path of the stage output (.parquet or .geojson)
@@ -332,7 +337,15 @@ def load_df_stage_output(path: str) -> pl.DataFrame:
         ValueError: for file types the comparison cannot read
     """
     if path.endswith(".parquet"):
-        return pl.read_parquet(path)
+        table = pq.read_table(path)
+        tabular = [
+            field.name
+            for field in table.schema
+            if not (field.metadata or {})
+            .get(b"ARROW:extension:name", b"")
+            .startswith(b"geoarrow")
+        ]
+        return pl.from_arrow(table.select(tabular))
     if path.endswith(".geojson"):
         gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
         return pl.from_pandas(gdf.drop(columns="geometry"))

@@ -215,6 +215,20 @@ class TestGenerateDfTechTransitions:
         # Only the 3 retained UPRNs are counted; added/removed ones are churn.
         assert transitions["n_uprns"].sum() == 3
 
+    def test_null_tech_assignments_get_a_readable_label(self, df_old):
+        """Real outputs contain UPRNs with a null tech (e.g. no building ID);
+        they transition as "(null)" rather than an inconsistent None/null mix."""
+        df_new = df_old.with_columns(
+            pl.when(pl.col("UPRN") == 1)
+            .then(None)
+            .otherwise(pl.col("assigned_tech"))
+            .alias("assigned_tech")
+        )
+        transitions = compare_versions.generate_df_tech_transitions(df_old, df_new)
+        nulled = transitions.filter(pl.col("assigned_tech_new") == "(null)")
+        assert nulled["assigned_tech_old"].to_list() == ["Individual solution"]
+        assert transitions["assigned_tech_new"].null_count() == 0
+
 
 class TestLoadDictManifest:
     """Tests for `load_dict_manifest`."""
@@ -471,3 +485,31 @@ class TestGenerateStrReport:
         df_new = df_old.head(1)
         report = generate_report(df_old, df_new, *manifests)
         assert "WARNING" in report
+
+
+class TestLoadDfStageOutput:
+    """Tests for `load_df_stage_output`."""
+
+    def test_loads_geoparquet_without_the_geometry_column(self, tmp_path):
+        """Geopandas-written outputs carry geoarrow extension columns polars
+        cannot read; the loader drops them and returns the tabular columns."""
+        import geopandas as gpd
+        from shapely.geometry import Point
+
+        path = tmp_path / "output.parquet"
+        gpd.GeoDataFrame(
+            {"UPRN": [1, 2], "assigned_tech": ["Individual solution"] * 2},
+            geometry=[Point(0, 0), Point(1, 1)],
+            crs="EPSG:27700",
+        ).to_parquet(path)
+        df = compare_versions.load_df_stage_output(str(path))
+        assert "geometry" not in df.columns
+        assert df["UPRN"].to_list() == [1, 2]
+
+    def test_loads_plain_parquet_unchanged(self, tmp_path):
+        """Polars-written outputs have no geometry and load as-is."""
+        path = tmp_path / "output.parquet"
+        pl.DataFrame({"UPRN": [1, 2], "in_hn_zone": [True, False]}).write_parquet(path)
+        df = compare_versions.load_df_stage_output(str(path))
+        assert df.columns == ["UPRN", "in_hn_zone"]
+        assert df.height == 2
