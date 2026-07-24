@@ -385,3 +385,13 @@ run_manifest:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
       - "processed.valid_la_names"
+
+compare_versions:
+  # Tolerances applied by pipeline/validate/compare_versions.py, keyed by the
+  # trigger rubric the comparison is read against. Shares are fractions of the
+  # old version's UPRNs.
+  tolerances:
+    methodology_change:
+      max_removed_uprn_share: 0.05
+    input_release:
+      max_removed_uprn_share: 0.05
