@@ -392,11 +392,14 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
     raise ValueError(f"Cannot compare file type of {path}; expected parquet/geojson.")
 
 
+def _render_section(title: str, *body: str) -> str:
+    """Render a markdown section: a `## Title` heading, then body lines."""
+    return "\n".join([f"## {title}", "", *body])
+
+
 def _generate_str_counts_section(counts: dict) -> str:
     """Render the row/UPRN count delta as a markdown section."""
     lines = [
-        "## Row and UPRN counts",
-        "",
         "| Metric | Old | New | Delta |",
         "| --- | --- | --- | --- |",
         (
@@ -411,12 +414,12 @@ def _generate_str_counts_section(counts: dict) -> str:
             f"| Distinct UPRNs | {counts['uprns_old']} | {counts['uprns_new']} "
             f"| {counts['uprns_delta']:+d} |"
         )
-    return "\n".join(lines)
+    return _render_section("Row and UPRN counts", *lines)
 
 
 def _generate_str_schema_section(schema_diff: dict) -> str:
     """Render the schema diff as a markdown section."""
-    lines = ["## Schema diff", ""]
+    lines = []
     if not any(schema_diff.values()):
         lines.append("No schema changes.")
     lines.extend(
@@ -429,48 +432,47 @@ def _generate_str_schema_section(schema_diff: dict) -> str:
         f"- Dtype changed: `{col}` {old} -> {new}"
         for col, (old, new) in schema_diff["dtype_changed"].items()
     )
-    return "\n".join(lines)
+    return _render_section("Schema diff", *lines)
 
 
 def _generate_str_churn_section(churn: dict | None, max_removed_share: float) -> str:
     """Render UPRN churn and any above-tolerance warning as a markdown section."""
-    lines = ["## UPRN churn", ""]
     if churn is None:
-        lines.append("Skipped: no UPRN column in this stage's output.")
-        return "\n".join(lines)
-    lines.extend(
-        [
-            "| Added | Removed | Retained |",
-            "| --- | --- | --- |",
-            f"| {churn['n_added']} | {churn['n_removed']} | {churn['n_retained']} |",
-            "",
-            (
-                f"{churn['removed_share']:.1%} of old UPRNs were removed "
-                f"(rubric tolerance: {max_removed_share:.1%})."
-            ),
-        ]
-    )
+        return _render_section(
+            "UPRN churn", "Skipped: no UPRN column in this stage's output."
+        )
+    lines = [
+        "| Added | Removed | Retained |",
+        "| --- | --- | --- |",
+        f"| {churn['n_added']} | {churn['n_removed']} | {churn['n_retained']} |",
+        "",
+        (
+            f"{churn['removed_share']:.1%} of old UPRNs were removed "
+            f"(rubric tolerance: {max_removed_share:.1%})."
+        ),
+    ]
     churn_note = generate_str_churn_note(churn, max_removed_share)
     if churn_note:
         lines.extend(["", churn_note])
-    return "\n".join(lines)
+    return _render_section("UPRN churn", *lines)
 
 
 def _generate_str_transitions_section(
     df_old: pl.DataFrame, df_new: pl.DataFrame
 ) -> str:
     """Render the UPRN-level tech transition matrix as a markdown section."""
-    lines = ["## Tech-assignment transitions (UPRN-level)", ""]
+    title = "Tech-assignment transitions (UPRN-level)"
     transitions = generate_df_tech_transitions(df_old, df_new)
     if transitions is None:
-        lines.append(
+        return _render_section(
+            title,
             f"Skipped: `{TECH_COL}` column missing from one or both versions "
-            "(see schema diff)."
+            "(see schema diff).",
         )
-        return "\n".join(lines)
     if transitions.is_empty():
-        lines.append("No UPRNs retained across versions; matrix skipped.")
-        return "\n".join(lines)
+        return _render_section(
+            title, "No UPRNs retained across versions; matrix skipped."
+        )
     # Pivot the index under an internal name: a real tech label equal to
     # "assigned_tech_old" would otherwise collide with the pivoted index
     # column and crash the pivot.
@@ -480,22 +482,20 @@ def _generate_str_transitions_section(
         .fill_null(0)
     )
     new_techs = sorted(col for col in matrix.columns if col != "_old_tech")
-    lines.extend(
-        [
-            "| Old tech \\ New tech | " + " | ".join(new_techs) + " |",
-            "| --- |" + " --- |" * len(new_techs),
-        ]
-    )
+    lines = [
+        "| Old tech \\ New tech | " + " | ".join(new_techs) + " |",
+        "| --- |" + " --- |" * len(new_techs),
+    ]
     for row in matrix.sort("_old_tech").iter_rows(named=True):
         cells = " | ".join(str(row[tech]) for tech in new_techs)
         lines.append(f"| {row['_old_tech']} | {cells} |")
-    return "\n".join(lines)
+    return _render_section(title, *lines)
 
 
 def _generate_str_input_changes_section(manifest_old: dict, manifest_new: dict) -> str:
     """Render the manifest-recorded input version changes as a markdown section."""
     changes = generate_dict_input_version_changes(manifest_old, manifest_new)
-    lines = ["## Input version changes", ""]
+    lines = []
     if not any(changes.values()):
         lines.append("No recorded input version changes.")
     lines.extend(
@@ -506,7 +506,7 @@ def _generate_str_input_changes_section(manifest_old: dict, manifest_new: dict) 
     lines.extend(
         f"- Removed: `{key}` {path}" for key, path in changes["removed"].items()
     )
-    return "\n".join(lines)
+    return _render_section("Input version changes", *lines)
 
 
 def _generate_str_commit_log_section(
@@ -516,22 +516,20 @@ def _generate_str_commit_log_section(
     commit_old = manifest_old["git_commit"]
     commit_new = manifest_new["git_commit"]
     span = f"`{commit_old[:7]}..{commit_new[:7]}`"
-    lines = ["## Module-scoped commit log", ""]
     commits = generate_list_commit_log(commit_old, commit_new, stage)
     if commits is None:
-        lines.append(
+        lines = [
             "Commit log unavailable: a recorded commit is unknown or not in "
             "local git history (try fetching first)."
-        )
+        ]
     elif commit_old == commit_new:
-        lines.append(f"Both versions were produced by the same commit `{commit_old}`.")
+        lines = [f"Both versions were produced by the same commit `{commit_old}`."]
     elif not commits:
-        lines.append(f"No commits touched this stage's modules in {span}.")
+        lines = [f"No commits touched this stage's modules in {span}."]
     else:
-        lines.append(f"Commits touching this stage's modules in {span}:")
-        lines.append("")
+        lines = [f"Commits touching this stage's modules in {span}:", ""]
         lines.extend(f"- {commit}" for commit in commits)
-    return "\n".join(lines)
+    return _render_section("Module-scoped commit log", *lines)
 
 
 def generate_str_report(
