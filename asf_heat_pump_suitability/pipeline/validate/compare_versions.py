@@ -353,15 +353,15 @@ def load_df_stage_output(path: str) -> pl.DataFrame:
         ValueError: for file types the comparison cannot read
     """
     if path.endswith(".parquet"):
-        table = pq.read_table(path)
+        schema = pq.read_schema(path)
         tabular = [
             field.name
-            for field in table.schema
+            for field in schema
             if not (field.metadata or {})
             .get(b"ARROW:extension:name", b"")
             .startswith(b"geoarrow")
         ]
-        return pl.from_arrow(table.select(tabular))
+        return pl.from_arrow(pq.read_table(path, columns=tabular))
     if path.endswith(".geojson"):
         gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
         return pl.from_pandas(gdf.drop(columns="geometry"))
