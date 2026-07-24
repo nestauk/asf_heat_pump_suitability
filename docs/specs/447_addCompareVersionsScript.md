@@ -2,7 +2,7 @@
 title: Cross-version comparison script — base checks
 status: draft
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/447
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/451
 asana: https://app.asana.com/1/5571817120120/project/1214222223606748/task/1216704619895657
 created: 2026-07-23
 ---
