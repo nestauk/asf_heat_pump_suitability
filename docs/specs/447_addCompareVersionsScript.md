@@ -92,25 +92,44 @@ Decisions settled during kickoff interview (2026-07-23):
 
 ## Open questions
 
-- The stage→module mapping for the module-scoped commit log (which repo
-  paths count as "the relevant stage's module" for `git log A..B -- <paths>`)
-  — expected to be a curated dict mirroring `STAGE_INPUT_KEYS` in
-  `utils/run_manifest.py`; exact path lists left to `/implement`.
-- How the script behaves when a version's manifest is missing (pre-#440
-  outputs have none) — presumably degrade gracefully: skip the commit-log
-  section with a note rather than fail the whole report; left to
-  `/implement`'s judgment.
+Both resolved during implementation (2026-07-24):
+
+- **Stage→module mapping for the commit log**: a curated
+  `compare_versions.stage_module_paths` dict in `base.yaml`, mirroring the
+  stages of `STAGE_INPUT_KEYS` in `utils/manifest_utils.py` (a test pins the
+  key sets equal and every path's existence). Each stage lists its entrypoint
+  plus the pipeline modules it directly drives; cross-cutting code
+  (`getters/`, `utils/`, `config/`) is excluded to keep the log scoped to
+  candidate causes.
+- **Missing manifest** (pre-#440 outputs): the report degrades gracefully —
+  the input-version and commit-log sections are replaced by a note naming
+  which version lacks a manifest; all data-level checks still run. A manifest
+  recording an `unknown` commit, or commits absent from local git history,
+  degrade the commit-log section the same way.
+
+Implementation decisions within the spec's frame:
+
+- **Tolerances** live in `compare_versions.tolerances` in `base.yaml`, keyed
+  by trigger rubric, with one v1 tolerance: `max_removed_uprn_share`
+  (defaults 0.05 for both rubrics). Exceeding it adds a warning line to the
+  report and console — a per-check note, not the grouped expected/suspicious
+  flagging the thresholding follow-on owns.
+- **Input version changes** recorded in the two manifests are diffed into
+  their own report section (the manifest's `input_versions` is read from day
+  one, per the Problem section).
+- The report is written to `outputs/comparisons/` (gitignored) by default;
+  `--report_dir` overrides.
 
 ## Verification
 
-- [ ] Runs against two dated version folders for one LA and one stage
-- [ ] Accepts an explicit trigger input (`methodology_change` /
+- [x] Runs against two dated version folders for one LA and one stage
+- [x] Accepts an explicit trigger input (`methodology_change` /
       `input_release`); report states which rubric it was read against
-- [ ] Reports row/UPRN count delta, schema diff, and UPRN churn
+- [x] Reports row/UPRN count delta, schema diff, and UPRN churn
       (added/removed/retained)
-- [ ] Tech-assignment transition matrix for the decision-tree stage
+- [x] Tech-assignment transition matrix for the decision-tree stage
       (UPRN-level output)
-- [ ] Reads `git_commit` from each version's manifest and embeds the
+- [x] Reads `git_commit` from each version's manifest and embeds the
       module-scoped commit log between the two recorded commits in the
       report
-- [ ] Unit tests cover: no drift, expected UPRN churn, unexpected UPRN loss
+- [x] Unit tests cover: no drift, expected UPRN churn, unexpected UPRN loss
