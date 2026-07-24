@@ -5,10 +5,15 @@ Run:
 pytest asf_heat_pump_suitability/pipeline/validate/tests/test_compare_versions.py
 """
 
+import json
+import subprocess
+
 import polars as pl
 import pytest
 
+from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.validate import compare_versions
+from asf_heat_pump_suitability.utils import manifest_utils
 
 
 @pytest.fixture(scope="module")
@@ -209,3 +214,131 @@ class TestGenerateDfTechTransitions:
         assert moved["n_uprns"].to_list() == [1]
         # Only the 3 retained UPRNs are counted; added/removed ones are churn.
         assert transitions["n_uprns"].sum() == 3
+
+
+class TestLoadDictManifest:
+    """Tests for `load_dict_manifest`."""
+
+    def test_loads_the_outputs_colocated_manifest(self, mocker):
+        """The manifest is read from the output's co-located .manifest.json."""
+        manifest = {"stage": "decision_tree", "git_commit": "a" * 40}
+        opened = mocker.patch(
+            "fsspec.open", mocker.mock_open(read_data=json.dumps(manifest))
+        )
+        loaded = compare_versions.load_dict_manifest("s3://bucket/dir/output.parquet")
+        assert loaded == manifest
+        assert opened.call_args.args[0] == "s3://bucket/dir/output.manifest.json"
+
+    def test_missing_manifest_returns_none(self, mocker):
+        """Pre-#440 outputs have no manifest: degrade to None, don't raise."""
+        mocker.patch("fsspec.open", side_effect=FileNotFoundError("no such key"))
+        assert (
+            compare_versions.load_dict_manifest("s3://bucket/dir/output.parquet")
+            is None
+        )
+
+
+class TestGenerateDictInputVersionChanges:
+    """Tests for `generate_dict_input_version_changes`."""
+
+    def test_identical_input_versions_have_empty_changes(self):
+        """No input re-release means no changed, added or removed inputs."""
+        versions = {"epc.domestic": "s3://bucket/inputs/2026Q1_epc.parquet"}
+        assert compare_versions.generate_dict_input_version_changes(
+            {"input_versions": versions}, {"input_versions": versions}
+        ) == {"changed": {}, "added": {}, "removed": {}}
+
+    def test_reports_changed_added_and_removed_inputs(self):
+        """Input path changes are reported old -> new, alongside inputs only
+        one version's manifest records."""
+        old = {
+            "input_versions": {
+                "epc.domestic": "s3://bucket/inputs/2026Q1_epc.parquet",
+                "geodata.gb_code_points": "s3://bucket/inputs/2025_codepoint.zip",
+            }
+        }
+        new = {
+            "input_versions": {
+                "epc.domestic": "s3://bucket/inputs/2026Q2_epc.parquet",
+                "geodata.uk_osopen_uprn": "s3://bucket/inputs/2026_uprn.zip",
+            }
+        }
+        assert compare_versions.generate_dict_input_version_changes(old, new) == {
+            "changed": {
+                "epc.domestic": (
+                    "s3://bucket/inputs/2026Q1_epc.parquet",
+                    "s3://bucket/inputs/2026Q2_epc.parquet",
+                )
+            },
+            "added": {"geodata.uk_osopen_uprn": "s3://bucket/inputs/2026_uprn.zip"},
+            "removed": {
+                "geodata.gb_code_points": "s3://bucket/inputs/2025_codepoint.zip"
+            },
+        }
+
+
+class TestStageModulePaths:
+    """Tests for the curated `STAGE_MODULE_PATHS` lists."""
+
+    def test_covers_the_same_stages_as_the_run_manifest(self):
+        """Commit-log scoping mirrors the run manifest's curated stage list."""
+        assert set(compare_versions.STAGE_MODULE_PATHS) == set(
+            manifest_utils.STAGE_INPUT_KEYS
+        )
+
+    def test_every_curated_path_exists_in_the_repo(self):
+        """A renamed module must break this test, not silently empty the log."""
+        for stage, paths in compare_versions.STAGE_MODULE_PATHS.items():
+            for path in paths:
+                assert (
+                    PROJECT_DIR / path
+                ).exists(), f"Missing module path for stage {stage}: {path}"
+
+
+class TestGenerateListCommitLog:
+    """Tests for `generate_list_commit_log`."""
+
+    def test_scopes_git_log_to_the_stages_module_paths(self, mocker):
+        """git log runs over old..new restricted to the stage's curated paths."""
+        run = mocker.patch(
+            "subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="abc1234 Fix tree\ndef5678 Tune zones\n"
+            ),
+        )
+        commits = compare_versions.generate_list_commit_log(
+            "a" * 40, "b" * 40, "decision_tree"
+        )
+        assert commits == ["abc1234 Fix tree", "def5678 Tune zones"]
+        command = run.call_args.args[0]
+        assert f"{'a' * 40}..{'b' * 40}" in command
+        paths = command[command.index("--") + 1 :]
+        assert paths == compare_versions.STAGE_MODULE_PATHS["decision_tree"]
+
+    def test_same_commit_returns_empty_log_without_running_git(self, mocker):
+        """Two outputs from the same commit cannot differ by code: empty log."""
+        run = mocker.patch("subprocess.run")
+        assert (
+            compare_versions.generate_list_commit_log("a" * 40, "a" * 40, "uprns") == []
+        )
+        run.assert_not_called()
+
+    def test_unknown_recorded_commit_returns_none(self, mocker):
+        """A manifest recording the "unknown" commit sentinel cannot be scoped."""
+        run = mocker.patch("subprocess.run")
+        assert (
+            compare_versions.generate_list_commit_log("unknown", "b" * 40, "uprns")
+            is None
+        )
+        run.assert_not_called()
+
+    def test_commits_missing_from_local_history_return_none(self, mocker):
+        """Commits not present locally (unfetched branch) degrade to None."""
+        mocker.patch(
+            "subprocess.run",
+            side_effect=subprocess.CalledProcessError(128, "git log"),
+        )
+        assert (
+            compare_versions.generate_list_commit_log("a" * 40, "b" * 40, "uprns")
+            is None
+        )

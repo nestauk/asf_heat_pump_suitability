@@ -16,13 +16,20 @@ python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
     --trigger methodology_change
 """
 
+import json
+import logging
+import subprocess
+
+import fsspec
 import polars as pl
 
-from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability import PROJECT_DIR, config
+from asf_heat_pump_suitability.utils import manifest_utils
 
 UPRN_COL = "UPRN"
 TECH_COL = "assigned_tech"
 
+STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 TOLERANCES = config["compare_versions"]["tolerances"]
 
 
@@ -178,3 +185,98 @@ def generate_df_tech_transitions(
         .agg(pl.len().alias("n_uprns"))
         .sort("n_uprns", "assigned_tech_old", "assigned_tech_new", descending=True)
     )
+
+
+def load_dict_manifest(output_path: str) -> dict | None:
+    """
+    Load the run manifest saved next to a pipeline output.
+
+    Args:
+        output_path: S3 path of the output file the manifest describes
+
+    Returns:
+        dict: the run manifest, or None when it is missing or unreadable
+            (outputs predating the run manifest have none)
+    """
+    manifest_path = manifest_utils.get_str_manifest_path(output_path)
+    try:
+        with fsspec.open(manifest_path) as f:
+            return json.load(f)
+    except (FileNotFoundError, OSError, ValueError):
+        logging.warning("No readable run manifest at %s", manifest_path)
+        return None
+
+
+def generate_dict_input_version_changes(manifest_old: dict, manifest_new: dict) -> dict:
+    """
+    Diff the input dataset versions recorded in two run manifests.
+
+    Args:
+        manifest_old: run manifest of the older output version
+        manifest_new: run manifest of the newer output version
+
+    Returns:
+        dict: "changed" maps input key to an (old, new) path pair; "added"
+            and "removed" map inputs recorded by only one manifest to their path
+    """
+    versions_old = manifest_old["input_versions"]
+    versions_new = manifest_new["input_versions"]
+    return {
+        "changed": {
+            key: (versions_old[key], versions_new[key])
+            for key in versions_old
+            if key in versions_new and versions_old[key] != versions_new[key]
+        },
+        "added": {
+            key: path for key, path in versions_new.items() if key not in versions_old
+        },
+        "removed": {
+            key: path for key, path in versions_old.items() if key not in versions_new
+        },
+    }
+
+
+def generate_list_commit_log(
+    commit_old: str, commit_new: str, stage: str
+) -> list[str] | None:
+    """
+    List commits between two recorded commits that touched a stage's modules.
+
+    Args:
+        commit_old: git commit recorded in the older version's manifest
+        commit_new: git commit recorded in the newer version's manifest
+        stage: pipeline stage whose curated `STAGE_MODULE_PATHS` scope the log
+
+    Returns:
+        list[str]: one "short-hash subject" line per commit, or None when a
+            recorded commit is the "unknown" sentinel or absent from local
+            git history (e.g. an unfetched branch)
+    """
+    if manifest_utils.UNKNOWN_GIT_COMMIT in (commit_old, commit_new):
+        logging.warning("A recorded commit is unknown; cannot build a commit log.")
+        return None
+    if commit_old == commit_new:
+        return []
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "log",
+                "--oneline",
+                f"{commit_old}..{commit_new}",
+                "--",
+                *STAGE_MODULE_PATHS[stage],
+            ],
+            cwd=PROJECT_DIR,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, OSError):
+        logging.warning(
+            "git log %s..%s failed; are both commits fetched locally?",
+            commit_old,
+            commit_new,
+        )
+        return None
+    return result.stdout.splitlines()

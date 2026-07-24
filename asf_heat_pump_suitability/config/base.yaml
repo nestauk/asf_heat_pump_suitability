@@ -387,6 +387,29 @@ run_manifest:
       - "processed.valid_la_names"
 
 compare_versions:
+  # Repo paths counted as each stage's module when scoping the commit log
+  # between two versions' recorded commits: the stage entrypoint plus the
+  # pipeline modules it directly drives. Cross-cutting code (getters/, utils/,
+  # config/) is excluded to keep the log scoped to candidate causes.
+  stage_module_paths:
+    uprns:
+      - "asf_heat_pump_suitability/pipeline/transform/uprns.py"
+      - "asf_heat_pump_suitability/schemas/uprns_schema.py"
+    add_features:
+      - "asf_heat_pump_suitability/pipeline/run/add_features.py"
+      - "asf_heat_pump_suitability/pipeline/transform/"
+      - "asf_heat_pump_suitability/pipeline/impute/"
+      - "asf_heat_pump_suitability/pipeline/model/"
+    decision_tree:
+      - "asf_heat_pump_suitability/pipeline/transform/decision_tree.py"
+      - "asf_heat_pump_suitability/pipeline/transform/local_authority.py"
+      - "asf_heat_pump_suitability/pipeline/transform/uprns.py"
+    cluster:
+      - "asf_heat_pump_suitability/pipeline/cluster/"
+      - "asf_heat_pump_suitability/pipeline/transform/local_authority.py"
+    compute_contextual_features:
+      - "asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py"
+      - "asf_heat_pump_suitability/pipeline/cluster/"
   # Tolerances applied by pipeline/validate/compare_versions.py, keyed by the
   # trigger rubric the comparison is read against. Shares are fractions of the
   # old version's UPRNs.
