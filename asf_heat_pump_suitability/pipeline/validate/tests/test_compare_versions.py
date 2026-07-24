@@ -468,14 +468,50 @@ class TestGenerateStrReport:
         assert "Tech-assignment transitions" in decision_tree
         assert "Tech-assignment transitions" not in other
 
-    def test_missing_manifest_skips_lineage_sections_with_a_note(
+    def test_missing_manifests_name_both_versions_in_the_note(
         self, df_old, df_new_identical
     ):
-        """A version without a manifest (pre-manifest output) degrades to a
-        note instead of failing the whole report."""
+        """When both versions lack a manifest, the note must not attribute
+        the gap to only one of them."""
         report = generate_report(df_old, df_new_identical, None, None)
-        assert "manifest" in report.lower()
+        assert "manifest missing for the old and new versions" in report.lower()
         assert "Row and UPRN counts" in report
+
+    def test_missing_manifest_names_only_the_version_that_lacks_one(
+        self, df_old, df_new_identical, manifests
+    ):
+        """When only one version lacks a manifest, the note names that
+        version specifically, not both."""
+        _, manifest_new = manifests
+        report = generate_report(df_old, df_new_identical, None, manifest_new)
+        assert "manifest missing for the old version " in report.lower()
+        assert "old and new" not in report.lower()
+
+    def test_transition_matrix_skips_when_tech_column_missing(
+        self, df_old, manifests, mocker
+    ):
+        """A version missing `assigned_tech` (e.g. dropped by a schema
+        change) must not crash report generation; the schema diff already
+        surfaces the drop."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        df_new = df_old.drop("assigned_tech")
+        report = generate_report(df_old, df_new, *manifests)
+        assert "Skipped" in report
+        assert "assigned_tech" in report
+
+    def test_transition_matrix_skips_when_no_uprns_retained(
+        self, df_old, manifests, mocker
+    ):
+        """Total UPRN churn (no overlap between versions) must render a note
+        rather than an empty, malformed markdown table."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        df_new = df_old.with_columns((pl.col("UPRN") + 100).alias("UPRN"))
+        report = generate_report(df_old, df_new, *manifests)
+        assert "No UPRNs retained across versions; matrix skipped." in report
 
     def test_unexpected_uprn_loss_warning_appears(self, df_old, manifests, mocker):
         """UPRN loss above the rubric tolerance surfaces as a warning line."""

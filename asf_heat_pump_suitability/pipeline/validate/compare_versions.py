@@ -420,17 +420,27 @@ def _generate_str_transitions_section(
     df_old: pl.DataFrame, df_new: pl.DataFrame
 ) -> str:
     """Render the UPRN-level tech transition matrix as a markdown section."""
+    lines = ["## Tech-assignment transitions (UPRN-level)", ""]
+    if TECH_COL not in df_old.columns or TECH_COL not in df_new.columns:
+        lines.append(
+            f"Skipped: `{TECH_COL}` column missing from one or both versions "
+            "(see schema diff)."
+        )
+        return "\n".join(lines)
     transitions = generate_df_tech_transitions(df_old, df_new)
+    if transitions.is_empty():
+        lines.append("No UPRNs retained across versions; matrix skipped.")
+        return "\n".join(lines)
     matrix = transitions.pivot(
         on="assigned_tech_new", index="assigned_tech_old", values="n_uprns"
     ).fill_null(0)
     new_techs = sorted(col for col in matrix.columns if col != "assigned_tech_old")
-    lines = [
-        "## Tech-assignment transitions (UPRN-level)",
-        "",
-        "| Old tech \\ New tech | " + " | ".join(new_techs) + " |",
-        "| --- |" + " --- |" * len(new_techs),
-    ]
+    lines.extend(
+        [
+            "| Old tech \\ New tech | " + " | ".join(new_techs) + " |",
+            "| --- |" + " --- |" * len(new_techs),
+        ]
+    )
     for row in matrix.sort("assigned_tech_old").iter_rows(named=True):
         cells = " | ".join(str(row[tech]) for tech in new_techs)
         lines.append(f"| {row['assigned_tech_old']} | {cells} |")
@@ -534,9 +544,15 @@ def generate_str_report(
     if stage == "decision_tree":
         sections.append(_generate_str_transitions_section(df_old, df_new))
     if manifest_old is None or manifest_new is None:
-        missing = "old" if manifest_old is None else "new"
+        missing_versions = [
+            label
+            for label, manifest in (("old", manifest_old), ("new", manifest_new))
+            if manifest is None
+        ]
+        missing = " and ".join(missing_versions)
+        noun = "version" if len(missing_versions) == 1 else "versions"
         sections.append(
-            f"## Lineage\n\nRun manifest missing for the {missing} version "
+            f"## Lineage\n\nRun manifest missing for the {missing} {noun} "
             "(output predates run manifests); input-version and commit-log "
             "sections skipped."
         )
