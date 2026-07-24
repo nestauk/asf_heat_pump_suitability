@@ -119,6 +119,35 @@ def generate_dict_run_manifest(
     }
 
 
+def save_run_manifest_to_s3(
+    output_path: str,
+    stage: str,
+    local_authority: str,
+    row_count: int,
+    params: dict,
+) -> None:
+    """
+    Generate a run manifest and save it next to the output file it describes.
+
+    Convenience wrapper for the pipeline entrypoints, combining
+    `generate_dict_run_manifest` and `save_manifest_to_s3`.
+
+    Args:
+        output_path (str): S3 path of the output file the manifest describes
+        stage (str): pipeline entrypoint that produced the output, e.g. "uprns"
+        local_authority (str): local authority slug the output was generated for
+        row_count (int): number of rows (or geojson features) in the output
+        params (dict): CLI arguments the entrypoint was run with
+    """
+    manifest = generate_dict_run_manifest(
+        stage=stage,
+        local_authority=local_authority,
+        row_count=row_count,
+        params=params,
+    )
+    save_manifest_to_s3(manifest, output_path)
+
+
 def get_str_manifest_path(output_path: str) -> str:
     """
     Get the S3 path of the run manifest for an output file.

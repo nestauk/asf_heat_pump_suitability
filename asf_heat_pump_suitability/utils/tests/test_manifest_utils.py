@@ -181,3 +181,29 @@ class TestSaveManifestToS3:
                 {"stage": "uprns"}, "s3://bucket/dir/output.parquet"
             )
         assert "s3://bucket/dir/output.manifest.json" in caplog.text
+
+
+class TestSaveRunManifestToS3:
+    """Tests for `save_run_manifest_to_s3`."""
+
+    def test_builds_manifest_from_args_and_saves_against_output_path(self, mocker):
+        """The wrapper generates the manifest from the entrypoint arguments and
+        hands it to `save_manifest_to_s3` with the output path."""
+        save = mocker.patch.object(manifest_utils, "save_manifest_to_s3")
+        manifest_utils.save_run_manifest_to_s3(
+            "s3://bucket/dir/output.parquet",
+            stage="uprns",
+            local_authority="plymouth",
+            row_count=123,
+            params={"local_authorities": ["plymouth"], "release_date": "20260722"},
+        )
+        manifest, output_path = save.call_args.args
+        assert output_path == "s3://bucket/dir/output.parquet"
+        assert manifest["stage"] == "uprns"
+        assert manifest["local_authority"] == "plymouth"
+        assert manifest["row_count"] == 123
+        assert manifest[
+            "input_versions"
+        ] == manifest_utils.generate_dict_input_versions(
+            manifest_utils.STAGE_INPUT_KEYS["uprns"]
+        )

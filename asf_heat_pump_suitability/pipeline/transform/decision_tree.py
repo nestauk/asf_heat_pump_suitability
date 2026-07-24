@@ -496,19 +496,17 @@ if __name__ == "__main__":
             ("uprns_most_suitable_tech", uprns_tech_gdf),
             ("buildings_most_suitable_tech", buildings_tech_gdf),
         ]:
-            manifest_utils.save_manifest_to_s3(
-                manifest_utils.generate_dict_run_manifest(
-                    stage="decision_tree",
-                    local_authority=local_authority_dict["url_slug"],
-                    row_count=len(output_gdf),
-                    params={
-                        "local_authorities": args.local_authorities,
-                        "release_date": release_date,
-                    },
-                ),
+            manifest_utils.save_run_manifest_to_s3(
                 save_utils.get_str_output_path(
                     dataset,
                     release_date=release_date,
                     local_authorities=local_authority_dict["url_slug"],
                 ),
+                stage="decision_tree",
+                local_authority=local_authority_dict["url_slug"],
+                row_count=len(output_gdf),
+                params={
+                    "local_authorities": args.local_authorities,
+                    "release_date": release_date,
+                },
             )

@@ -357,16 +357,14 @@ if __name__ == "__main__":
             local_authority=local_authority_dict["url_slug"],
         )
         save_utils.save_to_s3(features_df, path=output_path)
-        manifest_utils.save_manifest_to_s3(
-            manifest_utils.generate_dict_run_manifest(
-                stage="add_features",
-                local_authority=local_authority_dict["url_slug"],
-                row_count=len(features_df),
-                params={
-                    "local_authorities": args.local_authorities,
-                    "release_date": release_date,
-                    "detail": args.detail,
-                },
-            ),
+        manifest_utils.save_run_manifest_to_s3(
             output_path,
+            stage="add_features",
+            local_authority=local_authority_dict["url_slug"],
+            row_count=len(features_df),
+            params={
+                "local_authorities": args.local_authorities,
+                "release_date": release_date,
+                "detail": args.detail,
+            },
         )

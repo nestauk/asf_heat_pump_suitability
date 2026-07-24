@@ -109,6 +109,19 @@ Decisions settled at review (Aidan's call, 2026-07-22):
   omitting lineage. Legacy `config["data_source"]` (v1) reads stay out of
   scope.
 
+Decisions settled at review (Aidan's call, 2026-07-24):
+
+- **Entrypoints call a single `save_run_manifest_to_s3` wrapper** instead of
+  nesting `generate_dict_run_manifest` inside `save_manifest_to_s3` at every
+  call site — the identical two-call pattern repeated in all five entrypoints.
+  The wrapper takes explicit typed parameters (not `**kwargs`, which would
+  erase the signature and defer typos to a deeper stack frame) and omits
+  `input_keys`, which no entrypoint overrides. The two underlying functions
+  stay public: `generate_dict_run_manifest` is pure and unit-testable without
+  S3, `save_manifest_to_s3` isolates the non-fatal write. The wrapper stays in
+  `manifest_utils`, not `save_utils`, because its swallow-errors contract is
+  the opposite of `save_to_s3`'s raise-on-failure contract.
+
 ## Alternatives considered
 
 - **Fixed name `run_manifest.json` per directory** — rejected; ambiguous
