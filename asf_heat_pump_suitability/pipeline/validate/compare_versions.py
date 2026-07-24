@@ -263,6 +263,19 @@ def generate_dict_input_version_changes(manifest_old: dict, manifest_new: dict) 
     }
 
 
+def _run_git_or_none(
+    args: list[str], warning: str, *warning_args: object
+) -> subprocess.CompletedProcess | None:
+    """Run a git command in PROJECT_DIR, or None (with a warning) on failure."""
+    try:
+        return subprocess.run(
+            args, cwd=PROJECT_DIR, capture_output=True, text=True, check=True
+        )
+    except (subprocess.CalledProcessError, OSError):
+        logging.warning(warning, *warning_args)
+        return None
+
+
 def generate_list_commit_log(
     commit_old: str, commit_new: str, stage: str
 ) -> list[str] | None:
@@ -285,42 +298,29 @@ def generate_list_commit_log(
         return None
     if commit_old == commit_new:
         return []
-    try:
-        subprocess.run(
-            ["git", "merge-base", "--is-ancestor", commit_old, commit_new],
-            cwd=PROJECT_DIR,
-            capture_output=True,
-            check=True,
-        )
-    except (subprocess.CalledProcessError, OSError):
-        logging.warning(
-            "%s is not an ancestor of %s (or a commit is unfetched); "
-            "old..new would silently omit commits, so the log is skipped.",
-            commit_old,
-            commit_new,
-        )
+    ancestor_check = _run_git_or_none(
+        ["git", "merge-base", "--is-ancestor", commit_old, commit_new],
+        "%s is not an ancestor of %s (or a commit is unfetched); "
+        "old..new would silently omit commits, so the log is skipped.",
+        commit_old,
+        commit_new,
+    )
+    if ancestor_check is None:
         return None
-    try:
-        result = subprocess.run(
-            [
-                "git",
-                "log",
-                "--oneline",
-                f"{commit_old}..{commit_new}",
-                "--",
-                *STAGE_MODULE_PATHS[stage],
-            ],
-            cwd=PROJECT_DIR,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (subprocess.CalledProcessError, OSError):
-        logging.warning(
-            "git log %s..%s failed; are both commits fetched locally?",
-            commit_old,
-            commit_new,
-        )
+    result = _run_git_or_none(
+        [
+            "git",
+            "log",
+            "--oneline",
+            f"{commit_old}..{commit_new}",
+            "--",
+            *STAGE_MODULE_PATHS[stage],
+        ],
+        "git log %s..%s failed; are both commits fetched locally?",
+        commit_old,
+        commit_new,
+    )
+    if result is None:
         return None
     return result.stdout.splitlines()
 
