@@ -11,7 +11,7 @@ import subprocess
 import polars as pl
 import pytest
 
-from asf_heat_pump_suitability import PROJECT_DIR
+from asf_heat_pump_suitability import PROJECT_DIR, config
 from asf_heat_pump_suitability.pipeline.validate import compare_versions
 from asf_heat_pump_suitability.utils import manifest_utils
 
@@ -342,3 +342,132 @@ class TestGenerateListCommitLog:
             compare_versions.generate_list_commit_log("a" * 40, "b" * 40, "uprns")
             is None
         )
+
+
+class TestGetStrStageOutputPath:
+    """Tests for `get_str_stage_output_path`."""
+
+    def test_resolves_the_decision_tree_uprn_level_output(self):
+        """The decision-tree comparison reads the UPRN-level output, the
+        stable join key the churn check and transition matrix rely on."""
+        assert compare_versions.get_str_stage_output_path(
+            "decision_tree", "plymouth", "20260722"
+        ) == (
+            "s3://asf-local-heat-planning-tool/outputs/data/plymouth/20260722/"
+            "plymouth_uprns_most_suitable_tech.parquet"
+        )
+
+    def test_fills_the_clustering_tolerance_placeholder(self):
+        """The contextual-features template's {tolerance_m} placeholder is
+        filled from config so the path matches what the pipeline saved."""
+        tolerance_m = config["constant"]["clustering"]["tolerance_m"]
+        path = compare_versions.get_str_stage_output_path(
+            "compute_contextual_features", "plymouth", "20260722"
+        )
+        assert path.endswith(f"_clusters_contextual_features_{tolerance_m}m.geojson")
+
+    def test_covers_the_same_stages_as_the_run_manifest(self):
+        """Output-dataset mapping mirrors the run manifest's curated stages."""
+        assert set(compare_versions.STAGE_OUTPUT_DATASETS) == set(
+            manifest_utils.STAGE_INPUT_KEYS
+        )
+
+
+@pytest.fixture()
+def manifests():
+    """Old/new run manifests with distinct commits and one input re-release."""
+    return (
+        {
+            "stage": "decision_tree",
+            "git_commit": "a" * 40,
+            "input_versions": {"epc.domestic": "s3://bucket/inputs/2026Q1_epc.parquet"},
+        },
+        {
+            "stage": "decision_tree",
+            "git_commit": "b" * 40,
+            "input_versions": {"epc.domestic": "s3://bucket/inputs/2026Q2_epc.parquet"},
+        },
+    )
+
+
+def generate_report(df_old, df_new, manifest_old, manifest_new, **overrides):
+    """Build a report with representative defaults, overridable per test."""
+    kwargs = {
+        "stage": "decision_tree",
+        "local_authority": "plymouth",
+        "trigger": "methodology_change",
+        "release_date_old": "20260601",
+        "release_date_new": "20260722",
+        "path_old": "s3://bucket/outputs/plymouth/20260601/old.parquet",
+        "path_new": "s3://bucket/outputs/plymouth/20260722/new.parquet",
+    }
+    kwargs.update(overrides)
+    return compare_versions.generate_str_report(
+        df_old, df_new, manifest_old, manifest_new, **kwargs
+    )
+
+
+class TestGenerateStrReport:
+    """Tests for `generate_str_report`."""
+
+    def test_states_the_trigger_rubric_and_versions(
+        self, df_old, df_new_identical, manifests, mocker
+    ):
+        """The report names both versions and the rubric it was read against."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        report = generate_report(df_old, df_new_identical, *manifests)
+        assert "methodology_change" in report
+        assert "20260601" in report
+        assert "20260722" in report
+
+    def test_covers_counts_schema_churn_and_input_changes(
+        self, df_old, df_new_churned, manifests, mocker
+    ):
+        """Count delta, schema diff, UPRN churn and manifest-recorded input
+        changes each get a report section."""
+        mocker.patch.object(
+            compare_versions,
+            "generate_list_commit_log",
+            return_value=["abc1234 Tune decision tree"],
+        )
+        report = generate_report(df_old, df_new_churned, *manifests)
+        assert "Row and UPRN counts" in report
+        assert "Schema diff" in report
+        assert "UPRN churn" in report
+        assert "2026Q2_epc" in report
+        assert "abc1234 Tune decision tree" in report
+
+    def test_transition_matrix_only_for_the_decision_tree_stage(
+        self, df_old, df_new_churned, manifests, mocker
+    ):
+        """The tech transition matrix is UPRN-level, so only the decision-tree
+        stage's report includes it."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        decision_tree = generate_report(df_old, df_new_churned, *manifests)
+        other = generate_report(
+            df_old, df_new_churned, *manifests, stage="add_features"
+        )
+        assert "Tech-assignment transitions" in decision_tree
+        assert "Tech-assignment transitions" not in other
+
+    def test_missing_manifest_skips_lineage_sections_with_a_note(
+        self, df_old, df_new_identical
+    ):
+        """A version without a manifest (pre-manifest output) degrades to a
+        note instead of failing the whole report."""
+        report = generate_report(df_old, df_new_identical, None, None)
+        assert "manifest" in report.lower()
+        assert "Row and UPRN counts" in report
+
+    def test_unexpected_uprn_loss_warning_appears(self, df_old, manifests, mocker):
+        """UPRN loss above the rubric tolerance surfaces as a warning line."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        df_new = df_old.head(1)
+        report = generate_report(df_old, df_new, *manifests)
+        assert "WARNING" in report

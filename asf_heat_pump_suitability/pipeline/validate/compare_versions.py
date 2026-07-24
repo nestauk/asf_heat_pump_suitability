@@ -16,20 +16,25 @@ python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
     --trigger methodology_change
 """
 
+import argparse
 import json
 import logging
 import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
 
 import fsspec
 import polars as pl
 
 from asf_heat_pump_suitability import PROJECT_DIR, config
-from asf_heat_pump_suitability.utils import manifest_utils
+from asf_heat_pump_suitability.getters import base_getters
+from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 
 UPRN_COL = "UPRN"
 TECH_COL = "assigned_tech"
 
 STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
+STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
 TOLERANCES = config["compare_versions"]["tolerances"]
 
 
@@ -280,3 +285,353 @@ def generate_list_commit_log(
         )
         return None
     return result.stdout.splitlines()
+
+
+def get_str_stage_output_path(
+    stage: str,
+    local_authority: str,
+    release_date: str,
+    check_exists: bool = False,
+) -> str:
+    """
+    Build the S3 path of the output a stage's comparison reads.
+
+    Args:
+        stage: pipeline stage, a key of `STAGE_OUTPUT_DATASETS`
+        local_authority: local authority slug used in output paths
+        release_date: dated version folder in YYYYMMDD format
+        check_exists: if True, raise when no file exists at the path
+
+    Returns:
+        str: S3 path of the stage's output for that version
+    """
+    return save_utils.get_str_output_path(
+        STAGE_OUTPUT_DATASETS[stage],
+        release_date=release_date,
+        check_exists=check_exists,
+        local_authority=local_authority,
+        local_authorities=local_authority,
+        tolerance_m=config["constant"]["clustering"]["tolerance_m"],
+    )
+
+
+def load_df_stage_output(path: str) -> pl.DataFrame:
+    """
+    Load a stage output as a plain DataFrame for tabular comparison.
+
+    Geojson outputs (saved in EPSG:4326 by save_utils) are loaded with
+    geopandas and their geometry dropped: the base checks are tabular.
+
+    Args:
+        path: S3 path of the stage output (.parquet or .geojson)
+
+    Returns:
+        pl.DataFrame: the output's tabular columns
+
+    Raises:
+        ValueError: for file types the comparison cannot read
+    """
+    if path.endswith(".parquet"):
+        return pl.read_parquet(path)
+    if path.endswith(".geojson"):
+        gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
+        return pl.from_pandas(gdf.drop(columns="geometry"))
+    raise ValueError(f"Cannot compare file type of {path}; expected parquet/geojson.")
+
+
+def _generate_str_counts_section(counts: dict) -> str:
+    """Render the row/UPRN count delta as a markdown section."""
+    lines = [
+        "## Row and UPRN counts",
+        "",
+        "| Metric | Old | New | Delta |",
+        "| --- | --- | --- | --- |",
+        (
+            f"| Rows | {counts['rows_old']} | {counts['rows_new']} "
+            f"| {counts['rows_delta']:+d} |"
+        ),
+    ]
+    if counts["uprns_old"] is None:
+        lines.append("\nNo UPRN column in this stage's output.")
+    else:
+        lines.append(
+            f"| Distinct UPRNs | {counts['uprns_old']} | {counts['uprns_new']} "
+            f"| {counts['uprns_delta']:+d} |"
+        )
+    return "\n".join(lines)
+
+
+def _generate_str_schema_section(schema_diff: dict) -> str:
+    """Render the schema diff as a markdown section."""
+    lines = ["## Schema diff", ""]
+    if not any(schema_diff.values()):
+        lines.append("No schema changes.")
+    lines.extend(
+        f"- Added: `{col}` ({dtype})" for col, dtype in schema_diff["added"].items()
+    )
+    lines.extend(
+        f"- Removed: `{col}` ({dtype})" for col, dtype in schema_diff["removed"].items()
+    )
+    lines.extend(
+        f"- Dtype changed: `{col}` {old} -> {new}"
+        for col, (old, new) in schema_diff["dtype_changed"].items()
+    )
+    return "\n".join(lines)
+
+
+def _generate_str_churn_section(churn: dict | None, max_removed_share: float) -> str:
+    """Render UPRN churn and any above-tolerance warning as a markdown section."""
+    lines = ["## UPRN churn", ""]
+    if churn is None:
+        lines.append("Skipped: no UPRN column in this stage's output.")
+        return "\n".join(lines)
+    lines.extend(
+        [
+            "| Added | Removed | Retained |",
+            "| --- | --- | --- |",
+            f"| {churn['n_added']} | {churn['n_removed']} | {churn['n_retained']} |",
+            "",
+            (
+                f"{churn['removed_share']:.1%} of old UPRNs were removed "
+                f"(rubric tolerance: {max_removed_share:.1%})."
+            ),
+        ]
+    )
+    churn_note = generate_str_churn_note(churn, max_removed_share)
+    if churn_note:
+        lines.extend(["", churn_note])
+    return "\n".join(lines)
+
+
+def _generate_str_transitions_section(
+    df_old: pl.DataFrame, df_new: pl.DataFrame
+) -> str:
+    """Render the UPRN-level tech transition matrix as a markdown section."""
+    transitions = generate_df_tech_transitions(df_old, df_new)
+    matrix = transitions.pivot(
+        on="assigned_tech_new", index="assigned_tech_old", values="n_uprns"
+    ).fill_null(0)
+    new_techs = sorted(col for col in matrix.columns if col != "assigned_tech_old")
+    lines = [
+        "## Tech-assignment transitions (UPRN-level)",
+        "",
+        "| Old tech \\ New tech | " + " | ".join(new_techs) + " |",
+        "| --- |" + " --- |" * len(new_techs),
+    ]
+    for row in matrix.sort("assigned_tech_old").iter_rows(named=True):
+        cells = " | ".join(str(row[tech]) for tech in new_techs)
+        lines.append(f"| {row['assigned_tech_old']} | {cells} |")
+    return "\n".join(lines)
+
+
+def _generate_str_input_changes_section(manifest_old: dict, manifest_new: dict) -> str:
+    """Render the manifest-recorded input version changes as a markdown section."""
+    changes = generate_dict_input_version_changes(manifest_old, manifest_new)
+    lines = ["## Input version changes", ""]
+    if not any(changes.values()):
+        lines.append("No recorded input version changes.")
+    lines.extend(
+        f"- Changed: `{key}` {old} -> {new}"
+        for key, (old, new) in changes["changed"].items()
+    )
+    lines.extend(f"- Added: `{key}` {path}" for key, path in changes["added"].items())
+    lines.extend(
+        f"- Removed: `{key}` {path}" for key, path in changes["removed"].items()
+    )
+    return "\n".join(lines)
+
+
+def _generate_str_commit_log_section(
+    manifest_old: dict, manifest_new: dict, stage: str
+) -> str:
+    """Render the module-scoped commit log between recorded commits."""
+    commit_old = manifest_old["git_commit"]
+    commit_new = manifest_new["git_commit"]
+    span = f"`{commit_old[:7]}..{commit_new[:7]}`"
+    lines = ["## Module-scoped commit log", ""]
+    commits = generate_list_commit_log(commit_old, commit_new, stage)
+    if commits is None:
+        lines.append(
+            "Commit log unavailable: a recorded commit is unknown or not in "
+            "local git history (try fetching first)."
+        )
+    elif commit_old == commit_new:
+        lines.append(f"Both versions were produced by the same commit `{commit_old}`.")
+    elif not commits:
+        lines.append(f"No commits touched this stage's modules in {span}.")
+    else:
+        lines.append(f"Commits touching this stage's modules in {span}:")
+        lines.append("")
+        lines.extend(f"- {commit}" for commit in commits)
+    return "\n".join(lines)
+
+
+def generate_str_report(
+    df_old: pl.DataFrame,
+    df_new: pl.DataFrame,
+    manifest_old: dict | None,
+    manifest_new: dict | None,
+    stage: str,
+    local_authority: str,
+    trigger: str,
+    release_date_old: str,
+    release_date_new: str,
+    path_old: str,
+    path_new: str,
+) -> str:
+    """
+    Assemble the full markdown comparison report.
+
+    Args:
+        df_old: older version of the stage output
+        df_new: newer version of the stage output
+        manifest_old: older version's run manifest, or None when missing
+        manifest_new: newer version's run manifest, or None when missing
+        stage: pipeline stage the outputs belong to
+        local_authority: local authority slug the outputs cover
+        trigger: rubric the comparison is read against
+        release_date_old: dated version folder of the older output
+        release_date_new: dated version folder of the newer output
+        path_old: S3 path of the older output
+        path_new: S3 path of the newer output
+
+    Returns:
+        str: markdown report; lineage sections are replaced by a note when a
+            version's run manifest is missing (outputs predating manifests)
+    """
+    tolerances = get_dict_tolerances(trigger)
+    sections = [
+        f"# Cross-version comparison: {stage} — {local_authority}",
+        "\n".join(
+            [
+                f"- Old version: {release_date_old} (`{path_old}`)",
+                f"- New version: {release_date_new} (`{path_new}`)",
+                f"- Trigger: `{trigger}` — read against this rubric's tolerances",
+                "- Generated: "
+                + datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            ]
+        ),
+        _generate_str_counts_section(generate_dict_count_delta(df_old, df_new)),
+        _generate_str_schema_section(generate_dict_schema_diff(df_old, df_new)),
+        _generate_str_churn_section(
+            generate_dict_uprn_churn(df_old, df_new),
+            tolerances["max_removed_uprn_share"],
+        ),
+    ]
+    if stage == "decision_tree":
+        sections.append(_generate_str_transitions_section(df_old, df_new))
+    if manifest_old is None or manifest_new is None:
+        missing = "old" if manifest_old is None else "new"
+        sections.append(
+            f"## Lineage\n\nRun manifest missing for the {missing} version "
+            "(output predates run manifests); input-version and commit-log "
+            "sections skipped."
+        )
+    else:
+        sections.append(_generate_str_input_changes_section(manifest_old, manifest_new))
+        sections.append(
+            _generate_str_commit_log_section(manifest_old, manifest_new, stage)
+        )
+    return "\n\n".join(sections) + "\n"
+
+
+def parse_arguments() -> argparse.Namespace:
+    """
+    Parse CLI arguments.
+
+    Returns:
+        argparse.Namespace: parsed arguments
+    """
+    parser = argparse.ArgumentParser(
+        description="Compare two dated versions of a pipeline stage output."
+    )
+    parser.add_argument("--stage", required=True, choices=sorted(STAGE_OUTPUT_DATASETS))
+    parser.add_argument(
+        "--local_authority",
+        required=True,
+        help="Local authority slug as used in output paths, e.g. 'plymouth'.",
+    )
+    parser.add_argument(
+        "--old_release_date", required=True, help="Older version, YYYYMMDD."
+    )
+    parser.add_argument(
+        "--new_release_date", required=True, help="Newer version, YYYYMMDD."
+    )
+    parser.add_argument(
+        "--trigger",
+        required=True,
+        choices=sorted(TOLERANCES),
+        help="Why the comparison is run; picks the tolerance rubric.",
+    )
+    parser.add_argument(
+        "--report_dir",
+        default=str(PROJECT_DIR / "outputs" / "comparisons"),
+        help="Directory the markdown report is written to.",
+    )
+    return parser.parse_args()
+
+
+def main(args: argparse.Namespace) -> None:
+    """
+    Run the comparison, write the markdown report and log a console summary.
+
+    Args:
+        args: parsed CLI arguments
+    """
+    release_date_old = save_utils.get_str_release_date(args.old_release_date)
+    release_date_new = save_utils.get_str_release_date(args.new_release_date)
+    path_old = get_str_stage_output_path(
+        args.stage, args.local_authority, release_date_old, check_exists=True
+    )
+    path_new = get_str_stage_output_path(
+        args.stage, args.local_authority, release_date_new, check_exists=True
+    )
+    df_old = load_df_stage_output(path_old)
+    df_new = load_df_stage_output(path_new)
+    report = generate_str_report(
+        df_old,
+        df_new,
+        load_dict_manifest(path_old),
+        load_dict_manifest(path_new),
+        stage=args.stage,
+        local_authority=args.local_authority,
+        trigger=args.trigger,
+        release_date_old=release_date_old,
+        release_date_new=release_date_new,
+        path_old=path_old,
+        path_new=path_new,
+    )
+    report_dir = Path(args.report_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_path = report_dir / (
+        f"{args.stage}_{args.local_authority}_"
+        f"{release_date_old}_vs_{release_date_new}.md"
+    )
+    report_path.write_text(report)
+
+    counts = generate_dict_count_delta(df_old, df_new)
+    logging.info(
+        "Rows: %s -> %s (%+d)",
+        counts["rows_old"],
+        counts["rows_new"],
+        counts["rows_delta"],
+    )
+    churn = generate_dict_uprn_churn(df_old, df_new)
+    if churn:
+        logging.info(
+            "UPRN churn: %d added, %d removed, %d retained",
+            churn["n_added"],
+            churn["n_removed"],
+            churn["n_retained"],
+        )
+        churn_note = generate_str_churn_note(
+            churn, get_dict_tolerances(args.trigger)["max_removed_uprn_share"]
+        )
+        if churn_note:
+            logging.warning(churn_note)
+    logging.info("Report written to %s", report_path)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    main(parse_arguments())

@@ -387,6 +387,15 @@ run_manifest:
       - "processed.valid_la_names"
 
 compare_versions:
+  # Which output dataset (config["output"]["dataset"] key) each stage's
+  # comparison reads. decision_tree compares the UPRN-level output: UPRNs are
+  # stable external identifiers, unlike pipeline-generated building IDs.
+  stage_output_datasets:
+    uprns: "domestic_uprns"
+    add_features: "domestic_uprns_with_features"
+    decision_tree: "uprns_most_suitable_tech"
+    cluster: "tech_clusters"
+    compute_contextual_features: "clusters_tech_contextual_info"
   # Repo paths counted as each stage's module when scoping the commit log
   # between two versions' recorded commits: the stage entrypoint plus the
   # pipeline modules it directly drives. Cross-cutting code (getters/, utils/,
