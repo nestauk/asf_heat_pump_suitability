@@ -115,12 +115,23 @@ def generate_dict_schema_diff(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dic
     }
 
 
+def _expr_uprn_canonical() -> pl.Expr:
+    """
+    Cast the UPRN column to a canonical string, safe against a numeric
+    dtype mismatch between versions (e.g. one side upcast to Float64 by a
+    pandas/geopandas round-trip). Going via Float64 then Int64 first means
+    an Int64 123 and a Float64 123.0 both land on the string "123", instead
+    of "123" vs "123.0" reading as churn.
+    """
+    return pl.col(UPRN_COL).cast(pl.Float64).cast(pl.Int64).cast(pl.Utf8)
+
+
 def generate_dict_uprn_churn(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict | None:
     """
     Count UPRNs added, removed and retained between two versions of an output.
 
-    UPRNs are compared as strings so a dtype change between versions does not
-    read as full churn.
+    UPRNs are compared as canonical strings so a dtype change between
+    versions does not read as full churn.
 
     Args:
         df_old: older version of the stage output
@@ -132,8 +143,8 @@ def generate_dict_uprn_churn(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict
     """
     if UPRN_COL not in df_old.columns or UPRN_COL not in df_new.columns:
         return None
-    uprns_old = set(df_old[UPRN_COL].cast(pl.Utf8).to_list())
-    uprns_new = set(df_new[UPRN_COL].cast(pl.Utf8).to_list())
+    uprns_old = set(df_old.select(_expr_uprn_canonical()).to_series().to_list())
+    uprns_new = set(df_new.select(_expr_uprn_canonical()).to_series().to_list())
     n_removed = len(uprns_old - uprns_new)
     return {
         "n_added": len(uprns_new - uprns_old),

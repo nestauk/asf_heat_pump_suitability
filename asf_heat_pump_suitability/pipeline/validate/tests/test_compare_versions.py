@@ -150,6 +150,15 @@ class TestGenerateDictUprnChurn:
         assert churn["n_retained"] == 4
         assert churn["n_removed"] == 0
 
+    def test_matches_uprns_across_int_and_float_dtypes(self, df_old):
+        """An Int64-vs-Float64 UPRN mismatch (e.g. a pandas null-upcast) must
+        not read as full churn: casting straight to Utf8 would compare "123"
+        against "123.0" and miss every match."""
+        df_new = df_old.with_columns(pl.col("UPRN").cast(pl.Float64))
+        churn = compare_versions.generate_dict_uprn_churn(df_old, df_new)
+        assert churn["n_retained"] == 4
+        assert churn["n_removed"] == 0
+
 
 class TestGenerateStrChurnNote:
     """Tests for `generate_str_churn_note`."""
