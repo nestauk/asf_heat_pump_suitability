@@ -18,6 +18,8 @@ from asf_heat_pump_suitability.pipeline.cluster import cluster
 from asf_heat_pump_suitability.getters import load_geodata
 from asf_heat_pump_suitability.pipeline.transform import local_authority as tla
 
+# LA name to LAD25CD mapping
+# codes can be found here: https://www.ons.gov.uk/explore-local-statistics/areas/K02000001-united-kingdom
 la_code_mapping = {
     "babergh": "E07000200",
     "wiltshire": "E06000054",
