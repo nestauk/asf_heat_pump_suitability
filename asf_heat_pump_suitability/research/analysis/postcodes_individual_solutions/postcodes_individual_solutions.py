@@ -55,12 +55,6 @@ if __name__ == "__main__":
     for local_authority in la_code_mapping.keys():
         print(f"Running analysis for local authority: {local_authority}")
 
-        if local_authority not in la_code_mapping:
-            raise ValueError(
-                f"Local authority '{local_authority}' is not present in la_code_mapping. "
-                f"Available options: {list(la_code_mapping.keys())}"
-            )
-
         tolerance_m = config["constant"]["clustering"]["tolerance_m"]
         local_authority_dict = tla.get_dict_la_data(local_authority)
 
