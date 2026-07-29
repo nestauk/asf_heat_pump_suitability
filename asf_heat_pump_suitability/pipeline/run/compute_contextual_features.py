@@ -2,7 +2,7 @@
 Script to compute contextual information for clusters including:
 - Proportion of attachment types, tenure types, EPC ratings of properties within clusters
 - Median outdoor space of properties within clusters
-- Whether any properties within clusters are in HN zones, city centres, protected areas, off-gas, within 1500m of coastline
+- Whether any properties within clusters are in protected areas, off-gas, within 1500m of coastline
 - Number of properties, number of properties in listed buildings and number of properties with solar PV
 
 Run:
@@ -69,8 +69,6 @@ def extend_df_contextual_features(
     - tenure type proportions
     - EPC rating proportions
     - Median outdoor space
-    - HN zone flag
-    - City centre flag
     - number of properties in listed buildings
     - number of off-gas properties
     - proximity to coastline flag (within 1500m)
@@ -162,20 +160,6 @@ def extend_df_contextual_features(
             pl.col("max_contiguous_outdoor_space_area_m2")
             .median()
             .alias("median_outdoor_space_m2"),
-            # in_hn_zone flag
-            pl.when(pl.col("in_hn_zone").is_null().all())
-            .then(pl.lit("Unknown"))
-            .when(pl.col("in_hn_zone").any())
-            .then(pl.lit("Yes"))
-            .otherwise(pl.lit("No"))
-            .alias("in_hn_zone"),
-            # in_city_centre flag
-            pl.when(pl.col("in_city_centre").is_null().all())
-            .then(pl.lit("Unknown"))
-            .when(pl.col("in_city_centre").any())
-            .then(pl.lit("Yes"))
-            .otherwise(pl.lit("No"))
-            .alias("in_city_centre"),
             # near_coastline flag
             pl.when(
                 pl.col(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline")
@@ -194,9 +178,7 @@ def extend_df_contextual_features(
             .then(pl.lit("Yes"))
             .otherwise(pl.lit("No"))
             .alias("in_protected_area"),
-            # Counts of UPRNs in HN zone, city centre, near salt water, and in protected areas
-            pl.col("in_hn_zone").sum().alias("n_uprns_in_hn_zone"),
-            pl.col("in_city_centre").sum().alias("n_uprns_in_city_centre"),
+            # Counts of UPRNs near salt water, and in protected areas
             pl.col("within_1500m_coastline")
             .sum()
             .alias("n_uprns_within_1500m_of_coastline"),
@@ -214,12 +196,8 @@ def extend_df_contextual_features(
                 "n_uprns_missing_off_gas_flag",
                 "median_estimated_energy_consumption_12_months_kwh_per_m2",
                 "median_outdoor_space_m2",
-                "in_hn_zone",
-                "in_city_centre",
                 f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline",
                 "in_protected_area",
-                "n_uprns_in_hn_zone",
-                "n_uprns_in_city_centre",
                 "n_uprns_within_1500m_of_coastline",
                 "n_uprns_in_protected_area",
             ]
