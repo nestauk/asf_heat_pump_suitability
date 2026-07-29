@@ -93,6 +93,8 @@ def load_gdf_heat_network_zones(
     hn_gdf = _extend_gdf_hn_zone_id(hn_gdf)
     hn_gdf = geo_utils.verify_gdf_crs(gdf=hn_gdf)
 
+    hn_gdf["annotation"] = "DESNZ advanced heat network zoning"
+
     if boundary is not None:
         if local_authority is not None:
             warnings.warn(
@@ -149,7 +151,13 @@ def _extend_gdf_hn_zone_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 
 def load_gdf_spatial_signatures_gb(
-    detail_level: str = "full", **kwargs
+    detail_level: str = "full",
+    boundary: Optional[
+        shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame
+    ] = None,
+    signature_types: Optional[List[str]] = None,
+    local_authority: Optional[str] = None,
+    **kwargs,
 ) -> gpd.GeoDataFrame:
     """
     Load GeoDataFrame with polygons in GB from the Spatial Signatures Framework  classified by their
@@ -170,9 +178,16 @@ def load_gdf_spatial_signatures_gb(
 
     Both versions contain 96,704 polygons.
 
+    Allows filtering by:
+    - boundary or local authority: if specified, only polygons that intersect the boundary or local authority are returned. Otherwise, GB-wide polygons are returned.
+    - signature_types: if specified, only polygons of the specified spatial signature types are returned. Otherwise, all types are returned.
+
     Args:
         detail_level (str, optional): Which level of descriptive detail to load.
             Must be either "simplified" or "full". Defaults to "simplified".
+        signature_types (List[str], optional): Optional. List of spatial signature types to load. If None, all types are loaded.
+        boundary (shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame, optional): Optional. Boundary to load spatial signature polygons for or geodataframe of multiple boundary polygons.
+        local_authority (str, optional): Optional. Local Authority to load spatial signature polygons for. This is slower than using the boundary directly. If both `local_authority` and `boundary` arguments are passed, then `boundary` is used and `local_authority` is ignored.
 
     Returns:
         gpd.GeoDataFrame: spatial signature polygons in GB.
@@ -192,6 +207,46 @@ def load_gdf_spatial_signatures_gb(
     print(
         f"Spatial signatures {detail_level} geodataframe successfully loaded with CRS {gdf.crs}."
     )
+
+    if signature_types is not None:
+        gdf = gdf[gdf["type"].isin(signature_types)]
+        if gdf.empty:
+            print(
+                f"No spatial signatures found for the specified signature types: {signature_types}."
+            )
+
+    if boundary is not None:
+        if local_authority is not None:
+            warnings.warn(
+                "Both `boundary` and `local_authority` arguments have been passed. Using `boundary` only and ignoring `local_authority`."
+            )
+        if isinstance(boundary, gpd.GeoDataFrame):
+            boundary = geo_utils.verify_gdf_crs(gdf=boundary)
+            gdf = gdf.sjoin(
+                boundary[["geometry"]], how="inner", predicate="intersects"
+            ).drop(columns="index_right")
+        else:
+
+            gdf = gdf[gdf["geometry"].intersects(boundary)]
+        if gdf.empty:
+            print("No spatial signatures found within given boundary.")
+
+    elif local_authority is not None:
+        local_authority_dict = la.get_dict_la_data(local_authority)
+        local_authorities_list = local_authority_dict["valid_local_authorities"]
+        boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+            select_las=local_authorities_list
+        )
+
+        gdf = gdf.sjoin(
+            boundary_gdf[["geometry"]], how="inner", predicate="intersects"
+        ).drop(columns="index_right")
+        if gdf.empty:
+            print(
+                f"No spatial signatures found for Local Authority: {local_authority}."
+            )
+
+    gdf["annotation"] = "Spatial signatures framework: " + gdf["type"]
 
     return gdf
 
