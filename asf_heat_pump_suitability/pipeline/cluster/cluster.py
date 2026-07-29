@@ -732,33 +732,6 @@ def reassign_gdf_near_anchor_properties(
     return tech_gdf
 
 
-def append_gdf_heat_network_zone_layer(
-    clusters_gdf: gpd.GeoDataFrame, hn_zones_gdf: gpd.GeoDataFrame
-) -> gpd.GeoDataFrame:
-    """
-    Append DESNZ heat network zones to clusters geodataframe, where `assigned_tech` is 'DESNZ_HNZ'. DESNZ heat network
-    zones are also assigned unique cluster IDs by Local Authority.
-
-    Args:
-        clusters_gdf (gpd.GeoDataFrame): clusters with `assigned_tech`, `cluster_id`, and `geometry` columns.
-        hn_zones_gdf (gpd.GeoDataFrame): DESNZ heat network zones with geometries.
-
-    Returns:
-        gpd.GeoDataFrame: cluster and DESNZ heat network zone geometries
-    """
-    if len(hn_zones_gdf) > 0:
-        id_col = [col for col in hn_zones_gdf.columns if "ID" in col][0]
-        hn_zones_gdf = hn_zones_gdf.rename(columns={id_col: "cluster_id"}).assign(
-            assigned_tech="DESNZ_HNZ",
-            cluster_id=lambda df: "DESNZ_HNZ_"
-            + df["cluster_id"].astype(str).str.replace("-", "_"),
-        )[["assigned_tech", "geometry", "cluster_id"]]
-
-        return pd.concat([clusters_gdf, hn_zones_gdf], ignore_index=True)
-    else:
-        return clusters_gdf
-
-
 def map_df_uprns_to_clusters(
     uprns_df: pl.DataFrame,
     buildings_gdf: gpd.GeoDataFrame,
@@ -775,13 +748,8 @@ def map_df_uprns_to_clusters(
         building_id (str): name of building ID column in both `uprns_df` and `buildings_gdf`.
 
     Returns:
-        pl.DataFrame: UPRNs mapped to their clusters. Expect some UPRNs to be duplicated if the `clusters_gdf` contains DESNZ Heat Network zones.
+        pl.DataFrame: UPRNs mapped to their clusters.
     """
-    # Split clusters into DESNZ heat network zones and clusters
-    desnz_hn_zones_gdf = clusters_gdf[clusters_gdf["cluster_id"].str.contains("DESNZ")]
-    clusters_gdf = clusters_gdf[
-        ~clusters_gdf["cluster_id"].isin(desnz_hn_zones_gdf["cluster_id"])
-    ]
 
     building_cluster_mapping = sjoin_gdf_buildings_to_clusters(
         buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
@@ -793,22 +761,7 @@ def map_df_uprns_to_clusters(
         pl.col("ID").replace_strict(building_cluster_mapping).alias("cluster_id")
     )
 
-    if desnz_hn_zones_gdf.empty:
-        return uprns_df
-    else:
-        building_desnz_mapping = sjoin_gdf_buildings_to_clusters(
-            buildings_gdf=buildings_gdf, clusters_gdf=desnz_hn_zones_gdf
-        ).dropna(subset="cluster_id")
-        building_desnz_mapping = building_desnz_mapping.set_index(building_id)[
-            "cluster_id"
-        ].to_dict()
-        desnz_uprns_df = uprns_df.with_columns(
-            pl.col("ID")
-            .replace_strict(building_desnz_mapping, default=None)
-            .alias("cluster_id")
-        ).drop_nulls(subset="cluster_id")
-
-        return pl.concat([uprns_df, desnz_uprns_df])
+    return uprns_df
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -884,14 +837,6 @@ if __name__ == "__main__":
         radius=ANCHOR_RADIUS,
         local_authorities_slug=local_authority_dict["url_slug"],
     )
-
-    # Add heat network zones to clusters_gdf, if they exist
-    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(boundary=boundary_gdf)
-
-    if hn_zones_gdf is not None:
-        clusters_gdf = append_gdf_heat_network_zone_layer(
-            clusters_gdf=clusters_gdf, hn_zones_gdf=hn_zones_gdf
-        )
 
     if args.save:
         save_utils.save_to_s3(
