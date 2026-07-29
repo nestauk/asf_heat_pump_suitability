@@ -73,7 +73,6 @@ if __name__ == "__main__":
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
-    detail_level = args.detail
     uprns_path = config["output"]["dataset"]["domestic_uprns"].format(
         local_authority=local_authority_dict["url_slug"]
     )
