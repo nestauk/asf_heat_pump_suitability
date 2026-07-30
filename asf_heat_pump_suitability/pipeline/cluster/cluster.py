@@ -9,6 +9,10 @@ python asf_heat_pump_suitability/pipeline/cluster/cluster.py
 Required args:
 --local_authorities to specify which local authority / authorities to run the script for
 --save - Set to save output GeoDataFrame to S3.
+
+Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
+save outputs to. Defaults to running the pipeline using today's date. Multi-day runs
+should pass the same --release_date to every stage.
 """
 
 from typing import Optional, List
@@ -786,6 +790,11 @@ def parse_arguments() -> argparse.Namespace:
         "--save", help="Set to save output GeoDataFrame to S3.", action="store_true"
     )
 
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
+    )
+
     return parser.parse_args()
 
 
@@ -795,10 +804,15 @@ if __name__ == "__main__":
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
+    release_date = save_utils.get_str_release_date(args.release_date)
+
     tech_gdf = (
         gpd.read_parquet(
-            config["output"]["dataset"]["buildings_most_suitable_tech"].format(
-                local_authorities=local_authority_dict["url_slug"]
+            save_utils.get_str_output_path(
+                "buildings_most_suitable_tech",
+                release_date=release_date,
+                check_exists=True,
+                local_authorities=local_authority_dict["url_slug"],
             )
         )
         .set_geometry("geometry")
@@ -841,7 +855,9 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             clusters_gdf,
-            config["output"]["dataset"]["tech_clusters"].format(
+            save_utils.get_str_output_path(
+                "tech_clusters",
+                release_date=release_date,
                 local_authorities=local_authority_dict["url_slug"],
             ),
         )
