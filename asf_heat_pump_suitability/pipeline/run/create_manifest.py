@@ -48,6 +48,7 @@ if __name__ == "__main__":
         config["output"]["dataset"]["clusters_tech_contextual_info"]
         .format(
             local_authorities="{local_authorities}",
+            release_date="{release_date}",  # identity: only affects the directory, not the suffix
             tolerance_m=config["constant"]["clustering"]["tolerance_m"],
         )
         .split("{local_authorities}")[-1]

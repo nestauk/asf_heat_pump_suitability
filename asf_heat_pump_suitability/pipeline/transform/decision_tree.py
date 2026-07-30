@@ -11,6 +11,10 @@ To run the script:
 python asf_heat_pump_suitability/pipeline/transform/decision_tree.py --local_authorities LOCAL_AUTHORITIES
 
 Use --save if you want to save the outputs to S3.
+
+Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
+save outputs to. Defaults to running the pipeline using today's date. Multi-day runs
+should pass the same --release_date to every stage.
 """
 
 # package imports
@@ -26,6 +30,7 @@ from asf_heat_pump_suitability.getters.load_geodata import (
 )
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.transform import local_authority
+from asf_heat_pump_suitability.utils import save_utils
 
 OUTDOOR_SPACE_THRESHOLD_M2 = config["constant"]["threshold"][
     "outdoor_space_threshold_m2"
@@ -55,6 +60,11 @@ def parse_arguments() -> argparse.Namespace:
         help="If --save is set, it saves outputs to S3.",
         required=False,
         action="store_true",
+    )
+
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
     )
 
     return parser.parse_args()
@@ -329,11 +339,12 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
     id_col: str,
     uprns_gdf: gpd.GeoDataFrame,
     save: bool,
+    release_date: str,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Main function to identify the most suitable tech for each UPRN and building in the specified local authority or authorities.
 
-    Saves outputs to S3 if specified.
+    Saves outputs to S3 if specified, to the dated release directory for `release_date`.
 
     Args:
         local_authorities (str): local authority slug to save decision tree outputs to.
@@ -341,6 +352,8 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
         id_col (str): The name of the column in `buildings_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
         save (bool): Whether to save outputs to S3.
+        release_date (str): release date in YYYYMMDD format used for the dated output
+            directory, as returned by `save_utils.get_str_release_date`.
 
     Returns:
         tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]: A tuple containing:
@@ -420,13 +433,17 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
 
     if save:
         uprns_gdf.to_parquet(
-            config["output"]["dataset"]["uprns_most_suitable_tech"].format(
-                local_authorities=local_authorities
+            save_utils.get_str_output_path(
+                "uprns_most_suitable_tech",
+                release_date=release_date,
+                local_authorities=local_authorities,
             )
         )
         solutions_per_footprint_gdf.to_parquet(
-            config["output"]["dataset"]["buildings_most_suitable_tech"].format(
-                local_authorities=local_authorities
+            save_utils.get_str_output_path(
+                "buildings_most_suitable_tech",
+                release_date=release_date,
+                local_authorities=local_authorities,
             )
         )
 
@@ -445,9 +462,14 @@ if __name__ == "__main__":
         grid_squares=local_authority_dict["grid_squares"],
     )
 
+    release_date = save_utils.get_str_release_date(args.release_date)
+
     uprns_with_features_df = pl.read_parquet(
-        config["output"]["dataset"]["domestic_uprns_with_features"].format(
-            local_authority=local_authority_dict["url_slug"]
+        save_utils.get_str_output_path(
+            "domestic_uprns_with_features",
+            release_date=release_date,
+            check_exists=True,
+            local_authority=local_authority_dict["url_slug"],
         )
     )
     uprns_with_features_gdf = uprns.generate_gdf_uprn_coords(df=uprns_with_features_df)
@@ -464,4 +486,5 @@ if __name__ == "__main__":
         id_col="ID",
         uprns_gdf=uprns_with_features_gdf,
         save=args.save,
+        release_date=release_date,
     )

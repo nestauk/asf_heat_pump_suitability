@@ -9,6 +9,10 @@ Run:
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
 
 Add --save to save the output to S3 as a geojson with geometry and contextual features per cluster.
+
+Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
+save outputs to. Defaults to running the pipeline using today's date. Multi-day runs
+should pass the same --release_date to every stage.
 """
 
 import argparse
@@ -17,7 +21,6 @@ import geopandas as gpd
 import json
 import os
 from dotenv import load_dotenv
-from datetime import datetime
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.cluster import cluster
@@ -53,6 +56,11 @@ def parse_arguments() -> argparse.Namespace:
         help="Whether to save the output to S3.",
         action="store_true",
         default=False,
+    )
+
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
     )
 
     return parser.parse_args()
@@ -306,6 +314,7 @@ def create_gdf_contextual_features(
 def create_json_contextual_features_metadata(
     clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
     local_authorities: str,
+    release_date: str,
 ) -> json:
     """
     Create json with cluster level data and associated metadata.
@@ -313,6 +322,7 @@ def create_json_contextual_features_metadata(
     Args:
         clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
         local_authorities (str): local authority or authorities for which the data was generated
+        release_date (str): release date in YYYYMMDD format of the dated release directory the data belongs to
 
     Returns:
        json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
@@ -325,7 +335,7 @@ def create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf.to_json(drop_id=True)
     )
     metadata = {
-        "Data file date of creation": datetime.now().strftime("%Y-%m-%d"),
+        "Release date": release_date,
         "Local authority": local_authorities,
     }
 
@@ -366,10 +376,15 @@ if __name__ == "__main__":
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
+    release_date = save_utils.get_str_release_date(args.release_date)
+
     print(f"Loading {local_authorities} domestic UPRNs...")
     uprns_df = pl.read_parquet(
-        config["output"]["dataset"]["domestic_uprns_with_features"].format(
-            local_authority=local_authority_dict["url_slug"]
+        save_utils.get_str_output_path(
+            "domestic_uprns_with_features",
+            release_date=release_date,
+            check_exists=True,
+            local_authority=local_authority_dict["url_slug"],
         )
     )
 
@@ -379,9 +394,11 @@ if __name__ == "__main__":
 
     print("Loading clusters...")
     clusters_gdf = gpd.read_parquet(
-        config["output"]["dataset"]["tech_clusters"].format(
+        save_utils.get_str_output_path(
+            "tech_clusters",
+            release_date=release_date,
+            check_exists=True,
             local_authorities=local_authority_dict["url_slug"],
-            tolerance_m=tolerance_m,
         ),
     ).to_crs(epsg=27700)
 
@@ -408,15 +425,15 @@ if __name__ == "__main__":
 
     print("Creating json with contextual features for each cluster and metadata...")
     geojson_file = create_json_contextual_features_metadata(
-        clusters_with_contextual_features_gdf, local_authorities
+        clusters_with_contextual_features_gdf, local_authorities, release_date
     )
 
     if args.save:
         print("Saving geojson to S3... ")
         # Save to S3 as geojson
-        s3_file_path = config["output"]["dataset"][
-            "clusters_tech_contextual_info"
-        ].format(
+        s3_file_path = save_utils.get_str_output_path(
+            "clusters_tech_contextual_info",
+            release_date=release_date,
             local_authorities=local_authority_dict["url_slug"],
             tolerance_m=tolerance_m,
         )
