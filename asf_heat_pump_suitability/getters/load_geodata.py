@@ -17,9 +17,12 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import geo_utils
 from asf_heat_pump_suitability.getters import base_getters, load_boundaries
 from asf_heat_pump_suitability.pipeline.transform import local_authority as la
+from asf_heat_pump_suitability.utils import s3_utils
 
 # Instantiate variable to fill with list from iterator in `load_gdf_bng_grid_squares`
 _BNG_GRID_100KM_FEATURES = None
+
+s3_client = boto3.client("s3")
 
 
 def load_df_osopen_uprn(**kwargs) -> pl.DataFrame:
@@ -63,6 +66,91 @@ def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame.from_features(_BNG_GRID_100KM_FEATURES, crs=27700)
 
 
+def load_desnz_heat_network_zones() -> gpd.GeoDataFrame:
+    """
+    Load DESNZ heat network zones geodataframe, CRS 27700.
+
+    Returns:
+        gpd.GeoDataFrame: DESNZ heat network zones polygons
+    """
+    print("Loading DESNZ heat network zones...")
+    gdf = gpd.read_parquet(
+        path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
+    ).drop(columns="index_right")
+
+    gdf = geo_utils.verify_gdf_crs(gdf=gdf)[["geometry"]]
+
+    return gdf
+
+
+def load_lhees_heat_network_zones(s3_client: boto3.client) -> gpd.GeoDataFrame:
+    """
+    Load LHEES heat network zones geodataframe.
+
+    Args:
+        s3_client: Boto3 S3 client instance.
+
+    Returns:
+        gpd.GeoDataFrame: Combined LHEES heat network zones geometries.
+    """
+    print("Loading LHEES heat network zones...")
+    s3_full_path = config["data"]["geodata"]["heat_network_zones"]["lhees_files"]
+
+    s3_bucket = s3_full_path.split("s3://")[1].split("/")[0]
+    folder_path = s3_full_path.split(f"s3://{s3_bucket}/")[1]
+
+    file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
+        s3_client=s3_client,
+        s3_bucket=s3_bucket,
+        path_folder=folder_path,
+        file_type=[".geojson", ".gpkg"],
+    )
+
+    # Load and standardize CRS for each dataset
+    gdfs = [
+        geo_utils.verify_gdf_crs(gpd.read_file(f"s3://{s3_bucket}/{path}"))[
+            ["geometry"]
+        ]
+        for path in file_paths
+    ]
+
+    return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+
+
+def load_wales_heat_network_zones(s3_client: boto3.client) -> gpd.GeoDataFrame:
+    """
+    Load Wales heat network zones geodataframe, CRS 27700.
+
+    Args:
+        s3_client: Boto3 S3 client instance.
+
+    Returns:
+        gpd.GeoDataFrame: Wales heat network zones polygons
+    """
+    print("Loading Wales heat network zones...")
+    s3_full_path = config["data"]["geodata"]["heat_network_zones"]["wales_files"]
+
+    s3_bucket = s3_full_path.split("s3://")[1].split("/")[0]
+    folder_path = s3_full_path.split(f"s3://{s3_bucket}/")[1]
+
+    file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
+        s3_client=s3_client,
+        s3_bucket=s3_bucket,
+        path_folder=folder_path,
+        file_type=[".geojson", ".gpkg"],
+    )
+
+    # Load and standardize CRS for each dataset
+    gdfs = [
+        geo_utils.verify_gdf_crs(gpd.read_file(f"s3://{s3_bucket}/{path}"))[
+            ["geometry"]
+        ]
+        for path in file_paths
+    ]
+
+    return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+
+
 def load_gdf_heat_network_zones(
     boundary: Optional[
         shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame
@@ -84,16 +172,18 @@ def load_gdf_heat_network_zones(
         gpd.GeoDataFrame: polygons of heat network zones in given Local Authority or boundary.
     """
     # Load all DESNZ heat network zones in England
-    hn_gdf = gpd.read_parquet(
-        path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
-    ).drop(columns="index_right")
+    desnz_hn_gdf = load_desnz_heat_network_zones()
+    desnz_hn_gdf["annotation"] = "DESNZ advanced heat network zoning in England"
 
-    # Assume first column with `ID` substring is the zone ID column
-    # Note original ID column retained in case of erroneous ID assignment
-    hn_gdf = _extend_gdf_hn_zone_id(hn_gdf)
-    hn_gdf = geo_utils.verify_gdf_crs(gdf=hn_gdf)
+    # Load LHEES heat network zones in Scotland
+    lhees_hn_gdf = load_lhees_heat_network_zones(s3_client)
+    lhees_hn_gdf["annotation"] = "LHEES heat network zoning in Scotland"
 
-    hn_gdf["annotation"] = "DESNZ advanced heat network zoning"
+    # Load priority areas for district heat networks in Wales
+    wales_hn_gdf = load_wales_heat_network_zones(s3_client)
+    wales_hn_gdf["annotation"] = "Priority areas for district heat networks in Wales"
+
+    hn_gdf = pd.concat([desnz_hn_gdf, lhees_hn_gdf, wales_hn_gdf], ignore_index=True)
 
     if boundary is not None:
         if local_authority is not None:
