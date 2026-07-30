@@ -13,16 +13,16 @@ def fetch_list_file_paths_from_s3_folder(
     file_type: str | List[str] = None,
 ) -> List[str]:
     """
-        Fetches file paths from a specified S3 folder.
-    `
-        Args:
-            s3_client (boto3.client): An initialized boto3 S3 client.
-            s3_bucket (str): The name of the S3 bucket.
-            path_folder (str): The path to the folder in S3.
-            file_type (str | List[str]): The type of files to fetch (e.g., ".parquet", ".csv", ".geojson"). If None, fetches all files.
+    Fetches file paths from a specified S3 folder.
 
-        Returns:
-            List[str]: list of strings with the file paths.
+    Args:
+        s3_client (boto3.client): An initialized boto3 S3 client.
+        s3_bucket (str): The name of the S3 bucket.
+        path_folder (str): The path to the folder in S3.
+        file_type (str | List[str]): The type of files to fetch (e.g., ".parquet", ".csv", ".geojson"). If None, fetches all files.
+
+    Returns:
+        List[str]: list of strings with the file paths.
     """
     # Normalize prefix: ensuring it ends with '/'
     if path_folder and not path_folder.endswith("/"):
