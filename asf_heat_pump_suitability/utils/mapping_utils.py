@@ -1,9 +1,13 @@
+"""
+Util functions for plotting geospatial data in maps.
+"""
+
 import folium
 import shapely
 from shapely.ops import transform
 import pyproj
 import geopandas as gpd
-from typing import Optional, List, Dict
+from typing import Optional, Dict
 from pathlib import Path
 import os
 
