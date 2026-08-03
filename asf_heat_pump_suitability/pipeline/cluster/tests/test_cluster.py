@@ -10,7 +10,6 @@ from shapely.affinity import rotate
 from asf_heat_pump_suitability.pipeline.cluster.cluster import (
     extend_edges_gdf,
     generate_gdf_clusters,
-    overlay_gdf_physical_barriers,
 )
 from asf_heat_pump_suitability.pipeline.cluster.tests import utils
 
@@ -211,7 +210,8 @@ def gdf_mixed_buildings():
 @pytest.fixture(scope="module")
 def gdf_enclosing_boundary(gdf_mixed_buildings):
     """
-    Generate a boundary geodataframe with a 12m buffer.
+    Generate a boundary geodataframe with a 12m buffer (slightly above 10m desired minimum distance between edges of any
+    buildings and the edge of the map).
     """
     combined_footprints = gdf_mixed_buildings.union_all()
     site_boundary_geom = combined_footprints.buffer(12).convex_hull
@@ -502,6 +502,7 @@ class TestExtendEdgesGdf:
         self, gdf_mixed_buildings, gdf_enclosing_boundary
     ):
         """Test one Voronoi polygon contains one building footprint."""
+        # Access the shapely polygon of the enclosing boundary
         boundary = gdf_enclosing_boundary.geometry.iloc[0]
         cells_gdf = extend_edges_gdf(gdf=gdf_mixed_buildings, boundary=boundary)
 
@@ -536,6 +537,8 @@ class TestExtendEdgesGdf:
         expected = gdf_polygons_across_boundary[
             gdf_polygons_across_boundary["within_boundary"]
         ]["building_id"]
+
+        # TODO update when buildings crossing boundaries has been handled differently
         assert set(results) == set(
             expected
         ), "Polygons outside or crossing boundaries are not handled correctly"
@@ -584,6 +587,8 @@ class TestExtendEdgesGdf:
             gdf=gdf_far_apart_polygons, boundary=geometry_far_apart_boundary, buffer=20
         )
         results = cells_gdf.area.sum()
+        # join_style=2 creates mitred corners of polygon buffers (i.e. sharp rather than rounded corners)
+        # Same join_style as used in cluster._clip_gdf_voronoi_cells_polygon_buffer
         expected = gdf_far_apart_polygons.buffer(20, join_style=2).area.sum()
 
         assert results == expected, "Voronoi not clipped to buffer correctly"
