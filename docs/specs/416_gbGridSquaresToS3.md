@@ -1,0 +1,83 @@
+---
+title: Add GB-wide OS grid square data to S3 and repoint the pipeline
+status: in-review
+github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/416
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/424
+asana: https://app.asana.com/1/5571817120120/project/1214222223606748/task/1216293268467171
+created: 2026-07-06
+---
+
+# Spec: Adding grid squares for all of GB for all datasets to S3
+
+Asana task 1216293268467171 · due 2026-07-09 · created by Sofia Pinto · no description/comments.
+
+Updated 2026-07-09: uploads are **done** (dated prefixes, verified against S3 below). Remaining
+work is config/getter wiring + acceptance test. Supersedes the original upload-focused plan.
+
+## What's on S3 now (verified 2026-07-09, all under `inputs/geodata/`)
+
+- `opmplc_essh_gb/20260708/data/{square}/{square}_{layer}.shp` — OpenMap Local, **55 squares (full GB)**.
+  Same per-square layout as the old prefix, so the existing getter template works unchanged.
+- `oproad_essh_gb/20260708/data/{square}_RoadLink.shp` — Open Roads, flat layout, **51 squares**
+  (missing only HW/HX/OV, which are effectively sea-only; getter derives squares from LA
+  boundaries so these never get requested).
+  Updated 2026-07-20: the "never get requested" claim is wrong — verified by deriving squares
+  for all GB LAs: HW (Na h-Eileanan Siar), HX (Orkney) and OV (North Yorkshire's 1km buffer)
+  ARE requested and rely on the getter's missing-file skip; NI LAs in the UK-wide boundary
+  file additionally pull in NQ/NV/SA/SB, which OS GB products never cover. Evidence posted to
+  the PR #424 skip-logic thread.
+- `opgrsp_essh_gb/20260709/{square}/data/{square}_GreenspaceSite.shp` — Greenspace per-square,
+  **all 52 tiles OS offers** (renamed from OS download folder names + 5 missing island squares
+  HP/HT/HU/HY/HZ fetched from the OS Downloads API, 2026-07-09). HW/HX/OV not offered (sea-only).
+  Note the extra `/data/` level vs OpenMap Local's layout. A GB-wide copy also exists at
+  `opgrsp_essh_gb/20260708/data/GB_GreenspaceSite.shp` — now redundant, cleanup candidate.
+- **BREAKING NOW:** the old flat road files were moved into `oproad_essh_gb/20260507/`, so the
+  current `base.yaml` keys `grid_square_os_openroad` and `gb_os_openroad` point at nothing —
+  `cluster.py` fails today until config is updated.
+- Old prefixes still present: `v202510_OSOpenMapLocal_geometries_selected/` and
+  `v202510_OSOpenMapGreenspace_geometries_selected/` (15 squares each), `oproad_essh_gb/20260507/`.
+- OS `readme.txt` carries no release date; release presumed April 2026 (downloaded 2026-07-08) —
+  verify against OS product page before updating `config/README.md` citation dates.
+
+## Changes
+
+1. `config/base.yaml` (`data:geodata:`):
+   - `grid_square_os_openmap_local` → `.../opmplc_essh_gb/20260708/data/{square}/{square}_{layer}.shp`
+   - `grid_square_os_openroad` → `.../oproad_essh_gb/20260708/data/{square}_RoadLink.shp`
+   - `gb_os_openroad` → `.../oproad_essh_gb/20260708/data/` (glob target in `load_gdf_os_openroad`)
+   - `grid_square_os_openmap_greenspace` → `.../opgrsp_essh_gb/20260709/{square}/data/{square}_GreenspaceSite.shp`
+2. `getters/load_geodata.py` — **no change needed**: greenspace is per-square again (resolved
+   2026-07-09; the earlier bbox-read idea is obsolete).
+   Updated 2026-07-20: the `origin/dev` merge (27e9029) had stacked dev's blanket
+   `except (FileNotFoundError, pyogrio.errors.DataSourceError)` (from #408) above this branch's
+   stricter handler (55427da), leaving the re-raise logic unreachable. Fixed in f32fa71 by
+   restoring this branch's reviewed two-clause version, which already covers the S3-missing
+   case #408 addressed.
+3. `config/README.md` — update the three dataset rows (release date, config key names if changed).
+4. Acceptance test: run `pipeline/transform/uprns.py` and the clustering step (exercises roads +
+   greenspace + OpenMap layers) for an LA **outside** the old 15 squares — e.g. a London LA (TQ)
+   — and spot-check a remote one (Highland / Orkney) where layers are legitimately missing.
+
+## Not changing
+
+- `gb_os_openmap_local` / `gb_os_openmap_greenspace` GPKG keys (separate GB products; note the
+  GPKGs are an older release than the 20260708 shapefiles — version skew accepted for now).
+- `constant:sampling_areas:grid_squares` — dev sampling convenience, unrelated to coverage.
+- Research scripts hard-coding the `v202510_..._selected/SX/...` path — only relevant if old
+  prefixes are deleted.
+
+## Decisions (all resolved 2026-07-09)
+
+1. ~~Greenspace grid-square mode~~ per-square OS tiles uploaded to `opgrsp_essh_gb/20260709/` —
+   config repoint only, getter untouched.
+2. ~~Old prefixes~~ keep (`v202510_*_selected/`, `oproad_essh_gb/20260507/`, GB-wide
+   `opgrsp_essh_gb/20260708/`); raise a cleanup follow-up issue.
+3. ~~Date pinning~~ hard-code `20260708`/`20260709` in `base.yaml` (matches `v202510` convention).
+   Latest-release lookup considered and deferred to the versioning task (specs/...467175) as an
+   explicit CLI opt-in — implicit run-time "latest" breaks reproducibility and is vulnerable to
+   in-progress uploads.
+4. Release confirmed **April 2026** for all three products via OS Downloads API (`version: 2026-04`).
+5. Acceptance scope: `uprns.py` + clustering chain for one LA outside the old 15 squares (London,
+   TQ) plus a remote spot-check (Orkney Islands).
+
+<!-- asana-sync: 2026-07-06T13:03:14.521Z -->

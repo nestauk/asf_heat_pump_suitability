@@ -9,6 +9,10 @@ python asf_heat_pump_suitability/pipeline/cluster/cluster.py
 Required args:
 --local_authorities to specify which local authority / authorities to run the script for
 --save - Set to save output GeoDataFrame to S3.
+
+Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
+save outputs to. Defaults to running the pipeline using today's date. Multi-day runs
+should pass the same --release_date to every stage.
 """
 
 from typing import Optional, List
@@ -56,7 +60,7 @@ TECH_CODES = {
 NETWORKED = TECH_TYPES["networked"]
 COMMUNAL = TECH_TYPES["communal"]
 
-TECH_MAPPING = {NETWORKED: COMMUNAL}
+ANCHOR_REASSIGNMENT_MAPPING = {NETWORKED: COMMUNAL}
 
 
 def generate_gdf_clusters(
@@ -67,6 +71,7 @@ def generate_gdf_clusters(
     polygon_overlay_gdf: gpd.GeoDataFrame,
     combined_anchor_gdf: gpd.GeoDataFrame,
     radius: float,
+    local_authorities_slug: str,
     id_col: str = "ID",
 ) -> gpd.GeoDataFrame:
     """
@@ -81,9 +86,9 @@ def generate_gdf_clusters(
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries to separate clusters by.
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
-        poi_gdf (gpd.GeoDataFrame): anchor properties dataframe taken from POI data, with point geometries
-        important_buildings_gdf (gpd.GeoDataFrame): important building footprint polygons
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
         radius (float): radius in metres around anchor property within which communal solutions should be assigned
+        local_authorities_slug (str): slug of local authority to generate clusters for. Used to create unique cluster IDs.
         id_col (str): building ID column. Default "ID".
 
     Returns:
@@ -134,26 +139,11 @@ def generate_gdf_clusters(
         reassigned_gdf.set_index(id_col).to_dict()["assigned_tech"]
     )
 
-    # Add "within_{radius}m_from_anchor_load" as a column to cells_gdf
-    cells_gdf = cells_gdf.merge(
-        reassigned_gdf[[id_col, f"within_{radius}m_from_anchor_load"]],
-        on=id_col,
-        how="left",
-    )
-
-    # Creating the clusters
+    # Create cluster geometries
     clusters_gdf = (
-        cells_gdf.dissolve(
-            by="assigned_tech",
-            aggfunc={
-                # If any building in cluster is within anchor load radius, label cluster as within radius
-                f"within_{radius}m_from_anchor_load": "max",
-            },
-        )
+        cells_gdf.dissolve(by="assigned_tech")
         .explode()
-        .reset_index()[
-            ["assigned_tech", "geometry", f"within_{radius}m_from_anchor_load"]
-        ]
+        .reset_index()[["assigned_tech", "geometry"]]
     )
 
     # Create an ID for each geometry that starts with the tech code and ends with a unique number
@@ -164,7 +154,21 @@ def generate_gdf_clusters(
         clusters_gdf["assigned_tech"].map(TECH_CODES)
         + "_"
         + (clusters_gdf["cluster_id"] + 1).astype(str)
+        + "_"
+        + local_authorities_slug
     )
+
+    # Join boolean flag for each building contained in the cluster back to the cluster to aggregate
+    clusters_gdf = clusters_gdf.sjoin(
+        reassigned_gdf[[f"within_{radius}m_from_anchor_load", "geometry"]],
+        how="left",
+        predicate="contains",
+    ).drop(columns="index_right")
+
+    # At this point we have multiple rows of each cluster geometry with one row for every building within the cluster.
+    # We need to flatten the cluster geometries to one row per cluster, aggregating the within_anchor_radius boolean flag.
+    # Selecting `max` of the boolean will mean any clusters containing one building within the anchor radius will be labelled as within the radius.
+    clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max").reset_index()
 
     # TODO move to testing when sample set available
     if round(clusters_gdf["geometry"].area.sum(), 3) > round(
@@ -282,12 +286,10 @@ def extend_edges_gdf(
         "Joining Voronois to original building footprints and dissolving per footprint..."
     )
     # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
-    voronoi_gdf = (
-        # Intersects (rather than contains) allows for small floating point errors without dropping Voronois
-        voronoi_gdf.sjoin(points_gdf, how="inner", predicate="intersects")
-        .dissolve(by=id_col)
-        .reset_index()
-    ).clip(boundary)
+    # Intersects (rather than contains) allows for small floating point errors without dropping Voronois
+    voronoi_gdf = voronoi_gdf.sjoin(points_gdf, how="inner", predicate="intersects")
+    voronoi_gdf.geometry = voronoi_gdf.geometry.make_valid()
+    voronoi_gdf = (voronoi_gdf.dissolve(by=id_col).reset_index()).clip(boundary)
 
     # Clip Voronoi cells to a max buffer
     print("Clip Voronoi cells to maximum buffer...")
@@ -533,7 +535,7 @@ def sjoin_gdf_max_intersection(
     )
 
 
-def load_tranform_gdf_linestring_barriers(
+def load_transform_gdf_linestring_barriers(
     grid_squares: Optional[List[str]],
 ) -> gpd.GeoDataFrame:
     """
@@ -696,7 +698,7 @@ def load_transform_anchor_property_gdfs(
     combined_anchor_gdf = pd.concat(
         [anchors_with_footprint, important_building_gdf], join="inner"
     )
-    combined_anchor_gdf["geometry"] = combined_anchor_gdf.normalize()
+    combined_anchor_gdf["geometry"] = combined_anchor_gdf.geometry.normalize()
     combined_anchor_gdf = combined_anchor_gdf.drop_duplicates(["geometry"])
     return combined_anchor_gdf
 
@@ -729,7 +731,7 @@ def reassign_gdf_near_anchor_properties(
     # if distance column is not NaN (i.e. building is within the radius of an anchor), reassign tech type according to the map
     tech_gdf["assigned_tech"] = np.where(
         tech_gdf["distance_m"].notna(),
-        tech_gdf["assigned_tech"].replace(TECH_MAPPING),
+        tech_gdf["assigned_tech"].replace(ANCHOR_REASSIGNMENT_MAPPING),
         tech_gdf["assigned_tech"],
     )
     # add column with True if near anchor, False if not
@@ -841,6 +843,11 @@ def parse_arguments() -> argparse.Namespace:
         "--save", help="Set to save output GeoDataFrame to S3.", action="store_true"
     )
 
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
+    )
+
     return parser.parse_args()
 
 
@@ -850,10 +857,15 @@ if __name__ == "__main__":
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
+    release_date = save_utils.get_str_release_date(args.release_date)
+
     tech_gdf = (
         gpd.read_parquet(
-            config["output"]["dataset"]["buildings_most_suitable_tech"].format(
-                local_authorities=local_authority_dict["url_slug"]
+            save_utils.get_str_output_path(
+                "buildings_most_suitable_tech",
+                release_date=release_date,
+                check_exists=True,
+                local_authorities=local_authority_dict["url_slug"],
             )
         )
         .set_geometry("geometry")
@@ -870,7 +882,7 @@ if __name__ == "__main__":
     )
 
     # Load and transform physical barriers for clusters
-    line_overlay_gdf = load_tranform_gdf_linestring_barriers(
+    line_overlay_gdf = load_transform_gdf_linestring_barriers(
         local_authority_dict["grid_squares"]
     )
     polygon_overlay_gdf = load_transform_gdf_polygon_barriers(
@@ -890,6 +902,7 @@ if __name__ == "__main__":
         polygon_overlay_gdf=polygon_overlay_gdf,
         combined_anchor_gdf=combined_anchor_gdf,
         radius=ANCHOR_RADIUS,
+        local_authorities_slug=local_authority_dict["url_slug"],
     )
 
     # Add heat network zones to clusters_gdf, if they exist
@@ -903,7 +916,9 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             clusters_gdf,
-            config["output"]["dataset"]["tech_clusters"].format(
+            save_utils.get_str_output_path(
+                "tech_clusters",
+                release_date=release_date,
                 local_authorities=local_authority_dict["url_slug"],
             ),
         )

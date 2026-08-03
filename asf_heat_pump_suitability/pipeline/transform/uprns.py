@@ -12,6 +12,10 @@ python asf_heat_pump_suitability/pipeline/transform/uprns.py --local_authorities
 Defaults to `GB` (all of Great Britain), but this is not yet implemented.
 
 Set --save to save the outputs to S3. By default, outputs are not saved.
+
+Set --release_date to specify the YYYYMMDD dated release directory to save outputs to.
+Defaults to running the pipeline using today's date. Multi-day runs should pass the
+same --release_date to every stage.
 """
 
 import geopandas as gpd
@@ -305,6 +309,9 @@ def map_dict_uprns_to_building_id(
     # combine the two gdfs and turn into a dictionary
     uprns_building_dict = (
         (pd.concat([uprns_inside_buildings, nearest_buildings_uprns]))
+        # Handle edge cases reproducibly where UPRNs on the edge of multiple buildings get joined to more than one building
+        .sort_values(by=id_col, ascending=True)
+        .drop_duplicates(subset="UPRN")
         .set_index("UPRN")
         .to_dict()[id_col]
     )
@@ -424,6 +431,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
     )
 
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated output directory. Defaults to today's date.",
+    )
+
     return parser.parse_args()
 
 
@@ -446,6 +458,8 @@ if __name__ == "__main__":
     local_authorities = [la.lower() for la in args.local_authorities]
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
+
+    release_date = save_utils.get_str_release_date(args.release_date)
 
     uprns_df = load_geodata.load_df_osopen_uprn()
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
@@ -530,8 +544,8 @@ if __name__ == "__main__":
         min_expected_rows=uprn_bounds["min"], max_expected_rows=uprn_bounds["max"]
     )
 
-    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds["min"]}")
-    print(f"Max Expected (1.4 * household census counts): {uprn_bounds["max"]}")
+    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds['min']}")
+    print(f"Max Expected (1.4 * household census counts): {uprn_bounds['max']}")
     print(f"Actual Rows:  {len(df)}")
 
     df = schema.validate(df, lazy=True)
@@ -541,7 +555,9 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             df,
-            config["output"]["dataset"]["domestic_uprns"].format(
-                local_authority=local_authority_dict["url_slug"]
+            save_utils.get_str_output_path(
+                "domestic_uprns",
+                release_date=release_date,
+                local_authority=local_authority_dict["url_slug"],
             ),
         )
