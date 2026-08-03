@@ -1,16 +1,20 @@
+"""
+Util functions for plotting geospatial data in maps.
+"""
+
 import folium
 import shapely
 from shapely.ops import transform
 import pyproj
 import geopandas as gpd
-from typing import Optional, List, Dict
+from typing import Optional, Dict
 from pathlib import Path
 import os
 
 from asf_heat_pump_suitability import config
 
-TECH_TYPES = config["constant"]["tech_types"]
-COLOUR_MAPPING = config["constant"]["tech_colour_mapping"]
+TECH_TYPES = dict(sorted(config["constant"]["tech_types"].items()))
+COLOUR_MAPPING = dict(sorted(config["constant"]["tech_colour_mapping"].items()))
 
 
 def plot_folium_cluster_map(
@@ -24,7 +28,7 @@ def plot_folium_cluster_map(
     Args:
         clusters_gdf (gpd.GeoDataFrame): geodataframe containing (Multi)Polygons to plot.
         popup_col (str): name of column containing information for popup. Optional.
-        save_as (str): file name to save as. Saves a local html file copy to /outputs/maps/.
+        save_as (str): file name to save as, without file extension, e.g. `map_01`. Saves a local html file copy to /outputs/maps/.
 
     Returns:
         Folium.Map

@@ -2,6 +2,10 @@
 .cookiecutter/state/
 
 *.lock
+!uv.lock
+
+# uv virtual environment
+.venv/
 
 # Proposed convention
 scratch*
