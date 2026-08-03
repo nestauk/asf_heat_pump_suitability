@@ -828,6 +828,7 @@ class TestReassignGdfAnchorProperties:
         )
         results = reassigned_gdf.set_index("building_id").to_dict()["assigned_tech"]
         expected = tech_gdf.set_index("building_id").to_dict()["assigned_tech"]
+        # Check that networked solutions are reassigned to communal
         reassigned_buildings = ["B02", "B03", "B04"]
         for b in reassigned_buildings:
             expected[b] = "Communal solution"
