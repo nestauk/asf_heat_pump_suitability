@@ -1,3 +1,7 @@
+"""
+Unit tests for functions in cluster.py
+"""
+
 import pytest
 import geopandas as gpd
 import shapely
@@ -14,7 +18,8 @@ from asf_heat_pump_suitability.pipeline.cluster.tests import utils
 @pytest.fixture(scope="module")
 def gdf_mixed_buildings():
     """
-    Generate a geodataframe containing a selection of test building footprints to test clustering across different scenarios:
+    Generate a geodataframe containing a selection of test building footprints in BNG CRS (EPSG: 27700) to test clustering
+    across different scenarios:
     1. A horseshoe-shaped building that wraps around another smaller building on three sides.
     2. A central cluster of buildings surrounded on all sides by a selection of buildings of different shapes.
     3. Buildings which are very close to the neighbouring buildings.
@@ -268,7 +273,7 @@ class TestGenerateGdfClusters:
         tech_gdf,
         empty_gdf,
     ):
-        """Test each domestic building is assigned to a cluster."""
+        """Test each domestic building is assigned to a cluster and only to one cluster."""
         clusters_gdf = generate_gdf_clusters(
             buildings_gdf=gdf_mixed_buildings,
             boundary_gdf=gdf_enclosing_boundary,
@@ -283,11 +288,19 @@ class TestGenerateGdfClusters:
         results = clusters_gdf[["geometry"]].sjoin(
             gdf_mixed_buildings, how="inner", predicate="contains"
         )["building_id"]
+
+        # Assert each building is assigned to a cluster
         expected = gdf_mixed_buildings["building_id"]
         missing = set(expected).difference(set(results))
         assert (
             not missing
         ), f"Some buildings not contained by a cluster. Building IDs: {missing}"
+
+        # Assert each building is assigned to only one cluster
+        duplicated = results.duplicated()
+        assert (
+            duplicated.sum() == 0
+        ), f"Some buildings are contained by multiple clusters. Building IDs: {results[duplicated].unique()}"
 
     def test_clusters_contain_domestic_only(
         self,
