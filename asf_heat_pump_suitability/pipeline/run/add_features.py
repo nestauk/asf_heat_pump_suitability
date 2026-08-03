@@ -11,6 +11,10 @@ python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authoritie
 Set -- `--detail "simplified"` to use simplified spatial signature polygons to label city centres. The default is "full" which uses the fully detailed spatial signatures framework.
 
 To save outputs to S3, add --save flag.
+
+Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
+save outputs to. Defaults to running the pipeline using today's date. Multi-day runs
+should pass the same --release_date to every stage.
 """
 
 import argparse
@@ -46,6 +50,11 @@ def parse_arguments() -> argparse.Namespace:
         help="If --save is set, it saves outputs to S3.",
         required=False,
         action="store_true",
+    )
+
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
     )
 
     return parser.parse_args()
@@ -87,8 +96,12 @@ if __name__ == "__main__":
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
     detail_level = args.detail
-    uprns_path = config["output"]["dataset"]["domestic_uprns"].format(
-        local_authority=local_authority_dict["url_slug"]
+    release_date = save_utils.get_str_release_date(args.release_date)
+    uprns_path = save_utils.get_str_output_path(
+        "domestic_uprns",
+        release_date=release_date,
+        check_exists=True,
+        local_authority=local_authority_dict["url_slug"],
     )
 
     # Load UPRN data
@@ -340,7 +353,9 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             features_df,
-            path=config["output"]["dataset"]["domestic_uprns_with_features"].format(
-                local_authority=local_authority_dict["url_slug"]
+            path=save_utils.get_str_output_path(
+                "domestic_uprns_with_features",
+                release_date=release_date,
+                local_authority=local_authority_dict["url_slug"],
             ),
         )
