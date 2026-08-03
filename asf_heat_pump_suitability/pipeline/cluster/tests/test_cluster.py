@@ -283,6 +283,7 @@ class TestGenerateGdfClusters:
             combined_anchor_gdf=empty_gdf,
             radius=50,
             id_col="building_id",
+            local_authorities_slug="TEST",
         )
 
         results = clusters_gdf[["geometry"]].sjoin(
@@ -323,6 +324,7 @@ class TestGenerateGdfClusters:
             combined_anchor_gdf=empty_gdf,
             radius=50,
             id_col="building_id",
+            local_authorities_slug="TEST",
         )
 
         # Check only domestic building IDs are retained
@@ -369,6 +371,7 @@ class TestGenerateGdfClusters:
             combined_anchor_gdf=empty_gdf,
             radius=50,
             id_col="building_id",
+            local_authorities_slug="TEST",
         )
 
         # Rounding accounts for tiny errors caused by earlier rounding
@@ -393,6 +396,7 @@ class TestGenerateGdfClusters:
             combined_anchor_gdf=empty_gdf,
             radius=50,
             id_col="building_id",
+            local_authorities_slug="TEST",
         )
 
         resulting_tech_types = results["assigned_tech"].to_list()
