@@ -128,7 +128,7 @@ def generate_gdf_clusters(
             UserWarning,
         )
 
-    # Tech reassignment for cells within a certain distance of anchor properties
+    # Tech reassignment for building footprints within a certain distance of anchor properties
     reassigned_gdf = reassign_gdf_near_anchor_properties(
         tech_gdf=tech_gdf,
         combined_anchor_gdf=combined_anchor_gdf,
