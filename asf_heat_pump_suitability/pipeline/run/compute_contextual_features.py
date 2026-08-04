@@ -78,6 +78,32 @@ def parse_arguments() -> argparse.Namespace:
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
     )
 
+    parser.add_argument(
+        "--clusters_gdf_path",
+        help="Path to clusters geodataframe file. Optional. If not provided, the script will load the clusters geodataframe from S3 based on the local authorities and release date.",
+        type=str,
+        required=False,
+        default=save_utils.get_str_output_path(
+            "tech_clusters",
+            release_date=release_date,
+            check_exists=True,
+            local_authorities=local_authority_dict["url_slug"],
+        ),
+    )
+
+    parser.add_argument(
+        "--save_to_path",
+        help="Path to save the output geojson file. Optional. If not provided, the script will save the output to S3 based on the local authorities and release date.",
+        type=str,
+        required=False,
+        default=save_utils.get_str_output_path(
+            "contextual_features",
+            release_date=release_date,
+            check_exists=False,
+            local_authorities=local_authority_dict["url_slug"],
+        ),
+    )
+
     return parser.parse_args()
 
 
@@ -398,6 +424,8 @@ if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
     detail_level = args.detail
+    clusters_gdf_path = args.clusters_gdf_path
+    save_to_path = args.save_to_path
 
     tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
@@ -420,14 +448,7 @@ if __name__ == "__main__":
     )
 
     print("Loading clusters...")
-    clusters_gdf = gpd.read_parquet(
-        save_utils.get_str_output_path(
-            "tech_clusters",
-            release_date=release_date,
-            check_exists=True,
-            local_authorities=local_authority_dict["url_slug"],
-        ),
-    ).to_crs(epsg=27700)
+    clusters_gdf = gpd.read_parquet(clusters_gdf_path).to_crs(epsg=27700)
 
     uprns_df = cluster.map_df_uprns_to_clusters(
         uprns_df=uprns_df, buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
@@ -511,12 +532,7 @@ if __name__ == "__main__":
     if args.save:
         print("Saving geojson to S3... ")
         # Save to S3 as geojson
-        s3_file_path = save_utils.get_str_output_path(
-            "clusters_tech_contextual_info",
-            release_date=release_date,
-            local_authorities=local_authority_dict["url_slug"],
-            tolerance_m=tolerance_m,
-        )
+        s3_file_path = save_utils.get_str_output_path(save_to_path)
 
         # Save to data science S3 bucket
         save_utils.save_to_s3(
@@ -524,13 +540,19 @@ if __name__ == "__main__":
             s3_file_path,
         )
 
-        # Save to front-end S3 bucket for use in the tool
-        front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
-        front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
-        file_name = s3_file_path.split("/")[-1]
-        save_utils.save_to_s3(
-            geojson_file,
-            os.path.join(
-                "s3://", front_end_s3_bucket, front_end_staging_s3_path, file_name
-            ),
-        )
+        if save_to_path == save_utils.get_str_output_path(
+            "tech_clusters",
+            release_date=release_date,
+            check_exists=True,
+            local_authorities=local_authority_dict["url_slug"],
+        ):
+            # Save to front-end S3 bucket for use in the tool
+            front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
+            front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
+            file_name = s3_file_path.split("/")[-1]
+            save_utils.save_to_s3(
+                geojson_file,
+                os.path.join(
+                    "s3://", front_end_s3_bucket, front_end_staging_s3_path, file_name
+                ),
+            )
