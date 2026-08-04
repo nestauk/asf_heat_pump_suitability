@@ -321,20 +321,18 @@ def create_gdf_contextual_features(
 
 def create_json_contextual_features_metadata(
     clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
-    hn_potential: gpd.GeoDataFrame,
-    anchor_loads: gpd.GeoDataFrame,
     local_authorities: str,
     release_date: str,
+    optional_data_layers: dict = None,
 ) -> json:
     """
     Create json with cluster level data and associated metadata.
 
     Args:
         clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
-        hn_potential (gpd.GeoDataFrame): geodataframe with district HN potential (CRS: EPSG:4326)
-        anchor_loads (gpd.GeoDataFrame): geodataframe with anchor load properties (CRS: EPSG:4326)
         local_authorities (str): local authority or authorities for which the data was generated
         release_date (str): release date in YYYYMMDD format of the dated release directory the data belongs to
+        optional_data_layers (dict): dictionary of optional data layers with layer name as key and geodataframe as value
 
     Returns:
        json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
@@ -346,17 +344,15 @@ def create_json_contextual_features_metadata(
     clusters_json = json.loads(
         clusters_with_contextual_features_gdf.to_json(drop_id=True)
     )
-
-    hn_potential_geojson = json.loads(hn_potential.to_json(drop_id=True))
-
-    anchor_loads_geojson = json.loads(anchor_loads.to_json(drop_id=True))
-
     for feature in clusters_json["features"]:
         feature["properties"]["layer"] = "clusters_with_contextual_features"
-    for feature in hn_potential_geojson["features"]:
-        feature["properties"]["layer"] = "areas_of_district_heat_network_potential"
-    for feature in anchor_loads_geojson["features"]:
-        feature["properties"]["layer"] = "anchor_loads"
+
+    if optional_data_layers:
+        for layer_name, layer_gdf in optional_data_layers.items():
+            layer_json = json.loads(layer_gdf.to_json(drop_id=True))
+            for feature in layer_json["features"]:
+                feature["properties"]["layer"] = layer_name
+            clusters_json["features"].extend(layer_json["features"])
 
     metadata = {
         "Release date": release_date,
@@ -387,7 +383,7 @@ def create_json_contextual_features_metadata(
     geojson_file = {
         "type": "FeatureCollection",
         "metadata": metadata,
-        "features": clusters_json["features"] + hn_potential_geojson["features"],
+        "features": clusters_json["features"],
     }
 
     return geojson_file
@@ -492,11 +488,15 @@ if __name__ == "__main__":
         how="intersection",
     ).to_crs(epsg=4326)
 
+    optional_data_layers = {
+        "areas_of_district_heat_network_potential": hn_potential,
+        "anchor_loads": combined_anchor_gdf,
+    }
+
     print("Creating json with contextual features for each cluster and metadata...")
     geojson_file = create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf=clusters_with_contextual_features_gdf,
-        hn_potential=hn_potential,
-        anchor_loads=combined_anchor_gdf,
+        optional_data_layers=optional_data_layers,
         local_authorities=local_authorities,
         release_date=release_date,
     )
