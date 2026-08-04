@@ -2,14 +2,18 @@
 Unit tests for functions in cluster.py
 """
 
+import os
 import pytest
 import geopandas as gpd
 import shapely
 from shapely.geometry import Polygon
 from shapely.affinity import rotate
+from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.cluster.cluster import (
     extend_edges_gdf,
     generate_gdf_clusters,
+    overlay_gdf_physical_barriers,
+    reassign_gdf_near_anchor_properties,
 )
 from asf_heat_pump_suitability.pipeline.cluster.tests import utils
 
@@ -222,49 +226,51 @@ def gdf_enclosing_boundary(gdf_mixed_buildings):
     )
 
 
+@pytest.fixture(scope="module")
+def empty_gdf():
+    """Create an empty geodataframe."""
+    return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
+
+
+@pytest.fixture(scope="module")
+def tech_gdf(gdf_mixed_buildings):
+    """
+    Assign building footprints a technology type and a boolean to indicate whether or not they are a domestic building.
+    """
+    non_domestic_ids = ["B03", "B05", "B08"]
+
+    tech_mapping = {
+        "B01": "Individual solution",
+        "B05": "Individual solution",
+        "B06": "Individual solution",
+        "B10": "Individual solution",
+        "B14": "Individual solution",
+        "B07": "Communal solution",
+        "B11": "Communal solution",
+        "B12": "Communal solution",
+        "B13": "Communal solution",
+        "B02": "Networked heat pump",
+        "B03": "Networked heat pump",
+        "B04": "Networked heat pump",
+        "B08": "District heat network",
+        "B09": "District heat network",
+    }
+
+    # Assign domestic boolean to buildings according to mapping
+    gdf_mixed_buildings["domestic"] = gdf_mixed_buildings["building_id"].apply(
+        utils.assign_bool_domestic_status, args=(non_domestic_ids,)
+    )
+
+    # Assign tech type according to mapping
+    gdf_mixed_buildings["assigned_tech"] = gdf_mixed_buildings["building_id"].apply(
+        utils.assign_str_tech_type, args=(tech_mapping,)
+    )
+
+    return gdf_mixed_buildings
+
+
 class TestGenerateGdfClusters:
     """Test the `generate_gdf_clusters` function."""
-
-    @pytest.fixture(scope="class")
-    def tech_gdf(self, gdf_mixed_buildings):
-        """
-        Assign building footprints a technology type and a boolean to indicate whether or not they are a domestic building.
-        """
-        non_domestic_ids = ["B03", "B05", "B08"]
-
-        tech_mapping = {
-            "B01": "Individual solution",
-            "B05": "Individual solution",
-            "B06": "Individual solution",
-            "B10": "Individual solution",
-            "B14": "Individual solution",
-            "B07": "Communal solution",
-            "B11": "Communal solution",
-            "B12": "Communal solution",
-            "B13": "Communal solution",
-            "B02": "Networked heat pump",
-            "B03": "Networked heat pump",
-            "B04": "Networked heat pump",
-            "B08": "District heat network",
-            "B09": "District heat network",
-        }
-
-        # Assign domestic boolean to buildings according to mapping
-        gdf_mixed_buildings["domestic"] = gdf_mixed_buildings["building_id"].apply(
-            utils.assign_bool_domestic_status, args=(non_domestic_ids,)
-        )
-
-        # Assign tech type according to mapping
-        gdf_mixed_buildings["assigned_tech"] = gdf_mixed_buildings["building_id"].apply(
-            utils.assign_str_tech_type, args=(tech_mapping,)
-        )
-
-        return gdf_mixed_buildings
-
-    @pytest.fixture(scope="class")
-    def empty_gdf(self):
-        """Create an empty geodataframe."""
-        return gpd.GeoDataFrame({"geometry": []}, geometry="geometry", crs=27700)
 
     def test_all_buildings_assigned_cluster(
         self,
@@ -594,5 +600,264 @@ class TestExtendEdgesGdf:
         # join_style=2 creates mitred corners of polygon buffers (i.e. sharp rather than rounded corners)
         # Same join_style as used in cluster._clip_gdf_voronoi_cells_polygon_buffer
         expected = gdf_far_apart_polygons.buffer(20, join_style=2).area.sum()
-
         assert results == expected, "Voronoi not clipped to buffer correctly"
+
+
+class TestOverlayGdfPhysicalBarriers:
+    """
+    Test the function `overlay_gdf_physical_barriers`.
+    """
+
+    @pytest.fixture(scope="class")
+    def gdf_mixed_buildings_voronoi(self):
+        """
+        Load Voronoi cells of mixed buildings.
+        """
+        fpath = os.path.join(
+            PROJECT_DIR,
+            "asf_heat_pump_suitability/pipeline/cluster/tests",
+            "voronoi_polygons_test_set.parquet",
+        )
+        return gpd.read_parquet(fpath).set_crs(epsg=27700)
+
+    @pytest.fixture(scope="class")
+    def gdf_line_overlay_mixed_buildings(self):
+        """
+        Create a geodataframe of line polygons (linestrings converted to polygons) that meet the following criteria:
+        1. One road separates the corner of a building off from the rest of the footprint.
+        2. One road bisects a building.
+        3. The other roads go around and between buildings to separate clusters.
+        The buildings affected are separate from those affected by the overlay polygons.
+        """
+        line_dict = {
+            "geometry": [
+                Polygon(
+                    [
+                        (400017.68, 400121.33),
+                        (400025.87, 400012.34),
+                        (400302.02, 400015.53),
+                        (400302.26, 400016.72),
+                        (400027.79, 400013.53),
+                        (400020.89, 400120.79),
+                        (400017.68, 400121.33),
+                    ]
+                ),
+                Polygon(
+                    [
+                        (400094.55, 400125.95),
+                        (400095.66, 399990.09),
+                        (400073.84, 399990.27),
+                        (400052.29, 399989.81),
+                        (400044.42, 399987.56),
+                        (400034.56, 399985.46),
+                        (400035.32, 399879.01),
+                        (400036.30, 399878.96),
+                        (400035.16, 399984.38),
+                        (400044.23, 399986.65),
+                        (400052.20, 399989.26),
+                        (400096.17, 399989.56),
+                        (400096.69, 400126.13),
+                        (400094.55, 400125.95),
+                    ]
+                ),
+                Polygon(
+                    [
+                        (400025.89, 400012.87),
+                        (400026.00, 400000.50),
+                        (400051.71, 400002.09),
+                        (400052.29, 399989.81),
+                        (400055.18, 399989.75),
+                        (400055.13, 400013.06),
+                        (400051.44, 400012.93),
+                        (400051.53, 400003.60),
+                        (400027.42, 400002.54),
+                        (400027.51, 400012.48),
+                        (400025.89, 400012.87),
+                    ]
+                ),
+            ]
+        }
+
+        # Dissolve overlapping polygons and explode back to one line per polygon
+        return gpd.GeoDataFrame(line_dict, crs="EPSG:27700").dissolve().explode()
+
+    @pytest.fixture(scope="class")
+    def gdf_polygon_overlay_mixed_buildings(self):
+        """
+        Create a geodataframe of overlay polygons that meet the following criteria:
+        1. Overlaps with the corner of a building.
+        2. Completely overlaps a building.
+        3. Bisects a building.
+        The buildings affected are separate from those affected by the line polygons.
+        """
+        polygon_dict = {
+            "geometry": [
+                Polygon(
+                    [
+                        (400015.8, 400046.4),
+                        (399978.9, 400042.1),
+                        (399985.0, 400019.7),
+                        (400012.9, 400016.7),
+                        (400027.9, 400023.6),
+                        (400034.6, 400031.1),
+                        (400033.7, 400043.0),
+                        (400015.8, 400046.4),
+                    ]
+                ),
+                Polygon(
+                    [
+                        (399924.5, 400012.3),
+                        (399914.9, 400009.9),
+                        (399920.2, 399998.9),
+                        (399928.7, 399991.5),
+                        (399941.9, 399986.9),
+                        (399950.8, 399979.8),
+                        (399975.7, 399977.0),
+                        (399991.4, 399975.2),
+                        (400004.4, 399973.2),
+                        (400009.9, 399967.0),
+                        (400011.3, 399956.7),
+                        (400010.6, 399945.2),
+                        (400012.9, 399929.9),
+                        (400009.5, 399918.4),
+                        (400003.5, 399907.0),
+                        (399991.0, 399890.9),
+                        (400001.7, 399877.6),
+                        (400010.9, 399896.7),
+                        (400018.1, 399921.6),
+                        (400018.4, 399948.9),
+                        (400016.5, 399965.8),
+                        (400007.2, 399977.3),
+                        (399992.6, 399979.4),
+                        (399978.7, 399982.5),
+                        (399957.4, 399994.5),
+                        (399941.0, 399995.2),
+                        (399924.5, 400012.3),
+                    ]
+                ),
+                Polygon(
+                    [
+                        (400062.2, 400007.4),
+                        (400062.5, 400004.6),
+                        (400065.2, 400004.6),
+                        (400066.1, 400007.0),
+                        (400062.2, 400007.4),
+                    ]
+                ),
+                Polygon(
+                    [
+                        (400021.8, 399989.3),
+                        (400021.8, 399980.4),
+                        (400031.9, 399977.4),
+                        (400038.2, 399977.6),
+                        (400037.3, 399988.0),
+                        (400029.8, 399987.9),
+                        (400029.2, 399989.4),
+                        (400024.0, 399989.7),
+                        (400021.8, 399989.3),
+                    ]
+                ),
+            ]
+        }
+
+        return gpd.GeoDataFrame(polygon_dict, crs="EPSG:27700")
+
+    def test_cells_entirely_contain_buildings_after_overlay(
+        self,
+        gdf_mixed_buildings_voronoi,
+        tech_gdf,
+        gdf_line_overlay_mixed_buildings,
+        gdf_polygon_overlay_mixed_buildings,
+    ):
+        """Test Voronoi cells entirely contain buildings after overlaying barriers. This tests the function can handle
+        edge cases like a barrier completely or partially overlapping a building footprint and thus fragmenting the cell
+        so that it no longer encases a full building footprint."""
+        domestic_tech_gdf = tech_gdf[tech_gdf["domestic"]]
+
+        cells_gdf = overlay_gdf_physical_barriers(
+            voronoi_gdf=gdf_mixed_buildings_voronoi,
+            tech_gdf=domestic_tech_gdf,
+            line_overlay_gdf=gdf_line_overlay_mixed_buildings,
+            polygon_overlay_gdf=gdf_polygon_overlay_mixed_buildings,
+            id_col="building_id",
+        )
+
+        results = cells_gdf["building_id"]
+        expected = domestic_tech_gdf["building_id"]
+        assert set(results) == set(
+            expected
+        ), "Some buildings do not have a cell after overlaying barriers"
+
+        assert len(cells_gdf) == len(
+            domestic_tech_gdf
+        ), f"Number of Voronoi cells {len(cells_gdf)} != number of domestic buildings {len(domestic_tech_gdf)} after overlay"
+
+        # Check if the uncontained area of building footprints is effectively zero (e.g., less than 1 square millimeter)
+        # This is to account for floating point errors which can cause tiny slivers of building not to be covered by
+        # the cells.
+        uncontained_slivers_gdf = domestic_tech_gdf.overlay(
+            cells_gdf, how="difference", keep_geom_type=False
+        )
+        uncontained_slivers_gdf["area"] = uncontained_slivers_gdf["geometry"].area
+        results = uncontained_slivers_gdf[uncontained_slivers_gdf["area"] > 1e-5]
+        assert (
+            len(results) == 0
+        ), f"Buildings {set(results['building_id'])} are missing significant coverage of cells after overlay."
+
+
+class TestReassignGdfAnchorProperties:
+    """
+    Test `reassign_gdf_anchor_properties` function.
+    """
+
+    @pytest.fixture(scope="class")
+    def gdf_anchor_property(self):
+        """Create single anchor property, 50m east of easternmost networked heat pump building in `gdf_mixed_buildings`."""
+        anchor_property = Polygon(
+            [(400135, 399995), (400145, 399995), (400145, 400005), (400135, 400005)]
+        )
+
+        return gpd.GeoDataFrame(
+            {"class": ["school"], "geometry": [anchor_property]}, crs="EPSG:27700"
+        )
+
+    def test_cells_within_anchor_radius(self, tech_gdf, gdf_anchor_property):
+        """Test technology reassignment for networked heat pump buildings within anchor property radius."""
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
+        )
+        results = reassigned_gdf.set_index("building_id").to_dict()["assigned_tech"]
+        expected = tech_gdf.set_index("building_id").to_dict()["assigned_tech"]
+        # Check that networked solutions are reassigned to communal
+        reassigned_buildings = ["B02", "B03", "B04"]
+        for b in reassigned_buildings:
+            expected[b] = "Communal solution"
+
+        assert (
+            results == expected
+        ), "Technology reassignment for building within anchor property radius failed"
+
+    def test_cells_outside_anchor_radius(self, tech_gdf, gdf_anchor_property):
+        """Test no technology reassignment occurs for networked heat pump buildings outside anchor property radius."""
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=40
+        )
+        results = reassigned_gdf.set_index("building_id").to_dict()["assigned_tech"]
+        expected = tech_gdf.set_index("building_id").to_dict()["assigned_tech"]
+
+        assert (
+            results == expected
+        ), "Unexpected technology reassignment for building outside anchor property radius"
+
+    def test_cells_intersecting_anchor_radius(self, tech_gdf, gdf_anchor_property):
+        """Test technology reassignment for networked heat pump buildings intersecting anchor property radius."""
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=50
+        )
+        results = reassigned_gdf.set_index("building_id").to_dict()["assigned_tech"]
+        expected = tech_gdf.set_index("building_id").to_dict()["assigned_tech"]
+        expected["B04"] = "Communal solution"
+
+        assert (
+            results == expected
+        ), "Technology reassignment for building intersecting anchor property radius failed"
