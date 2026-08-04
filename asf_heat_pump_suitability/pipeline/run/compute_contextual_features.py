@@ -488,9 +488,16 @@ if __name__ == "__main__":
         how="intersection",
     ).to_crs(epsg=4326)
 
+    print("Loading ward boundaries and transforming to EPSG:4326...")
+    ward_boundaries_gdf = load_boundaries.load_gdf_ward_boundaries(
+        select_las=local_authority_dict["valid_local_authorities"],
+        la_boundaries_gdf=boundary_gdf,
+    )[["geometry"]].to_crs(epsg=4326)
+
     optional_data_layers = {
         "areas_of_district_heat_network_potential": hn_potential,
         "anchor_loads": combined_anchor_gdf,
+        "ward_boundaries": ward_boundaries_gdf,
     }
 
     print("Creating json with contextual features for each cluster and metadata...")
