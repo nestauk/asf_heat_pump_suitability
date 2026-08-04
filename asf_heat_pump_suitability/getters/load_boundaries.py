@@ -2,6 +2,7 @@
 Functions to load raw census geography boundaries, like Local Authority; ward; output areas, etc. No/minimal preprocessing occurs in these functions.
 """
 
+import pandas as pd
 import geopandas as gpd
 import shapely
 from typing import List
@@ -57,3 +58,41 @@ def load_gdf_local_authority_boundaries(
             )
         else:
             return la_boundaries_gdf
+
+
+def load_gdf_ward_boundaries(
+    select_las: str | List[str] = None, la_boundaries_gdf: gpd.GeoDataFrame = None
+) -> gpd.GeoDataFrame:
+    """
+    Load boundaries for the whole of the UK.
+    If select_las and la_boundaries_gdf are specified, load boundaries for the specified Local Authority Districts.
+    CRS British National Grid (27700).
+
+    Args:
+        select_las (str | List[str]): selected Local Authorities to load boundaries for. Optional. Default None to load all.
+        la_boundaries_gdf (gpd.GeoDataFrame): boundaries for specified Local Authority Districts. Optional. Default None to load all.
+
+    Returns:
+        gpd.GeoDataFrame: boundaries for specified Local Authority Districts or all UK if no selection is made.
+    """
+
+    wards_gdf = pd.read_parquet(
+        config["data"]["geodata"]["boundaries"]["UK_ward_boundaries"]
+    )
+    wards_gdf = gpd.GeoDataFrame(
+        wards_gdf, geometry=gpd.GeoSeries.from_wkt(wards_gdf.geometry), crs="EPSG:4326"
+    ).to_crs(epsg=27700)
+
+    if select_las:
+        if la_boundaries_gdf is None:
+            raise ValueError(
+                "la_boundaries_gdf must be provided if select_las is specified."
+            )
+        print(f"Loading ward boundaries for {select_las}...")
+        wards_gdf = gpd.sjoin(
+            wards_gdf, la_boundaries_gdf, how="inner", predicate="intersects"
+        )
+        return wards_gdf
+    else:
+        print("Loading ward boundaries for the whole of the UK...")
+        return wards_gdf
