@@ -12,6 +12,10 @@ python asf_heat_pump_suitability/pipeline/transform/uprns.py --local_authorities
 Defaults to `GB` (all of Great Britain), but this is not yet implemented.
 
 Set --save to save the outputs to S3. By default, outputs are not saved.
+
+Set --release_date to specify the YYYYMMDD dated release directory to save outputs to.
+Defaults to running the pipeline using today's date. Multi-day runs should pass the
+same --release_date to every stage.
 """
 
 import numpy as np
@@ -434,6 +438,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
     )
 
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated output directory. Defaults to today's date.",
+    )
+
     return parser.parse_args()
 
 
@@ -455,6 +464,8 @@ if __name__ == "__main__":
 
     local_authorities = [la.lower() for la in args.local_authorities]
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
+
+    release_date = save_utils.get_str_release_date(args.release_date)
 
     if local_authorities == "gb":  # All of GB
         # TODO this may not work due to scaling and may require chunking of datasets.
@@ -562,7 +573,9 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             df,
-            config["output"]["dataset"]["domestic_uprns"].format(
-                local_authority=local_authority_dict["url_slug"]
+            save_utils.get_str_output_path(
+                "domestic_uprns",
+                release_date=release_date,
+                local_authority=local_authority_dict["url_slug"],
             ),
         )

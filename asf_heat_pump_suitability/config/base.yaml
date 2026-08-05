@@ -97,6 +97,7 @@ constant:
       - "ST"
       - "SX"
   target_crs: 27700 # British National Grid
+  release_date_format: "%Y%m%d" # strftime format for {release_date} in output dataset paths
   tech_types:
     individual: "Individual solution"
     networked: "Networked heat pump"
@@ -111,6 +112,13 @@ constant:
     heat_networks: "DHNZ"
     individual_or_networked: "IND_or_NHP"
     individual_or_heat_network: "IND_or_DHNZ"
+  tech_colour_mapping:
+    individual: "#00B197"
+    networked: "#0E0EFE"
+    communal: "#FF6945"
+    heat_networks: "#A91BC1"
+    individual_or_networked: "grey"
+    individual_or_heat_network: "grey"
   anchor_radius: 50 # radius in metres around anchor properties within which we are reassigning N-GSHP to communal
   coastline:
     distance_from_coastline_threshold_m: 1500 # distance in metres from coastline threshold
@@ -123,17 +131,17 @@ constant:
 output:
   dataset:
     # Residential UPRNs and their point geometries
-    domestic_uprns: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{local_authority}_domestic_uprns.parquet"
+    domestic_uprns: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{release_date}/{local_authority}_domestic_uprns.parquet"
     # Residential UPRNs with all features for modelling, mapping and aggregation
-    domestic_uprns_with_features: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{local_authority}_with_features.parquet"
+    domestic_uprns_with_features: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{release_date}/{local_authority}_with_features.parquet"
     # Residential UPRNs with their most suitable low carbon heat technology group
-    uprns_most_suitable_tech: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_uprns_most_suitable_tech.parquet"
+    uprns_most_suitable_tech: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_uprns_most_suitable_tech.parquet"
     # Residential buildings with their most suitable low carbon heat technology group
-    buildings_most_suitable_tech: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_buildings_most_suitable_tech.parquet"
+    buildings_most_suitable_tech: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_buildings_most_suitable_tech.parquet"
     # Buildings containing domestic UPRNs aggregated into groups of neighbouring clusters of the same tech type
-    tech_clusters: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_clustered_tech_polygons.parquet"
+    tech_clusters: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_clustered_tech_polygons.parquet"
     # Opportunity areas with most suitable tech, cluster ID, contextual data
-    clusters_tech_contextual_info: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{local_authorities}_clusters_contextual_features_{tolerance_m}m.geojson"
+    clusters_tech_contextual_info: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_clusters_contextual_features_{tolerance_m}m.geojson"
   model:
     block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_building_classifier.pkl"
 
