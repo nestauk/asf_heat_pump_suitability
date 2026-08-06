@@ -486,11 +486,9 @@ if __name__ == "__main__":
         buildings_gdf=buildings_gdf, grid_squares=local_authority_dict["grid_squares"]
     )[["geometry"]]
 
-    combined_anchor_gdf = gpd.overlay(
-        combined_anchor_gdf,
-        boundary_gdf[["geometry"]],
-        how="intersection",
-    ).to_crs(epsg=4326)
+    combined_anchor_gdf = combined_anchor_gdf[
+        combined_anchor_gdf["geometry"].intersects(boundary_gdf.union_all())
+    ].to_crs(epsg=4326)
 
     print("Creating json with contextual features for each cluster and metadata...")
     geojson_file = create_json_contextual_features_metadata(
