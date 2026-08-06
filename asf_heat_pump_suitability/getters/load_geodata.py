@@ -186,7 +186,7 @@ def load_gdf_spatial_signatures_gb(
         detail_level (str, optional): Which level of descriptive detail to load.
             Must be either "simplified" or "full". Defaults to "simplified".
         signature_types (List[str], optional): Optional. List of spatial signature types to load. If None, all types are loaded.
-        boundary (shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame, optional): Optional. Boundary to load spatial signature polygons for or geodataframe of multiple boundary polygons.
+        boundary (shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame, optional): Optional. Boundary to load spatial signature polygons for, or geodataframe of multiple boundary polygons.
         local_authority (str, optional): Optional. Local Authority to load spatial signature polygons for. This is slower than using the boundary directly. If both `local_authority` and `boundary` arguments are passed, then `boundary` is used and `local_authority` is ignored.
 
     Returns:
