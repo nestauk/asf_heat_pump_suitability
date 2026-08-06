@@ -69,6 +69,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.utils import geo_utils, save_utils
     from asf_heat_pump_suitability.getters import (
         base_getters,
+        load_data,
         load_geodata,
         load_boundaries,
     )
@@ -81,7 +82,9 @@ if __name__ == "__main__":
         uprns,
         outdoor_space,
         epc,
+        coast,
         heat_network_zones,
+        lookups,
         city_centres,
         local_authority,
         listed_buildings,
@@ -255,6 +258,16 @@ if __name__ == "__main__":
     # ------------------------ #
     # CONTEXTUAL FEATURES
     # ------------------------ #
+    # ADD POSTCODE AND COUNTRY CODE FROM UPRN LOOKUP
+    uprn_lookup_df = load_data.load_df_uprn_lookup(
+        grid_squares=local_authority_dict["grid_squares"],
+        columns=["UPRN", "PCDS", "ctry25cd"],
+    )
+    uprn_lookup_df = lookups.transform_df_uprn_lookup(uprn_lookup_df)
+    features_df = features_df.join(
+        uprn_lookup_df.select(["UPRN", "postcode", "country"]), how="left", on="UPRN"
+    )
+
     # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE, SOLAR PV info, ESTIMATED CURRENT ENERGY CONSUMPTION and POSTCODE
     epc_df = pl.read_parquet(
         config["data"]["epc"]["domestic"],
@@ -266,7 +279,6 @@ if __name__ == "__main__":
             "SOLAR_WATER_HEATING_FLAG",
             "PHOTO_SUPPLY",
             "ENERGY_CONSUMPTION_CURRENT",
-            "POSTCODE",
         ],
     )
 
@@ -280,7 +292,6 @@ if __name__ == "__main__":
             "SOLAR_WATER_HEATING_FLAG",
             "ENERGY_CONSUMPTION_CURRENT",
             "PHOTO_SUPPLY",
-            "POSTCODE",
         ],
     )
 
@@ -298,24 +309,16 @@ if __name__ == "__main__":
 
     del listed_buildings_gdf
 
-    # Add number of off-gas properties
+    # Add off-gas label
 
-    off_gas_list = off_gas.process_off_gas_data()
-
-    code_point_gdf = load_geodata.load_gdf_code_points()
-
-    features_df = off_gas.extend_df_off_gas(
-        features_df=features_df,
-        uprns_gdf=uprns_gdf,
-        code_point_gdf=code_point_gdf,
-        off_gas_list=off_gas_list,
-        id_col=config["constant"]["id"]["building"],
-        max_distance_m=500,  # to be conservative
+    off_gas_postcodes = off_gas.load_transform_list_off_gas_postcodes()
+    features_df = features_df.with_columns(
+        pl.col("postcode").is_in(off_gas_postcodes).alias("off_gas")
     )
+    del off_gas_postcodes
 
+    # Add distance to salt water
     coast_gdf = load_geodata.load_gdf_gb_coast_boundaries()
-
-    from asf_heat_pump_suitability.pipeline.transform import coast
 
     features_df = coast.extend_df_near_coastline_bool(
         features_df=features_df,
@@ -330,12 +333,6 @@ if __name__ == "__main__":
     del coast_gdf
 
     # Add conservation area boolean flag
-
-    uprn_to_country_dict = load_geodata.load_transform_dict_uprn_to_country_mapping()
-
-    # Map UPRNs to their corresponding countries
-    uprns_gdf["COUNTRY"] = uprns_gdf["UPRN"].map(uprn_to_country_dict)
-
     uprns_protected_areas_df = protected_areas.load_transform_df_uprn_in_protected_area(
         gdf=uprns_gdf
     )
