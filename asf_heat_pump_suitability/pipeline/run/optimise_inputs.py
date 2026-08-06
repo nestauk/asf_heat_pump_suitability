@@ -110,7 +110,7 @@ def partition_geofile_to_grid_squares(
                 "No list of dataframes detected despite setting `multi-file` to True. Set to False or enter a list of dataframes for processing."
             )
 
-        existing_gs = {}
+        existing_gs = set()
         existing_suffixes = defaultdict(int)
 
         for chunk_df in df:
@@ -128,6 +128,7 @@ def partition_geofile_to_grid_squares(
                     f"Saving {len(partition):,} rows for grid square {grid_square} to {fpath.format(grid_square=fsuffix)}..."
                 )
                 save_utils.save_to_s3(partition, fpath.format(grid_square=fsuffix))
+                existing_gs.add(grid_square)
             del chunk_df
 
         # This is required if grid squares span across multiple files.
