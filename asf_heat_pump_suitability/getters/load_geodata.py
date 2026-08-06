@@ -93,7 +93,7 @@ def load_gdf_heat_network_zones(
     hn_gdf = _extend_gdf_hn_zone_id(hn_gdf)
     hn_gdf = geo_utils.verify_gdf_crs(gdf=hn_gdf)
 
-    hn_gdf["annotation"] = "DESNZ advanced heat network zoning"
+    hn_gdf["source_annotation"] = "DESNZ advanced heat network zoning"
 
     if boundary is not None:
         if local_authority is not None:
