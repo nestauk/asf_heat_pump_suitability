@@ -173,15 +173,17 @@ def load_gdf_heat_network_zones(
     """
     # Load all DESNZ heat network zones in England
     desnz_hn_gdf = load_desnz_heat_network_zones()
-    desnz_hn_gdf["annotation"] = "DESNZ advanced heat network zoning in England"
+    desnz_hn_gdf["source_annotation"] = "DESNZ advanced heat network zoning in England"
 
     # Load LHEES heat network zones in Scotland
     lhees_hn_gdf = load_lhees_heat_network_zones(s3_client)
-    lhees_hn_gdf["annotation"] = "LHEES heat network zoning in Scotland"
+    lhees_hn_gdf["source_annotation"] = "LHEES heat network zoning in Scotland"
 
     # Load priority areas for district heat networks in Wales
     wales_hn_gdf = load_wales_heat_network_zones(s3_client)
-    wales_hn_gdf["annotation"] = "Priority areas for district heat networks in Wales"
+    wales_hn_gdf["source_annotation"] = (
+        "Priority areas for district heat networks in Wales"
+    )
 
     hn_gdf = pd.concat([desnz_hn_gdf, lhees_hn_gdf, wales_hn_gdf], ignore_index=True)
 
@@ -276,7 +278,7 @@ def load_gdf_spatial_signatures_gb(
         detail_level (str, optional): Which level of descriptive detail to load.
             Must be either "simplified" or "full". Defaults to "simplified".
         signature_types (List[str], optional): Optional. List of spatial signature types to load. If None, all types are loaded.
-        boundary (shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame, optional): Optional. Boundary to load spatial signature polygons for or geodataframe of multiple boundary polygons.
+        boundary (shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame, optional): Optional. Boundary to load spatial signature polygons for, or geodataframe of multiple boundary polygons.
         local_authority (str, optional): Optional. Local Authority to load spatial signature polygons for. This is slower than using the boundary directly. If both `local_authority` and `boundary` arguments are passed, then `boundary` is used and `local_authority` is ignored.
 
     Returns:
@@ -336,7 +338,9 @@ def load_gdf_spatial_signatures_gb(
                 f"No spatial signatures found for Local Authority: {local_authority}."
             )
 
-    gdf["annotation"] = "Spatial signatures framework: " + gdf["type"]
+    gdf["source_annotation"] = (
+        "Spatial signatures framework: signatures types assumed to be representative of city centre areas"
+    )
 
     return gdf
 

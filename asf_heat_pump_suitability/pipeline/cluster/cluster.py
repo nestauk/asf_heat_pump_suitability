@@ -22,7 +22,7 @@ import pandas as pd
 import numpy as np
 import polars as pl
 import shapely
-from shapely.geometry import MultiPoint, Polygon, MultiPolygon
+from shapely.geometry import MultiPoint, Polygon, MultiPolygon, Point
 from asf_heat_pump_suitability.pipeline.transform import local_authority
 import libpysal
 import warnings
@@ -106,6 +106,7 @@ def generate_gdf_clusters(
             tech_gdf=tech_gdf,
             line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
+            id_col=id_col,
         )
         # TODO No reassignment based on neighbouring cells - TBC if wanted by user testing
         # gdfs.append(reassign_gdf_communal_networked(cells_gdf))
@@ -127,14 +128,14 @@ def generate_gdf_clusters(
             UserWarning,
         )
 
-    # Tech reassignment for cells within a certain distance of anchor properties
+    # Tech reassignment for building footprints within a certain distance of anchor properties
     reassigned_gdf = reassign_gdf_near_anchor_properties(
         tech_gdf=tech_gdf,
         combined_anchor_gdf=combined_anchor_gdf,
         radius=radius,
     )
 
-    cells_gdf["assigned_tech"] = cells_gdf.ID.map(
+    cells_gdf["assigned_tech"] = cells_gdf[id_col].map(
         reassigned_gdf.set_index(id_col).to_dict()["assigned_tech"]
     )
 
@@ -262,6 +263,8 @@ def extend_edges_gdf(
             num_pts = int(np.ceil(exterior.length / spacing))
             # Return a list of points at each segment-distance-interval along the exterior edge of the building
             pts = [exterior.interpolate(i * spacing) for i in range(num_pts)]
+            # Add corner vertices of building into list, dropping the last one which is a duplicate of the starting point
+            pts.extend(Point(coord) for coord in exterior.coords[:-1])
             all_points.extend(pts)
             all_ids.extend([id] * len(pts))
 
@@ -283,7 +286,8 @@ def extend_edges_gdf(
         "Joining Voronois to original building footprints and dissolving per footprint..."
     )
     # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
-    voronoi_gdf = voronoi_gdf.sjoin(points_gdf, how="inner", predicate="contains")
+    # Intersects (rather than contains) allows for small floating point errors without dropping Voronois
+    voronoi_gdf = voronoi_gdf.sjoin(points_gdf, how="inner", predicate="intersects")
     voronoi_gdf.geometry = voronoi_gdf.geometry.make_valid()
     voronoi_gdf = (voronoi_gdf.dissolve(by=id_col).reset_index()).clip(boundary)
 
@@ -346,6 +350,7 @@ def overlay_gdf_physical_barriers(
     tech_gdf: gpd.GeoDataFrame,
     line_overlay_gdf: gpd.GeoDataFrame,
     polygon_overlay_gdf: gpd.GeoDataFrame,
+    id_col: str,
 ) -> gpd.GeoDataFrame:
     """
     Conduct difference overlay of physical barriers onto Voronoi polygons. Physical barriers represent features of the
@@ -358,6 +363,7 @@ def overlay_gdf_physical_barriers(
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types
         line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries.
+        id_col (str): building ID column.
 
     Returns:
         gpd.GeoDataFrame: domestic building cells with overlapping physical barriers removed
@@ -375,10 +381,10 @@ def overlay_gdf_physical_barriers(
         cell_gdf=voronoi_gdf,
         building_gdf=tech_gdf,
         cell_id=cell_id_col,
-        building_cols=["ID", "assigned_tech", "geometry"],
+        building_cols=[id_col, "assigned_tech", "geometry"],
     )
     # Map each building to its corresponding Voronoi ID
-    cell_to_building_mapping = intersection_gdf.set_index(cell_id_col)["ID"].to_dict()
+    cell_to_building_mapping = intersection_gdf.set_index(cell_id_col)[id_col].to_dict()
 
     # Use the mapping to label the original Voronoi cells with the correct building ID
     voronoi_gdf["select_id"] = voronoi_gdf[cell_id_col].replace(
@@ -386,7 +392,7 @@ def overlay_gdf_physical_barriers(
     )
     # Filter to the rows where the building ID matches (i.e. only domestic buildings are retained here)
     domestic_voronoi_gdf = voronoi_gdf[
-        voronoi_gdf["ID"] == voronoi_gdf["select_id"]
+        voronoi_gdf[id_col] == voronoi_gdf["select_id"]
     ].drop(columns="select_id")
 
     # Remove areas covered by polygons and lines
@@ -762,10 +768,11 @@ def map_df_uprns_to_clusters(
         "cluster_id"
     ].to_dict()
     uprns_df = uprns_df.with_columns(
-        pl.col("ID").replace_strict(building_cluster_mapping).alias("cluster_id")
+        pl.col(building_id).replace_strict(building_cluster_mapping).alias("cluster_id")
     )
 
     return uprns_df
+
 
 
 def parse_arguments() -> argparse.Namespace:
