@@ -246,7 +246,7 @@ def load_gdf_spatial_signatures_gb(
                 f"No spatial signatures found for Local Authority: {local_authority}."
             )
 
-    gdf["annotation"] = (
+    gdf["source_annotation"] = (
         "Spatial signatures framework: signatures types assumed to be representative of city centre areas"
     )
 

@@ -470,8 +470,8 @@ if __name__ == "__main__":
     print("Creating layer with district HN potential and converting to EPSG:4326...")
     hn_potential = pd.concat(
         [
-            hn_zones_gdf[["geometry", "annotation"]],
-            spatial_signatures_gdf[["geometry", "annotation"]],
+            hn_zones_gdf[["geometry", "source_annotation"]],
+            spatial_signatures_gdf[["geometry", "source_annotation"]],
         ]
     ).to_crs(epsg=4326)
 
