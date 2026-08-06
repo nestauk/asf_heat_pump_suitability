@@ -97,6 +97,7 @@ def extend_df_contextual_features(
     - proximity to coastline flag (within 1500m)
     - protected area flag
     - within anchor load radius flag
+    - Logic trace for each cluster explaining why the assigned technology was chosen
 
     Args:
         clusters_df (pl.DataFrame): dataframe of clusters with cluster_id and `within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` feature
@@ -274,7 +275,7 @@ def extend_df_contextual_features(
         )
         .then(
             pl.lit(
-                "This cluster is in an area of district heat network potential, so homes are most suitable for a district heat network connection when/if a district heat network is constructed. \n A `communal solution` could be considered as an interim solution or as an alternative because it is within 50m of an anchor load (e.g. a hospital or school). \n There might also be one or multiple blocks of flats in the cluster.\n"
+                "This cluster is in an area of district heat network potential, so homes are most suitable for a district heat network connection when/if a district heat network is constructed. \n A 'communal solution' could be considered as an interim solution or as an alternative because it is within 50m of an anchor load (e.g. a hospital or school). \n There might also be one or multiple blocks of flats in the cluster.\n"
             )
         )
         # communal within 50m of anchor load
