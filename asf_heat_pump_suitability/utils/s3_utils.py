@@ -40,3 +40,19 @@ def fetch_list_file_paths_from_s3_folder(
                 file_paths.append(key)
 
     return file_paths
+
+
+def extract_tuple_bucket_prefix(s3_uri: str) -> tuple:
+    """
+    Extract bucket name and prefix (folder key) from an S3 URI.
+
+    Args:
+        s3_uri (str): S3 URI
+
+    Returns:
+        tuple: bucket name, folder prefix
+    """
+    bucket_name = s3_uri.split("s3://")[1].split("/")[0]
+    prefix = s3_uri.split(f"s3://{bucket_name}/")[1]
+
+    return (bucket_name, prefix)
