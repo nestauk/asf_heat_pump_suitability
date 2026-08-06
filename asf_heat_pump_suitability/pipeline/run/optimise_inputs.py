@@ -13,7 +13,9 @@ To run for specific datasets only:
 """
 
 import argparse
-import logging
+import warnings
+
+from typing import List
 
 import polars as pl
 import polars.selectors as cs
@@ -43,19 +45,25 @@ def build_df_grid_square_lookup() -> pl.DataFrame:
 
 
 def assign_df_grid_squares(
-    df: pl.DataFrame, x_col: str = "X", y_col: str = "Y"
+    df: pl.DataFrame,
+    x_col: str = "X",
+    y_col: str = "Y",
+    gs_lookup: pl.DataFrame = None,
 ) -> pl.DataFrame:
     """
     Join a grid square column to a UPRN DataFrame using X and Y coordinate information.
 
     Args:
         df (pl.DataFrame): UPRN data with X_COORDINATE and Y_COORDINATE columns in BNG (EPSG:27700).
+        gs_lookup (pl.DataFrame): grid square lookup with easting_100km and northing_100km corresponding to grid square values.
+        Optional. If None, defaults to generating new grid square lookup.
 
     Returns:
         pl.DataFrame: UPRNs with their corresponding grid square
     """
-    lookup = build_df_grid_square_lookup()
-    return (
+    if not gs_lookup:
+        gs_lookup = build_df_grid_square_lookup()
+    df = (
         df.with_columns(
             [
                 # Convert X and Y coordinates to single digit easting and northing values
@@ -63,13 +71,24 @@ def assign_df_grid_squares(
                 (pl.col(y_col) // 100000).cast(pl.Int32).alias("northing_100km"),
             ]
         )
-        .join(lookup, on=["easting_100km", "northing_100km"], how="left")
+        .join(gs_lookup, on=["easting_100km", "northing_100km"], how="left")
         .drop(["easting_100km", "northing_100km"])
     )
 
+    null_count = df["grid_square"].null_count()
+    if null_count > 0:
+        warnings.warn(
+            f"{null_count} UPRNs could not be assigned to a grid square and will be skipped."
+        )
+        df = df.drop_nulls(subset=["grid_square"])
+    return df
+
 
 def partition_geofile_to_grid_squares(
-    df: pl.DataFrame, grid_squares: list, fpath: str
+    df: pl.DataFrame | List[pl.DataFrame],
+    grid_squares: list,
+    fpath: str,
+    multi_file: bool = False,
 ) -> None:
     """
     Partition a single dataframe containing geospatial information into GB 100km grid squares and save to S3.
@@ -80,12 +99,17 @@ def partition_geofile_to_grid_squares(
         fpath (str): generic path to save partitioned files to. String must contain `{grid_square}` for formatting corresponding
         grid square for each file.
     """
-    for grid_square in grid_squares:
-        partition = df.filter(pl.col("grid_square") == grid_square).drop("grid_square")
-        print(
-            f"Saving {len(partition):,} rows for grid square {grid_square} to {fpath.format(grid_square=grid_square)}..."
-        )
-        save_utils.save_to_s3(partition, fpath.format(grid_square=grid_square))
+    if multi_file:
+        pass
+    else:
+        for grid_square in grid_squares:
+            partition = df.filter(pl.col("grid_square") == grid_square).drop(
+                "grid_square"
+            )
+            print(
+                f"Saving {len(partition):,} rows for grid square {grid_square} to {fpath.format(grid_square=grid_square)}..."
+            )
+            save_utils.save_to_s3(partition, fpath.format(grid_square=grid_square))
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -111,13 +135,42 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    import boto3
     from asf_heat_pump_suitability.getters import base_getters
+    from asf_heat_pump_suitability.utils import s3_utils
 
     args = parse_arguments()
     datasets = args.datasets
     grid_squares = (
         args.grid_squares or load_geodata.load_gdf_bng_grid_squares()["bng_ref"]
     )
+
+    gs_lookup = build_df_grid_square_lookup()
+
+    if not datasets or "UPRN_lookup" in datasets:
+        s3_client = boto3.client("s3")
+        path = config["data"]["geodata"]["gb_uprn_country_mapping"]
+        bucket_name = path.split("s3://")[1].split("/")[0]
+        prefix = path.split(f"s3://{bucket_name}/")[1]
+        uprn_lookup_files = s3_utils.fetch_list_file_paths_from_s3_folder(
+            s3_client=s3_client,
+            s3_bucket=bucket_name,
+            path_folder=prefix,
+            file_type=".csv",
+        )
+
+        for file in uprn_lookup_files:
+            uprn_lookup_df = pl.read_csv(file)
+            uprn_lookup_df = assign_df_grid_squares(
+                df=uprn_lookup_df,
+                x_col="GRIDGB1E",
+                y_col="GRIDGB1N",
+                gs_lookup=gs_lookup,
+            )
+            s3_fname = config["data"]["geodata"]["uk_osopen_uprn_partitioned"]
+            partition_geofile_to_grid_squares(
+                df=uprn_lookup_df, grid_squares=grid_squares, fpath=s3_fname
+            )
 
     if not datasets or "UPRN" in datasets or "EPC_domestic" in datasets:
         uprns_df = load_geodata.load_df_osopen_uprn(parquet=False)
@@ -127,15 +180,11 @@ if __name__ == "__main__":
             uprns_df, config["data"]["geodata"]["uk_osopen_uprn_parquet"]
         )
         uprns_df = assign_df_grid_squares(
-            uprns_df, x_col="X_COORDINATE", y_col="Y_COORDINATE"
+            uprns_df,
+            x_col="X_COORDINATE",
+            y_col="Y_COORDINATE",
+            gs_lookup=gs_lookup,
         )
-
-        null_count = uprns_df["grid_square"].null_count()
-        if null_count > 0:
-            logging.warning(
-                f"{null_count} UPRNs could not be assigned to a grid square and will be skipped."
-            )
-            uprns_df = uprns_df.drop_nulls(subset=["grid_square"])
 
         if not datasets or "UPRN" in datasets:
             s3_fname = config["data"]["geodata"]["uk_osopen_uprn_partitioned"]
