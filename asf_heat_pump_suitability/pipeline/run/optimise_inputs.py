@@ -227,9 +227,8 @@ if __name__ == "__main__":
 
     if not datasets or "UPRN_lookup" in datasets:
         s3_client = boto3.client("s3")
-        path = config["data"]["geodata"]["gb_uprn_country_mapping"]
-        bucket_name = path.split("s3://")[1].split("/")[0]
-        prefix = path.split(f"s3://{bucket_name}/")[1]
+        fpath = config["data"]["geodata"]["gb_uprn_lookup"]
+        bucket_name, prefix = s3_utils.extract_tuple_bucket_prefix(fpath)
         uprn_lookup_files = s3_utils.fetch_list_file_paths_from_s3_folder(
             s3_client=s3_client,
             s3_bucket=bucket_name,
