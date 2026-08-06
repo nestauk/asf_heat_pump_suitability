@@ -114,7 +114,7 @@ def partition_geofile_to_grid_squares(
         existing_suffixes = defaultdict(int)
 
         for chunk_df in df:
-            grid_squares = df["grid_square"].unique()
+            grid_squares = chunk_df["grid_square"].unique()
             for grid_square in grid_squares:
                 partition = chunk_df.filter(pl.col("grid_square") == grid_square).drop(
                     "grid_square"
