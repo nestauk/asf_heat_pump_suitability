@@ -16,9 +16,12 @@ import argparse
 import warnings
 
 from typing import List
+from collections import defaultdict
 
 import polars as pl
 import polars.selectors as cs
+
+import s3fs
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import load_geodata
@@ -61,7 +64,7 @@ def assign_df_grid_squares(
     Returns:
         pl.DataFrame: UPRNs with their corresponding grid square
     """
-    if not gs_lookup:
+    if gs_lookup is None:
         gs_lookup = build_df_grid_square_lookup()
     df = (
         df.with_columns(
@@ -94,14 +97,49 @@ def partition_geofile_to_grid_squares(
     Partition a single dataframe containing geospatial information into GB 100km grid squares and save to S3.
 
     Args:
-        df (pl.DataFrame): dataframe to partition containing `grid_square` column
+        df (pl.DataFrame): dataframe or list of dataframes to partition containing `grid_square` column
         grid_squares (list): all grid squares contained in `df`
         fpath (str): generic path to save partitioned files to. String must contain `{grid_square}` for formatting corresponding
         grid square for each file.
+        multi_file (bool): set to True if multiple source files are being partitioned. This handles grid squares spanning
+        across several files. Default False.
     """
     if multi_file:
-        pass
+        if not isinstance(df, list):
+            raise TypeError(
+                "No list of dataframes detected despite setting `multi-file` to True. Set to False or enter a list of dataframes for processing."
+            )
+
+        existing_gs = {}
+        existing_suffixes = defaultdict(int)
+
+        for chunk_df in df:
+            grid_squares = df["grid_square"].unique()
+            for grid_square in grid_squares:
+                partition = chunk_df.filter(pl.col("grid_square") == grid_square).drop(
+                    "grid_square"
+                )
+                if grid_square in existing_gs:
+                    existing_suffixes[grid_square] += 1
+                    fsuffix = grid_square + "_" + existing_suffixes["grid_square"]
+                else:
+                    fsuffix = grid_square
+                print(
+                    f"Saving {len(partition):,} rows for grid square {grid_square} to {fpath.format(grid_square=fsuffix)}..."
+                )
+                save_utils.save_to_s3(partition, fpath.format(grid_square=fsuffix))
+            del chunk_df
+
+        # This is required if grid squares span across multiple files.
+        # It ensures there is one file per grid square at the end.
+        _flatten_grid_square_files(
+            suffixes=existing_suffixes, fpath=fpath, clean_up=True
+        )
+
     else:
+        # Extract dataframe from list if there is just a single one
+        if isinstance(df, list) and len(df) == 1:
+            df = df[0]
         for grid_square in grid_squares:
             partition = df.filter(pl.col("grid_square") == grid_square).drop(
                 "grid_square"
@@ -110,6 +148,46 @@ def partition_geofile_to_grid_squares(
                 f"Saving {len(partition):,} rows for grid square {grid_square} to {fpath.format(grid_square=grid_square)}..."
             )
             save_utils.save_to_s3(partition, fpath.format(grid_square=grid_square))
+
+
+def _flatten_grid_square_files(suffixes: dict, fpath: str, clean_up: bool = True):
+    """
+    Flatten multiple data files for the same grid square with different suffixes (e.g. SX_1, SX_2,..., SX_n) into a
+    single grid square file (e.g. SX) and saves it to S3.
+
+    Args:
+        suffixes (dict): where keys are grid square references (e.g. SX, NT) and values are integers representing the maximum
+        suffix (e.g. this would be '3' if there are 3 additional files for a given grid square).
+        fpath (str): generic S3 path to save partitioned files to. String must contain `{grid_square}` for formatting corresponding
+        grid square for each file.
+        clean_up (bool): remove redundant files from S3 after flattening. Default True.
+    """
+    print("Aggregating multiple files created for the same grid squares...")
+    if clean_up:
+        fs = s3fs.S3FileSystem()
+    for grid_square in suffixes.keys():
+        # Load main grid square file to append the others to
+        dfs = [pl.read_parquet(fpath.format(grid_square=grid_square))]
+
+        # Generate all suffixes for the grid square
+        gs_suffixes = list(range(1, suffixes[grid_square] + 1, 1))
+
+        # Load all files for that grid square and save a final concatenated single file for the grid square
+        fsuffixes = [grid_square + "_" + suffix for suffix in gs_suffixes]
+        suffix_paths = [fpath.format(grid_square=fsuffix) for fsuffix in fsuffixes]
+        dfs.extend([pl.read_parquet(fpath) for fpath in suffix_paths])
+        print(
+            f"Concatenating {len(dfs)} files for grid square {grid_square} and saving to {fpath.format(grid_square=grid_square)}..."
+        )
+        save_utils.save_to_s3(
+            df=pl.concat(dfs), path=fpath.format(grid_square=grid_square)
+        )
+        del dfs
+
+        if clean_up:
+            # Delete the files with suffixes to clean up S3 folder
+            print(f"Removing redundant files after concatenation: {suffix_paths}")
+            fs.rm(suffix_paths)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -125,7 +203,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--datasets",
-        help="Datasets to process of: UPRN; POI; EPC_domestic; EPC_commercial. Defaults to all datasets with optimisation options.",
+        help="Datasets to process of: UPRN; UPRN_lookup; POI; EPC_domestic; EPC_commercial. Defaults to all datasets with optimisation options.",
         type=str,
         nargs="+",
         default=None,
@@ -159,18 +237,26 @@ if __name__ == "__main__":
             file_type=".csv",
         )
 
+        uprn_lookup_dfs = []
         for file in uprn_lookup_files:
-            uprn_lookup_df = pl.read_csv(file)
-            uprn_lookup_df = assign_df_grid_squares(
-                df=uprn_lookup_df,
-                x_col="GRIDGB1E",
-                y_col="GRIDGB1N",
-                gs_lookup=gs_lookup,
+            fpath = f"s3://asf-local-heat-planning-tool/{file}"
+            print(f"Loading UPRN lookup from: {fpath}")
+            uprn_lookup_df = pl.read_csv(fpath)
+            uprn_lookup_dfs.append(
+                assign_df_grid_squares(
+                    df=uprn_lookup_df,
+                    x_col="GRIDGB1E",
+                    y_col="GRIDGB1N",
+                    gs_lookup=gs_lookup,
+                )
             )
-            s3_fname = config["data"]["geodata"]["uk_osopen_uprn_partitioned"]
-            partition_geofile_to_grid_squares(
-                df=uprn_lookup_df, grid_squares=grid_squares, fpath=s3_fname
-            )
+        s3_fname = config["data"]["geodata"]["gb_uprn_lookup_partitioned"]
+        partition_geofile_to_grid_squares(
+            df=uprn_lookup_dfs,
+            grid_squares=grid_squares,
+            fpath=s3_fname,
+            multi_file=True,
+        )
 
     if not datasets or "UPRN" in datasets or "EPC_domestic" in datasets:
         uprns_df = load_geodata.load_df_osopen_uprn(parquet=False)
