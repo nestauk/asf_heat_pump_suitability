@@ -173,15 +173,17 @@ def load_gdf_heat_network_zones(
     """
     # Load all DESNZ heat network zones in England
     desnz_hn_gdf = load_desnz_heat_network_zones()
-    desnz_hn_gdf["annotation"] = "DESNZ advanced heat network zoning in England"
+    desnz_hn_gdf["source_annotation"] = "DESNZ advanced heat network zoning in England"
 
     # Load LHEES heat network zones in Scotland
     lhees_hn_gdf = load_lhees_heat_network_zones(s3_client)
-    lhees_hn_gdf["annotation"] = "LHEES heat network zoning in Scotland"
+    lhees_hn_gdf["source_annotation"] = "LHEES heat network zoning in Scotland"
 
     # Load priority areas for district heat networks in Wales
     wales_hn_gdf = load_wales_heat_network_zones(s3_client)
-    wales_hn_gdf["annotation"] = "Priority areas for district heat networks in Wales"
+    wales_hn_gdf["source_annotation"] = (
+        "Priority areas for district heat networks in Wales"
+    )
 
     hn_gdf = pd.concat([desnz_hn_gdf, lhees_hn_gdf, wales_hn_gdf], ignore_index=True)
 
