@@ -84,7 +84,7 @@ def generate_df_uprn_in_whs(
     """
     whs_gdf = load_transform_gdf_scottish_world_heritage_sites()
 
-    gdf = gdf[gdf[country_col] == "Scotland"].copy()
+    gdf = gdf[gdf[country_col] == "S"].copy()
     gdf = gdf.sjoin(whs_gdf, how="left", predicate="intersects").drop_duplicates(
         subset="UPRN"
     )
@@ -142,7 +142,7 @@ def generate_df_conservation_area_data_availability(
 
     df = (
         extend_df_country_col(df, lsoa_col="LAD23CD")
-        .filter(pl.col("country").is_in(["England", "Wales"]))
+        .filter(pl.col("country").is_in(["E", "W"]))
         .drop("country")
     )
 
@@ -160,12 +160,7 @@ def extend_df_country_col(df: pl.DataFrame, lsoa_col: str = "lsoa") -> pl.DataFr
     Returns:
         pl.DataFrame: dataframe with new "country" column
     """
-    df = df.with_columns(pl.col(lsoa_col).str.slice(0, 1).alias("country"))
-    df = df.with_columns(
-        pl.col("country").replace({"E": "England", "S": "Scotland", "W": "Wales"})
-    )
-
-    return df
+    return df.with_columns(pl.col(lsoa_col).str.slice(0, 1).alias("country"))
 
 
 def extend_df_protected_area_bool(
@@ -182,7 +177,6 @@ def extend_df_protected_area_bool(
     Returns:
         pl.DataFrame: Input dataframe extended with boolean column indicating whether each UPRN is within a protected area.
     """
-
     features_df = features_df.join(
         protected_areas_df.select(["UPRN", "in_protected_area"]),
         how="left",
