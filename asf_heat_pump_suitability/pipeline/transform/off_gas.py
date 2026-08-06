@@ -8,7 +8,7 @@ from asf_heat_pump_suitability.getters import load_data
 
 def process_off_gas_data() -> List[str]:
     """
-    This function processes the off-gas data by removing spaces from the postcodes and converting them to a list.
+    Process the off-gas data by removing spaces from the postcodes and converting them to a list.
 
     Returns:
         List[str]: The list of processed off-gas postcodes.
@@ -20,7 +20,7 @@ def process_off_gas_data() -> List[str]:
 
 def add_off_gas_feature(df: pl.DataFrame, off_gas_postcodes: List[str]) -> pl.DataFrame:
     """
-    This function adds an 'off_gas' column to a DataFrame based on whether 'POSTCODE' is in off_gas_postcodes.
+    Add an 'off_gas' column to a DataFrame based on whether 'POSTCODE' is in off_gas_postcodes.
 
     Args:
         df (pl.DataFrame): EPC dataset with postcode column
