@@ -472,52 +472,6 @@ def load_gdf_gb_coast_boundaries():
     return coast_gdf
 
 
-def load_transform_dict_uprn_to_country_mapping() -> dict:
-    """
-    Load and transform the UPRN to country mapping data from S3.
-
-    Returns:
-        dict: A dictionary mapping UPRN to corresponding country information.
-    """
-
-    print("Loading UPRN to country mapping...")
-    s3_client = boto3.client("s3")
-
-    path = config["data"]["geodata"]["gb_uprn_country_mapping"]
-    bucket_name = path.split("s3://")[1].split("/")[0]
-    prefix = path.split(f"s3://{bucket_name}/")[1]
-
-    response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-    files = [
-        f"s3://{bucket_name}/{obj['Key']}"
-        for obj in response.get("Contents", [])
-        if obj["Key"].endswith(".csv")
-    ]
-
-    uprn_to_country_df = pd.concat(
-        [pd.read_csv(file, usecols=["UPRN", "PCDS", "ctry25cd"]) for file in files],
-        ignore_index=True,
-    )
-
-    uprn_to_country_df["COUNTRY"] = (
-        uprn_to_country_df["ctry25cd"]
-        .str[0]
-        .map(
-            {
-                "E": "England",
-                "W": "Wales",
-                "S": "Scotland",
-            }
-        )
-    )
-
-    uprn_to_country_dict = dict(
-        zip(uprn_to_country_df["UPRN"], uprn_to_country_df["COUNTRY"])
-    )
-
-    return uprn_to_country_dict
-
-
 def load_gdf_listed_buildings(nation: str = "GB", **kwargs) -> gpd.GeoDataFrame:
     """
     Get raw Listed Buildings polygons dataset for specified nation. CRS EPSG:27700, British National Grid.
