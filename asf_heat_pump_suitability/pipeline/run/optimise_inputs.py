@@ -121,7 +121,7 @@ def partition_geofile_to_grid_squares(
                 )
                 if grid_square in existing_gs:
                     existing_suffixes[grid_square] += 1
-                    fsuffix = grid_square + "_" + existing_suffixes["grid_square"]
+                    fsuffix = grid_square + "_" + str(existing_suffixes[grid_square])
                 else:
                     fsuffix = grid_square
                 print(
@@ -174,7 +174,7 @@ def _flatten_grid_square_files(suffixes: dict, fpath: str, clean_up: bool = True
         gs_suffixes = list(range(1, suffixes[grid_square] + 1, 1))
 
         # Load all files for that grid square and save a final concatenated single file for the grid square
-        fsuffixes = [grid_square + "_" + suffix for suffix in gs_suffixes]
+        fsuffixes = [grid_square + "_" + str(suffix) for suffix in gs_suffixes]
         suffix_paths = [fpath.format(grid_square=fsuffix) for fsuffix in fsuffixes]
         dfs.extend([pl.read_parquet(fpath) for fpath in suffix_paths])
         print(
