@@ -105,6 +105,13 @@ constant:
     heat_networks: "DHNZ"
     individual_or_networked: "IND_or_NHP"
     individual_or_heat_network: "IND_or_DHNZ"
+  tech_colour_mapping:
+    individual: "#00B197"
+    networked: "#0E0EFE"
+    communal: "#FF6945"
+    heat_networks: "#A91BC1"
+    individual_or_networked: "grey"
+    individual_or_heat_network: "grey"
   anchor_radius: 50 # radius in metres around anchor properties within which we are reassigning N-GSHP to communal
   coastline:
     distance_from_coastline_threshold_m: 1500 # distance in metres from coastline threshold

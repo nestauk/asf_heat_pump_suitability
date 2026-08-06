@@ -277,8 +277,8 @@ def create_gdf_contextual_features(
     Args:
         uprns_df (pl.DataFrame): dataframe of UPRNs and UPRN-level features
         clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
-        hn_zones_gdf (gpd.GeoDataFrame): geodataframe of heat network zones with geometry and annotation
-        spatial_signatures_gdf (gpd.GeoDataFrame): geodataframe of spatial signatures with geometry and annotation
+        hn_zones_gdf (gpd.GeoDataFrame): geodataframe of heat network zones with geometry and source annotation
+        city_centre_signatures_gdf (gpd.GeoDataFrame): geodataframe of spatial signatures representing city centre areas with geometry and source annotation
     Returns:
         gpd.GeoDataFrame: geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
     """
@@ -476,8 +476,8 @@ if __name__ == "__main__":
     print("Creating layer with district HN potential and converting to EPSG:4326...")
     hn_potential = pd.concat(
         [
-            hn_zones_gdf[["geometry", "annotation"]],
-            spatial_signatures_gdf[["geometry", "annotation"]],
+            hn_zones_gdf[["geometry", "source_annotation"]],
+            spatial_signatures_gdf[["geometry", "source_annotation"]],
         ]
     ).to_crs(epsg=4326)
 
