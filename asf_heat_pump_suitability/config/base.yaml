@@ -29,6 +29,7 @@ data:
     gb_coast_boundaries: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
     # Path to folder with UPRN to country mapping files for GB
     gb_uprn_country_mapping: "s3://asf-local-heat-planning-tool/inputs/lookup/NSUL_DEC_2025/"
+    gb_uprn_lookup_partitioned: "s3://asf-local-heat-planning-tool/inputs/lookup/NSUL_DEC_2025_partitioned/{grid_square}_NSUL.parquet"
 
     boundaries:
       # UK LA boundaries
