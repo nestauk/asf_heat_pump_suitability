@@ -89,8 +89,8 @@ def load_gdf_ward_boundaries(
                 "la_boundaries_gdf must be provided if select_las is specified."
             )
         print(f"Loading ward boundaries for {select_las}...")
-        wards_gdf = gpd.sjoin(
-            wards_gdf, la_boundaries_gdf, how="inner", predicate="intersects"
+        wards_gdf = wards_gdf.sjoin(
+           la_boundaries_gdf, how="inner", predicate="intersects"
         )
         return wards_gdf
     else:
