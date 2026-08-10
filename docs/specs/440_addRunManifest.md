@@ -182,6 +182,19 @@ review agreeing with Aidan's own inline comment):
 - ~~What `git_commit` should record when `git rev-parse HEAD` isn't
   available~~ — resolved during implementation: an `"unknown"` sentinel
   with a logged warning, never a hard failure.
+- **Reconcile with PR #458 (decision tree restructure) — whichever PR
+  merges second owns this.** #458 moves HN zones and spatial signatures
+  between stages, invalidating three `stage_input_keys` lists and one
+  manifest param: `add_features` loses its `--detail` arg (the manifest
+  write's `"detail": args.detail` would raise `AttributeError`), both
+  heat_network_zones keys and both gb_spatial_signatures keys; `cluster`
+  loses `heat_network_zones.desnz_polygons`; `compute_contextual_features`
+  gains `--detail` (add to its manifest params), the spatial signatures
+  keys and the HN zone keys. The existing tests catch neither direction —
+  removed inputs still resolve in config, added inputs are silent
+  omissions — which is a live instance of the manual-sync risk flagged at
+  review and motivates the follow-up issue on deriving input lists from
+  the getters.
 
 ## Verification
 
