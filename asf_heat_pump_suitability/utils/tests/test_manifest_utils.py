@@ -212,8 +212,8 @@ class TestSaveManifestToS3:
         ), "Warning log does not name the manifest path that failed to write"
 
 
-class TestSaveRunManifestToS3:
-    """Tests for `save_run_manifest_to_s3`."""
+class TestGenerateAndSaveRunManifestToS3:
+    """Tests for `generate_and_save_run_manifest_to_s3`."""
 
     def test_builds_manifest_from_args_and_saves_against_output_path(self, mocker):
         """The wrapper generates the manifest from the script arguments and
@@ -221,14 +221,14 @@ class TestSaveRunManifestToS3:
         mock_save_manifest_to_s3 = mocker.patch.object(
             manifest_utils, "save_manifest_to_s3"
         )
-        manifest_utils.save_run_manifest_to_s3(
+        manifest_utils.generate_and_save_run_manifest_to_s3(
             "s3://bucket/dir/output.parquet",
             stage="uprns",
             local_authority="plymouth",
             row_count=123,
             params={"local_authorities": ["plymouth"], "release_date": "20260722"},
         )
-        # args passed to 'save_manifest_to_s3' within the 'save_run_manifest_to_s3' function
+        # args passed to 'save_manifest_to_s3' within the 'generate_and_save_run_manifest_to_s3' function
         manifest, output_path = mock_save_manifest_to_s3.call_args.args
         assert (
             output_path == "s3://bucket/dir/output.parquet"

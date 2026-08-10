@@ -112,7 +112,11 @@ Decisions settled at review (Aidan's call, 2026-07-22):
 
 Decisions settled at review (Aidan's call, 2026-07-24):
 
-- **Entrypoints call a single `save_run_manifest_to_s3` wrapper** instead of
+- **Entrypoints call a single `generate_and_save_run_manifest_to_s3` wrapper**
+  (named `save_run_manifest_to_s3` until reviewer feedback on 2026-08-10:
+  one syllable apart from the wrapped `save_manifest_to_s3`, the old name
+  hid which function a script should call; the new name encodes the
+  build-then-write relationship) instead of
   nesting `generate_dict_run_manifest` inside `save_manifest_to_s3` at every
   call site — the identical two-call pattern repeated in all five entrypoints.
   The wrapper takes explicit typed parameters (not `**kwargs`, which would
@@ -131,7 +135,7 @@ review agreeing with Aidan's own inline comment):
   `identify_gdf_tuple_most_suitable_tech_uprn_and_building` becomes a pure
   transform (drops its `save`/`release_date`/`local_authorities` params); the
   entrypoint derives each output path **once** and passes it to both
-  `save_to_s3` and `save_run_manifest_to_s3`. The clincher was
+  `save_to_s3` and `generate_and_save_run_manifest_to_s3`. The clincher was
   manifest correctness, not tidiness: the interim state derived the path
   twice (inside the function for the write, in `__main__` for the manifest),
   so a drift between the two derivations would make the manifest silently

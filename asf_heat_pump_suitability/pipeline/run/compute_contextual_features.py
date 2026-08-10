@@ -458,7 +458,7 @@ if __name__ == "__main__":
         # Only the dated data-science copy gets a run manifest; the undated
         # front-end copy above is overwritten every run, so there is no
         # version history to attach lineage to.
-        manifest_utils.save_run_manifest_to_s3(
+        manifest_utils.generate_and_save_run_manifest_to_s3(
             s3_file_path,
             stage="compute_contextual_features",
             local_authority=local_authority_dict["url_slug"],

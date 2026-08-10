@@ -143,7 +143,7 @@ def generate_dict_run_manifest(
     }
 
 
-def save_run_manifest_to_s3(
+def generate_and_save_run_manifest_to_s3(
     output_path: str,
     stage: str,
     local_authority: str,
