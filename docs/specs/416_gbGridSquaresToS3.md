@@ -1,6 +1,6 @@
 ---
 title: Add GB-wide OS grid square data to S3 and repoint the pipeline
-status: in-review
+status: implemented
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/416
 pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/424
 asana: https://app.asana.com/1/5571817120120/project/1214222223606748/task/1216293268467171
