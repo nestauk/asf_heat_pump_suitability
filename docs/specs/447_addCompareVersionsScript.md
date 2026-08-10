@@ -24,15 +24,22 @@ each extend the report this issue creates.
 ## Proposal
 
 A new module, `pipeline/validate/compare_versions.py`, takes a pipeline
-stage, a local authority, two dated versions (`release_date` folders), and an
-explicit trigger (`methodology_change` or `input_release`) supplied by
-whoever runs the comparison — they know why they're running it, and that's
-the one piece of context the script can't infer. It reports:
+stage and a local authority, plus optionally two dated versions
+(`release_date` folders) — omitted, it compares the latest two dated
+versions found for that stage and LA, so the routine current-vs-previous
+comparison runs with no version bookkeeping — and an optional trigger
+(`methodology_change` or `input_release`) supplied by whoever runs the
+comparison — they know why they're running it, and that's the one piece of
+context the script can't infer. The trigger deliberately has no default:
+omitted, the report presents raw numbers only, skipping rubric
+interpretation (including the rubric-keyed tolerance warnings). It reports:
 
 - row/UPRN count delta
 - schema diff
 - UPRN churn (added/removed/retained, joined on UPRN)
-- tech-assignment transition matrix for the decision-tree stage
+- tech-assignment transition matrix for the decision-tree stage, plus
+  per-tech marginal counts for both the UPRN-level and building-level
+  outputs
 - a module-scoped commit log between the two versions' recorded commits,
   read from each version's run manifest (`{output_basename}.manifest.json`,
   #440) — so the reader sees which commits are the candidate cause of a
@@ -63,6 +70,22 @@ Decisions settled during kickoff interview (2026-07-23):
   bodies reference this issue's branch name, and the thresholding issue
   still carries a confirm-criteria-first flag (drafts doc, issues 4–6).
 
+Decisions added 2026-08-10, reconciling the Asana high-priority metric list
+(see the drafts doc's header note) — the implementation predates these, so
+they are the unchecked Verification items below:
+
+- **Version pair becomes optional**, defaulting to the latest two dated
+  versions found for the stage and LA — the "comparison happens
+  automatically" steer. Output versions only; auto-detecting _input_
+  prefixes stays with #429.
+- **Trigger becomes optional with no default.** Omitted, the report is raw
+  numbers with no rubric interpretation — a silently-defaulted trigger would
+  grade drift against the wrong rubric, which is worse than no rubric.
+- **Per-tech marginal counts at both UPRN and building level** join the
+  transition matrix in the report. This does not reopen the rejected
+  building-level _matrix_: marginal counts are per-version tallies needing
+  no cross-version key, so building-ID instability doesn't pollute them.
+
 ## Alternatives considered
 
 - **`pipeline/run/compare_versions.py`** — rejected; avoids the trivial
@@ -79,6 +102,11 @@ Decisions settled during kickoff interview (2026-07-23):
 - **Storing the comparison trigger in the manifest** — rejected during the
   stack's design (drafts doc): the trigger is supplied by whoever runs the
   comparison, who knows at that moment which rubric applies.
+- **Defaulting the trigger to `methodology_change`** — rejected 2026-08-10
+  when the trigger became optional; the two rubrics have near-opposite
+  expectations for the same signals, so a forgotten flag would silently
+  grade an input release against the methodology rubric (or vice versa).
+  Omitting the trigger degrades to raw numbers instead.
 
 ## Out of scope
 
@@ -123,8 +151,8 @@ Implementation decisions within the spec's frame:
 ## Verification
 
 - [x] Runs against two dated version folders for one LA and one stage
-- [x] Accepts an explicit trigger input (`methodology_change` /
-      `input_release`); report states which rubric it was read against
+- [x] Accepts a trigger input (`methodology_change` / `input_release`);
+      report states which rubric it was read against
 - [x] Reports row/UPRN count delta, schema diff, and UPRN churn
       (added/removed/retained)
 - [x] Tech-assignment transition matrix for the decision-tree stage
@@ -133,3 +161,14 @@ Implementation decisions within the spec's frame:
       module-scoped commit log between the two recorded commits in the
       report
 - [x] Unit tests cover: no drift, expected UPRN churn, unexpected UPRN loss
+
+Added 2026-08-10 (not yet implemented):
+
+- [ ] When versions are omitted, defaults to the latest two dated versions
+      found for that stage and LA
+- [ ] Trigger is optional with no default; omitted, the report presents raw
+      numbers with no rubric interpretation or tolerance warnings
+- [ ] Per-tech marginal counts reported for both the UPRN-level and
+      building-level decision-tree outputs
+- [ ] Unit tests cover: default version selection picks the latest two;
+      omitted-trigger report carries no rubric labels
