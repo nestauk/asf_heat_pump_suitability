@@ -247,3 +247,9 @@ def convert_gdf_to_df(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
     assert gdf.geom_type.unique() == "Point"
     gdf[["X", "Y"]] = gdf.get_coordinates()
     return pl.from_pandas(gdf.drop(columns="geometry"))
+
+
+def generate_geom_bounding_poly(
+    gdf: gpd.GeoDataFrame,
+) -> shapely.Polygon | shapely.MultiPolygon:
+    return gdf.union_all().convex_hull
