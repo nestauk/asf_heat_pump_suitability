@@ -60,7 +60,7 @@ class TestStageInputKeys:
     """Tests for the curated `STAGE_INPUT_KEYS` lists."""
 
     def test_covers_the_five_pipeline_stages(self):
-        """One curated list exists per pipeline entrypoint."""
+        """One curated list exists per pipeline script."""
         assert set(manifest_utils.STAGE_INPUT_KEYS) == {
             "uprns",
             "add_features",
@@ -81,7 +81,7 @@ class TestStageInputKeys:
 
 @pytest.fixture(scope="class")
 def manifest():
-    """Run manifest built once with hand-crafted entrypoint arguments,
+    """Run manifest built once with hand-crafted script arguments,
     exercising the default per-stage input_keys lookup."""
     return manifest_utils.generate_dict_run_manifest(
         stage="uprns",
@@ -187,7 +187,7 @@ class TestSaveRunManifestToS3:
     """Tests for `save_run_manifest_to_s3`."""
 
     def test_builds_manifest_from_args_and_saves_against_output_path(self, mocker):
-        """The wrapper generates the manifest from the entrypoint arguments and
+        """The wrapper generates the manifest from the script arguments and
         hands it to `save_manifest_to_s3` with the output path."""
         save = mocker.patch.object(manifest_utils, "save_manifest_to_s3")
         manifest_utils.save_run_manifest_to_s3(
