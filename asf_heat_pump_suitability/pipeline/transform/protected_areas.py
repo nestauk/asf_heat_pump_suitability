@@ -70,7 +70,7 @@ def transform_gdf_building_cons_areas() -> gpd.GeoDataFrame:
 
 
 def generate_df_uprn_in_whs(
-    gdf: gpd.GeoDataFrame, country_col: str = "COUNTRY"
+    gdf: gpd.GeoDataFrame, country_col: str = "country"
 ) -> pl.DataFrame:
     """
     Generate dataframe to flag UPRNs located within World Heritage Sites in Scotland.
