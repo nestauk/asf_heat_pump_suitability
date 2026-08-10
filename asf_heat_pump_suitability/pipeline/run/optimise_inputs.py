@@ -24,6 +24,7 @@ import polars.selectors as cs
 import s3fs
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.schemas import nsul_schema
 from asf_heat_pump_suitability.getters import load_geodata
 from asf_heat_pump_suitability.utils import save_utils, geo_utils
 
@@ -177,6 +178,9 @@ def _flatten_grid_square_files(suffixes: dict, fpath: str, clean_up: bool = True
         fsuffixes = [grid_square + "_" + str(suffix) for suffix in gs_suffixes]
         suffix_paths = [fpath.format(grid_square=fsuffix) for fsuffix in fsuffixes]
         dfs.extend([pl.read_parquet(fpath) for fpath in suffix_paths])
+        # Cast to same schema - some dfs read ruc21ind col as Int while others read as string because of formatting
+        # diffs between Scotland and England & Wales
+        dfs = [df.cast(nsul_schema.schema) for df in dfs]
         print(
             f"Concatenating {len(dfs)} files for grid square {grid_square} and saving to {fpath.format(grid_square=grid_square)}..."
         )
