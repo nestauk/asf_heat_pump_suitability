@@ -269,8 +269,8 @@ if __name__ == "__main__":
     )
 
     # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE, SOLAR PV info, ESTIMATED CURRENT ENERGY CONSUMPTION and POSTCODE
-    epc_df = pl.read_parquet(
-        config["data"]["epc"]["domestic"],
+    epc_df = load_data.load_df_domestic_epc(
+        grid_squares=local_authority_dict["grid_squares"],
         columns=[
             "UPRN",
             "TENURE",
