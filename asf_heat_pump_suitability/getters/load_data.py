@@ -119,3 +119,27 @@ def load_df_uprn_lookup(grid_squares: Optional[List[str]], **kwargs) -> pl.DataF
         )
 
         return pl.concat([pl.read_parquet(file, **kwargs) for file in files])
+
+
+def load_df_domestic_epc(grid_squares: Optional[List[str]], **kwargs) -> pl.DataFrame:
+    """
+    Load processed domestic EPC data (processed with asf-daps) for given grid squares or all of Great Britain.
+
+    Args:
+        grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded. Default None to load whole GB.
+        **kwargs for polars.read_parquet()
+
+    Returns:
+        pl.DataFrame: domestic EPC data
+    """
+    print("Loading domestic EPC data...")
+    if grid_squares:
+        uri = config["data"]["epc"]["domestic_partitioned"]
+        return pl.concat(
+            [
+                pl.read_parquet(uri.format(grid_square=grid_square), **kwargs)
+                for grid_square in grid_squares
+            ]
+        )
+    else:
+        return pl.read_parquet(config["data"]["epc"]["domestic"], **kwargs)
