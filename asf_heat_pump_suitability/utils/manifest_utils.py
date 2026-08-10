@@ -10,6 +10,7 @@ pipeline/run/create_manifest.py.
 
 import json
 import logging
+import os
 import subprocess
 from datetime import datetime, timezone
 
@@ -182,7 +183,9 @@ def get_str_manifest_path(output_path: str) -> str:
     Returns:
         str: co-located path ending `.manifest.json`
     """
-    return output_path.rsplit(".", 1)[0] + MANIFEST_SUFFIX
+    # os.path.splitext, not pathlib: Path mangles "s3://" URLs and Path.stem
+    # drops the directory. splitext only touches the extension.
+    return os.path.splitext(output_path)[0] + MANIFEST_SUFFIX
 
 
 def save_manifest_to_s3(manifest: dict, output_path: str) -> None:
