@@ -212,9 +212,12 @@ if __name__ == "__main__":
     # TODO scale beyond Plymouth. This is a temporary fix to working with multiple LAs
     print("Loading land registry data...")
     inspire_file_gdf = gpd.read_file(config["data"]["processed"]["inspire_file_names"])
-    inspire_file_names = uprns_gdf.sjoin(
-        inspire_file_gdf, how="inner", predicate="intersects"
-    )["inspire_file_name"].unique()
+
+    # Get file names of INSPIRE files which overlap with UPRNs
+    uprns_poly = geo_utils.generate_geom_bounding_poly(uprns_gdf)
+    inspire_file_names = inspire_file_gdf[
+        inspire_file_gdf.geometry.intersects(uprns_poly)
+    ]["inspire_file_name"].unique()
 
     land_parcels_gdf = pd.concat(
         [
