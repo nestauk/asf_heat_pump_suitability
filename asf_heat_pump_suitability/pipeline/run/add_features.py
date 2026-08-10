@@ -114,6 +114,17 @@ if __name__ == "__main__":
         columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
     )
 
+    # ADD POSTCODE AND COUNTRY CODE FROM UPRN LOOKUP
+    uprn_lookup_df = load_data.load_df_uprn_lookup(
+        grid_squares=local_authority_dict["grid_squares"],
+        columns=["UPRN", "PCDS", "ctry25cd"],
+    )
+    uprn_lookup_df = lookups.transform_df_uprn_lookup(uprn_lookup_df)
+    uprns_df = uprns_df.join(
+        uprn_lookup_df.select(["UPRN", "postcode", "country"]), how="left", on="UPRN"
+    )
+    del uprn_lookup_df
+
     # Get geopoints of UPRNs
     uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
 
@@ -258,16 +269,6 @@ if __name__ == "__main__":
     # ------------------------ #
     # CONTEXTUAL FEATURES
     # ------------------------ #
-    # ADD POSTCODE AND COUNTRY CODE FROM UPRN LOOKUP
-    uprn_lookup_df = load_data.load_df_uprn_lookup(
-        grid_squares=local_authority_dict["grid_squares"],
-        columns=["UPRN", "PCDS", "ctry25cd"],
-    )
-    uprn_lookup_df = lookups.transform_df_uprn_lookup(uprn_lookup_df)
-    features_df = features_df.join(
-        uprn_lookup_df.select(["UPRN", "postcode", "country"]), how="left", on="UPRN"
-    )
-
     # ADD EPC FEATURES - EPC RATING, ATTACHMENT, TENURE, SOLAR PV info, ESTIMATED CURRENT ENERGY CONSUMPTION and POSTCODE
     epc_df = load_data.load_df_domestic_epc(
         grid_squares=local_authority_dict["grid_squares"],
