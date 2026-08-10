@@ -132,6 +132,8 @@ def generate_dict_run_manifest(
     return {
         "stage": stage,
         "local_authority": local_authority,
+        # UTC, matching S3's own file timestamps; the string carries its
+        # timezone with it (ends "+00:00")
         "run_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "git_commit": get_str_git_commit(),
         "input_versions": generate_dict_input_versions(input_keys),
