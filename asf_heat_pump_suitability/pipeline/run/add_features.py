@@ -313,6 +313,7 @@ if __name__ == "__main__":
             "W": "Wales",
         }
         nation = mapping[countries[0]]
+    # TODO this seems to have gotten slower after specifying nation over GB?
     listed_buildings_gdf = listed_buildings.transform_gdf_listed_buildings(
         nation=nation
     )
