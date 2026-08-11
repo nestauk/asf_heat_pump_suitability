@@ -247,19 +247,3 @@ def convert_gdf_to_df(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
     assert gdf.geom_type.unique() == "Point"
     gdf[["X", "Y"]] = gdf.get_coordinates()
     return pl.from_pandas(gdf.drop(columns="geometry"))
-
-
-def generate_geom_concave_hull(
-    gdf: gpd.GeoDataFrame,
-) -> shapely.Polygon | shapely.MultiPolygon:
-    """
-    Generate the total concave hull of a geodataframe.
-
-    Args:
-         gdf (gpd.GeoDataFrame): containing geometries of interest
-
-    Returns:
-        shapely.Polygon | shapely.MultiPolygon: concave hull of geodataframe
-    """
-    union = gdf.union_all()
-    return shapely.concave_hull(union)
