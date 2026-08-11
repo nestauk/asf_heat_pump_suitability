@@ -213,11 +213,10 @@ if __name__ == "__main__":
     print("Loading land registry data...")
     inspire_file_gdf = gpd.read_file(config["data"]["processed"]["inspire_file_names"])
 
-    # Get file names of INSPIRE files which overlap with UPRNs
-    uprns_poly = geo_utils.generate_geom_concave_hull(uprns_gdf)
-    inspire_file_names = inspire_file_gdf[
-        inspire_file_gdf.geometry.intersects(uprns_poly)
-    ]["inspire_file_name"].unique()
+    # Get file names of INSPIRE files which intersect with UPRNs
+    inspire_file_names = inspire_file_gdf.sjoin(
+        uprns_gdf, how="inner", predicate="intersects"
+    )["inspire_file_name"].unique()
 
     land_parcels_gdf = pd.concat(
         [
@@ -324,6 +323,7 @@ if __name__ == "__main__":
     # Add distance to salt water
 
     # Load coastline and clip to LA boundaries first
+    # Load boundary
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
         select_las=local_authority_dict["valid_local_authorities"]
     )
