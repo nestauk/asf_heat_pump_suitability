@@ -211,7 +211,9 @@ if __name__ == "__main__":
     # ESTIMATE OUTDOOR SPACE
     # TODO scale beyond Plymouth. This is a temporary fix to working with multiple LAs
     print("Loading land registry data...")
-    inspire_file_gdf = gpd.read_file(config["data"]["processed"]["inspire_file_names"])
+    inspire_file_gdf = gpd.read_parquet(
+        config["data"]["processed"]["inspire_file_names"]
+    )
 
     # Get file names of INSPIRE files which intersect with UPRNs
     inspire_file_names = inspire_file_gdf.sjoin(
