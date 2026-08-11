@@ -168,7 +168,19 @@ def generate_gdf_clusters(
     # At this point we have multiple rows of each cluster geometry with one row for every building within the cluster.
     # We need to flatten the cluster geometries to one row per cluster, aggregating the within_anchor_radius boolean flag.
     # Selecting `max` of the boolean will mean any clusters containing one building within the anchor radius will be labelled as within the radius.
-    clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max").reset_index()
+    # clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max").reset_index()
+    clusters_gdf = (
+        clusters_gdf.groupby(by="cluster_id")
+        .agg(
+            {
+                "geometry": "first",
+                "assigned_tech": "first",
+                f"within_{radius}m_from_anchor_load": "max",
+            }
+        )
+        .reset_index()
+        .set_geometry(column="geometry", crs=clusters_gdf.crs)
+    )
 
     # TODO move to testing when sample set available
     if round(clusters_gdf["geometry"].area.sum(), 3) > round(
@@ -285,11 +297,12 @@ def extend_edges_gdf(
     print(
         "Joining Voronois to original building footprints and dissolving per footprint..."
     )
+
     # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
     # Intersects (rather than contains) allows for small floating point errors without dropping Voronois
     voronoi_gdf = voronoi_gdf.sjoin(points_gdf, how="inner", predicate="intersects")
     voronoi_gdf.geometry = voronoi_gdf.geometry.make_valid()
-    voronoi_gdf = (voronoi_gdf.dissolve(by=id_col).reset_index()).clip(boundary)
+    voronoi_gdf = voronoi_gdf.clip(boundary).dissolve(by=id_col).reset_index()
 
     # Clip Voronoi cells to a max buffer
     print("Clip Voronoi cells to maximum buffer...")
