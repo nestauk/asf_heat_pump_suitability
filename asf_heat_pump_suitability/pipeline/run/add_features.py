@@ -302,8 +302,20 @@ if __name__ == "__main__":
 
     # Add listed building boolean flag
 
-    # Load listed buildings geodataframe for Great Britain
-    listed_buildings_gdf = listed_buildings.transform_gdf_listed_buildings(nation="GB")
+    # Load listed buildings geodataframe for relevant nations
+    countries = features_df["country"].unique()
+    if len(countries) > 1:
+        nation = "GB"
+    else:
+        mapping = {
+            "E": "England",
+            "S": "Scotland",
+            "W": "Wales",
+        }
+        nation = mapping[countries[0]]
+    listed_buildings_gdf = listed_buildings.transform_gdf_listed_buildings(
+        nation=nation
+    )
 
     features_df = listed_buildings.extend_df_listed_building_bool(
         features_df=features_df,
