@@ -208,7 +208,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--datasets",
-        help="Datasets to process of: UPRN; UPRN_lookup; POI; EPC_domestic; EPC_commercial. Defaults to all datasets with optimisation options.",
+        help="Datasets to process of: UPRN; UPRN_lookup; POI; EPC_domestic; EPC_commercial; coastline. Defaults to all datasets with optimisation options.",
         type=str,
         nargs="+",
         default=None,
@@ -219,6 +219,7 @@ def parse_arguments() -> argparse.Namespace:
 
 if __name__ == "__main__":
     import boto3
+    import geopandas as gpd
     from asf_heat_pump_suitability.getters import base_getters
     from asf_heat_pump_suitability.utils import s3_utils
 
@@ -342,4 +343,11 @@ if __name__ == "__main__":
         )
         save_utils.save_to_s3(
             commercial_epc_df, config["data"]["epc"]["commercial"]["S_parquet"]
+        )
+
+    if not datasets or "coastline" in datasets:
+        coastline_gdf = gpd.read_file(config["data"]["geodata"]["gb_coast_boundaries"])
+        coastline_gdf.to_parquet(
+            config["data"]["geodata"]["gb_coast_boundaries_parquet"],
+            write_covering_bbox=True,
         )
