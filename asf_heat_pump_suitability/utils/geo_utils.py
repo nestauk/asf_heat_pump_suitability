@@ -261,4 +261,5 @@ def generate_geom_convex_hull(
     Returns:
         shapely.Polygon | shapely.MultiPolygon: convex hull of geodataframe
     """
-    return gdf.union_all().concave_hull
+    union = gdf.union_all()
+    return shapely.concave_hull(union)
