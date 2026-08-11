@@ -342,7 +342,9 @@ if __name__ == "__main__":
         select_las=local_authority_dict["valid_local_authorities"]
     )
     boundary = boundary_gdf.geometry.union_all()
-    coast_gdf = load_geodata.load_gdf_gb_coast_boundaries(clip=boundary)
+    coast_gdf = load_geodata.load_gdf_gb_coast_boundaries(
+        clip=boundary, bbox=boundary.bounds
+    )
 
     features_df = coast.extend_df_near_coastline_bool(
         features_df=features_df,
