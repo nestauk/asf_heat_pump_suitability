@@ -448,10 +448,13 @@ def load_gdf_code_points() -> gpd.GeoDataFrame:
     return code_point_gdf
 
 
-def load_gdf_gb_coast_boundaries():
+def load_gdf_gb_coast_boundaries(clip: shapely.Polygon | shapely.MultiPolygon = None):
     """
     Load GB coastline boundaries geodataframe and dissolve into a single geometry.
     (CRS: EPSG:27700)
+
+    Args:
+        clip (shapely.Polygon | shapely.MultiPolygon): boundary to clip coastline to. Default None for unclipped coastline for all of GB.
 
     Returns:
         gpd.GeoDataFrame: geodataframe with single geometry of GB coastline boundaries.
@@ -469,7 +472,12 @@ def load_gdf_gb_coast_boundaries():
     print(
         f"GB coastline boundaries geodataframe successfully loaded with CRS {coast_gdf.crs}."
     )
-    return coast_gdf
+
+    if clip:
+        print("Clipping coastline to boundaries...")
+        return coast_gdf.clip(clip)
+    else:
+        return coast_gdf
 
 
 def load_gdf_listed_buildings(nation: str = "GB", **kwargs) -> gpd.GeoDataFrame:

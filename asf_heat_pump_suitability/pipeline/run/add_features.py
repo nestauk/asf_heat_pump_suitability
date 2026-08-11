@@ -322,7 +322,13 @@ if __name__ == "__main__":
     del off_gas_postcodes
 
     # Add distance to salt water
-    coast_gdf = load_geodata.load_gdf_gb_coast_boundaries()
+
+    # Load coastline and clip to LA boundaries first
+    boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+        select_las=local_authority_dict["valid_local_authorities"]
+    )
+    boundary = boundary_gdf.geometry.union_all()
+    coast_gdf = load_geodata.load_gdf_gb_coast_boundaries(clip=boundary)
 
     features_df = coast.extend_df_near_coastline_bool(
         features_df=features_df,
@@ -334,7 +340,7 @@ if __name__ == "__main__":
         simplify_tolerance_m=config["constant"]["coastline"]["simplify_tolerance_m"],
     )
 
-    del coast_gdf
+    del coast_gdf, boundary_gdf
 
     # Add conservation area boolean flag
     uprns_protected_areas_df = protected_areas.load_transform_df_uprn_in_protected_area(
