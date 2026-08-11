@@ -214,7 +214,7 @@ if __name__ == "__main__":
     inspire_file_gdf = gpd.read_file(config["data"]["processed"]["inspire_file_names"])
 
     # Get file names of INSPIRE files which overlap with UPRNs
-    uprns_poly = geo_utils.generate_geom_bounding_poly(uprns_gdf)
+    uprns_poly = geo_utils.generate_geom_convex_hull(uprns_gdf)
     inspire_file_names = inspire_file_gdf[
         inspire_file_gdf.geometry.intersects(uprns_poly)
     ]["inspire_file_name"].unique()

@@ -249,7 +249,16 @@ def convert_gdf_to_df(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
     return pl.from_pandas(gdf.drop(columns="geometry"))
 
 
-def generate_geom_bounding_poly(
+def generate_geom_convex_hull(
     gdf: gpd.GeoDataFrame,
 ) -> shapely.Polygon | shapely.MultiPolygon:
-    return gdf.union_all().convex_hull
+    """
+    Generate the total convex hull of a geodataframe.
+
+    Args:
+         gdf (gpd.GeoDataFrame): containing geometries of interest
+
+    Returns:
+        shapely.Polygon | shapely.MultiPolygon: convex hull of geodataframe
+    """
+    return gdf.union_all().concave_hull
