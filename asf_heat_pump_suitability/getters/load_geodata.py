@@ -448,20 +448,23 @@ def load_gdf_code_points() -> gpd.GeoDataFrame:
     return code_point_gdf
 
 
-def load_gdf_gb_coast_boundaries(clip: shapely.Polygon | shapely.MultiPolygon = None):
+def load_gdf_gb_coast_boundaries(
+    clip: shapely.Polygon | shapely.MultiPolygon = None, **kwargs
+):
     """
     Load GB coastline boundaries geodataframe and dissolve into a single geometry.
     (CRS: EPSG:27700)
 
     Args:
         clip (shapely.Polygon | shapely.MultiPolygon): boundary to clip coastline to. Default None for unclipped coastline for all of GB.
+        **kwargs for geopandas.read_parquet
 
     Returns:
         gpd.GeoDataFrame: geodataframe with single geometry of GB coastline boundaries.
     """
 
-    coast_gdf = gpd.read_file(
-        config["data"]["geodata"]["gb_coast_boundaries"],
+    coast_gdf = gpd.read_parquet(
+        config["data"]["geodata"]["gb_coast_boundaries_parquet"], **kwargs
     )
 
     # Dissolve coastline boundaries into a single geometry
