@@ -147,6 +147,22 @@ Implementation decisions within the spec's frame:
 - The report is written to `outputs/comparisons/` (gitignored) by default;
   `--report_dir` overrides.
 
+Review pass on the 2026-08-10 additions (2026-08-12, ten findings applied):
+
+- **Contextual-features paths resolve across clustering-tolerance
+  changes**: version discovery wildcards the tolerance segment, and an
+  explicit date whose file sits under a previous tolerance resolves via a
+  glob fallback (single match only; otherwise the original missing-file
+  error re-raises) — without this, the very methodology changes the tool
+  exists for would hide older releases of the final stage.
+- **Building-level loading hardened**: both paths are existence-checked
+  before anything downloads, only the tech column is fetched, and any
+  missing or unreadable output (not just missing) degrades the counts
+  section to a note, with the warning naming the cause.
+- **LA slug lowercased** in the entrypoint, matching sibling entrypoints.
+- CLI validation (dates-XOR, optional trigger) is now test-pinned; the
+  null-tech label and template format-kwargs each live at one site.
+
 ## Verification
 
 - [x] Runs against two dated version folders for one LA and one stage
