@@ -71,8 +71,7 @@ Decisions settled during kickoff interview (2026-07-23):
   still carries a confirm-criteria-first flag (drafts doc, issues 4–6).
 
 Decisions added 2026-08-10, reconciling the Asana high-priority metric list
-(see the drafts doc's header note) — the implementation predates these, so
-they are the unchecked Verification items below:
+(see the drafts doc's header note); implemented 2026-08-12:
 
 - **Version pair becomes optional**, defaulting to the latest two dated
   versions found for the stage and LA — the "comparison happens
@@ -162,13 +161,20 @@ Implementation decisions within the spec's frame:
       report
 - [x] Unit tests cover: no drift, expected UPRN churn, unexpected UPRN loss
 
-Added 2026-08-10 (not yet implemented):
+Added 2026-08-10 (implemented 2026-08-12):
 
-- [ ] When versions are omitted, defaults to the latest two dated versions
-      found for that stage and LA
-- [ ] Trigger is optional with no default; omitted, the report presents raw
-      numbers with no rubric interpretation or tolerance warnings
-- [ ] Per-tech marginal counts reported for both the UPRN-level and
-      building-level decision-tree outputs
-- [ ] Unit tests cover: default version selection picks the latest two;
+- [x] When versions are omitted, defaults to the latest two dated versions
+      found for that stage and LA — S3 glob over the dated output
+      directories, validated by the strict release-date parser; passing
+      exactly one date is a CLI error naming both options
+- [x] Trigger is optional with no default; omitted, the report presents raw
+      numbers with no rubric interpretation or tolerance warnings — pinned
+      by `test_omitted_trigger_reports_raw_numbers_without_rubric`
+- [x] Per-tech marginal counts reported for both the UPRN-level and
+      building-level decision-tree outputs (building-level dataset named in
+      `compare_versions.decision_tree_buildings_dataset` in `base.yaml`; a
+      missing building output degrades its section to a note)
+- [x] Unit tests cover: default version selection picks the latest two;
       omitted-trigger report carries no rubric labels
+      (`TestGetTupleDefaultReleaseDates`, `TestGenerateListReleaseDates`,
+      `TestGenerateDfTechCounts` + report-level tests; 61 tests pass)
