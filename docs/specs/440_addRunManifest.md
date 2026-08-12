@@ -1,6 +1,6 @@
 ---
 title: Run manifest for pipeline output lineage
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/440
 pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/449
 asana:
@@ -44,7 +44,7 @@ Decisions settled during kickoff interview (2026-07-22):
   `save_utils.save_to_s3` (already flagged as an open question on another
   PR). Manifest writing bolts on alongside that existing write; refactoring
   it to `save_utils` first is out of scope here to avoid scope creep into
-  unrelated code.
+  unrelated code. _Superseded at review (2026-08-10) — see below._
 - **`input_versions` records raw resolved `config["data"...]` path strings**,
   not extracted version tokens. Dated prefixes use inconsistent formats
   today (`YYYYMMDD` folder vs `v{YYYYMM}` prefix, no shared convention), so
@@ -79,8 +79,9 @@ Decisions settled during implementation (2026-07-22):
   dated directory used), not the raw CLI value, which may be `None`.
 - **`decision_tree` manifests are written in `__main__`** from the
   function's previously discarded return value — one manifest per output
-  file, each with its own `row_count` — leaving the non-standard
-  `gdf.to_parquet` save path untouched as decided above.
+  file, each with its own `row_count` — initially leaving the non-standard
+  `gdf.to_parquet` save path untouched as decided above (later reversed at
+  review, 2026-08-10 — the saves moved to `__main__` too).
 
 Decisions settled at review (Aidan's call, 2026-07-22):
 
@@ -111,7 +112,11 @@ Decisions settled at review (Aidan's call, 2026-07-22):
 
 Decisions settled at review (Aidan's call, 2026-07-24):
 
-- **Entrypoints call a single `save_run_manifest_to_s3` wrapper** instead of
+- **Entrypoints call a single `generate_and_save_run_manifest_to_s3` wrapper**
+  (named `save_run_manifest_to_s3` until reviewer feedback on 2026-08-10:
+  one syllable apart from the wrapped `save_manifest_to_s3`, the old name
+  hid which function a script should call; the new name encodes the
+  build-then-write relationship) instead of
   nesting `generate_dict_run_manifest` inside `save_manifest_to_s3` at every
   call site — the identical two-call pattern repeated in all five entrypoints.
   The wrapper takes explicit typed parameters (not `**kwargs`, which would
@@ -122,6 +127,25 @@ Decisions settled at review (Aidan's call, 2026-07-24):
   `manifest_utils`, not `save_utils`, because its swallow-errors contract is
   the opposite of `save_to_s3`'s raise-on-failure contract.
 
+Decisions settled at review (2026-08-10, prompted by crispy-wonton's PR
+review agreeing with Aidan's own inline comment):
+
+- **`decision_tree.py`'s saves move to `__main__`, via `save_utils.save_to_s3`**
+  — reversing the kickoff decision above.
+  `identify_gdf_tuple_most_suitable_tech_uprn_and_building` becomes a pure
+  transform (drops its `save`/`release_date`/`local_authorities` params); the
+  entrypoint derives each output path **once** and passes it to both
+  `save_to_s3` and `generate_and_save_run_manifest_to_s3`. The clincher was
+  manifest correctness, not tidiness: the interim state derived the path
+  twice (inside the function for the write, in `__main__` for the manifest),
+  so a drift between the two derivations would make the manifest silently
+  point at a path the output was never written to. Behaviourally identical
+  writes — `save_to_s3` calls the same `gdf.to_parquet(path)` for
+  GeoDataFrame+parquet, plus its logging chokepoint. No external callers of
+  the function existed (repo-wide grep), so the signature change is safe.
+  Covered by new `pipeline/transform/tests/test_decision_tree.py`, including
+  a test pinning that the transform performs no path-building or saving.
+
 ## Alternatives considered
 
 - **Fixed name `run_manifest.json` per directory** — rejected; ambiguous
@@ -129,9 +153,11 @@ Decisions settled at review (Aidan's call, 2026-07-24):
 - **Manifest for both compute_contextual_features writes** — rejected; the
   front-end "latest" copy has no version history to attach lineage to and
   would go stale/misleading immediately on the next run.
-- **Refactor `decision_tree.py` to `save_utils.save_to_s3`** — rejected;
-  unrelated concern already flagged elsewhere, would expand this issue's
-  diff into code it doesn't need to touch.
+- **Refactor `decision_tree.py` to `save_utils.save_to_s3`** — initially
+  rejected as scope creep; adopted at review (2026-08-10) once the reviewer
+  asked for it and the double path-derivation it removed turned out to be a
+  manifest-correctness risk, not just an inconsistency. See the decision
+  above.
 - **Extracted version token via per-dataset regex** — rejected; no shared
   naming convention exists today to write a single regex against.
 - **Flat `input_versions` snapshot of the whole `config["data"]` tree**
@@ -156,6 +182,19 @@ Decisions settled at review (Aidan's call, 2026-07-24):
 - ~~What `git_commit` should record when `git rev-parse HEAD` isn't
   available~~ — resolved during implementation: an `"unknown"` sentinel
   with a logged warning, never a hard failure.
+- **Reconcile with PR #458 (decision tree restructure) — whichever PR
+  merges second owns this.** #458 moves HN zones and spatial signatures
+  between stages, invalidating three `stage_input_keys` lists and one
+  manifest param: `add_features` loses its `--detail` arg (the manifest
+  write's `"detail": args.detail` would raise `AttributeError`), both
+  heat_network_zones keys and both gb_spatial_signatures keys; `cluster`
+  loses `heat_network_zones.desnz_polygons`; `compute_contextual_features`
+  gains `--detail` (add to its manifest params), the spatial signatures
+  keys and the HN zone keys. The existing tests catch neither direction —
+  removed inputs still resolve in config, added inputs are silent
+  omissions — which is a live instance of the manual-sync risk flagged at
+  review and motivates the follow-up issue on deriving input lists from
+  the getters.
 
 ## Verification
 

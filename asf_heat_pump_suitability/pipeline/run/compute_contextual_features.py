@@ -93,6 +93,22 @@ def extend_df_contextual_features(
     """
 
     dummy_cols = ["ATTACHMENT", "TENURE", "CURRENT_ENERGY_RATING"]
+
+    unknowns_mapping = {
+        "": "unknown",
+        "null": "unknown",
+    }
+
+    uprns_df = uprns_df.with_columns(
+        pl.col(col)
+        .cast(pl.String)
+        .str.to_lowercase()
+        .str.strip_chars()
+        .replace(unknowns_mapping)
+        .fill_null("unknown")
+        for col in dummy_cols
+    )
+
     # Get value counts per feature
     dummy_contextual_feat_df = (
         uprns_df.select(dummy_cols + ["cluster_id"])
@@ -105,7 +121,7 @@ def extend_df_contextual_features(
     dummy_cols_to_keep = [
         col
         for col in dummy_contextual_feat_df.columns
-        if any(col.startswith(prefix) for prefix in dummy_cols)
+        if any(col.lower().startswith(prefix.lower()) for prefix in dummy_cols)
     ]
     dummy_contextual_feat_df = dummy_contextual_feat_df.select(
         ["cluster_id"] + dummy_cols_to_keep
@@ -292,7 +308,7 @@ def create_gdf_contextual_features(
 
     return gpd.GeoDataFrame(
         clusters_with_contextual_features_gdf, geometry="geometry", crs="EPSG:27700"
-    ).to_crs(epsg=4326)
+    )
 
 
 def create_json_contextual_features_metadata(
@@ -395,6 +411,18 @@ if __name__ == "__main__":
         uprns_df=uprns_df, clusters_gdf=clusters_gdf
     )
 
+    print("Simplifying geometries using tolerance_m...")
+    clusters_with_contextual_features_gdf["geometry"] = (
+        clusters_with_contextual_features_gdf["geometry"].simplify(
+            tolerance=tolerance_m, preserve_topology=True
+        )
+    )
+
+    print("Converting to EPSG:4326 for geojson output...")
+    clusters_with_contextual_features_gdf = (
+        clusters_with_contextual_features_gdf.to_crs(epsg=4326)
+    )
+
     print("Creating json with contextual features for each cluster and metadata...")
     geojson_file = create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf, local_authorities, release_date
@@ -430,7 +458,7 @@ if __name__ == "__main__":
         # Only the dated data-science copy gets a run manifest; the undated
         # front-end copy above is overwritten every run, so there is no
         # version history to attach lineage to.
-        manifest_utils.save_run_manifest_to_s3(
+        manifest_utils.generate_and_save_run_manifest_to_s3(
             s3_file_path,
             stage="compute_contextual_features",
             local_authority=local_authority_dict["url_slug"],

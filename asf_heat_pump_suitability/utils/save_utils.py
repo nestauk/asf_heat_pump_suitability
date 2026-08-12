@@ -16,14 +16,17 @@ def get_str_release_date(release_date: str | None = None) -> str:
     """
     Validate a release date string or default to today's date.
 
+    The date format is set by `config["constant"]["release_date_format"]` (currently
+    `%Y%m%d`, i.e. YYYYMMDD).
+
     Args:
-        release_date (str | None): release date in YYYYMMDD format, or None to use today's date
+        release_date (str | None): release date in the configured format, or None to use today's date
 
     Returns:
-        str: validated release date in zero-padded YYYYMMDD format
+        str: validated release date in the configured format
 
     Raises:
-        ValueError: if `release_date` is not a valid YYYYMMDD date
+        ValueError: if `release_date` does not match the configured format
     """
     date_format = config["constant"]["release_date_format"]
     if release_date is None:
@@ -31,12 +34,13 @@ def get_str_release_date(release_date: str | None = None) -> str:
     try:
         parsed_date = datetime.strptime(release_date, date_format)
         # strptime is lenient (e.g. "080726" parses as year 807); require an exact
-        # round-trip so only strict zero-padded YYYYMMDD strings are accepted
+        # round-trip so only strings exactly matching the configured format are accepted
         if parsed_date.strftime(date_format) != release_date:
             raise ValueError
     except ValueError:
         raise ValueError(
-            f"release_date must be a valid date in YYYYMMDD format, got '{release_date}'."
+            f"release_date must be a valid date in the configured format, "
+            f"e.g. '{datetime.today().strftime(date_format)}', got '{release_date}'."
         )
     return release_date
 
@@ -52,8 +56,8 @@ def get_str_output_path(
 
     Args:
         dataset (str): key of the output dataset path template in `config["output"]["dataset"]`
-        release_date (str): release date in YYYYMMDD format, resolved once per run
-            via `get_str_release_date` at the script entrypoint
+        release_date (str): release date, resolved once per run via
+            `get_str_release_date` at the script entrypoint
         check_exists (bool): if True, raise FileNotFoundError when no file exists at the path.
             Set when reading upstream pipeline outputs to fail fast on a missing release.
         **format_kwargs: values for the remaining placeholders in the path template, e.g.
