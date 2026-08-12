@@ -284,25 +284,40 @@ def extend_edges_gdf(
     # Create a gdf of all densified points, where one row is one point
     points_gdf = gpd.GeoDataFrame({id_col: all_ids}, geometry=all_points, crs=gdf.crs)
 
-    # Convert to a Multipoint collection for Voronoi
-    coords = MultiPoint(points_gdf.geometry.tolist())
+    # Convert to a Multipoint collection for Voronoi.
+    # Pass raw coordinate array rather than a list of Point objects to avoid Python object overhead.
+    coords = MultiPoint(shapely.get_coordinates(points_gdf.geometry.values))
 
     print("Computing Voronoi diagram...")
     # Compute Voronoi polygons up to specified boundary, create one Voronoi cell per point
     voronoi_collection = shapely.voronoi_polygons(coords, extend_to=boundary)
 
-    # Convert to a geodataframe
-    voronoi_gdf = gpd.GeoDataFrame(geometry=list(voronoi_collection.geoms), crs=gdf.crs)
+    # Convert to a geodataframe using a numpy array rather than a Python list to avoid copying all geometries.
+    voronoi_gdf = gpd.GeoDataFrame(
+        geometry=np.array(voronoi_collection.geoms), crs=gdf.crs
+    )
 
     print(
         "Joining Voronois to original building footprints and dissolving per footprint..."
     )
 
-    # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
-    # Intersects (rather than contains) allows for small floating point errors without dropping Voronois
+    # Join the original building points with IDs to the Voronoi cells and union per building ID.
+    # Intersects (rather than contains) allows for small floating point errors without dropping Voronois.
+    # Deduplicate on the Voronoi cell index: intersects can match a cell to neighbouring seed points
+    # that land on its boundary, producing duplicate rows in the same building's group.
+    # union_all via sorted numpy groups is faster than dissolve (no pandas groupby overhead) and
+    # tolerates the microscopic floating-point overlaps that coverage_union_all would reject.
     voronoi_gdf = voronoi_gdf.sjoin(points_gdf, how="inner", predicate="intersects")
+    voronoi_gdf = voronoi_gdf[~voronoi_gdf.index.duplicated(keep="first")]
     voronoi_gdf.geometry = voronoi_gdf.geometry.make_valid()
-    voronoi_gdf = (voronoi_gdf.dissolve(by=id_col).reset_index()).clip(boundary)
+    arr = voronoi_gdf.sort_values(id_col)
+    unique_ids, first_idx = np.unique(arr[id_col].values, return_index=True)
+    geom_groups = np.split(arr.geometry.values, first_idx[1:])
+    voronoi_gdf = gpd.GeoDataFrame(
+        {id_col: unique_ids},
+        geometry=[shapely.union_all(g) for g in geom_groups],
+        crs=voronoi_gdf.crs,
+    ).clip(boundary)
 
     # Clip Voronoi cells to a max buffer
     print("Clip Voronoi cells to maximum buffer...")
@@ -314,7 +329,7 @@ def extend_edges_gdf(
     return gpd.GeoDataFrame(
         gdf.drop(columns=["geometry"])
         .merge(clipped_voronoi_gdf, how="inner", on=id_col)
-        .drop(columns=["index_right", id_col]),
+        .drop(columns=[id_col]),
         geometry="geometry",
         crs=gdf.crs,
     )
@@ -348,13 +363,16 @@ def _clip_gdf_voronoi_cells_polygon_buffer(
         # Simplify with a tolerance of 1mm to remove vertices which are extremely close together
     ).simplify(0.001)
 
-    # Clip Voronoi cells to the defined buffer area if they are larger than it by calculating intersections
-    clipped_gdf = voronoi_gdf.overlay(buffered_gdf, how="intersection")
-    # Filter clipped cells (intersections) to ensure each polygon's Voronoi cell is clipped only by its own buffer
-    return (
-        clipped_gdf[clipped_gdf[f"{id_col}_1"] == clipped_gdf[f"{id_col}_2"]]
-        .drop(columns=[f"{id_col}_2"])
-        .rename(columns={f"{id_col}_1": id_col})
+    # Clip each Voronoi cell to its own building's buffer using a 1:1 merge and vectorised intersection.
+    # This avoids the full cross-join overhead of overlay by only computing the intersection for matching pairs.
+    clipped_gdf = voronoi_gdf.merge(
+        buffered_gdf.rename(columns={"geometry": "buffer_geom"}), on=id_col
+    )
+    clipped_gdf["geometry"] = clipped_gdf["geometry"].intersection(
+        clipped_gdf["buffer_geom"]
+    )
+    return clipped_gdf.set_geometry(col="geometry", crs=voronoi_gdf.crs).drop(
+        columns="buffer_geom"
     )
 
 
