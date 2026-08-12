@@ -51,7 +51,13 @@ Decisions settled during kickoff interview (2026-07-22):
   square/LA — e.g. `.../opmplc_essh_gb/20260708/data/{square}/{square}_{layer}.shp`
   truncates to `.../opmplc_essh_gb/20260708/data/` at the first `{` token.
   Per-square resolution needs the LA→squares mapping and is explicitly out
-  of scope (below).
+  of scope (below). **Revised in review (2026-08-12, crispy-wonton's
+  suggestion):** `{square}` tokens are now expanded over
+  `config["constant"]["sampling_areas"]["grid_squares"]` before checking, so
+  a missing square is reported individually. Remaining `{layer}` tokens
+  still truncate to a prefix, requiring at least one file per square rather
+  than every layer, since some layers are legitimately absent in a square
+  (`load_gdf_os_openmap_layer` deliberately skips those).
 
 ## Alternatives considered
 
@@ -64,8 +70,11 @@ Decisions settled during kickoff interview (2026-07-22):
 
 ## Out of scope
 
-- Per-square existence checks (would need the LA→squares mapping;
-  prefix-level only for v1)
+- ~~Per-square existence checks~~ — pulled into scope during PR #448 review
+  (see revised decision above). Still out of scope: deriving the required
+  squares from the requested LAs or a canonical GB-wide list; the expansion
+  currently uses the dev sampling squares only, so a full-GB run has just
+  those 7 verified per templated dataset (follow-up).
 - Auto-detecting the latest dated prefix (tracked separately in #429)
 
 ## Open questions
@@ -99,6 +108,14 @@ Decisions settled during kickoff interview (2026-07-22):
       `config["data"]` is production-pipeline inputs only — every path in it
       is preflight-gated, so datasets read only by research/exploratory
       scripts keep their paths in the script or a research-local config.
+      **Revised in review (2026-08-12, crispy-wonton):** the
+      `geodata.council_tax_data` entry was restored so research scripts keep
+      a config reference until production and research configs are split
+      (low-priority follow-up issue to open); the preflight skips it via the
+      explicit `RESEARCH_ONLY_PATHS` constant in `check_inputs.py`. The
+      script also now exits non-zero if the collector finds zero configured
+      paths, so a broken config walk can't pass vacuously. Post-review
+      acceptance run: all 44 paths exist (23 plain + 21 per-square), exit 0.
 - [x] Wired into `run_pipeline.sh` as its first step, before the
       local-authority loop
 - [x] Unit tests cover at least one missing-path case and one all-present
