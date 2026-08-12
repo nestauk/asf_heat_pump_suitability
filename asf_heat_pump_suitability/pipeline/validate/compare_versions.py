@@ -40,6 +40,7 @@ from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 
 UPRN_COL = "UPRN"
 TECH_COL = "assigned_tech"
+NULL_TECH_LABEL = "(null)"
 
 STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
@@ -134,6 +135,15 @@ def _expr_uprn_canonical() -> pl.Expr:
     return pl.col(UPRN_COL).cast(pl.Float64).cast(pl.Int64).cast(pl.Utf8)
 
 
+def _expr_tech_canonical() -> pl.Expr:
+    """
+    The tech-assignment column with nulls as a regular report label, so the
+    counts table and the transition matrix cannot diverge on how a null
+    tech is presented.
+    """
+    return pl.col(TECH_COL).fill_null(NULL_TECH_LABEL)
+
+
 def generate_dict_uprn_churn(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict | None:
     """
     Count UPRNs added, removed and retained between two versions of an output.
@@ -208,11 +218,11 @@ def generate_df_tech_transitions(
         return None
     old = df_old.select(
         _expr_uprn_canonical(),
-        pl.col(TECH_COL).fill_null("(null)").alias("assigned_tech_old"),
+        _expr_tech_canonical().alias("assigned_tech_old"),
     ).unique(subset=[UPRN_COL], keep="first")
     new = df_new.select(
         _expr_uprn_canonical(),
-        pl.col(TECH_COL).fill_null("(null)").alias("assigned_tech_new"),
+        _expr_tech_canonical().alias("assigned_tech_new"),
     ).unique(subset=[UPRN_COL], keep="first")
     return (
         old.join(new, on=UPRN_COL, how="inner")
@@ -245,14 +255,15 @@ def generate_df_tech_counts(
     """
     if TECH_COL not in df_old.columns or TECH_COL not in df_new.columns:
         return None
-    counts_old = df_old.group_by(pl.col(TECH_COL).fill_null("(null)")).agg(
-        pl.len().cast(pl.Int64).alias("n_old")
-    )
-    counts_new = df_new.group_by(pl.col(TECH_COL).fill_null("(null)")).agg(
-        pl.len().cast(pl.Int64).alias("n_new")
-    )
+
+    def tally(df: pl.DataFrame, alias: str) -> pl.DataFrame:
+        return df.group_by(_expr_tech_canonical()).agg(
+            pl.len().cast(pl.Int64).alias(alias)
+        )
+
     return (
-        counts_old.join(counts_new, on=TECH_COL, how="full", coalesce=True)
+        tally(df_old, "n_old")
+        .join(tally(df_new, "n_new"), on=TECH_COL, how="full", coalesce=True)
         .fill_null(0)
         .with_columns((pl.col("n_new") - pl.col("n_old")).alias("n_delta"))
         .sort(TECH_COL)
@@ -370,6 +381,35 @@ def generate_list_commit_log(
     return result.stdout.splitlines()
 
 
+def _get_str_output_path(
+    dataset: str, local_authority: str, release_date: str, check_exists: bool
+) -> str:
+    """Build an output dataset's exact dated S3 path (single site for the
+    template format kwargs; save_utils validates the date)."""
+    return save_utils.get_str_output_path(
+        dataset,
+        release_date=release_date,
+        check_exists=check_exists,
+        local_authority=local_authority,
+        local_authorities=local_authority,
+        tolerance_m=config["constant"]["clustering"]["tolerance_m"],
+    )
+
+
+def _generate_str_output_glob(
+    dataset: str, local_authority: str, release_date: str = "*"
+) -> str:
+    """Build an S3 glob over an output dataset's path template, wildcarding
+    the dated directory (unless given) and the clustering tolerance — so
+    versions saved under a previous tolerance stay discoverable."""
+    return config["output"]["dataset"][dataset].format(
+        release_date=release_date,
+        local_authority=local_authority,
+        local_authorities=local_authority,
+        tolerance_m="*",
+    )
+
+
 def get_str_stage_output_path(
     stage: str,
     local_authority: str,
@@ -378,6 +418,11 @@ def get_str_stage_output_path(
 ) -> str:
     """
     Build the S3 path of the output a stage's comparison reads.
+
+    The contextual-features filename embeds the clustering tolerance; when
+    `check_exists` finds nothing under the current config tolerance, a
+    version saved under a previous tolerance is resolved by glob, so past
+    releases stay comparable across tolerance changes.
 
     Args:
         stage: pipeline stage, a key of `STAGE_OUTPUT_DATASETS`
@@ -388,14 +433,24 @@ def get_str_stage_output_path(
     Returns:
         str: S3 path of the stage's output for that version
     """
-    return save_utils.get_str_output_path(
-        STAGE_OUTPUT_DATASETS[stage],
-        release_date=release_date,
-        check_exists=check_exists,
-        local_authority=local_authority,
-        local_authorities=local_authority,
-        tolerance_m=config["constant"]["clustering"]["tolerance_m"],
-    )
+    dataset = STAGE_OUTPUT_DATASETS[stage]
+    try:
+        return _get_str_output_path(
+            dataset, local_authority, release_date, check_exists
+        )
+    except FileNotFoundError:
+        matches = s3fs.S3FileSystem().glob(
+            _generate_str_output_glob(dataset, local_authority, release_date)
+        )
+        if len(matches) != 1:
+            raise
+        path = f"s3://{matches[0]}"
+        logging.info(
+            "No %s output under the current clustering tolerance; resolved %s",
+            stage,
+            path,
+        )
+        return path
 
 
 def get_str_buildings_output_path(
@@ -417,12 +472,8 @@ def get_str_buildings_output_path(
     Returns:
         str: S3 path of the building-level output for that version
     """
-    return save_utils.get_str_output_path(
-        BUILDINGS_DATASET,
-        release_date=release_date,
-        check_exists=check_exists,
-        local_authority=local_authority,
-        local_authorities=local_authority,
+    return _get_str_output_path(
+        BUILDINGS_DATASET, local_authority, release_date, check_exists
     )
 
 
@@ -437,12 +488,7 @@ def generate_list_release_dates(stage: str, local_authority: str) -> list[str]:
     Returns:
         list[str]: distinct release dates in YYYYMMDD format, oldest first
     """
-    pattern = config["output"]["dataset"][STAGE_OUTPUT_DATASETS[stage]].format(
-        release_date="*",
-        local_authority=local_authority,
-        local_authorities=local_authority,
-        tolerance_m=config["constant"]["clustering"]["tolerance_m"],
-    )
+    pattern = _generate_str_output_glob(STAGE_OUTPUT_DATASETS[stage], local_authority)
     release_dates = set()
     for path in s3fs.S3FileSystem().glob(pattern):
         # The release date is the output file's parent directory in every
@@ -518,6 +564,62 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
             return pl.DataFrame()
         return pl.from_pandas(gdf.drop(columns="geometry"))
     raise ValueError(f"Cannot compare file type of {path}; expected parquet/geojson.")
+
+
+def load_df_buildings_tech(path: str) -> pl.DataFrame:
+    """
+    Load only the tech-assignment column of a building-level output.
+
+    The building-level output feeds the per-tech counts alone, so a single
+    column is fetched rather than the full parquet. A version without the
+    column loads as an empty frame, which the counts section reports as a
+    missing column.
+
+    Args:
+        path: S3 path of the building-level output parquet
+
+    Returns:
+        pl.DataFrame: the tech-assignment column, or an empty frame
+    """
+    if TECH_COL not in pq.read_schema(path).names:
+        return pl.DataFrame()
+    return pl.from_arrow(pq.read_table(path, columns=[TECH_COL]))
+
+
+def load_tuple_df_buildings(
+    local_authority: str, release_date_old: str, release_date_new: str
+) -> tuple[pl.DataFrame | None, pl.DataFrame | None]:
+    """
+    Load the tech column of both building-level decision-tree outputs.
+
+    Both paths are existence-checked before anything is downloaded. Any
+    missing or unreadable output degrades to (None, None) with a logged
+    warning naming the cause, so the building-level counts section becomes
+    a note instead of aborting the whole comparison.
+
+    Args:
+        local_authority: local authority slug used in output paths
+        release_date_old: dated version folder of the older output
+        release_date_new: dated version folder of the newer output
+
+    Returns:
+        tuple: (older, newer) building-level tech columns, or (None, None)
+    """
+    try:
+        path_old = get_str_buildings_output_path(
+            local_authority, release_date_old, check_exists=True
+        )
+        path_new = get_str_buildings_output_path(
+            local_authority, release_date_new, check_exists=True
+        )
+        return load_df_buildings_tech(path_old), load_df_buildings_tech(path_new)
+    except (OSError, ValueError) as error:
+        logging.warning(
+            "Building-level output unavailable (%s); its per-tech counts "
+            "section is skipped.",
+            error,
+        )
+        return None, None
 
 
 def _render_section(title: str, *body: str) -> str:
@@ -754,7 +856,7 @@ def generate_str_report(
         _generate_str_schema_section(generate_dict_schema_diff(df_old, df_new)),
         _generate_str_churn_section(
             generate_dict_uprn_churn(df_old, df_new),
-            tolerances["max_removed_uprn_share"] if tolerances else None,
+            tolerances["max_removed_uprn_share"] if tolerances is not None else None,
         ),
     ]
     if stage == "decision_tree":
@@ -835,9 +937,12 @@ def main(args: argparse.Namespace) -> None:
     Args:
         args: parsed CLI arguments
     """
+    # Output paths use lowercase LA slugs; lowercase like the sibling
+    # entrypoints (e.g. add_features) so "Plymouth" finds plymouth's outputs.
+    local_authority = args.local_authority.lower()
     if args.old_release_date is None:
         release_date_old, release_date_new = get_tuple_default_release_dates(
-            args.stage, args.local_authority
+            args.stage, local_authority
         )
         logging.info(
             "No versions supplied; comparing the latest two: %s vs %s",
@@ -848,39 +953,25 @@ def main(args: argparse.Namespace) -> None:
         release_date_old = save_utils.get_str_release_date(args.old_release_date)
         release_date_new = save_utils.get_str_release_date(args.new_release_date)
     path_old = get_str_stage_output_path(
-        args.stage, args.local_authority, release_date_old, check_exists=True
+        args.stage, local_authority, release_date_old, check_exists=True
     )
     path_new = get_str_stage_output_path(
-        args.stage, args.local_authority, release_date_new, check_exists=True
+        args.stage, local_authority, release_date_new, check_exists=True
     )
     df_old = load_transform_df_stage_output(path_old)
     df_new = load_transform_df_stage_output(path_new)
     df_buildings_old = df_buildings_new = None
     if args.stage == "decision_tree":
-        try:
-            df_buildings_old = load_transform_df_stage_output(
-                get_str_buildings_output_path(
-                    args.local_authority, release_date_old, check_exists=True
-                )
-            )
-            df_buildings_new = load_transform_df_stage_output(
-                get_str_buildings_output_path(
-                    args.local_authority, release_date_new, check_exists=True
-                )
-            )
-        except FileNotFoundError:
-            logging.warning(
-                "Building-level output missing for a version; its per-tech "
-                "counts section is skipped."
-            )
-            df_buildings_old = df_buildings_new = None
+        df_buildings_old, df_buildings_new = load_tuple_df_buildings(
+            local_authority, release_date_old, release_date_new
+        )
     report = generate_str_report(
         df_old,
         df_new,
         load_dict_manifest(path_old),
         load_dict_manifest(path_new),
         stage=args.stage,
-        local_authority=args.local_authority,
+        local_authority=local_authority,
         trigger=args.trigger,
         release_date_old=release_date_old,
         release_date_new=release_date_new,
@@ -892,8 +983,7 @@ def main(args: argparse.Namespace) -> None:
     report_dir = Path(args.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
     report_path = report_dir / (
-        f"{args.stage}_{args.local_authority}_"
-        f"{release_date_old}_vs_{release_date_new}.md"
+        f"{args.stage}_{local_authority}_{release_date_old}_vs_{release_date_new}.md"
     )
     report_path.write_text(report)
 

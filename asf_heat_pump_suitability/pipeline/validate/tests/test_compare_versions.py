@@ -491,6 +491,48 @@ class TestGetStrStageOutputPath:
             manifest_utils.STAGE_INPUT_KEYS
         )
 
+    def test_resolves_a_version_saved_under_a_previous_tolerance(self, mocker):
+        """A contextual-features version saved before a tolerance_m config
+        change must still resolve (via glob) so past releases stay
+        comparable across the very methodology changes the tool exists for."""
+        mocker.patch.object(
+            compare_versions.save_utils,
+            "get_str_output_path",
+            side_effect=FileNotFoundError("No file found"),
+        )
+        fs = mocker.patch("s3fs.S3FileSystem").return_value
+        fs.glob.return_value = [
+            "bucket/outputs/data/plymouth/20260601/"
+            "plymouth_clusters_contextual_features_10m.geojson"
+        ]
+        path = compare_versions.get_str_stage_output_path(
+            "compute_contextual_features", "plymouth", "20260601", check_exists=True
+        )
+        assert path == (
+            "s3://bucket/outputs/data/plymouth/20260601/"
+            "plymouth_clusters_contextual_features_10m.geojson"
+        ), "a single glob match under another tolerance must be resolved and returned"
+
+    def test_missing_version_still_raises_when_no_tolerance_variant_exists(
+        self, mocker
+    ):
+        """The tolerance-glob fallback must not mask a genuinely missing
+        version: zero (or ambiguous) matches re-raise the original error."""
+        mocker.patch.object(
+            compare_versions.save_utils,
+            "get_str_output_path",
+            side_effect=FileNotFoundError("No file found"),
+        )
+        fs = mocker.patch("s3fs.S3FileSystem").return_value
+        fs.glob.return_value = []
+        with pytest.raises(FileNotFoundError):
+            compare_versions.get_str_stage_output_path(
+                "compute_contextual_features",
+                "plymouth",
+                "20260601",
+                check_exists=True,
+            )
+
 
 class TestGenerateListReleaseDates:
     """Tests for `generate_list_release_dates`."""
@@ -526,16 +568,30 @@ class TestGenerateListReleaseDates:
             "20260722"
         ], "non-date directories must be skipped, not listed as versions"
 
-    def test_glob_pattern_wildcards_only_the_release_date(self, mocker):
-        """The S3 glob fixes stage and LA and wildcards only the dated
-        directory, so another LA's versions can't leak into the list."""
+    def test_glob_pattern_fixes_stage_and_local_authority(self, mocker):
+        """The S3 glob fixes stage and LA and wildcards the dated directory,
+        so another LA's versions can't leak into the list."""
         fs = mocker.patch("s3fs.S3FileSystem").return_value
         fs.glob.return_value = []
         compare_versions.generate_list_release_dates("decision_tree", "plymouth")
         pattern = fs.glob.call_args.args[0]
         assert pattern.endswith(
             "/plymouth/*/plymouth_uprns_most_suitable_tech.parquet"
-        ), "only the release-date segment of the path may be a wildcard"
+        ), "stage filename and LA must stay fixed; the dated segment is the wildcard"
+
+    def test_glob_pattern_wildcards_the_clustering_tolerance(self, mocker):
+        """The contextual-features filename embeds the clustering tolerance;
+        discovery must wildcard it so versions saved under a previous
+        tolerance are still found."""
+        fs = mocker.patch("s3fs.S3FileSystem").return_value
+        fs.glob.return_value = []
+        compare_versions.generate_list_release_dates(
+            "compute_contextual_features", "plymouth"
+        )
+        pattern = fs.glob.call_args.args[0]
+        assert pattern.endswith(
+            "_clusters_contextual_features_*m.geojson"
+        ), "the tolerance segment must be a wildcard, not the current config value"
 
 
 class TestGetTupleDefaultReleaseDates:
@@ -839,3 +895,128 @@ class TestLoadTransformDfStageOutput:
             "s3://bucket/dir/output.geojson"
         )
         assert df.is_empty()
+
+
+class TestLoadDfBuildingsTech:
+    """Tests for `load_df_buildings_tech`."""
+
+    def test_fetches_only_the_tech_column(self, tmp_path):
+        """The building-level output feeds per-tech counts alone, so only
+        the tech-assignment column is downloaded."""
+        path = tmp_path / "buildings.parquet"
+        pl.DataFrame(
+            {"ID": [1, 2], "assigned_tech": ["Individual solution"] * 2}
+        ).write_parquet(path)
+        df = compare_versions.load_df_buildings_tech(str(path))
+        assert df.columns == [
+            "assigned_tech"
+        ], "only the tech column may be fetched from the building-level output"
+
+    def test_missing_tech_column_loads_as_an_empty_frame(self, tmp_path):
+        """A building-level version without the tech column degrades to an
+        empty frame, which the counts section reports as a missing column
+        rather than crashing on a column-not-found read."""
+        path = tmp_path / "buildings.parquet"
+        pl.DataFrame({"ID": [1, 2]}).write_parquet(path)
+        df = compare_versions.load_df_buildings_tech(str(path))
+        assert (
+            df.is_empty() and "assigned_tech" not in df.columns
+        ), "a missing tech column must load as empty, not raise"
+
+
+class TestLoadTupleDfBuildings:
+    """Tests for `load_tuple_df_buildings`."""
+
+    def test_missing_output_degrades_to_none_pair(self, mocker):
+        """A version without a building-level output degrades to (None,
+        None) with a warning, not an aborted comparison."""
+        mocker.patch.object(
+            compare_versions,
+            "get_str_buildings_output_path",
+            side_effect=FileNotFoundError("No file found at s3://bucket/x.parquet"),
+        )
+        assert compare_versions.load_tuple_df_buildings(
+            "plymouth", "20260601", "20260722"
+        ) == (None, None), "a missing building output must degrade to (None, None)"
+
+    def test_unreadable_output_degrades_to_none_pair(self, mocker):
+        """A present-but-unreadable building output (e.g. a corrupt parquet
+        raising ArrowInvalid) must also degrade, not crash the comparison."""
+        import pyarrow
+
+        mocker.patch.object(
+            compare_versions,
+            "get_str_buildings_output_path",
+            return_value="s3://bucket/x.parquet",
+        )
+        mocker.patch.object(
+            compare_versions,
+            "load_df_buildings_tech",
+            side_effect=pyarrow.ArrowInvalid("corrupt parquet"),
+        )
+        assert compare_versions.load_tuple_df_buildings(
+            "plymouth", "20260601", "20260722"
+        ) == (None, None), "an unreadable building output must degrade to (None, None)"
+
+    def test_checks_both_paths_before_downloading_anything(self, mocker):
+        """Both paths are existence-checked before any download, so a
+        missing new version can't waste a full download of the old one."""
+        mocker.patch.object(
+            compare_versions,
+            "get_str_buildings_output_path",
+            side_effect=[
+                "s3://bucket/old.parquet",
+                FileNotFoundError("No file found at s3://bucket/new.parquet"),
+            ],
+        )
+        load = mocker.patch.object(compare_versions, "load_df_buildings_tech")
+        compare_versions.load_tuple_df_buildings("plymouth", "20260601", "20260722")
+        load.assert_not_called()
+
+
+class TestParseArguments:
+    """Tests for `parse_arguments`."""
+
+    def test_single_release_date_is_a_cli_error_naming_both_options(
+        self, mocker, capsys
+    ):
+        """Passing exactly one date is ambiguous: the CLI must error naming
+        both date options rather than silently defaulting the other."""
+        mocker.patch(
+            "sys.argv",
+            [
+                "compare_versions.py",
+                "--stage",
+                "decision_tree",
+                "--local_authority",
+                "plymouth",
+                "--old_release_date",
+                "20260601",
+            ],
+        )
+        with pytest.raises(SystemExit):
+            compare_versions.parse_arguments()
+        stderr = capsys.readouterr().err
+        assert (
+            "--old_release_date" in stderr and "--new_release_date" in stderr
+        ), "the error message must name both date options"
+
+    def test_dates_and_trigger_are_optional_and_default_to_none(self, mocker):
+        """Omitting both dates and the trigger is the supported
+        compare-latest-two, raw-numbers-only invocation."""
+        mocker.patch(
+            "sys.argv",
+            [
+                "compare_versions.py",
+                "--stage",
+                "decision_tree",
+                "--local_authority",
+                "plymouth",
+            ],
+        )
+        args = compare_versions.parse_arguments()
+        assert (
+            args.old_release_date is None
+            and args.new_release_date is None
+            and args.trigger is None
+        ), "omitted dates and trigger must parse as None, not error or default"
