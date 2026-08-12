@@ -24,6 +24,7 @@ import pandas as pd
 import polars as pl
 import logging
 import argparse
+from typing import Optional, List
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 from asf_heat_pump_suitability.utils import geo_utils
@@ -70,12 +71,16 @@ def generate_gdf_uprn_coords(
     return gdf
 
 
-def load_arr_valid_epc_uprns(epc_type: str, grid_squares=None) -> np.array:
+def load_arr_valid_epc_uprns(
+    epc_type: str, grid_squares: Optional[List[str]] = None
+) -> np.array:
     """
     Load set of valid EPC UPRNs from either commercial or domestic EPC registers.
 
     Args:
         epc_type (str): {"commercial", "domestic"} the type of EPC to load valid UPRNs from
+        grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
+        Default None to load whole GB. Ignored if `epc_type` is set to "commercial".
 
     Returns:
         np.array: valid UPRNs from specified EPC dataset
@@ -87,24 +92,24 @@ def load_arr_valid_epc_uprns(epc_type: str, grid_squares=None) -> np.array:
                 config["data"]["epc"]["domestic_partitioned"].format(grid_square=sq)
                 for sq in grid_squares
             ]
-            df = pl.read_parquet(paths, columns="UPRN")
+            df = pl.read_parquet(paths, columns=["UPRN"])
         else:
             df = base_getters.load_df_from_s3(
-                config["data"]["epc"][epc_type], columns="UPRN"
+                config["data"]["epc"][epc_type], columns=["UPRN"]
             )
         before = len(df)
 
     else:
         # England and Wales EPC data
         df_EW = base_getters.load_df_from_s3(
-            config["data"]["epc"][epc_type]["EW_parquet"], columns="UPRN"
+            config["data"]["epc"][epc_type]["EW_parquet"], columns=["UPRN"]
         )
 
         # Scotland EPC data
         df_S = (
             base_getters.load_df_from_s3(
                 config["data"]["epc"][epc_type]["S_parquet"],
-                columns="OSG_REFERENCE_NUMBER",
+                columns=["OSG_REFERENCE_NUMBER"],
             )
             .rename({"OSG_REFERENCE_NUMBER": "UPRN"})
             .cast(pl.Float64, strict=False)
@@ -155,6 +160,7 @@ def filter_gdf_domestic_uprns(
         buildings_gdf (gpd.GeoDataFrame): all building footprints in area of interest.
         non_residential_buildings_gdf (gpd.GeoDataFrame): polygons of buildings which are unlikely to contain residential
         properties.
+        domestic_epc_uprns (np.array): UPRNs in domestic EPC register for area of interest.
         local_authority_dict (dict): name of local authority the domestic UPRNs are being identified for.
         id_col (str): name of ID column in `buildings_gdf`. Defaults to ID column defined in config.
 
