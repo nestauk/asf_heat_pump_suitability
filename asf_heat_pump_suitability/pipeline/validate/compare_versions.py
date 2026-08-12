@@ -1,13 +1,19 @@
 """
 Compare two dated versions of a pipeline stage output for one local authority.
 
-Reports row/UPRN count deltas, schema diff, UPRN churn, the tech-assignment
-transition matrix (decision-tree stage), and a module-scoped commit log
-between the two versions' recorded commits, read against the tolerance rubric
-of the trigger that prompted the comparison. Writes a local markdown report
-and logs a console summary.
+Reports row/UPRN count deltas, schema diff, UPRN churn, per-tech counts and
+the tech-assignment transition matrix (decision-tree stage), and a
+module-scoped commit log between the two versions' recorded commits. With a
+--trigger, checks are read against that rubric's tolerances; without one, the
+report presents raw numbers only. Writes a local markdown report and logs a
+console summary.
 
-Usage:
+Usage (compare the latest two versions, raw numbers only):
+python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
+    --stage decision_tree \
+    --local_authority plymouth
+
+Usage (explicit versions, read against a rubric):
 python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
     --stage decision_tree \
     --local_authority plymouth \
@@ -26,6 +32,7 @@ from pathlib import Path
 import fsspec
 import polars as pl
 import pyarrow.parquet as pq
+import s3fs
 
 from asf_heat_pump_suitability import PROJECT_DIR, config
 from asf_heat_pump_suitability.getters import base_getters
@@ -36,6 +43,7 @@ TECH_COL = "assigned_tech"
 
 STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
+BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"]
 TOLERANCES = config["compare_versions"]["tolerances"]
 
 
@@ -214,6 +222,43 @@ def generate_df_tech_transitions(
     )
 
 
+def generate_df_tech_counts(
+    df_old: pl.DataFrame, df_new: pl.DataFrame
+) -> pl.DataFrame | None:
+    """
+    Count rows per tech assignment in each version of an output.
+
+    Unlike the transition matrix these are per-version tallies needing no
+    cross-version key, so they also apply to the building-level output,
+    whose IDs are not stable across versions. Null tech assignments are
+    labelled "(null)"; a tech present in only one version counts 0 in the
+    other.
+
+    Args:
+        df_old: older version of a decision-tree output
+        df_new: newer version of a decision-tree output
+
+    Returns:
+        pl.DataFrame: one row per tech with n_old, n_new and n_delta counts,
+            sorted by tech, or None when either version has no
+            tech-assignment column
+    """
+    if TECH_COL not in df_old.columns or TECH_COL not in df_new.columns:
+        return None
+    counts_old = df_old.group_by(pl.col(TECH_COL).fill_null("(null)")).agg(
+        pl.len().cast(pl.Int64).alias("n_old")
+    )
+    counts_new = df_new.group_by(pl.col(TECH_COL).fill_null("(null)")).agg(
+        pl.len().cast(pl.Int64).alias("n_new")
+    )
+    return (
+        counts_old.join(counts_new, on=TECH_COL, how="full", coalesce=True)
+        .fill_null(0)
+        .with_columns((pl.col("n_new") - pl.col("n_old")).alias("n_delta"))
+        .sort(TECH_COL)
+    )
+
+
 def load_dict_manifest(output_path: str) -> dict | None:
     """
     Load the run manifest saved next to a pipeline output.
@@ -353,6 +398,89 @@ def get_str_stage_output_path(
     )
 
 
+def get_str_buildings_output_path(
+    local_authority: str,
+    release_date: str,
+    check_exists: bool = False,
+) -> str:
+    """
+    Build the S3 path of the building-level decision-tree output.
+
+    Read only for per-tech marginal counts; the decision-tree comparison's
+    other checks read the UPRN-level output (see `STAGE_OUTPUT_DATASETS`).
+
+    Args:
+        local_authority: local authority slug used in output paths
+        release_date: dated version folder in YYYYMMDD format
+        check_exists: if True, raise when no file exists at the path
+
+    Returns:
+        str: S3 path of the building-level output for that version
+    """
+    return save_utils.get_str_output_path(
+        BUILDINGS_DATASET,
+        release_date=release_date,
+        check_exists=check_exists,
+        local_authority=local_authority,
+        local_authorities=local_authority,
+    )
+
+
+def generate_list_release_dates(stage: str, local_authority: str) -> list[str]:
+    """
+    List the dated versions of a stage's output available on S3.
+
+    Args:
+        stage: pipeline stage, a key of `STAGE_OUTPUT_DATASETS`
+        local_authority: local authority slug used in output paths
+
+    Returns:
+        list[str]: distinct release dates in YYYYMMDD format, oldest first
+    """
+    pattern = config["output"]["dataset"][STAGE_OUTPUT_DATASETS[stage]].format(
+        release_date="*",
+        local_authority=local_authority,
+        local_authorities=local_authority,
+        tolerance_m=config["constant"]["clustering"]["tolerance_m"],
+    )
+    release_dates = set()
+    for path in s3fs.S3FileSystem().glob(pattern):
+        # The release date is the output file's parent directory in every
+        # output path template.
+        segment = path.rsplit("/", 2)[-2]
+        try:
+            release_dates.add(save_utils.get_str_release_date(segment))
+        except ValueError:
+            continue  # not a dated version directory
+    return sorted(release_dates)
+
+
+def get_tuple_default_release_dates(
+    stage: str, local_authority: str
+) -> tuple[str, str]:
+    """
+    Pick the latest two dated versions of a stage's output to compare.
+
+    Args:
+        stage: pipeline stage, a key of `STAGE_OUTPUT_DATASETS`
+        local_authority: local authority slug used in output paths
+
+    Returns:
+        tuple[str, str]: (older, newer) of the two latest release dates
+
+    Raises:
+        FileNotFoundError: when fewer than two dated versions exist
+    """
+    release_dates = generate_list_release_dates(stage, local_authority)
+    if len(release_dates) < 2:
+        raise FileNotFoundError(
+            f"Found {len(release_dates)} dated version(s) of {stage} for "
+            f"{local_authority} on S3 ({release_dates or 'none'}); need two to "
+            "compare. Pass --old_release_date and --new_release_date explicitly."
+        )
+    return release_dates[-2], release_dates[-1]
+
+
 def load_transform_df_stage_output(path: str) -> pl.DataFrame:
     """
     Load a stage output as a plain DataFrame for tabular comparison.
@@ -435,26 +563,60 @@ def _generate_str_schema_section(schema_diff: dict) -> str:
     return _render_section("Schema diff", *lines)
 
 
-def _generate_str_churn_section(churn: dict | None, max_removed_share: float) -> str:
-    """Render UPRN churn and any above-tolerance warning as a markdown section."""
+def _generate_str_churn_section(
+    churn: dict | None, max_removed_share: float | None
+) -> str:
+    """Render UPRN churn, checked against the rubric tolerance when one is
+    supplied (i.e. the comparison was run with a trigger)."""
     if churn is None:
         return _render_section(
             "UPRN churn", "Skipped: no UPRN column in this stage's output."
         )
+    share_suffix = (
+        f"(rubric tolerance: {max_removed_share:.1%})."
+        if max_removed_share is not None
+        else "(no trigger supplied; not checked against a tolerance)."
+    )
     lines = [
         "| Added | Removed | Retained |",
         "| --- | --- | --- |",
         f"| {churn['n_added']} | {churn['n_removed']} | {churn['n_retained']} |",
         "",
-        (
-            f"{churn['removed_share']:.1%} of old UPRNs were removed "
-            f"(rubric tolerance: {max_removed_share:.1%})."
-        ),
+        f"{churn['removed_share']:.1%} of old UPRNs were removed {share_suffix}",
     ]
-    churn_note = generate_str_churn_note(churn, max_removed_share)
-    if churn_note:
-        lines.extend(["", churn_note])
+    if max_removed_share is not None:
+        churn_note = generate_str_churn_note(churn, max_removed_share)
+        if churn_note:
+            lines.extend(["", churn_note])
     return _render_section("UPRN churn", *lines)
+
+
+def _generate_str_tech_counts_section(
+    df_old: pl.DataFrame | None, df_new: pl.DataFrame | None, level: str
+) -> str:
+    """Render per-tech counts for one output level as a markdown section."""
+    title = f"Per-tech counts ({level})"
+    if df_old is None or df_new is None:
+        return _render_section(
+            title, "Skipped: output missing for one or both versions."
+        )
+    counts = generate_df_tech_counts(df_old, df_new)
+    if counts is None:
+        return _render_section(
+            title,
+            f"Skipped: `{TECH_COL}` column missing from one or both versions "
+            "(see schema diff).",
+        )
+    lines = [
+        "| Tech | Old | New | Delta |",
+        "| --- | --- | --- | --- |",
+    ]
+    for row in counts.iter_rows(named=True):
+        lines.append(
+            f"| {row[TECH_COL]} | {row['n_old']} | {row['n_new']} "
+            f"| {row['n_delta']:+d} |"
+        )
+    return _render_section(title, *lines)
 
 
 def _generate_str_transitions_section(
@@ -539,11 +701,13 @@ def generate_str_report(
     manifest_new: dict | None,
     stage: str,
     local_authority: str,
-    trigger: str,
+    trigger: str | None,
     release_date_old: str,
     release_date_new: str,
     path_old: str,
     path_new: str,
+    df_buildings_old: pl.DataFrame | None = None,
+    df_buildings_new: pl.DataFrame | None = None,
 ) -> str:
     """
     Assemble the full markdown comparison report.
@@ -555,24 +719,33 @@ def generate_str_report(
         manifest_new: newer version's run manifest, or None when missing
         stage: pipeline stage the outputs belong to
         local_authority: local authority slug the outputs cover
-        trigger: rubric the comparison is read against
+        trigger: rubric the comparison is read against, or None for raw
+            numbers with no rubric interpretation or tolerance warnings
         release_date_old: dated version folder of the older output
         release_date_new: dated version folder of the newer output
         path_old: S3 path of the older output
         path_new: S3 path of the newer output
+        df_buildings_old: older building-level decision-tree output, or None
+            when missing (its per-tech counts section is then skipped)
+        df_buildings_new: newer building-level output, or None when missing
 
     Returns:
         str: markdown report; lineage sections are replaced by a note when a
             version's run manifest is missing (outputs predating manifests)
     """
-    tolerances = get_dict_tolerances(trigger)
+    tolerances = get_dict_tolerances(trigger) if trigger is not None else None
+    trigger_line = (
+        f"- Trigger: `{trigger}` — read against this rubric's tolerances"
+        if trigger is not None
+        else "- Trigger: not supplied — raw numbers only, no rubric interpretation"
+    )
     sections = [
         f"# Cross-version comparison: {stage} — {local_authority}",
         "\n".join(
             [
                 f"- Old version: {release_date_old} (`{path_old}`)",
                 f"- New version: {release_date_new} (`{path_new}`)",
-                f"- Trigger: `{trigger}` — read against this rubric's tolerances",
+                trigger_line,
                 "- Generated: "
                 + datetime.now(timezone.utc).isoformat(timespec="seconds"),
             ]
@@ -581,10 +754,16 @@ def generate_str_report(
         _generate_str_schema_section(generate_dict_schema_diff(df_old, df_new)),
         _generate_str_churn_section(
             generate_dict_uprn_churn(df_old, df_new),
-            tolerances["max_removed_uprn_share"],
+            tolerances["max_removed_uprn_share"] if tolerances else None,
         ),
     ]
     if stage == "decision_tree":
+        sections.append(_generate_str_tech_counts_section(df_old, df_new, "UPRN-level"))
+        sections.append(
+            _generate_str_tech_counts_section(
+                df_buildings_old, df_buildings_new, "building-level"
+            )
+        )
         sections.append(_generate_str_transitions_section(df_old, df_new))
     if manifest_old is None or manifest_new is None:
         missing_versions = [
@@ -624,23 +803,29 @@ def parse_arguments() -> argparse.Namespace:
         help="Local authority slug as used in output paths, e.g. 'plymouth'.",
     )
     parser.add_argument(
-        "--old_release_date", required=True, help="Older version, YYYYMMDD."
+        "--old_release_date",
+        help="Older version, YYYYMMDD. Omit both dates to compare the "
+        "latest two versions found on S3.",
     )
-    parser.add_argument(
-        "--new_release_date", required=True, help="Newer version, YYYYMMDD."
-    )
+    parser.add_argument("--new_release_date", help="Newer version, YYYYMMDD.")
     parser.add_argument(
         "--trigger",
-        required=True,
         choices=sorted(TOLERANCES),
-        help="Why the comparison is run; picks the tolerance rubric.",
+        help="Why the comparison is run; picks the tolerance rubric. "
+        "Omitted: raw numbers only, no rubric interpretation.",
     )
     parser.add_argument(
         "--report_dir",
         default=str(PROJECT_DIR / "outputs" / "comparisons"),
         help="Directory the markdown report is written to.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if (args.old_release_date is None) != (args.new_release_date is None):
+        parser.error(
+            "Pass both --old_release_date and --new_release_date, or neither "
+            "to compare the latest two versions."
+        )
+    return args
 
 
 def main(args: argparse.Namespace) -> None:
@@ -650,8 +835,18 @@ def main(args: argparse.Namespace) -> None:
     Args:
         args: parsed CLI arguments
     """
-    release_date_old = save_utils.get_str_release_date(args.old_release_date)
-    release_date_new = save_utils.get_str_release_date(args.new_release_date)
+    if args.old_release_date is None:
+        release_date_old, release_date_new = get_tuple_default_release_dates(
+            args.stage, args.local_authority
+        )
+        logging.info(
+            "No versions supplied; comparing the latest two: %s vs %s",
+            release_date_old,
+            release_date_new,
+        )
+    else:
+        release_date_old = save_utils.get_str_release_date(args.old_release_date)
+        release_date_new = save_utils.get_str_release_date(args.new_release_date)
     path_old = get_str_stage_output_path(
         args.stage, args.local_authority, release_date_old, check_exists=True
     )
@@ -660,6 +855,25 @@ def main(args: argparse.Namespace) -> None:
     )
     df_old = load_transform_df_stage_output(path_old)
     df_new = load_transform_df_stage_output(path_new)
+    df_buildings_old = df_buildings_new = None
+    if args.stage == "decision_tree":
+        try:
+            df_buildings_old = load_transform_df_stage_output(
+                get_str_buildings_output_path(
+                    args.local_authority, release_date_old, check_exists=True
+                )
+            )
+            df_buildings_new = load_transform_df_stage_output(
+                get_str_buildings_output_path(
+                    args.local_authority, release_date_new, check_exists=True
+                )
+            )
+        except FileNotFoundError:
+            logging.warning(
+                "Building-level output missing for a version; its per-tech "
+                "counts section is skipped."
+            )
+            df_buildings_old = df_buildings_new = None
     report = generate_str_report(
         df_old,
         df_new,
@@ -672,6 +886,8 @@ def main(args: argparse.Namespace) -> None:
         release_date_new=release_date_new,
         path_old=path_old,
         path_new=path_new,
+        df_buildings_old=df_buildings_old,
+        df_buildings_new=df_buildings_new,
     )
     report_dir = Path(args.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -696,11 +912,12 @@ def main(args: argparse.Namespace) -> None:
             churn["n_removed"],
             churn["n_retained"],
         )
-        churn_note = generate_str_churn_note(
-            churn, get_dict_tolerances(args.trigger)["max_removed_uprn_share"]
-        )
-        if churn_note:
-            logging.warning(churn_note)
+        if args.trigger is not None:
+            churn_note = generate_str_churn_note(
+                churn, get_dict_tolerances(args.trigger)["max_removed_uprn_share"]
+            )
+            if churn_note:
+                logging.warning(churn_note)
     logging.info("Report written to %s", report_path)
 
 

@@ -407,6 +407,10 @@ compare_versions:
     decision_tree: "uprns_most_suitable_tech"
     cluster: "tech_clusters"
     compute_contextual_features: "clusters_tech_contextual_info"
+  # Building-level decision-tree output, read only for per-tech marginal
+  # counts: building IDs aren't stable across versions, so it gets counts,
+  # not the transition matrix.
+  decision_tree_buildings_dataset: "buildings_most_suitable_tech"
   # Repo paths counted as each stage's module when scoping the commit log
   # between two versions' recorded commits: the stage entrypoint plus the
   # pipeline modules it directly drives. Cross-cutting code (getters/, utils/,

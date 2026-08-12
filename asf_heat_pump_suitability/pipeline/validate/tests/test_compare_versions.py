@@ -261,6 +261,54 @@ class TestGenerateDfTechTransitions:
         assert transitions["n_uprns"].sum() == 4
 
 
+class TestGenerateDfTechCounts:
+    """Tests for `generate_df_tech_counts`."""
+
+    def test_identical_versions_have_zero_deltas(self, df_old, df_new_identical):
+        """No drift means every tech keeps its count."""
+        counts = compare_versions.generate_df_tech_counts(df_old, df_new_identical)
+        assert (
+            counts["n_delta"].abs().sum() == 0
+        ), "identical versions must have a zero delta for every tech"
+
+    def test_counts_cover_techs_present_in_only_one_version(
+        self, df_old, df_new_churned
+    ):
+        """A tech present in only one version counts 0 in the other, so
+        appearing and disappearing techs both stay visible."""
+        counts = compare_versions.generate_df_tech_counts(df_old, df_new_churned)
+        by_tech = {row["assigned_tech"]: row for row in counts.iter_rows(named=True)}
+        assert by_tech["District heat network"]["n_new"] == 0, (
+            "a tech dropped in the new version must count 0 there, "
+            "not vanish from the table"
+        )
+        assert by_tech["Networked heat pump"]["n_old"] == 0, (
+            "a tech new in the new version must count 0 in the old, "
+            "not vanish from the table"
+        )
+        assert (
+            by_tech["Individual solution"]["n_delta"] == 1
+        ), "Individual solution grew 2 -> 3 so its delta must be +1"
+
+    def test_counts_are_per_version_tallies_not_per_retained_uprn(
+        self, df_old, df_new_churned
+    ):
+        """Unlike the transition matrix, counts cover every row of each
+        version - added and removed UPRNs included."""
+        counts = compare_versions.generate_df_tech_counts(df_old, df_new_churned)
+        assert (
+            counts["n_old"].sum() == 4 and counts["n_new"].sum() == 5
+        ), "tech counts must tally all rows of each version, not the retained join"
+
+    def test_returns_none_without_tech_column(self, df_old):
+        """A version missing `assigned_tech` must degrade to None rather than
+        raise, like its data-function siblings."""
+        no_tech = df_old.drop("assigned_tech")
+        assert (
+            compare_versions.generate_df_tech_counts(df_old, no_tech) is None
+        ), "a missing tech column must return None, not raise"
+
+
 class TestLoadDictManifest:
     """Tests for `load_dict_manifest`."""
 
@@ -444,6 +492,85 @@ class TestGetStrStageOutputPath:
         )
 
 
+class TestGenerateListReleaseDates:
+    """Tests for `generate_list_release_dates`."""
+
+    def test_lists_dated_versions_sorted_oldest_first(self, mocker):
+        """Release dates come back sorted oldest first, whatever order S3
+        lists them in (YYYYMMDD sorts chronologically as strings)."""
+        fs = mocker.patch("s3fs.S3FileSystem").return_value
+        fs.glob.return_value = [
+            "bucket/outputs/data/plymouth/20260722/plymouth_uprns_most_suitable_tech.parquet",
+            "bucket/outputs/data/plymouth/20260601/plymouth_uprns_most_suitable_tech.parquet",
+        ]
+        dates = compare_versions.generate_list_release_dates(
+            "decision_tree", "plymouth"
+        )
+        assert dates == [
+            "20260601",
+            "20260722",
+        ], "release dates must be sorted oldest first regardless of S3 list order"
+
+    def test_skips_directories_that_are_not_release_dates(self, mocker):
+        """A stray non-date directory (e.g. a manual 'latest' copy) must be
+        skipped, not returned as a version or crash date parsing."""
+        fs = mocker.patch("s3fs.S3FileSystem").return_value
+        fs.glob.return_value = [
+            "bucket/outputs/data/plymouth/latest/plymouth_uprns_most_suitable_tech.parquet",
+            "bucket/outputs/data/plymouth/20260722/plymouth_uprns_most_suitable_tech.parquet",
+        ]
+        dates = compare_versions.generate_list_release_dates(
+            "decision_tree", "plymouth"
+        )
+        assert dates == [
+            "20260722"
+        ], "non-date directories must be skipped, not listed as versions"
+
+    def test_glob_pattern_wildcards_only_the_release_date(self, mocker):
+        """The S3 glob fixes stage and LA and wildcards only the dated
+        directory, so another LA's versions can't leak into the list."""
+        fs = mocker.patch("s3fs.S3FileSystem").return_value
+        fs.glob.return_value = []
+        compare_versions.generate_list_release_dates("decision_tree", "plymouth")
+        pattern = fs.glob.call_args.args[0]
+        assert pattern.endswith(
+            "/plymouth/*/plymouth_uprns_most_suitable_tech.parquet"
+        ), "only the release-date segment of the path may be a wildcard"
+
+
+class TestGetTupleDefaultReleaseDates:
+    """Tests for `get_tuple_default_release_dates`."""
+
+    def test_picks_the_latest_two_versions(self, mocker):
+        """With more than two versions available, the default comparison is
+        the latest against the one before it."""
+        mocker.patch.object(
+            compare_versions,
+            "generate_list_release_dates",
+            return_value=["20260601", "20260708", "20260722"],
+        )
+        assert compare_versions.get_tuple_default_release_dates(
+            "decision_tree", "plymouth"
+        ) == (
+            "20260708",
+            "20260722",
+        ), "the default comparison must be the latest two versions, (older, newer)"
+
+    def test_fewer_than_two_versions_raises(self, mocker):
+        """One or zero dated versions cannot be compared: fail loudly with
+        the explicit-dates escape hatch rather than comparing a version to
+        itself."""
+        mocker.patch.object(
+            compare_versions,
+            "generate_list_release_dates",
+            return_value=["20260722"],
+        )
+        with pytest.raises(FileNotFoundError, match="explicitly"):
+            compare_versions.get_tuple_default_release_dates(
+                "decision_tree", "plymouth"
+            )
+
+
 @pytest.fixture()
 def manifests():
     """Old/new run manifests with distinct commits and one input re-release."""
@@ -596,6 +723,78 @@ class TestGenerateStrReport:
         df_new = df_old.head(1)
         report = generate_report(df_old, df_new, *manifests)
         assert "WARNING" in report
+
+    def test_omitted_trigger_reports_raw_numbers_without_rubric(
+        self, df_old, manifests, mocker
+    ):
+        """With no trigger there is no rubric to read against: the report
+        must carry no tolerance warnings even for churn that would breach
+        every configured rubric, and must say the trigger was not supplied."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        df_new = df_old.head(1)  # 75% UPRN loss breaches both rubrics
+        report = generate_report(df_old, df_new, *manifests, trigger=None)
+        assert (
+            "WARNING" not in report
+        ), "no trigger means no rubric, so no tolerance warnings may appear"
+        assert (
+            "read against" not in report
+        ), "the report must not claim a rubric was applied when none was supplied"
+        assert (
+            "not supplied" in report
+        ), "the report must state that no trigger was supplied"
+
+    def test_marginal_tech_counts_appear_for_both_output_levels(
+        self, df_old, df_new_churned, manifests, mocker
+    ):
+        """The decision-tree report carries per-tech counts for the
+        UPRN-level output and the building-level output."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        report = generate_report(
+            df_old,
+            df_new_churned,
+            *manifests,
+            df_buildings_old=df_old.head(2),
+            df_buildings_new=df_new_churned.head(3),
+        )
+        assert (
+            "Per-tech counts (UPRN-level)" in report
+        ), "the decision-tree report must include UPRN-level per-tech counts"
+        assert (
+            "Per-tech counts (building-level)" in report
+        ), "the decision-tree report must include building-level per-tech counts"
+
+    def test_building_counts_skip_when_building_output_missing(
+        self, df_old, df_new_churned, manifests, mocker
+    ):
+        """A version without a building-level output (or one that failed to
+        load) degrades the building counts to a note, not a crash."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        report = generate_report(df_old, df_new_churned, *manifests)
+        assert (
+            "Per-tech counts (building-level)" in report
+            and "Skipped: output missing" in report
+        ), "missing building output must be noted in its section, not crash"
+
+    def test_tech_counts_only_for_the_decision_tree_stage(
+        self, df_old, df_new_churned, manifests, mocker
+    ):
+        """Per-tech counts read the decision-tree outputs, so other stages'
+        reports must not carry the sections."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        report = generate_report(
+            df_old, df_new_churned, *manifests, stage="add_features"
+        )
+        assert (
+            "Per-tech counts" not in report
+        ), "non-decision-tree stages must not carry per-tech count sections"
 
 
 class TestLoadTransformDfStageOutput:
