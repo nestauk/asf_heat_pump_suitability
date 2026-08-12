@@ -179,7 +179,7 @@ def generate_gdf_clusters(
             }
         )
         .reset_index()
-        .set_geometry(column="geometry", crs=clusters_gdf.crs)
+        .set_geometry(col="geometry", crs=clusters_gdf.crs)
     )
 
     # TODO move to testing when sample set available
@@ -302,7 +302,7 @@ def extend_edges_gdf(
     # Intersects (rather than contains) allows for small floating point errors without dropping Voronois
     voronoi_gdf = voronoi_gdf.sjoin(points_gdf, how="inner", predicate="intersects")
     voronoi_gdf.geometry = voronoi_gdf.geometry.make_valid()
-    voronoi_gdf = voronoi_gdf.clip(boundary).dissolve(by=id_col).reset_index()
+    voronoi_gdf = (voronoi_gdf.dissolve(by=id_col).reset_index()).clip(boundary)
 
     # Clip Voronoi cells to a max buffer
     print("Clip Voronoi cells to maximum buffer...")
@@ -400,9 +400,7 @@ def overlay_gdf_physical_barriers(
     cell_to_building_mapping = intersection_gdf.set_index(cell_id_col)[id_col].to_dict()
 
     # Use the mapping to label the original Voronoi cells with the correct building ID
-    voronoi_gdf["select_id"] = voronoi_gdf[cell_id_col].replace(
-        cell_to_building_mapping
-    )
+    voronoi_gdf["select_id"] = voronoi_gdf[cell_id_col].map(cell_to_building_mapping)
     # Filter to the rows where the building ID matches (i.e. only domestic buildings are retained here)
     domestic_voronoi_gdf = voronoi_gdf[
         voronoi_gdf[id_col] == voronoi_gdf["select_id"]
