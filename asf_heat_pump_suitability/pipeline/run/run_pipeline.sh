@@ -19,6 +19,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --release_date)
             [ $# -ge 2 ] || usage
+            [ -n "$2" ] || usage
             release_date="$2"
             shift 2
             ;;
