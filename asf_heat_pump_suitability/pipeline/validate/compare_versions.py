@@ -148,26 +148,35 @@ def generate_dict_uprn_churn(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict
     Count UPRNs added, removed and retained between two versions of an output.
 
     UPRNs are compared as canonical strings so a dtype change between
-    versions does not read as full churn.
+    versions does not read as full churn. Null UPRNs are excluded from the
+    churn sets (any number of them would collapse to one set element and
+    silently undercount) and reported as their own counts instead.
 
     Args:
         df_old: older version of the stage output
         df_new: newer version of the stage output
 
     Returns:
-        dict: added/removed/retained counts and the removed share of old
-            UPRNs, or None when either version has no UPRN column
+        dict: added/removed/retained counts, the removed share of old
+            UPRNs, and per-version null-UPRN counts, or None when either
+            version has no UPRN column
     """
     if UPRN_COL not in df_old.columns or UPRN_COL not in df_new.columns:
         return None
-    uprns_old = set(df_old.select(_expr_uprn_canonical()).to_series().to_list())
-    uprns_new = set(df_new.select(_expr_uprn_canonical()).to_series().to_list())
+    uprns_old = set(
+        df_old.drop_nulls(UPRN_COL).select(_expr_uprn_canonical()).to_series().to_list()
+    )
+    uprns_new = set(
+        df_new.drop_nulls(UPRN_COL).select(_expr_uprn_canonical()).to_series().to_list()
+    )
     n_removed = len(uprns_old - uprns_new)
     return {
         "n_added": len(uprns_new - uprns_old),
         "n_removed": n_removed,
         "n_retained": len(uprns_old & uprns_new),
         "removed_share": n_removed / len(uprns_old) if uprns_old else 0.0,
+        "n_null_old": df_old[UPRN_COL].null_count(),
+        "n_null_new": df_new[UPRN_COL].null_count(),
     }
 
 
@@ -672,6 +681,16 @@ def _generate_str_churn_section(
         "",
         f"{churn['removed_share']:.1%} of old UPRNs were removed {share_suffix}",
     ]
+    if churn["n_null_old"] or churn["n_null_new"]:
+        lines.extend(
+            [
+                "",
+                (
+                    f"{churn['n_null_old']} null UPRNs in the old version and "
+                    f"{churn['n_null_new']} in the new were excluded from churn."
+                ),
+            ]
+        )
     if max_removed_share is not None:
         churn_note = generate_str_churn_note(churn, max_removed_share)
         if churn_note:

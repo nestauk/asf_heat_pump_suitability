@@ -126,6 +126,8 @@ class TestGenerateDictUprnChurn:
             "n_removed": 0,
             "n_retained": 4,
             "removed_share": 0.0,
+            "n_null_old": 0,
+            "n_null_new": 0,
         }
 
     def test_counts_added_removed_and_retained_uprns(self, df_old, df_new_churned):
@@ -136,6 +138,8 @@ class TestGenerateDictUprnChurn:
             "n_removed": 1,
             "n_retained": 3,
             "removed_share": 0.25,
+            "n_null_old": 0,
+            "n_null_new": 0,
         }
 
     def test_returns_none_without_uprn_column(self, df_old):
@@ -158,6 +162,23 @@ class TestGenerateDictUprnChurn:
         churn = compare_versions.generate_dict_uprn_churn(df_old, df_new)
         assert churn["n_retained"] == 4
         assert churn["n_removed"] == 0
+
+    def test_null_uprns_are_counted_not_collapsed(self, df_old):
+        """Any number of null UPRNs would collapse to one set element and
+        silently undercount churn; they are excluded from the churn sets and
+        reported as per-version counts instead."""
+        df_old_nulled = pl.concat(
+            [df_old, pl.DataFrame({"UPRN": [None, None]}, schema={"UPRN": pl.Int64})],
+            how="diagonal",
+        )
+        df_new = df_old.head(2)
+        churn = compare_versions.generate_dict_uprn_churn(df_old_nulled, df_new)
+        assert (
+            churn["n_null_old"] == 2 and churn["n_null_new"] == 0
+        ), "each version's null UPRNs must be counted individually"
+        assert (
+            churn["n_retained"] == 2 and churn["n_removed"] == 2
+        ), "null UPRNs must not appear in the churn sets as a phantom member"
 
 
 class TestGenerateStrChurnNote:
