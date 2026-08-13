@@ -91,16 +91,37 @@ Decisions settled during kickoff interview (2026-08-13):
   space…) are "important" enough to plot — this issue builds the plotting
   mechanism; the follow-on decides where else to apply it.
 
+Implementation decisions within the spec's frame (2026-08-13):
+
+- **Target columns live in `compare_versions.distribution_columns`** in
+  `base.yaml`, keyed by stage (`cluster: []`,
+  `compute_contextual_features: [n_UPRNs]`); a test pins the keys to known
+  stages. The geometry-bearing stages themselves are a module constant
+  (`GEOMETRY_STAGES`) — which outputs carry geometry is code behaviour,
+  not a tunable.
+- **The shared helper is `generate_dict_distribution_stats(df, column)`**
+  (min/Q1/mean/Q3/max, linear-interpolated quartiles, nulls dropped);
+  `get_dict_distribution_frames` pairs each distribution with the frames
+  carrying it — derived `area_m2` from the geometry loader
+  (`load_df_cluster_areas`, which reprojects non-EPSG:27700 outputs before
+  measuring), configured columns from the tabular outputs.
+- **Plots share the report's filename stem**
+  (`{stage}_{la}_{old}_vs_{new}_{column}.png`, saved next to the report);
+  both versions share histogram bins so the shapes are comparable. A
+  distribution with a missing column or no values on one side skips its
+  plot with a warning — its stats section already notes the gap.
+
 ## Verification
 
-- [ ] Cluster count delta reported for both stages
-- [ ] Total area delta reported for both stages with CRS/units stated;
+- [x] Cluster count delta reported for both stages
+- [x] Total area delta reported for both stages with CRS/units stated;
       simplified-geometry caveat in the contextual-features section
-- [ ] Cluster-area distribution reported: Q1, Q3, min, max, mean per version
-- [ ] UPRNs-per-cluster distribution reported with the same statistics
-- [ ] One shared column-parameterized distribution function; target columns
+- [x] Cluster-area distribution reported: Q1, Q3, min, max, mean per version
+- [x] UPRNs-per-cluster distribution reported with the same statistics
+- [x] One shared column-parameterized distribution function; target columns
       per stage in `base.yaml`
-- [ ] Overlaid old-vs-new plots for cluster area and UPRNs per cluster,
+- [x] Overlaid old-vs-new plots for cluster area and UPRNs per cluster,
       embedded in the report
-- [ ] Unit tests cover at least one genuine geometry-drift case and one
-      stable case
+- [x] Unit tests cover at least one genuine geometry-drift case and one
+      stable case (a cluster merge vs identical versions; acceptance runs
+      against Plymouth 20260806 vs 20260812 exercised both stages on S3)
