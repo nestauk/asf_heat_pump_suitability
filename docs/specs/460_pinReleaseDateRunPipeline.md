@@ -1,8 +1,8 @@
 ---
 title: Pin a single release date across all stages in run_pipeline.sh
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/460
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/471
 asana:
 created: 2026-08-12
 ---
