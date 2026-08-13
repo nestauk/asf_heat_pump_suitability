@@ -25,7 +25,6 @@ python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
 import argparse
 import json
 import logging
-import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -319,19 +318,6 @@ def generate_dict_input_version_changes(manifest_old: dict, manifest_new: dict) 
     }
 
 
-def _run_git_or_none(
-    args: list[str], warning: str, *warning_args: object
-) -> subprocess.CompletedProcess | None:
-    """Run a git command in PROJECT_DIR, or None (with a warning) on failure."""
-    try:
-        return subprocess.run(
-            args, cwd=PROJECT_DIR, capture_output=True, text=True, check=True
-        )
-    except (subprocess.CalledProcessError, OSError):
-        logging.warning(warning, *warning_args)
-        return None
-
-
 def generate_list_commit_log(
     commit_old: str, commit_new: str, stage: str
 ) -> list[str] | None:
@@ -354,7 +340,7 @@ def generate_list_commit_log(
         return None
     if commit_old == commit_new:
         return []
-    ancestor_check = _run_git_or_none(
+    ancestor_check = manifest_utils.run_git_or_none(
         ["git", "merge-base", "--is-ancestor", commit_old, commit_new],
         "%s is not an ancestor of %s (or a commit is unfetched); "
         "old..new would silently omit commits, so the log is skipped.",
@@ -363,7 +349,7 @@ def generate_list_commit_log(
     )
     if ancestor_check is None:
         return None
-    result = _run_git_or_none(
+    result = manifest_utils.run_git_or_none(
         [
             "git",
             "log",
