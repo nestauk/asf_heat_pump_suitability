@@ -935,13 +935,12 @@ def parse_arguments() -> argparse.Namespace:
     return args
 
 
-def main(args: argparse.Namespace) -> None:
-    """
-    Run the comparison, write the markdown report and log a console summary.
-
-    Args:
-        args: parsed CLI arguments
-    """
+if __name__ == "__main__":
+    # Orchestration lives in this block, not a main() function, matching the
+    # other pipeline entrypoints: intermediates stay in module globals so
+    # `python -i -m ...compare_versions ...` leaves them inspectable.
+    logging.basicConfig(level=logging.INFO)
+    args = parse_arguments()
     # Output paths use lowercase LA slugs; lowercase like the sibling
     # entrypoints (e.g. add_features) so "Plymouth" finds plymouth's outputs.
     local_authority = args.local_authority.lower()
@@ -1014,8 +1013,3 @@ def main(args: argparse.Namespace) -> None:
             if churn_note:
                 logging.warning(churn_note)
     logging.info("Report written to %s", report_path)
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    main(parse_arguments())
