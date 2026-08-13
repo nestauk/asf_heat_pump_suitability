@@ -933,6 +933,169 @@ class TestGenerateStrReport:
         ), "non-decision-tree stages must not carry per-tech count sections"
 
 
+class TestGenerateStrReportGeometrySections:
+    """Tests for `generate_str_report`'s cluster geometry sections."""
+
+    def test_geometry_drift_surfaces_in_counts_and_area(
+        self, df_clusters_old, df_clusters_merged, df_areas_old, df_areas_merged
+    ):
+        """A cluster merge (genuine geometry drift invisible to the tabular
+        checks) must surface as a cluster count delta and an area delta,
+        with the CRS and units stated."""
+        report = generate_report(
+            df_clusters_old,
+            df_clusters_merged,
+            None,
+            None,
+            stage="cluster",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_merged,
+        )
+        assert "Cluster geometry" in report, "the geometry section must appear"
+        assert (
+            "| Clusters | 3 | 2 | -1 |" in report
+        ), "the cluster merge must appear as a -1 cluster count delta"
+        assert (
+            "| Total area (m²) | 300.0 | 310.0 | +10.0 |" in report
+        ), "the absorbed 10 m² gap must appear as the total-area delta"
+        assert "EPSG:27700" in report, "the report must state the CRS areas use"
+
+    def test_stable_versions_show_zero_geometry_deltas(
+        self, df_clusters_old, df_areas_old
+    ):
+        """No geometry drift means zero cluster and area deltas."""
+        report = generate_report(
+            df_clusters_old,
+            df_clusters_old.clone(),
+            None,
+            None,
+            stage="cluster",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_old.clone(),
+        )
+        assert (
+            "| Clusters | 3 | 3 | +0 |" in report
+        ), "stable versions must show a zero cluster count delta"
+        assert (
+            "| Total area (m²) | 300.0 | 300.0 | +0.0 |" in report
+        ), "stable versions must show a zero total-area delta"
+
+    def test_simplified_geometry_caveat_only_at_the_contextual_stage(
+        self, df_clusters_old, df_areas_old
+    ):
+        """The contextual-features geojson carries simplified geometry, so
+        its report warns that area differences may be simplification
+        artefacts; the cluster stage's exact geometry needs no caveat."""
+        kwargs = dict(
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_old.clone(),
+        )
+        contextual = generate_report(
+            df_clusters_old,
+            df_clusters_old,
+            None,
+            None,
+            stage="compute_contextual_features",
+            **kwargs,
+        )
+        cluster = generate_report(
+            df_clusters_old, df_clusters_old, None, None, stage="cluster", **kwargs
+        )
+        assert (
+            "simplified geometry" in contextual
+        ), "the contextual-features report must carry the simplified-geometry caveat"
+        assert (
+            "simplified geometry" not in cluster
+        ), "the cluster stage's exact geometry must not carry the caveat"
+
+    def test_distribution_sections_report_the_statistics_per_version(
+        self, df_clusters_old, df_areas_old, df_areas_merged
+    ):
+        """Each distribution gets a section with Q1, Q3, min, max and mean
+        for both versions; the contextual stage also covers n_UPRNs."""
+        df_old = df_clusters_old.with_columns(pl.lit(5).alias("n_UPRNs"))
+        df_new = df_old.with_columns(pl.lit(8).alias("n_UPRNs"))
+        report = generate_report(
+            df_old,
+            df_new,
+            None,
+            None,
+            stage="compute_contextual_features",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_merged,
+        )
+        assert (
+            "Distribution: area_m2" in report
+        ), "the cluster-area distribution section must appear"
+        assert (
+            "Distribution: n_UPRNs" in report
+        ), "the UPRNs-per-cluster distribution section must appear"
+        for statistic in ("Min", "Q1", "Mean", "Q3", "Max"):
+            assert (
+                f"| {statistic} |" in report
+            ), f"each distribution must report {statistic} per version"
+        assert (
+            "| Mean | 5.0 | 8.0 |" in report
+        ), "the n_UPRNs shift must appear as old and new means"
+
+    def test_plots_are_embedded_as_image_links(
+        self, df_clusters_old, df_areas_old, df_areas_merged
+    ):
+        """Saved distribution plots are embedded in the report via image
+        links, next to their distribution's statistics."""
+        report = generate_report(
+            df_clusters_old,
+            df_clusters_old,
+            None,
+            None,
+            stage="cluster",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_merged,
+            plot_files={"area_m2": "cluster_plymouth_area_m2.png"},
+        )
+        assert (
+            "![Distribution of area_m2: old vs new](cluster_plymouth_area_m2.png)"
+            in report
+        ), "the saved plot must be embedded via a markdown image link"
+
+    def test_missing_cluster_id_degrades_the_count_to_a_note(
+        self, df_old, df_areas_old
+    ):
+        """A geometry-stage version without a cluster_id column (schema
+        change) must degrade the count to a note, not crash the report."""
+        report = generate_report(
+            df_old,
+            df_old,
+            None,
+            None,
+            stage="cluster",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_old.clone(),
+        )
+        assert (
+            "cluster_id" in report and "Cluster geometry" in report
+        ), "the missing cluster_id must be noted inside the geometry section"
+
+    def test_geometry_sections_only_for_geometry_stages(
+        self, df_old, df_new_identical, manifests, mocker
+    ):
+        """Stages without cluster geometry must not carry geometry or
+        distribution sections."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        report = generate_report(df_old, df_new_identical, *manifests)
+        assert (
+            "Cluster geometry" not in report and "Distribution:" not in report
+        ), "non-geometry stages must not carry geometry sections"
+
+
 class TestLoadTransformDfStageOutput:
     """Tests for `load_transform_df_stage_output`."""
 

@@ -2,11 +2,13 @@
 Compare two dated versions of a pipeline stage output for one local authority.
 
 Reports row/UPRN count deltas, schema diff, UPRN churn, per-tech counts and
-the tech-assignment transition matrix (decision-tree stage), and a
-module-scoped commit log between the two versions' recorded commits. With a
---trigger, checks are read against that rubric's tolerances; without one, the
-report presents raw numbers only. Writes a local markdown report and logs a
-console summary.
+the tech-assignment transition matrix (decision-tree stage), cluster
+count/area deltas and distribution comparisons with overlaid plots (cluster
+and contextual-features stages), and a module-scoped commit log between the
+two versions' recorded commits. With a --trigger, checks are read against
+that rubric's tolerances; without one, the report presents raw numbers only.
+Writes a local markdown report (plus distribution plot PNGs next to it) and
+logs a console summary.
 
 Usage (compare the latest two versions, raw numbers only):
 python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
@@ -913,6 +915,86 @@ def _generate_str_churn_section(
     return _render_section("UPRN churn", *lines)
 
 
+def _format_stat(value: float | int) -> str:
+    """Format a statistic for a report table (floats to one decimal place)."""
+    return f"{value:,.1f}" if isinstance(value, float) else f"{value:,}"
+
+
+def _generate_str_cluster_geometry_section(
+    count_delta: dict | None, area_delta: dict | None, stage: str
+) -> str:
+    """Render cluster count and total area deltas as a markdown section,
+    with the CRS/units stated and the simplified-geometry caveat for the
+    contextual-features stage."""
+    lines = [
+        "| Metric | Old | New | Delta |",
+        "| --- | --- | --- | --- |",
+    ]
+    if count_delta is not None:
+        lines.append(
+            f"| Clusters | {count_delta['clusters_old']} "
+            f"| {count_delta['clusters_new']} "
+            f"| {count_delta['clusters_delta']:+d} |"
+        )
+    if area_delta is not None:
+        lines.append(
+            f"| Total area (m²) | {area_delta['area_m2_old']:,.1f} "
+            f"| {area_delta['area_m2_new']:,.1f} "
+            f"| {area_delta['area_m2_delta']:+,.1f} |"
+        )
+    if count_delta is None:
+        lines.extend(
+            [
+                "",
+                f"Cluster count skipped: no `{CLUSTER_ID_COL}` column in one or "
+                "both versions (see schema diff).",
+            ]
+        )
+    if area_delta is None:
+        lines.extend(["", "Total area skipped: geometry unavailable."])
+    else:
+        lines.extend(
+            ["", "Areas are computed in EPSG:27700 (British National Grid), in m²."]
+        )
+        if stage == "compute_contextual_features":
+            lines.append(
+                "Note: this stage's areas are measured on simplified geometry "
+                "(reprojected from EPSG:4326); small differences from the "
+                "cluster stage are simplification artefacts, not drift."
+            )
+    return _render_section("Cluster geometry", *lines)
+
+
+def _generate_str_distribution_section(
+    column: str,
+    frame_old: pl.DataFrame,
+    frame_new: pl.DataFrame,
+    plot_file: str | None,
+) -> str:
+    """Render one distribution's per-version statistics as a markdown
+    section, with its overlaid plot embedded when one was saved."""
+    title = f"Distribution: {column}"
+    stats_old = generate_dict_distribution_stats(frame_old, column)
+    stats_new = generate_dict_distribution_stats(frame_new, column)
+    if stats_old is None or stats_new is None:
+        return _render_section(
+            title, f"Skipped: no `{column}` values in one or both versions."
+        )
+    lines = [
+        "| Statistic | Old | New |",
+        "| --- | --- | --- |",
+    ]
+    labels = {"min": "Min", "q1": "Q1", "mean": "Mean", "q3": "Q3", "max": "Max"}
+    for key, label in labels.items():
+        lines.append(
+            f"| {label} | {_format_stat(stats_old[key])} "
+            f"| {_format_stat(stats_new[key])} |"
+        )
+    if plot_file is not None:
+        lines.extend(["", f"![Distribution of {column}: old vs new]({plot_file})"])
+    return _render_section(title, *lines)
+
+
 def _generate_str_tech_counts_section(
     df_old: pl.DataFrame | None, df_new: pl.DataFrame | None, level: str
 ) -> str:
@@ -1030,6 +1112,9 @@ def generate_str_report(
     path_new: str,
     df_buildings_old: pl.DataFrame | None = None,
     df_buildings_new: pl.DataFrame | None = None,
+    df_areas_old: pl.DataFrame | None = None,
+    df_areas_new: pl.DataFrame | None = None,
+    plot_files: dict[str, str] | None = None,
 ) -> str:
     """
     Assemble the full markdown comparison report.
@@ -1050,6 +1135,11 @@ def generate_str_report(
         df_buildings_old: older building-level decision-tree output, or None
             when missing (its per-tech counts section is then skipped)
         df_buildings_new: newer building-level output, or None when missing
+        df_areas_old: older version's per-cluster areas (geometry stages), or
+            None (the total-area check is then skipped)
+        df_areas_new: newer version's per-cluster areas, or None
+        plot_files: distribution column to saved plot filename, embedded as
+            image links; None embeds no plots
 
     Returns:
         str: markdown report; lineage sections are replaced by a note when a
@@ -1079,6 +1169,26 @@ def generate_str_report(
             tolerances["max_removed_uprn_share"] if tolerances is not None else None,
         ),
     ]
+    if stage in GEOMETRY_STAGES:
+        area_delta = (
+            generate_dict_total_area_delta(df_areas_old, df_areas_new)
+            if df_areas_old is not None and df_areas_new is not None
+            else None
+        )
+        sections.append(
+            _generate_str_cluster_geometry_section(
+                generate_dict_cluster_count_delta(df_old, df_new), area_delta, stage
+            )
+        )
+        frames = get_dict_distribution_frames(
+            stage, df_old, df_new, df_areas_old, df_areas_new
+        )
+        sections.extend(
+            _generate_str_distribution_section(
+                column, frame_old, frame_new, (plot_files or {}).get(column)
+            )
+            for column, (frame_old, frame_new) in frames.items()
+        )
     if stage == "decision_tree":
         sections.append(_generate_str_tech_counts_section(df_old, df_new, "UPRN-level"))
         sections.append(
@@ -1184,6 +1294,22 @@ if __name__ == "__main__":
         df_buildings_old, df_buildings_new = load_tuple_df_buildings(
             local_authority, release_date_old, release_date_new
         )
+    report_dir = Path(args.report_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_stem = (
+        f"{args.stage}_{local_authority}_{release_date_old}_vs_{release_date_new}"
+    )
+    df_areas_old = df_areas_new = plot_files = None
+    if args.stage in GEOMETRY_STAGES:
+        df_areas_old = load_df_cluster_areas(path_old)
+        df_areas_new = load_df_cluster_areas(path_new)
+        plot_files = generate_dict_distribution_plots(
+            get_dict_distribution_frames(
+                args.stage, df_old, df_new, df_areas_old, df_areas_new
+            ),
+            report_dir,
+            report_stem,
+        )
     report = generate_str_report(
         df_old,
         df_new,
@@ -1198,12 +1324,11 @@ if __name__ == "__main__":
         path_new=path_new,
         df_buildings_old=df_buildings_old,
         df_buildings_new=df_buildings_new,
+        df_areas_old=df_areas_old,
+        df_areas_new=df_areas_new,
+        plot_files=plot_files,
     )
-    report_dir = Path(args.report_dir)
-    report_dir.mkdir(parents=True, exist_ok=True)
-    report_path = report_dir / (
-        f"{args.stage}_{local_authority}_{release_date_old}_vs_{release_date_new}.md"
-    )
+    report_path = report_dir / f"{report_stem}.md"
     report_path.write_text(report)
 
     counts = generate_dict_count_delta(df_old, df_new)
