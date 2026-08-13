@@ -352,10 +352,6 @@ tech_types:
   - "HN_N"
 
 run_manifest:
-  # Which input datasets each stage actually reads, so its run manifest
-  # records only the inputs that could have changed its output. A curated
-  # list per stage beats one flat snapshot of every input, which would bury
-  # the one changed path that matters under ~27 identical lines.
   # Remember to update stage_input_keys below when a pipeline script starts reading a new input data source.
   stage_input_keys:
     uprns:
@@ -438,13 +434,9 @@ compare_versions:
     compute_contextual_features:
       - "asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py"
       - "asf_heat_pump_suitability/pipeline/cluster/"
-  # Tolerances applied by pipeline/validate/compare_versions.py, keyed by
-  # the trigger rubric the comparison is read against, because what counts as
-  # expected drift depends on the cause (a methodology change should barely
-  # move UPRNs; an input re-release may legitimately add many). Shares are
-  # fractions of the old version's UPRNs. Both start at 0.05 as an initial
-  # guess; per-rubric values are expected to diverge when the thresholding
-  # follow-on issue tunes them.
+  # Tolerances applied by pipeline/validate/compare_versions.py, keyed by the
+  # trigger rubric the comparison is read against. Shares are fractions of the
+  # old version's UPRNs.
   tolerances:
     methodology_change:
       max_removed_uprn_share: 0.05
