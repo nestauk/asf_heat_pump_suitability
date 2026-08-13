@@ -1366,6 +1366,69 @@ class TestGetDictDistributionFrames:
         assert frames == {}, "a stage without geometry or configured columns gets none"
 
 
+class TestPlotDistributionOverlay:
+    """Tests for `plot_distribution_overlay`."""
+
+    def test_saves_a_png_at_the_given_path(self, tmp_path):
+        """The overlaid old-vs-new histogram is saved as a PNG file."""
+        path = tmp_path / "cluster_plymouth_area_m2.png"
+        compare_versions.plot_distribution_overlay(
+            pl.Series("area_m2", [100.0, 100.0, 100.0]),
+            pl.Series("area_m2", [210.0, 100.0]),
+            "area_m2",
+            path,
+        )
+        assert path.exists(), "the plot must be saved at the given path"
+        assert path.stat().st_size > 0, "the saved plot must not be an empty file"
+
+
+class TestGenerateDictDistributionPlots:
+    """Tests for `generate_dict_distribution_plots`."""
+
+    def test_saves_one_plot_per_distribution(
+        self, tmp_path, df_areas_old, df_areas_merged, df_clusters_old
+    ):
+        """Each distribution with values on both sides gets one PNG, named
+        after the report stem, and the mapping points the report at it."""
+        df_uprns = df_clusters_old.with_columns(pl.lit(5).alias("n_UPRNs"))
+        frames = {
+            "area_m2": (df_areas_old, df_areas_merged),
+            "n_UPRNs": (df_uprns, df_uprns),
+        }
+        plot_files = compare_versions.generate_dict_distribution_plots(
+            frames, tmp_path, "cluster_plymouth_20260601_vs_20260722"
+        )
+        assert plot_files == {
+            "area_m2": "cluster_plymouth_20260601_vs_20260722_area_m2.png",
+            "n_UPRNs": "cluster_plymouth_20260601_vs_20260722_n_UPRNs.png",
+        }, "each distribution must map to its stem-named PNG"
+        for filename in plot_files.values():
+            assert (tmp_path / filename).exists(), "every mapped PNG must be saved"
+
+    def test_skips_a_distribution_with_no_values_on_one_side(
+        self, tmp_path, df_areas_old
+    ):
+        """A distribution empty on one side (e.g. zero-feature geojson) has
+        nothing to overlay: no file, no mapping entry, no crash."""
+        empty = pl.DataFrame(schema={"area_m2": pl.Float64})
+        plot_files = compare_versions.generate_dict_distribution_plots(
+            {"area_m2": (df_areas_old, empty)}, tmp_path, "stem"
+        )
+        assert plot_files == {}, "an empty side must skip the plot, not crash"
+        assert list(tmp_path.iterdir()) == [], "no file may be written for a skip"
+
+    def test_skips_a_distribution_whose_column_is_missing(
+        self, tmp_path, df_clusters_old
+    ):
+        """A configured column missing from one version (schema change) is
+        skipped; the report's stats section already notes the gap."""
+        with_col = df_clusters_old.with_columns(pl.lit(5).alias("n_UPRNs"))
+        plot_files = compare_versions.generate_dict_distribution_plots(
+            {"n_UPRNs": (with_col, df_clusters_old)}, tmp_path, "stem"
+        )
+        assert plot_files == {}, "a missing column must skip the plot, not raise"
+
+
 class TestParseArguments:
     """Tests for `parse_arguments`."""
 

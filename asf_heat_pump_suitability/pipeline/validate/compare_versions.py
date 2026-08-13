@@ -30,6 +30,8 @@ from pathlib import Path
 
 import fsspec
 import geopandas as gpd
+import matplotlib.pyplot as plt
+import numpy as np
 import polars as pl
 import pyarrow.parquet as pq
 import s3fs
@@ -210,6 +212,71 @@ def get_dict_distribution_frames(
     for column in DISTRIBUTION_COLUMNS.get(stage, []):
         frames[column] = (df_old, df_new)
     return frames
+
+
+def plot_distribution_overlay(
+    values_old: pl.Series, values_new: pl.Series, label: str, path: Path
+) -> None:
+    """
+    Save an overlaid old-vs-new histogram of one distribution as a PNG.
+
+    Both versions share the same bins so the shapes are comparable.
+
+    Args:
+        values_old: older version's values
+        values_new: newer version's values
+        label: distribution name, used for the x-axis and title
+        path: file path the PNG is saved to
+    """
+    old, new = values_old.to_numpy(), values_new.to_numpy()
+    bins = np.histogram_bin_edges(np.concatenate([old, new]), bins=40)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.hist(old, bins=bins, alpha=0.6, label="Old", color="tab:blue")
+    ax.hist(new, bins=bins, alpha=0.6, label="New", color="tab:orange")
+    ax.set_xlabel(label)
+    ax.set_ylabel("Count")
+    ax.set_title(f"Distribution of {label}: old vs new")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def generate_dict_distribution_plots(
+    frames: dict[str, tuple[pl.DataFrame, pl.DataFrame]],
+    plot_dir: Path,
+    file_stem: str,
+) -> dict[str, str]:
+    """
+    Save an overlaid old-vs-new histogram for each of a stage's distributions.
+
+    A distribution with a missing column or no values on either side is
+    skipped with a warning — its stats section already notes the gap.
+
+    Args:
+        frames: column to (old, new) frame pair, as built by
+            `get_dict_distribution_frames`
+        plot_dir: directory the PNGs are saved to
+        file_stem: filename prefix, shared with the markdown report
+
+    Returns:
+        dict: column to saved PNG filename (relative to `plot_dir`, so the
+            report next to the PNGs can link them relatively)
+    """
+    plot_files = {}
+    for column, (frame_old, frame_new) in frames.items():
+        if column not in frame_old.columns or column not in frame_new.columns:
+            logging.warning("Column %s missing from one version; plot skipped.", column)
+            continue
+        values_old = frame_old[column].drop_nulls()
+        values_new = frame_new[column].drop_nulls()
+        if values_old.is_empty() or values_new.is_empty():
+            logging.warning("No %s values in one version; plot skipped.", column)
+            continue
+        filename = f"{file_stem}_{column}.png"
+        plot_distribution_overlay(values_old, values_new, column, plot_dir / filename)
+        plot_files[column] = filename
+    return plot_files
 
 
 def generate_dict_schema_diff(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict:
