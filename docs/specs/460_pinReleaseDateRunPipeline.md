@@ -76,5 +76,8 @@ same `--release_date` to every stage invocation. Decisions (interviewed
 - [x] An invalid date (e.g. `--release_date 2026-08-01`) exits with
       `get_str_release_date`'s error before any stage runs.
 - [x] An unknown argument exits with a usage error.
+- [x] An empty flag value (`--release_date ""` or a trailing `--release_date`)
+      exits with a usage error rather than silently defaulting to today
+      (found in review).
 - [x] `succeeded` counts correctly (assignment bug fixed) and the final
       summary line reports the right number.
