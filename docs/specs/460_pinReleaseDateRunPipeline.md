@@ -68,13 +68,13 @@ same `--release_date` to every stage invocation. Decisions (interviewed
 
 ## Verification
 
-- [ ] `./run_pipeline.sh` with no arguments resolves today's date once and
+- [x] `./run_pipeline.sh` with no arguments resolves today's date once and
       passes the identical `--release_date` value to all five stage
       invocations for every local authority.
-- [ ] `./run_pipeline.sh --release_date 20260801` pins all stages to that
+- [x] `./run_pipeline.sh --release_date 20260801` pins all stages to that
       date.
-- [ ] An invalid date (e.g. `--release_date 2026-08-01`) exits with
+- [x] An invalid date (e.g. `--release_date 2026-08-01`) exits with
       `get_str_release_date`'s error before any stage runs.
-- [ ] An unknown argument exits with a usage error.
-- [ ] `succeeded` counts correctly (assignment bug fixed) and the final
+- [x] An unknown argument exits with a usage error.
+- [x] `succeeded` counts correctly (assignment bug fixed) and the final
       summary line reports the right number.
