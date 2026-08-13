@@ -64,8 +64,8 @@ class TestGenerateDictCountDelta:
     def test_identical_versions_have_zero_deltas(self, df_old, df_new_identical):
         """No drift means zero row and UPRN deltas."""
         counts = compare_versions.generate_dict_count_delta(df_old, df_new_identical)
-        assert counts["rows_delta"] == 0
-        assert counts["uprns_delta"] == 0
+        assert counts["rows_delta"] == 0, "identical versions must show no row change"
+        assert counts["uprns_delta"] == 0, "identical versions must show no UPRN change"
 
     def test_reports_old_new_and_delta_counts(self, df_old, df_new_churned):
         """Row and distinct-UPRN counts are reported for both versions."""
@@ -77,16 +77,18 @@ class TestGenerateDictCountDelta:
             "uprns_old": 4,
             "uprns_new": 5,
             "uprns_delta": 1,
-        }
+        }, "old, new and delta must be reported for both rows and distinct UPRNs"
 
     def test_uprn_counts_are_none_without_uprn_column(self, df_old):
         """Outputs without a UPRN column (e.g. clusters) get row counts only."""
         no_uprn = df_old.drop("UPRN")
         counts = compare_versions.generate_dict_count_delta(no_uprn, no_uprn)
-        assert counts["rows_delta"] == 0
-        assert counts["uprns_old"] is None
-        assert counts["uprns_new"] is None
-        assert counts["uprns_delta"] is None
+        assert (
+            counts["rows_delta"] == 0
+        ), "row counts must still work without a UPRN column"
+        assert counts["uprns_old"] is None, "no UPRN column means no old UPRN count"
+        assert counts["uprns_new"] is None, "no UPRN column means no new UPRN count"
+        assert counts["uprns_delta"] is None, "no UPRN column means no UPRN delta"
 
 
 class TestGenerateDictSchemaDiff:
@@ -98,7 +100,7 @@ class TestGenerateDictSchemaDiff:
             "added": {},
             "removed": {},
             "dtype_changed": {},
-        }
+        }, "identical schemas must yield an empty diff in every category"
 
     def test_reports_added_and_removed_columns_with_dtypes(self, df_old):
         """Column additions and removals are reported with their dtypes."""
@@ -106,14 +108,20 @@ class TestGenerateDictSchemaDiff:
             pl.lit(1.5).alias("garden_area_m2")
         )
         diff = compare_versions.generate_dict_schema_diff(df_old, df_new)
-        assert diff["added"] == {"garden_area_m2": "Float64"}
-        assert diff["removed"] == {"in_hn_zone": "Boolean"}
+        assert diff["added"] == {
+            "garden_area_m2": "Float64"
+        }, "an added column must be reported with its dtype"
+        assert diff["removed"] == {
+            "in_hn_zone": "Boolean"
+        }, "a removed column must be reported with its dtype"
 
     def test_reports_dtype_changes_as_old_new_pairs(self, df_old):
         """A column changing dtype between versions is reported old -> new."""
         df_new = df_old.with_columns(pl.col("UPRN").cast(pl.Utf8))
         diff = compare_versions.generate_dict_schema_diff(df_old, df_new)
-        assert diff["dtype_changed"] == {"UPRN": ("Int64", "String")}
+        assert diff["dtype_changed"] == {
+            "UPRN": ("Int64", "String")
+        }, "a retyped column must be reported as an (old, new) dtype pair"
 
 
 class TestGenerateDictUprnChurn:
@@ -128,7 +136,7 @@ class TestGenerateDictUprnChurn:
             "removed_share": 0.0,
             "n_null_old": 0,
             "n_null_new": 0,
-        }
+        }, "identical versions must show full retention and zero churn"
 
     def test_counts_added_removed_and_retained_uprns(self, df_old, df_new_churned):
         """Added/removed/retained are set differences on the UPRN key, and
@@ -140,19 +148,21 @@ class TestGenerateDictUprnChurn:
             "removed_share": 0.25,
             "n_null_old": 0,
             "n_null_new": 0,
-        }
+        }, "churn must be the set differences on the UPRN key"
 
     def test_returns_none_without_uprn_column(self, df_old):
         """Outputs without a UPRN column cannot be churn-checked."""
         no_uprn = df_old.drop("UPRN")
-        assert compare_versions.generate_dict_uprn_churn(no_uprn, no_uprn) is None
+        assert (
+            compare_versions.generate_dict_uprn_churn(no_uprn, no_uprn) is None
+        ), "churn cannot be computed without a UPRN key, so None is expected"
 
     def test_matches_uprns_across_dtype_changes(self, df_old):
         """A UPRN dtype change between versions must not read as full churn."""
         df_new = df_old.with_columns(pl.col("UPRN").cast(pl.Utf8))
         churn = compare_versions.generate_dict_uprn_churn(df_old, df_new)
-        assert churn["n_retained"] == 4
-        assert churn["n_removed"] == 0
+        assert churn["n_retained"] == 4, "a dtype change must not read as churn"
+        assert churn["n_removed"] == 0, "no UPRNs were removed, only retyped"
 
     def test_matches_uprns_across_int_and_float_dtypes(self, df_old):
         """An Int64-vs-Float64 UPRN mismatch (e.g. a pandas null-upcast) must
@@ -160,8 +170,8 @@ class TestGenerateDictUprnChurn:
         against "123.0" and miss every match."""
         df_new = df_old.with_columns(pl.col("UPRN").cast(pl.Float64))
         churn = compare_versions.generate_dict_uprn_churn(df_old, df_new)
-        assert churn["n_retained"] == 4
-        assert churn["n_removed"] == 0
+        assert churn["n_retained"] == 4, "int and float UPRN keys must still match"
+        assert churn["n_removed"] == 0, "a numeric mismatch must not read as loss"
 
     def test_null_uprns_are_counted_not_collapsed(self, df_old):
         """Any number of null UPRNs would collapse to one set element and
@@ -190,15 +200,15 @@ class TestGenerateStrChurnNote:
         assert (
             compare_versions.generate_str_churn_note(churn, max_removed_share=0.25)
             is None
-        )
+        ), "churn within tolerance is expected and must not warn"
 
     def test_unexpected_uprn_loss_above_tolerance_gets_warning(self):
         """UPRN loss above the rubric's tolerance produces a warning naming
         the observed share and the tolerance."""
         churn = {"n_added": 0, "n_removed": 3, "n_retained": 1, "removed_share": 0.75}
         note = compare_versions.generate_str_churn_note(churn, max_removed_share=0.05)
-        assert "75.0%" in note
-        assert "5.0%" in note
+        assert "75.0%" in note, "the warning must name the observed removed share"
+        assert "5.0%" in note, "the warning must name the tolerance it breached"
 
 
 class TestGetDictTolerances:
@@ -208,7 +218,9 @@ class TestGetDictTolerances:
     def test_each_trigger_rubric_has_a_removed_uprn_tolerance(self, trigger):
         """Both rubrics are configured in base.yaml with the churn tolerance."""
         tolerances = compare_versions.get_dict_tolerances(trigger)
-        assert isinstance(tolerances["max_removed_uprn_share"], float)
+        assert isinstance(
+            tolerances["max_removed_uprn_share"], float
+        ), "each rubric must configure a numeric removed-UPRN tolerance"
 
     def test_unknown_trigger_raises_keyerror(self):
         """A trigger without a configured rubric fails loudly."""
@@ -228,8 +240,10 @@ class TestGenerateDfTechTransitions:
         )
         assert transitions.filter(
             pl.col("assigned_tech_old") != pl.col("assigned_tech_new")
-        ).is_empty()
-        assert transitions["n_uprns"].sum() == 4
+        ).is_empty(), "no drift means no off-diagonal transitions"
+        assert (
+            transitions["n_uprns"].sum() == 4
+        ), "every retained UPRN must appear exactly once in the matrix"
 
     def test_counts_transitions_for_retained_uprns_only(self, df_old, df_new_churned):
         """Transitions are counted over UPRNs present in both versions; UPRN 3's
@@ -241,9 +255,11 @@ class TestGenerateDfTechTransitions:
             (pl.col("assigned_tech_old") == "District heat network")
             & (pl.col("assigned_tech_new") == "Individual solution")
         )
-        assert moved["n_uprns"].to_list() == [1]
+        assert moved["n_uprns"].to_list() == [1], "UPRN 3's tech move must be counted"
         # Only the 3 retained UPRNs are counted; added/removed ones are churn.
-        assert transitions["n_uprns"].sum() == 3
+        assert (
+            transitions["n_uprns"].sum() == 3
+        ), "added/removed UPRNs are churn, not transitions"
 
     def test_null_tech_assignments_get_a_readable_label(self, df_old):
         """Real outputs contain UPRNs with a null tech (e.g. no building ID);
@@ -256,15 +272,21 @@ class TestGenerateDfTechTransitions:
         )
         transitions = compare_versions.generate_df_tech_transitions(df_old, df_new)
         nulled = transitions.filter(pl.col("assigned_tech_new") == "(null)")
-        assert nulled["assigned_tech_old"].to_list() == ["Individual solution"]
-        assert transitions["assigned_tech_new"].null_count() == 0
+        assert nulled["assigned_tech_old"].to_list() == [
+            "Individual solution"
+        ], "the nulled UPRN's transition must appear under the (null) label"
+        assert (
+            transitions["assigned_tech_new"].null_count() == 0
+        ), "null techs must be labelled, not left as raw nulls"
 
     def test_returns_none_without_tech_column(self, df_old, df_new_identical):
         """A version missing `assigned_tech` must degrade to None rather than
         raise `ColumnNotFoundError` — this data function must be as safe to
         call directly as its `generate_dict_*` siblings."""
         df_new = df_new_identical.drop("assigned_tech")
-        assert compare_versions.generate_df_tech_transitions(df_old, df_new) is None
+        assert (
+            compare_versions.generate_df_tech_transitions(df_old, df_new) is None
+        ), "a missing tech column must degrade to None, not raise"
 
     def test_duplicate_uprns_do_not_inflate_transition_counts(self, df_old):
         """A duplicated UPRN in one version must not cross-product into an
@@ -272,14 +294,18 @@ class TestGenerateDfTechTransitions:
         first."""
         df_new = pl.concat([df_old, df_old.head(1)])  # UPRN 1 appears twice
         transitions = compare_versions.generate_df_tech_transitions(df_old, df_new)
-        assert transitions["n_uprns"].sum() == 4
+        assert (
+            transitions["n_uprns"].sum() == 4
+        ), "a duplicated UPRN must not cross-product into extra transitions"
 
     def test_matches_uprns_across_int_and_float_dtypes(self, df_old):
         """An Int64-vs-Float64 UPRN mismatch must not read as churn here
         either, since the transition matrix joins on the same UPRN key."""
         df_new = df_old.with_columns(pl.col("UPRN").cast(pl.Float64))
         transitions = compare_versions.generate_df_tech_transitions(df_old, df_new)
-        assert transitions["n_uprns"].sum() == 4
+        assert (
+            transitions["n_uprns"].sum() == 4
+        ), "int and float UPRN keys must still join as the same UPRNs"
 
 
 class TestGenerateDfTechCounts:
@@ -340,8 +366,10 @@ class TestLoadDictManifest:
             "fsspec.open", mocker.mock_open(read_data=json.dumps(manifest))
         )
         loaded = compare_versions.load_dict_manifest("s3://bucket/dir/output.parquet")
-        assert loaded == manifest
-        assert opened.call_args.args[0] == "s3://bucket/dir/output.manifest.json"
+        assert loaded == manifest, "the manifest JSON must round-trip unchanged"
+        assert (
+            opened.call_args.args[0] == "s3://bucket/dir/output.manifest.json"
+        ), "the manifest path must be derived from the output path"
 
     def test_missing_manifest_returns_none(self, mocker):
         """Pre-#440 outputs have no manifest: degrade to None, don't raise."""
@@ -349,7 +377,7 @@ class TestLoadDictManifest:
         assert (
             compare_versions.load_dict_manifest("s3://bucket/dir/output.parquet")
             is None
-        )
+        ), "a missing manifest must degrade to None, not raise"
 
 
 class TestGenerateDictInputVersionChanges:
@@ -360,7 +388,11 @@ class TestGenerateDictInputVersionChanges:
         versions = {"epc.domestic": "s3://bucket/inputs/2026Q1_epc.parquet"}
         assert compare_versions.generate_dict_input_version_changes(
             {"input_versions": versions}, {"input_versions": versions}
-        ) == {"changed": {}, "added": {}, "removed": {}}
+        ) == {
+            "changed": {},
+            "added": {},
+            "removed": {},
+        }, "identical input versions must produce an empty diff"
 
     def test_reports_changed_added_and_removed_inputs(self):
         """Input path changes are reported old -> new, alongside inputs only
@@ -388,7 +420,7 @@ class TestGenerateDictInputVersionChanges:
             "removed": {
                 "geodata.gb_code_points": "s3://bucket/inputs/2025_codepoint.zip"
             },
-        }
+        }, "changed inputs pair old and new paths; one-sided ones are added/removed"
 
 
 class TestStageModulePaths:
@@ -398,7 +430,7 @@ class TestStageModulePaths:
         """Commit-log scoping mirrors the run manifest's curated stage list."""
         assert set(compare_versions.STAGE_MODULE_PATHS) == set(
             manifest_utils.STAGE_INPUT_KEYS
-        )
+        ), "commit-log scoping must cover exactly the manifest's curated stages"
 
     def test_every_curated_path_exists_in_the_repo(self):
         """A renamed module must break this test, not silently empty the log."""
@@ -429,18 +461,25 @@ class TestGenerateListCommitLog:
         commits = compare_versions.generate_list_commit_log(
             "a" * 40, "b" * 40, "decision_tree"
         )
-        assert commits == ["abc1234 Fix tree", "def5678 Tune zones"]
+        assert commits == [
+            "abc1234 Fix tree",
+            "def5678 Tune zones",
+        ], "the scoped git log's lines must come back as the commit list"
         command = run.call_args.args[0]
-        assert f"{'a' * 40}..{'b' * 40}" in command
+        assert (
+            f"{'a' * 40}..{'b' * 40}" in command
+        ), "git log must be scoped to the old..new commit range"
         paths = command[command.index("--") + 1 :]
-        assert paths == compare_versions.STAGE_MODULE_PATHS["decision_tree"]
+        assert (
+            paths == compare_versions.STAGE_MODULE_PATHS["decision_tree"]
+        ), "git log must be restricted to the stage's curated module paths"
 
     def test_same_commit_returns_empty_log_without_running_git(self, mocker):
         """Two outputs from the same commit cannot differ by code: empty log."""
         run = mocker.patch("subprocess.run")
         assert (
             compare_versions.generate_list_commit_log("a" * 40, "a" * 40, "uprns") == []
-        )
+        ), "the same commit on both sides cannot differ by code"
         run.assert_not_called()
 
     def test_unknown_recorded_commit_returns_none(self, mocker):
@@ -449,7 +488,7 @@ class TestGenerateListCommitLog:
         assert (
             compare_versions.generate_list_commit_log("unknown", "b" * 40, "uprns")
             is None
-        )
+        ), "an unrecorded commit cannot scope a log, so None is expected"
         run.assert_not_called()
 
     def test_commit_old_not_an_ancestor_of_commit_new_returns_none(self, mocker):
@@ -464,7 +503,7 @@ class TestGenerateListCommitLog:
         assert (
             compare_versions.generate_list_commit_log("a" * 40, "b" * 40, "uprns")
             is None
-        )
+        ), "a non-ancestor old commit must degrade to None, not an incomplete log"
         run.assert_called_once()
 
     def test_commits_missing_from_local_history_return_none(self, mocker):
@@ -480,8 +519,10 @@ class TestGenerateListCommitLog:
         assert (
             compare_versions.generate_list_commit_log("a" * 40, "b" * 40, "uprns")
             is None
-        )
-        assert run.call_count == 2
+        ), "git log failing after the ancestor check must degrade to None"
+        assert (
+            run.call_count == 2
+        ), "both the ancestor check and git log must have been attempted"
 
 
 class TestGetStrStageOutputPath:
@@ -495,7 +536,7 @@ class TestGetStrStageOutputPath:
         ) == (
             "s3://asf-local-heat-planning-tool/outputs/data/plymouth/20260722/"
             "plymouth_uprns_most_suitable_tech.parquet"
-        )
+        ), "the decision-tree comparison must read the UPRN-level output"
 
     def test_fills_the_clustering_tolerance_placeholder(self):
         """The contextual-features template's {tolerance_m} placeholder is
@@ -504,13 +545,15 @@ class TestGetStrStageOutputPath:
         path = compare_versions.get_str_stage_output_path(
             "compute_contextual_features", "plymouth", "20260722"
         )
-        assert path.endswith(f"_clusters_contextual_features_{tolerance_m}m.geojson")
+        assert path.endswith(
+            f"_clusters_contextual_features_{tolerance_m}m.geojson"
+        ), "the tolerance placeholder must be filled from config"
 
     def test_covers_the_same_stages_as_the_run_manifest(self):
         """Output-dataset mapping mirrors the run manifest's curated stages."""
         assert set(compare_versions.STAGE_OUTPUT_DATASETS) == set(
             manifest_utils.STAGE_INPUT_KEYS
-        )
+        ), "output resolution must cover exactly the manifest's curated stages"
 
     def test_resolves_a_version_saved_under_a_previous_tolerance(self, mocker):
         """A contextual-features version saved before a tolerance_m config
@@ -693,9 +736,9 @@ class TestGenerateStrReport:
             compare_versions, "generate_list_commit_log", return_value=[]
         )
         report = generate_report(df_old, df_new_identical, *manifests)
-        assert "methodology_change" in report
-        assert "20260601" in report
-        assert "20260722" in report
+        assert "methodology_change" in report, "the report must name its rubric"
+        assert "20260601" in report, "the report must name the old version"
+        assert "20260722" in report, "the report must name the new version"
 
     def test_covers_counts_schema_churn_and_input_changes(
         self, df_old, df_new_churned, manifests, mocker
@@ -708,11 +751,13 @@ class TestGenerateStrReport:
             return_value=["abc1234 Tune decision tree"],
         )
         report = generate_report(df_old, df_new_churned, *manifests)
-        assert "Row and UPRN counts" in report
-        assert "Schema diff" in report
-        assert "UPRN churn" in report
-        assert "2026Q2_epc" in report
-        assert "abc1234 Tune decision tree" in report
+        assert "Row and UPRN counts" in report, "the count-delta section must appear"
+        assert "Schema diff" in report, "the schema-diff section must appear"
+        assert "UPRN churn" in report, "the churn section must appear"
+        assert "2026Q2_epc" in report, "the re-released input must be named"
+        assert (
+            "abc1234 Tune decision tree" in report
+        ), "the scoped commit log must appear in the report"
 
     def test_transition_matrix_only_for_the_decision_tree_stage(
         self, df_old, df_new_churned, manifests, mocker
@@ -726,8 +771,12 @@ class TestGenerateStrReport:
         other = generate_report(
             df_old, df_new_churned, *manifests, stage="add_features"
         )
-        assert "Tech-assignment transitions" in decision_tree
-        assert "Tech-assignment transitions" not in other
+        assert (
+            "Tech-assignment transitions" in decision_tree
+        ), "the decision-tree report must carry the transition matrix"
+        assert (
+            "Tech-assignment transitions" not in other
+        ), "a UPRN-level matrix must not appear for other stages"
 
     def test_missing_manifests_name_both_versions_in_the_note(
         self, df_old, df_new_identical
@@ -735,8 +784,12 @@ class TestGenerateStrReport:
         """When both versions lack a manifest, the note must not attribute
         the gap to only one of them."""
         report = generate_report(df_old, df_new_identical, None, None)
-        assert "manifest missing for the old and new versions" in report.lower()
-        assert "Row and UPRN counts" in report
+        assert (
+            "manifest missing for the old and new versions" in report.lower()
+        ), "the note must attribute the missing manifests to both versions"
+        assert (
+            "Row and UPRN counts" in report
+        ), "data sections must still render without manifests"
 
     def test_missing_manifest_names_only_the_version_that_lacks_one(
         self, df_old, df_new_identical, manifests
@@ -745,8 +798,12 @@ class TestGenerateStrReport:
         version specifically, not both."""
         _, manifest_new = manifests
         report = generate_report(df_old, df_new_identical, None, manifest_new)
-        assert "manifest missing for the old version " in report.lower()
-        assert "old and new" not in report.lower()
+        assert (
+            "manifest missing for the old version " in report.lower()
+        ), "the note must name the one version lacking a manifest"
+        assert (
+            "old and new" not in report.lower()
+        ), "the note must not blame both versions when only one lacks a manifest"
 
     def test_transition_matrix_skips_when_tech_column_missing(
         self, df_old, manifests, mocker
@@ -759,8 +816,8 @@ class TestGenerateStrReport:
         )
         df_new = df_old.drop("assigned_tech")
         report = generate_report(df_old, df_new, *manifests)
-        assert "Skipped" in report
-        assert "assigned_tech" in report
+        assert "Skipped" in report, "the matrix must skip, not crash the report"
+        assert "assigned_tech" in report, "the skip note must name the missing column"
 
     def test_transition_matrix_skips_when_no_uprns_retained(
         self, df_old, manifests, mocker
@@ -772,7 +829,9 @@ class TestGenerateStrReport:
         )
         df_new = df_old.with_columns((pl.col("UPRN") + 100).alias("UPRN"))
         report = generate_report(df_old, df_new, *manifests)
-        assert "No UPRNs retained across versions; matrix skipped." in report
+        assert (
+            "No UPRNs retained across versions; matrix skipped." in report
+        ), "total churn must render a note, not a malformed table"
 
     def test_transition_matrix_survives_a_colliding_tech_label(
         self, df_old, manifests, mocker
@@ -790,7 +849,7 @@ class TestGenerateStrReport:
             .alias("assigned_tech")
         )
         report = generate_report(df_old, df_new, *manifests)
-        assert "assigned_tech_old" in report
+        assert "assigned_tech_old" in report, "a colliding label must still render"
 
     def test_unexpected_uprn_loss_warning_appears(self, df_old, manifests, mocker):
         """UPRN loss above the rubric tolerance surfaces as a warning line."""
@@ -799,7 +858,7 @@ class TestGenerateStrReport:
         )
         df_new = df_old.head(1)
         report = generate_report(df_old, df_new, *manifests)
-        assert "WARNING" in report
+        assert "WARNING" in report, "above-tolerance UPRN loss must surface a warning"
 
     def test_omitted_trigger_reports_raw_numbers_without_rubric(
         self, df_old, manifests, mocker
@@ -890,16 +949,16 @@ class TestLoadTransformDfStageOutput:
             crs="EPSG:27700",
         ).to_parquet(path)
         df = compare_versions.load_transform_df_stage_output(str(path))
-        assert "geometry" not in df.columns
-        assert df["UPRN"].to_list() == [1, 2]
+        assert "geometry" not in df.columns, "geoarrow columns must be dropped"
+        assert df["UPRN"].to_list() == [1, 2], "tabular columns must survive the drop"
 
     def test_loads_plain_parquet_unchanged(self, tmp_path):
         """Polars-written outputs have no geometry and load as-is."""
         path = tmp_path / "output.parquet"
         pl.DataFrame({"UPRN": [1, 2], "in_hn_zone": [True, False]}).write_parquet(path)
         df = compare_versions.load_transform_df_stage_output(str(path))
-        assert df.columns == ["UPRN", "in_hn_zone"]
-        assert df.height == 2
+        assert df.columns == ["UPRN", "in_hn_zone"], "plain parquet columns load as-is"
+        assert df.height == 2, "plain parquet rows must load unchanged"
 
     def test_zero_feature_geojson_degrades_to_an_empty_dataframe(self, mocker):
         """A geojson with every feature filtered out (e.g. compute_contextual
@@ -915,7 +974,7 @@ class TestLoadTransformDfStageOutput:
         df = compare_versions.load_transform_df_stage_output(
             "s3://bucket/dir/output.geojson"
         )
-        assert df.is_empty()
+        assert df.is_empty(), "a zero-feature geojson must degrade to an empty frame"
 
 
 class TestLoadDfBuildingsTech:
