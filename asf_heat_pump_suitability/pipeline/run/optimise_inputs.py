@@ -59,6 +59,8 @@ def assign_df_grid_squares(
 
     Args:
         df (pl.DataFrame): UPRN data with X_COORDINATE and Y_COORDINATE columns in BNG (EPSG:27700).
+        x_col (str): name of column containing X coordinates.
+        y_col (str): name of column containing Y coordinates.
         gs_lookup (pl.DataFrame): grid square lookup with easting_100km and northing_100km corresponding to grid square values.
         Optional. If None, defaults to generating new grid square lookup.
 
@@ -263,6 +265,10 @@ if __name__ == "__main__":
             multi_file=True,
         )
 
+    # Run block if user has input "UPRN" or "EPC_domestic" as a script-level arg, or no datasets specified (i.e. process
+    # all datasets).
+    # OS Open UPRN processing is required ahead of domestic EPC processing as EPC UPRNs are matched to their coordinates
+    # from OS Open UPRN to allow geospatial partitioning of EPC data into grid square files
     if not datasets or "UPRN" in datasets or "EPC_domestic" in datasets:
         uprns_df = load_geodata.load_df_osopen_uprn(parquet=False)
 
@@ -277,12 +283,21 @@ if __name__ == "__main__":
             gs_lookup=gs_lookup,
         )
 
+        null_count = uprns_df["grid_square"].null_count()
+        if null_count > 0:
+            warnings.warn(
+                f"{null_count} UPRNs could not be assigned to a grid square and will be skipped."
+            )
+            uprns_df = uprns_df.drop_nulls(subset=["grid_square"])
+
+        # Partition OS Open UPRN data into grid squares
         if not datasets or "UPRN" in datasets:
             s3_fname = config["data"]["geodata"]["uk_osopen_uprn_partitioned"]
             partition_geofile_to_grid_squares(
                 df=uprns_df, grid_squares=grid_squares, fpath=s3_fname
             )
 
+        # Partition preprocessed domestic EPC data into grid squares
         if not datasets or "EPC_domestic" in datasets:
             # Some UPRNs don't have coordinates so they will be dropped here.
             # This is fine because we can't use them in the pipeline because we don't know where they are located.
@@ -310,6 +325,7 @@ if __name__ == "__main__":
             del epc_df
         del uprns_df
 
+    # Partition points of interest (POI) data into grid squares
     if not datasets or "POI" in datasets:
         # POI data
         poi_gdf = load_geodata.load_gdf_poi(parquet=False).to_crs(
@@ -327,8 +343,9 @@ if __name__ == "__main__":
         )
         del poi_df
 
+    # Convert commercial EPC data to parquet file format
     if not datasets or "EPC_commercial" in datasets:
-        # England and Wales register
+        # Commercial EPC register for England and Wales
         commercial_epc_df = base_getters.load_df_from_s3(
             config["data"]["epc"]["commercial"]["EW"],
             infer_schema_length=10000,
@@ -337,7 +354,7 @@ if __name__ == "__main__":
             commercial_epc_df, config["data"]["epc"]["commercial"]["EW_parquet"]
         )
 
-        # Scotland register
+        # Commercial EPC register for Scotland
         commercial_epc_df = base_getters.load_df_from_s3(
             config["data"]["epc"]["commercial"]["S"]
         )

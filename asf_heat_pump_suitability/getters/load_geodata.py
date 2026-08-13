@@ -394,7 +394,7 @@ def load_gdf_poi(
                 for sq in grid_squares
             ]
             return pl.read_parquet(paths, **kwargs)
-        path = config["data"]["geodata"]["UK_poi_locations_partitioned"]
+        path = config["data"]["geodata"]["UK_poi_locations_parquet"]
         return pl.read_parquet(path, **kwargs)
 
     else:
