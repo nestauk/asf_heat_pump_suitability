@@ -152,10 +152,8 @@ def generate_gdf_outdoor_space(
 
     # Use a row-wise difference. This is quicker than using overlay with difference due to not needing to create a spatial index.
     # Difference geometry - equivalent to land minus buildings - MultiPolygons will be created for land parcels which get split into multi-parts
-    diff_geom = (
-        land_and_buildings_gdf["geometry"]
-        .difference(land_and_buildings_gdf["building_geometry"])
-        .fillna(land_and_buildings_gdf["geometry"])
+    diff_geom = land_and_buildings_gdf["geometry"].difference(
+        land_and_buildings_gdf["building_geometry"]
     )
     land_minus_buildings = gpd.GeoDataFrame(
         land_and_buildings_gdf[["NATIONALCADASTRALREFERENCE"]],
