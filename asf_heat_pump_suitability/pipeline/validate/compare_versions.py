@@ -50,6 +50,7 @@ GEOMETRY_STAGES = ("cluster", "compute_contextual_features")
 STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
 BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"]
+DISTRIBUTION_COLUMNS = config["compare_versions"]["distribution_columns"]
 TOLERANCES = config["compare_versions"]["tolerances"]
 
 
@@ -147,6 +148,68 @@ def generate_dict_total_area_delta(
         "area_m2_new": total_new,
         "area_m2_delta": total_new - total_old,
     }
+
+
+def generate_dict_distribution_stats(df: pl.DataFrame, column: str) -> dict | None:
+    """
+    Summarise one column's distribution: both quartiles, min, max and mean.
+
+    Q1 and Q3 are reported separately (linear interpolation) so a shifted
+    distribution and a widened one stay distinguishable. Nulls are excluded.
+
+    Args:
+        df: one version of a stage output
+        column: column to summarise
+
+    Returns:
+        dict: min/q1/mean/q3/max, or None when the column is missing or has
+            no non-null values
+    """
+    if column not in df.columns:
+        return None
+    values = df[column].drop_nulls()
+    if values.is_empty():
+        return None
+    return {
+        "min": values.min(),
+        "q1": values.quantile(0.25, "linear"),
+        "mean": values.mean(),
+        "q3": values.quantile(0.75, "linear"),
+        "max": values.max(),
+    }
+
+
+def get_dict_distribution_frames(
+    stage: str,
+    df_old: pl.DataFrame,
+    df_new: pl.DataFrame,
+    df_areas_old: pl.DataFrame | None,
+    df_areas_new: pl.DataFrame | None,
+) -> dict[str, tuple[pl.DataFrame, pl.DataFrame]]:
+    """
+    Map each of a stage's distribution columns to the (old, new) frames
+    that carry it.
+
+    The derived cluster area reads the geometry-derived frames (when
+    loaded); the stage's configured `DISTRIBUTION_COLUMNS` read the tabular
+    outputs.
+
+    Args:
+        stage: pipeline stage the outputs belong to
+        df_old: older version of the tabular stage output
+        df_new: newer version of the tabular stage output
+        df_areas_old: older version's per-cluster areas, or None
+        df_areas_new: newer version's per-cluster areas, or None
+
+    Returns:
+        dict: column name to (old, new) frame pair, plot/report order
+    """
+    frames = {}
+    if df_areas_old is not None and df_areas_new is not None:
+        frames[AREA_COL] = (df_areas_old, df_areas_new)
+    for column in DISTRIBUTION_COLUMNS.get(stage, []):
+        frames[column] = (df_old, df_new)
+    return frames
 
 
 def generate_dict_schema_diff(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict:

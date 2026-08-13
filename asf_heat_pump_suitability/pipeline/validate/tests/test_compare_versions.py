@@ -1256,6 +1256,116 @@ class TestLoadDfClusterAreas:
             compare_versions.load_df_cluster_areas("s3://bucket/dir/output.csv")
 
 
+class TestGenerateDictDistributionStats:
+    """Tests for `generate_dict_distribution_stats`."""
+
+    def test_reports_quartiles_min_max_and_mean(self):
+        """The shared helper reports Q1 and Q3 (both quartiles, so a shift
+        and a widening stay distinguishable) plus min, max and mean."""
+        df = pl.DataFrame({"n_UPRNs": [1, 2, 3, 4, 5]})
+        stats = compare_versions.generate_dict_distribution_stats(df, "n_UPRNs")
+        assert stats == {
+            "min": 1,
+            "q1": 2.0,
+            "mean": 3.0,
+            "q3": 4.0,
+            "max": 5,
+        }, "the helper must report Q1, Q3, min, max and mean for the column"
+
+    def test_nulls_are_excluded_from_the_statistics(self):
+        """Null values must not drag the statistics; they are dropped."""
+        df = pl.DataFrame({"n_UPRNs": [1, 2, 3, 4, 5, None]})
+        stats = compare_versions.generate_dict_distribution_stats(df, "n_UPRNs")
+        assert stats["mean"] == 3.0, "nulls must be excluded, not counted as zeros"
+
+    def test_missing_column_returns_none(self, df_clusters_old):
+        """A version without the target column cannot be summarised."""
+        assert (
+            compare_versions.generate_dict_distribution_stats(
+                df_clusters_old, "n_UPRNs"
+            )
+            is None
+        ), "a missing column must degrade to None, not raise"
+
+    def test_all_null_column_returns_none(self):
+        """A column with no values has no distribution to report."""
+        df = pl.DataFrame({"n_UPRNs": [None, None]}, schema={"n_UPRNs": pl.Int64})
+        assert (
+            compare_versions.generate_dict_distribution_stats(df, "n_UPRNs") is None
+        ), "an all-null column must degrade to None, not report null statistics"
+
+
+class TestDistributionColumns:
+    """Tests for the configured `DISTRIBUTION_COLUMNS` per-stage lists."""
+
+    def test_every_configured_stage_is_a_known_stage(self):
+        """Distribution columns are keyed by real pipeline stages."""
+        assert set(compare_versions.DISTRIBUTION_COLUMNS) <= set(
+            compare_versions.STAGE_OUTPUT_DATASETS
+        ), "distribution columns must be configured under known stage names"
+
+    def test_uprns_per_cluster_is_configured_at_the_contextual_stage(self):
+        """n_UPRNs is computed at the contextual-features stage, so its
+        distribution is configured there — config lists real columns only."""
+        assert (
+            "n_UPRNs"
+            in compare_versions.DISTRIBUTION_COLUMNS["compute_contextual_features"]
+        ), "the UPRNs-per-cluster distribution must target the real n_UPRNs column"
+
+
+class TestGetDictDistributionFrames:
+    """Tests for `get_dict_distribution_frames`."""
+
+    def test_cluster_stage_gets_the_derived_area_distribution_only(
+        self, df_clusters_old, df_areas_old, df_areas_merged
+    ):
+        """The cluster stage output has no configured distribution columns;
+        its only distribution is the geometry-derived area."""
+        frames = compare_versions.get_dict_distribution_frames(
+            "cluster",
+            df_clusters_old,
+            df_clusters_old,
+            df_areas_old,
+            df_areas_merged,
+        )
+        assert list(frames) == [
+            "area_m2"
+        ], "the cluster stage must get exactly the derived area distribution"
+        assert frames["area_m2"] == (
+            df_areas_old,
+            df_areas_merged,
+        ), "the area distribution must read the geometry-derived frames"
+
+    def test_contextual_stage_adds_the_configured_columns(
+        self, df_clusters_old, df_areas_old
+    ):
+        """The contextual-features stage gets the derived area plus its
+        configured columns (n_UPRNs), read from the tabular output."""
+        frames = compare_versions.get_dict_distribution_frames(
+            "compute_contextual_features",
+            df_clusters_old,
+            df_clusters_old,
+            df_areas_old,
+            df_areas_old,
+        )
+        assert set(frames) == {
+            "area_m2",
+            "n_UPRNs",
+        }, "the contextual stage must get the area and n_UPRNs distributions"
+        assert frames["n_UPRNs"] == (
+            df_clusters_old,
+            df_clusters_old,
+        ), "configured columns must read the tabular stage output"
+
+    def test_stage_without_geometry_gets_no_distributions(self, df_old):
+        """Non-geometry stages have no areas and no configured columns yet,
+        so no distribution sections are added."""
+        frames = compare_versions.get_dict_distribution_frames(
+            "decision_tree", df_old, df_old, None, None
+        )
+        assert frames == {}, "a stage without geometry or configured columns gets none"
+
+
 class TestParseArguments:
     """Tests for `parse_arguments`."""
 
