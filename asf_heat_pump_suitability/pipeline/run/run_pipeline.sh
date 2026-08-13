@@ -16,7 +16,7 @@ local_authorities=(
     "east lothian"
 )
 
-succeeded = 0
+succeeded=0
 for la in "${local_authorities[@]}"; do
     echo "=================================================="
     echo "Starting pipeline for: $la"
