@@ -282,18 +282,24 @@ def extend_edges_gdf(
             all_building_ids.extend([building_id] * len(pts))
 
     print(f"Generated {len(all_points)} points.")
-    # Create a gdf of all densified points, where one row is one point
-    point_ids = np.arange(
-        len(all_points)
-    )  # Set unique ID for each point for later joins
-    points_gdf = gpd.GeoDataFrame(
-        {"point_id": point_ids, building_id_col: all_building_ids},
-        geometry=all_points,
-        crs=gdf.crs,
-    )
+    # Extract a flat (N, 2) float64 array of all point coordinates
+    coords_arr = shapely.get_coordinates(np.array(all_points))
+
+    # ordered=True requires every input coordinate to be unique — GEOS raises GEOSException otherwise.
+    # Buildings can (rarely) share corner coordinates (e.g. shared walls), so duplicates can exist.
+    # To combat this we jitter duplicates by a 0.1mm x-offset so both buildings keep their seed points.
+
+    # Returns the index of the first occurrence of each unique coordinate pair
+    _, first_occ = np.unique(coords_arr, axis=0, return_index=True)
+    # Mark every position that is NOT a first occurrence as a duplicate
+    is_dup = np.ones(len(coords_arr), dtype=bool)
+    is_dup[first_occ] = False
+    # Offset each duplicate's x coordinate by a unique multiple of 0.1mm - this should not affect the overall shape of buildings significantly.
+    # (progressive multiples ensure jittered points don't collide with each other)
+    coords_arr[is_dup, 0] += np.arange(1, is_dup.sum() + 1) * 1e-4
 
     # Convert to a Multipoint collection for Voronoi
-    coords = MultiPoint(shapely.get_coordinates(points_gdf.geometry.values))
+    coords = MultiPoint(coords_arr)
 
     print("Computing Voronoi diagram...")
     # Compute Voronoi polygons up to specified boundary, create one Voronoi cell per point and retain the original order of points
@@ -301,10 +307,9 @@ def extend_edges_gdf(
         coords, extend_to=boundary, ordered=True
     )
 
-    # Convert to a geodataframe
+    # Convert to a geodataframe — with ordered=True the nth cell maps directly to the nth input point
     voronoi_gdf = gpd.GeoDataFrame(
         {
-            "voronoi_id": point_ids,
             building_id_col: all_building_ids,
             "geometry": np.array(voronoi_collection.geoms),
         },
