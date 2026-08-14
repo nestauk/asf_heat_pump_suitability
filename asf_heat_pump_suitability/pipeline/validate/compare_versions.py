@@ -759,7 +759,8 @@ def load_df_cluster_areas(path: str) -> pl.DataFrame:
         path: S3 path of the stage output (.parquet or .geojson)
 
     Returns:
-        pl.DataFrame: one `area_m2` row per cluster
+        pl.DataFrame: one `area_m2` row per feature row (not deduplicated on
+            cluster id, so a duplicated cluster contributes each of its rows)
 
     Raises:
         ValueError: for file types the comparison cannot read geometry from
