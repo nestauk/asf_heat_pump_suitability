@@ -250,17 +250,18 @@ def extend_edges_gdf(
     gdf = gdf[gdf.within(boundary)]
 
     # Add an internal unique ID to each building
-    id_col = "_internal_building_id"
-    gdf[id_col] = np.arange(len(gdf))
+    building_id_col = "_internal_building_id"
+    gdf[building_id_col] = np.arange(len(gdf))
 
     all_points = []
-    all_ids = []
+    all_building_ids = []
 
     print("Densifying building polygon edges...")
     # Densify polygon edges with additional points to prepare for Voronoi diagram
     for _, row in gdf.iterrows():
         geom = row.geometry
-        id = row[id_col]
+        # Assign building ID
+        building_id = row[building_id_col]
         # Deal with any multipolygon buildings
         polys = geom.geoms if isinstance(geom, MultiPolygon) else [geom]
 
@@ -278,43 +279,51 @@ def extend_edges_gdf(
             # Add corner vertices of building into list, dropping the last one which is a duplicate of the starting point
             pts.extend(Point(coord) for coord in exterior.coords[:-1])
             all_points.extend(pts)
-            all_ids.extend([id] * len(pts))
+            all_building_ids.extend([building_id] * len(pts))
 
     print(f"Generated {len(all_points)} points.")
     # Create a gdf of all densified points, where one row is one point
-    points_gdf = gpd.GeoDataFrame({id_col: all_ids}, geometry=all_points, crs=gdf.crs)
+    point_ids = np.arange(
+        len(all_points)
+    )  # Set unique ID for each point for later joins
+    points_gdf = gpd.GeoDataFrame(
+        {"point_id": point_ids, building_id_col: all_building_ids},
+        geometry=all_points,
+        crs=gdf.crs,
+    )
 
-    # Convert to a Multipoint collection for Voronoi.
-    # Pass raw coordinate array rather than a list of Point objects to avoid Python object overhead.
+    # Convert to a Multipoint collection for Voronoi
     coords = MultiPoint(shapely.get_coordinates(points_gdf.geometry.values))
 
     print("Computing Voronoi diagram...")
-    # Compute Voronoi polygons up to specified boundary, create one Voronoi cell per point
-    voronoi_collection = shapely.voronoi_polygons(coords, extend_to=boundary)
+    # Compute Voronoi polygons up to specified boundary, create one Voronoi cell per point and retain the original order of points
+    voronoi_collection = shapely.voronoi_polygons(
+        coords, extend_to=boundary, ordered=True
+    )
 
-    # Convert to a geodataframe using a numpy array rather than a Python list to avoid copying all geometries.
+    # Convert to a geodataframe
     voronoi_gdf = gpd.GeoDataFrame(
-        geometry=np.array(voronoi_collection.geoms), crs=gdf.crs
+        {
+            "voronoi_id": point_ids,
+            building_id_col: all_building_ids,
+            "geometry": np.array(voronoi_collection.geoms),
+        },
+        crs=gdf.crs,
     )
 
     print(
         "Joining Voronois to original building footprints and dissolving per footprint..."
     )
 
-    # Join the original building points with IDs to the Voronoi cells and union per building ID.
-    # Intersects (rather than contains) allows for small floating point errors without dropping Voronois.
-    # Deduplicate on the Voronoi cell index: intersects can match a cell to neighbouring seed points
-    # that land on its boundary, producing duplicate rows in the same building's group.
-    # union_all via sorted numpy groups is faster than dissolve (no pandas groupby overhead) and
-    # tolerates the microscopic floating-point overlaps that coverage_union_all would reject.
-    voronoi_gdf = voronoi_gdf.sjoin(points_gdf, how="inner", predicate="intersects")
-    voronoi_gdf = voronoi_gdf[~voronoi_gdf.index.duplicated(keep="first")]
     voronoi_gdf.geometry = voronoi_gdf.geometry.make_valid()
-    arr = voronoi_gdf.sort_values(id_col)
-    unique_ids, first_idx = np.unique(arr[id_col].values, return_index=True)
+    # Sort building IDs and then get the first index of each unique building ID
+    arr = voronoi_gdf.sort_values(building_id_col)
+    unique_ids, first_idx = np.unique(arr[building_id_col].values, return_index=True)
+    # Split the Voronoi geometries into groups. One group == one building ID
     geom_groups = np.split(arr.geometry.values, first_idx[1:])
     voronoi_gdf = gpd.GeoDataFrame(
-        {id_col: unique_ids},
+        {building_id_col: unique_ids},
+        # For each group of Voronoi polygons, union them into one polygon representing a Voronoi for the whole building
         geometry=[shapely.union_all(g) for g in geom_groups],
         crs=voronoi_gdf.crs,
     ).clip(boundary)
@@ -322,14 +331,14 @@ def extend_edges_gdf(
     # Clip Voronoi cells to a max buffer
     print("Clip Voronoi cells to maximum buffer...")
     clipped_voronoi_gdf = _clip_gdf_voronoi_cells_polygon_buffer(
-        polygon_gdf=gdf, voronoi_gdf=voronoi_gdf, buffer=buffer, id_col=id_col
+        polygon_gdf=gdf, voronoi_gdf=voronoi_gdf, buffer=buffer, id_col=building_id_col
     )
 
     # Return Voronoi cell geometries per building with original building ID
     return gpd.GeoDataFrame(
         gdf.drop(columns=["geometry"])
-        .merge(clipped_voronoi_gdf, how="inner", on=id_col)
-        .drop(columns=[id_col]),
+        .merge(clipped_voronoi_gdf, how="inner", on=building_id_col)
+        .drop(columns=[building_id_col]),
         geometry="geometry",
         crs=gdf.crs,
     )
