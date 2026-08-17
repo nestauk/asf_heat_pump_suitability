@@ -342,8 +342,10 @@ if __name__ == "__main__":
     boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
         select_las=local_authority_dict["valid_local_authorities"]
     )
-    # Adding 1600m of buffer first means that all the coastline within 1500m of every UPRN in the LA is loaded
-    boundary = boundary_gdf.geometry.buffer(1600).union_all()
+    # Adding 10km of buffer first means that all the coastline within 1500m of every UPRN in the LA is loaded.
+    # The extra distance means the clipped geometry extends far beyond the LA boundaries so we don't mislabel points
+    # as being close to the coastline (i.e. because they are close to the buffer).
+    boundary = boundary_gdf.geometry.buffer(10000).union_all()
     coast_gdf = load_geodata.load_gdf_gb_coast_boundaries(
         clip=boundary, bbox=boundary.bounds
     )
