@@ -9,11 +9,13 @@
 # Run from the repo root regardless of where the script is invoked from
 cd "$(dirname "$0")/../../.." || exit 1
 
+# Print how to call this script, then abort
 usage() {
     echo "Usage: $0 [--release_date YYYYMMDD]" >&2
     exit 1
 }
 
+# Read the arguments: accept an optional --release_date value, reject anything else
 release_date=""
 while [ $# -gt 0 ]; do
     case "$1" in
