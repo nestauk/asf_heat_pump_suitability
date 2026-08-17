@@ -567,9 +567,9 @@ if __name__ == "__main__":
     )[["geometry"]].to_crs(epsg=4326)
 
     optional_data_layers = {
-        "areas_of_district_heat_network_potential": hn_potential,
-        "anchor_loads": combined_anchor_gdf,
         "ward_boundaries": ward_boundaries_gdf,
+        "anchor_loads": combined_anchor_gdf,
+        "areas_of_district_heat_network_potential": hn_potential,
     }
 
     print("Creating json with contextual features for each cluster and metadata...")
