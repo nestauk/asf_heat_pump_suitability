@@ -473,7 +473,16 @@ if __name__ == "__main__":
     hn_potential = pd.concat(
         [
             hn_zones_gdf[["geometry", "source_annotation"]],
-            spatial_signatures_gdf[["geometry", "source_annotation"]],
+            # Create a single polygon for all spatial signatures to represent city centres
+            gpd.GeoDataFrame(
+                {
+                    "source_annotation": [
+                        spatial_signatures_gdf["source_annotation"].iloc[0]
+                    ],
+                    "geometry": [spatial_signatures_gdf.geometry.union_all()],
+                },
+                crs=spatial_signatures_gdf.crs,
+            ),
         ]
     ).to_crs(epsg=4326)
 
