@@ -27,7 +27,7 @@ data:
     boundaries:
       # UK LA boundaries
       UK_ons_lad_bounds: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/Local_Authority_Districts_December_2023_Boundaries_UK_BFE_-2600600853110041429/LAD_DEC_2023_UK_BFE.shp"
-      UK_ward_boundaries: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/wards/WD_MAY_2026_UK_BSC_-2096710804452657366.gpkg"
+      UK_ward_boundaries: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/wards/WD_MAY_2026_UK_BGC_-4779218457944992933.gpkg"
 
     heat_network_zones:
       desnz_files: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_network_desnz_data/"
