@@ -87,7 +87,7 @@ def load_gdf_ward_boundaries(
             )
         print(f"Loading ward boundaries for {select_las}...")
         wards_gdf = wards_gdf.sjoin(
-            la_boundaries_gdf, how="inner", predicate="intersects"
+            la_boundaries_gdf, how="inner", predicate="covered_by"
         )
         return wards_gdf
     else:
