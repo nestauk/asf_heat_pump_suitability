@@ -178,36 +178,6 @@ if __name__ == "__main__":
     del uprn_building_id_dict, building_features_df, labelled_df, clf
 
     # ------------------------ #
-    # # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
-    #
-    # geo_utils.concat_gdfs(
-    #     dir_path=config["data"]["geodata"]["heat_network_zones"]["desnz_files"],
-    #     save_as=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"],
-    # )
-    #
-    # boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-    #     select_las=local_authority_dict["valid_local_authorities"]
-    # )
-    # # Add heat network zones to clusters_gdf, if they exist
-    # hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(boundary=boundary_gdf)
-    #
-    # if hn_zones_gdf is not None:
-    #     features_df = heat_network_zones.extend_df_heat_network_zone_bool(
-    #         uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
-    #     )
-    #
-    # # Load spatial signature polygons and label UPRNs in city centres
-    # spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
-    #     detail_level=detail_level
-    # )
-    # features_df = city_centres.extend_df_city_centre_labels(
-    #     uprns_df=features_df,
-    #     uprns_gdf=uprns_gdf,
-    #     spatial_signatures_gdf=spatial_signatures_gdf,
-    # )
-    # del hn_zones_gdf, spatial_signatures_gdf
-
-    # ------------------------ #
     # ESTIMATE OUTDOOR SPACE
     # TODO scale beyond Plymouth. This is a temporary fix to working with multiple LAs
     print("Loading land registry data...")
