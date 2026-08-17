@@ -76,11 +76,8 @@ def load_gdf_ward_boundaries(
         gpd.GeoDataFrame: boundaries for specified Local Authority Districts or all UK if no selection is made.
     """
 
-    wards_gdf = pd.read_parquet(
+    wards_gdf = gpd.read_file(
         config["data"]["geodata"]["boundaries"]["UK_ward_boundaries"]
-    )
-    wards_gdf = gpd.GeoDataFrame(
-        wards_gdf, geometry=gpd.GeoSeries.from_wkt(wards_gdf.geometry), crs="EPSG:4326"
     ).to_crs(epsg=27700)
 
     if select_las:
@@ -90,7 +87,7 @@ def load_gdf_ward_boundaries(
             )
         print(f"Loading ward boundaries for {select_las}...")
         wards_gdf = wards_gdf.sjoin(
-           la_boundaries_gdf, how="inner", predicate="intersects"
+            la_boundaries_gdf, how="inner", predicate="intersects"
         )
         return wards_gdf
     else:

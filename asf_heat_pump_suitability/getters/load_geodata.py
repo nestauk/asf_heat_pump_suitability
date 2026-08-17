@@ -180,12 +180,19 @@ def load_gdf_heat_network_zones(
     lhees_hn_gdf["source_annotation"] = "LHEES heat network zoning in Scotland"
 
     # Load priority areas for district heat networks in Wales
-    wales_hn_gdf = load_wales_heat_network_zones(s3_client)
-    wales_hn_gdf["source_annotation"] = (
-        "Priority areas for district heat networks in Wales"
-    )
+    # wales_hn_gdf = load_wales_heat_network_zones(s3_client)
+    # wales_hn_gdf["source_annotation"] = (
+    #     "Priority areas for district heat networks in Wales"
+    # )
 
-    hn_gdf = pd.concat([desnz_hn_gdf, lhees_hn_gdf, wales_hn_gdf], ignore_index=True)
+    hn_gdf = pd.concat(
+        [
+            desnz_hn_gdf,
+            lhees_hn_gdf,
+            # wales_hn_gdf
+        ],
+        ignore_index=True,
+    )
 
     if boundary is not None:
         if local_authority is not None:
