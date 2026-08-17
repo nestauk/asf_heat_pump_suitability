@@ -9,21 +9,25 @@
 # Run from the repo root regardless of where the script is invoked from
 cd "$(dirname "$0")/../../.." || exit 1
 
-# Print how to call this script, then abort
+# Print how to call this script, then abort. >&2 sends the message to stderr
+# so it never mixes into piped output; exit 1 stops the whole run, not just
+# the function.
 usage() {
     echo "Usage: $0 [--release_date YYYYMMDD]" >&2
     exit 1
 }
 
-# Read the arguments: accept an optional --release_date value, reject anything else
+# Read the arguments: accept an optional --release_date value, reject anything
+# else. $1/$2 are the words typed after the script name and $# is how many
+# remain; each `[ ... ] || usage` line reads "this must be true, or quit".
 release_date=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --release_date)
-            [ $# -ge 2 ] || usage
-            [ -n "$2" ] || usage
+            [ $# -ge 2 ] || usage # a value must follow the flag
+            [ -n "$2" ] || usage  # and be non-empty (quotes let the test see "")
             release_date="$2"
-            shift 2
+            shift 2 # drop the two words just handled so the loop advances
             ;;
         *)
             usage
@@ -32,7 +36,9 @@ while [ $# -gt 0 ]; do
 done
 
 # Resolve the release date once (defaulting to today) and validate its format
-# via get_str_release_date, failing fast before any stage runs
+# via get_str_release_date, failing fast before any stage runs. $(...) captures
+# what Python prints; ${release_date:+"$release_date"} passes the value if one
+# was given and nothing at all otherwise, which is what triggers the default.
 release_date=$(python -c "
 import sys
 from asf_heat_pump_suitability.utils.save_utils import get_str_release_date
