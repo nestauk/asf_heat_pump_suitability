@@ -28,9 +28,9 @@ import boto3
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import s3_utils
 
-# Research-only inputs configured under config["data"] but not read by the
-# pipeline; skipped by the preflight until production and research configs
-# are split (follow-up issue from PR #448 review).
+# TODO(#469): remove RESEARCH_ONLY_PATHS once production and research configs
+# are split. These are inputs configured under config["data"] but only read by
+# research scripts, so the preflight skips them.
 RESEARCH_ONLY_PATHS = {
     "s3://asf-local-heat-planning-tool/inputs/geodata/council_tax/PLYMOUTH_CTBANDS_ONSUD_202512.csv",
 }
