@@ -98,8 +98,8 @@ def load_df_uprn_lookup(grid_squares: Optional[List[str]], **kwargs) -> pl.DataF
         pl.DataFrame: UPRN national statistics lookup for specified area(s)
     """
     print("Loading UPRN national statistics lookup...")
+    uri = config["data"]["geodata"]["gb_uprn_lookup_partitioned"]
     if grid_squares:
-        uri = config["data"]["geodata"]["gb_uprn_lookup_partitioned"]
         return pl.concat(
             [
                 pl.read_parquet(uri.format(grid_square=grid_square), **kwargs)
@@ -107,7 +107,6 @@ def load_df_uprn_lookup(grid_squares: Optional[List[str]], **kwargs) -> pl.DataF
             ]
         )
     else:  # Load whole of GB
-        uri = config["data"]["geodata"]["gb_uprn_lookup_partitioned"]
         bucket, prefix = s3_utils.extract_tuple_bucket_prefix(uri)
 
         fs = boto3.client("s3")
