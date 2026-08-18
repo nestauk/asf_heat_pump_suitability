@@ -2,6 +2,11 @@
 Create a sample of buildings containing flats for manual labelling to use in model training.
 """
 
+if "name" == "__main__":
+    import polars as pl
+    from asf_heat_pump_suitability.getters import load_geodata
+
+
 # STEP-BY-STEP APPROACH
 # 1. Label all UPRNs as flats or not.
 # 2. Identify all buildings containing flats.
