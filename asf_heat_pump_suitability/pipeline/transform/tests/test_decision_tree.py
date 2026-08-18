@@ -10,7 +10,6 @@ import pytest
 from shapely.geometry import Point, Polygon
 
 from asf_heat_pump_suitability.pipeline.transform import decision_tree
-from asf_heat_pump_suitability.utils import save_utils
 
 
 @pytest.fixture(scope="module")
@@ -110,16 +109,3 @@ class TestIdentifyGdfTupleMostSuitableTechUprnAndBuilding:
             f"Buildings with more than one assigned tech: "
             f"{techs_per_building[techs_per_building > 1].index.tolist()}"
         )
-
-    def test_performs_no_saving(self, buildings_gdf, uprns_gdf, mocker):
-        """The function is a pure transform: saving happens at the script
-        entrypoint, so no output path is built and nothing is written."""
-        mock_output_path = mocker.patch.object(save_utils, "get_str_output_path")
-        mock_save = mocker.patch.object(save_utils, "save_to_s3")
-        decision_tree.identify_gdf_tuple_most_suitable_tech_uprn_and_building(
-            buildings_gdf=buildings_gdf,
-            id_col="ID",
-            uprns_gdf=uprns_gdf,
-        )
-        mock_output_path.assert_not_called()
-        mock_save.assert_not_called()

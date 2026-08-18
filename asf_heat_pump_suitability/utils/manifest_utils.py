@@ -61,9 +61,9 @@ def generate_dict_input_versions(input_keys: list[str]) -> dict:
     Look up the S3 path of each input dataset, as a record of which version
     of the data was used.
 
-    Input dataset files in this repo carry a date in their filename or folder
-    (e.g. `202412_v1_...`), so the full path doubles as a version record: if
-    the path is different between two runs, the input data changed.
+    Input dataset paths in this repo change when the data they point to
+    changes, so the full path doubles as a version record: if the path is
+    different between two runs, the input data changed.
 
     Args:
         input_keys (list[str]): dot-separated key paths in `config["data"]`,
