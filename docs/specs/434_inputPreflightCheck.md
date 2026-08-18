@@ -58,6 +58,28 @@ Decisions settled during kickoff interview (2026-07-22):
   still truncate to a prefix, requiring at least one file per square rather
   than every layer, since some layers are legitimately absent in a square
   (`load_gdf_os_openmap_layer` deliberately skips those).
+  **Revised again in review (2026-08-18, crispy-wonton's follow-up):** the
+  sampling-squares expansion is replaced by the same derivation the pipeline
+  uses. `check_inputs.py` takes `--local_authorities` (`nargs="+"`,
+  `default=["GB"]` — the list form; a bare-string default would be iterated
+  character-wise downstream, the latent bug at `uprns.py:419`). Named LAs
+  expand `{square}` over `get_list_la_grid_squares(resolved)` — the BNG grid
+  clipped to the union of the LAs' buffered boundaries — and the GB default
+  uses `get_list_la_grid_squares(None)` (clipped to all LA boundaries), NOT
+  `get_dict_la_data(None)`, whose GB branch returns the raw unclipped grid
+  including sea-only squares. `run_pipeline.sh` passes its LA array to the
+  preflight, so the production check covers exactly the squares the run
+  reads. The GB acceptance run surfaced seven fringe squares (HW, HX, NQ,
+  NV, OV, SA, SB — remote islands/sea slivers inside LA boundaries) that
+  some OS OpenMap products ship no files for; these are excluded via the new
+  `config["constant"]["os_data_absent_grid_squares"]` mapping (same
+  expected-absence pattern as `RESEARCH_ONLY_PATHS`), **per product** — keyed
+  by the product folder name in the path — so e.g. OpenMap Local is still
+  checked for HW/HX/OV, which it does ship (St Kilda has buildings but no
+  roads). This also stops island-LA runs (e.g. Western Isles) failing the
+  preflight on squares the pipeline itself tolerates by silent skip. The
+  absences were verified as genuine OS publication sparsity, not upload gaps
+  — see the verification record below.
 
 ## Alternatives considered
 
@@ -71,10 +93,10 @@ Decisions settled during kickoff interview (2026-07-22):
 ## Out of scope
 
 - ~~Per-square existence checks~~ — pulled into scope during PR #448 review
-  (see revised decision above). Still out of scope: deriving the required
-  squares from the requested LAs or a canonical GB-wide list; the expansion
-  currently uses the dev sampling squares only, so a full-GB run has just
-  those 7 verified per templated dataset (follow-up).
+  (see revised decision above). ~~Still out of scope: deriving the required
+  squares from the requested LAs or a canonical GB-wide list~~ — also pulled
+  into scope (2026-08-18 revision above): squares now derive from
+  `--local_authorities` via boundary clipping, defaulting to whole-of-GB.
 - Auto-detecting the latest dated prefix (tracked separately in #429)
 
 ## Open questions
@@ -120,3 +142,59 @@ Decisions settled during kickoff interview (2026-07-22):
       local-authority loop
 - [x] Unit tests cover at least one missing-path case and one all-present
       case (`pipeline/validate/tests/test_check_inputs.py`)
+- [x] LA-scoped acceptance runs pass (2026-08-18): Plymouth (1 square, 26
+      paths, exit 0) and the two-LA union Glasgow City + Midlothian (29
+      paths, exit 0)
+- [x] GB-default acceptance run passes (2026-08-18): 59 derived grid
+      squares, 182 paths after per-product skips, exit 0. The failure mode
+      was demonstrated en route: before the `os_data_absent_grid_squares`
+      exclusion existed, the same run correctly reported all 18 absent
+      square-paths in one pass and exited 1
+
+### Verification record: `os_data_absent_grid_squares` entries (2026-08-18)
+
+The risk with an exclusion list is circularity: "the file is absent from our
+bucket" cannot by itself distinguish OS-publishes-nothing from
+we-failed-to-upload, because the bucket is downstream of our own upload. The
+entries were therefore verified against the **independently acquired GB-wide
+GeoPackage copies** of the same products
+(`inputs/geodata/opmplc_gb.gpkg` / `opgrsp_gb.gpkg` / `oproad_gb.gpkg`,
+downloaded from OS in a different format ~2 months before the shapefile
+delivery was uploaded). If OS publishes no features in a square, the GB-wide
+file must be empty there too; an upload gap on our side would not reproduce
+in it.
+
+Method: bbox-query each square (bounds from `load_gdf_bng_grid_squares`)
+against every layer of each GeoPackage via GDAL's `/vsis3/` ranged reads:
+
+```python
+import pyogrio
+from asf_heat_pump_suitability.getters import load_geodata
+grid = load_geodata.load_gdf_bng_grid_squares().set_index("bng_ref")
+bounds = tuple(grid.loc["HW"].geometry.bounds)
+pyogrio.read_dataframe(
+    "/vsis3/asf-local-heat-planning-tool/inputs/geodata/oproad_gb.gpkg",
+    layer="road_link", bbox=bounds,
+)
+```
+
+Results — feature counts per square across all layers of each product:
+
+| Square          | opmplc (20 layers)  | opgrsp (2 layers) | oproad (road_link) | Excluded for   |
+| --------------- | ------------------- | ----------------- | ------------------ | -------------- |
+| HW (St Kilda)   | 306                 | 0                 | 0                  | opgrsp, oproad |
+| HX              | shipped in delivery | 0                 | 0                  | opgrsp, oproad |
+| OV              | shipped in delivery | 0                 | 0                  | opgrsp, oproad |
+| NQ              | 0                   | 0                 | 0                  | all three      |
+| NV (NI overlap) | 0                   | 0                 | 0                  | all three      |
+| SA (NI overlap) | 0                   | 0                 | 0                  | all three      |
+| SB (NI overlap) | 0                   | 0                 | 0                  | all three      |
+| NA (control)    | —                   | 1                 | 10                 | not excluded   |
+| NL (control)    | —                   | —                 | 361                | not excluded   |
+
+Every excluded square/product combination has zero features in the
+independent copy; every control has features. The per-product asymmetry is
+theme-coherent (remote islets have buildings but no roads or greenspace
+sites; NQ/NV/SA/SB's land is Northern Ireland, outside OS GB products and
+this tool's GB-only scope). If a future OS release adds data for these
+squares, re-verification is one bbox query per square.

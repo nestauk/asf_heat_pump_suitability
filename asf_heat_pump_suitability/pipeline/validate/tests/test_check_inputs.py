@@ -80,6 +80,22 @@ class TestGenerateListExpandedSquarePaths:
             generate_list_expanded_square_paths(paths, ["SX", "SD"]) == paths
         ), "paths without a {square} token should pass through unchanged"
 
+    def test_absent_squares_skipped_per_product_only(self):
+        """A product's known-absent squares are skipped for that product's path only."""
+        paths = [
+            "s3://bucket/inputs/oproad_essh_gb/data/{square}_RoadLink.shp",
+            "s3://bucket/inputs/opmplc_essh_gb/data/{square}/{square}_{layer}.shp",
+        ]
+        absent = {"oproad_essh_gb": ["HW"]}
+        assert generate_list_expanded_square_paths(paths, ["SX", "HW"], absent) == [
+            "s3://bucket/inputs/oproad_essh_gb/data/SX_RoadLink.shp",
+            "s3://bucket/inputs/opmplc_essh_gb/data/SX/SX_{layer}.shp",
+            "s3://bucket/inputs/opmplc_essh_gb/data/HW/HW_{layer}.shp",
+        ], (
+            "HW should be skipped for the oproad path it is listed against, "
+            "but still expanded for the opmplc path"
+        )
+
 
 class TestGetStrCommonPrefix:
     """Tests for `get_str_common_prefix`."""

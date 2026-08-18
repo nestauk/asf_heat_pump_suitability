@@ -2,9 +2,8 @@
 Preflight check that all S3 input paths configured under `config["data"]` exist.
 
 Recursively collects every s3:// path in the nested `config["data"]` mapping,
-expands paths with a "{square}" token into one path per grid square in
-`config["constant"]["sampling_areas"]["grid_squares"]`, truncates any
-remaining tokens (e.g. "{layer}") to the prefix before the first "{", and
+expands paths with a "{square}" token into one path per grid square, truncates
+any remaining tokens (e.g. "{layer}") to the prefix before the first "{", and
 checks each resulting path exists in S3. All missing paths are reported in
 one pass and the script exits non-zero if any are missing, so
 run_pipeline.sh can abort before the local-authority loop starts. A missing
@@ -12,20 +11,34 @@ grid square is reported individually; layer files are only required
 at-least-one-per-square, since some layers are legitimately absent in a
 square.
 
+Grid squares are derived the same way the pipeline derives them
+(`local_authority.get_list_la_grid_squares`): the BNG grid clipped to the
+named local authorities' boundaries, or to all of GB when no local
+authorities are given, so sea-only squares with no OS data are never checked.
+Square/product combinations listed in
+`config["constant"]["os_data_absent_grid_squares"]` (remote islands and
+NI-overlap squares specific OS products ship no files for) are also skipped,
+per product.
+
 Corollary: every path under `config["data"]` is treated as a required
 production input, except research-only paths listed in `RESEARCH_ONLY_PATHS`,
 which are skipped until production and research configs are split.
 
 Usage:
-    python asf_heat_pump_suitability/pipeline/validate/check_inputs.py
+    python asf_heat_pump_suitability/pipeline/validate/check_inputs.py \
+        [--local_authorities <names>]
+
+Defaults to checking the whole of GB when --local_authorities is omitted.
 """
 
+import argparse
 import logging
 import sys
 
 import boto3
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.pipeline.transform import local_authority
 from asf_heat_pump_suitability.utils import s3_utils
 
 # TODO(#469): remove RESEARCH_ONLY_PATHS once production and research configs
@@ -55,23 +68,32 @@ def get_list_s3_paths(config_section: dict) -> list:
     return paths
 
 
-def generate_list_expanded_square_paths(paths: list, squares: list) -> list:
+def generate_list_expanded_square_paths(
+    paths: list, squares: list, absent_squares: dict = None
+) -> list:
     """
     Expand each "{square}"-templated path into one path per grid square.
 
     Args:
         paths: configured s3:// paths, possibly templated.
         squares: 100km OS grid square codes, e.g. ["SX", "SD"].
+        absent_squares: optional mapping of product folder name (matched as a
+            substring of the path) to squares that product publishes no data
+            for; those square expansions are skipped for that path.
 
     Returns:
         list: paths with "{square}" substituted per square; paths without the
             token are passed through unchanged.
     """
+    absent_squares = absent_squares or {}
     expanded_paths = []
     for path in paths:
         if "{square}" in path:
+            skip = next((set(v) for k, v in absent_squares.items() if k in path), set())
             expanded_paths.extend(
-                path.replace("{square}", square) for square in squares
+                path.replace("{square}", square)
+                for square in squares
+                if square not in skip
             )
         else:
             expanded_paths.append(path)
@@ -113,8 +135,29 @@ def get_list_missing_s3_paths(paths: list, s3_client: boto3.client) -> list:
     return missing_paths
 
 
+def parse_arguments() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--local_authorities",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire. Defaults to the whole of GB.",
+        type=str,
+        nargs="+",
+        default=["GB"],
+        required=False,
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    args = parse_arguments()
+    resolved_las = local_authority.resolve_list_la_names(args.local_authorities)
+    grid_squares = sorted(local_authority.get_list_la_grid_squares(resolved_las))
+    logging.info(
+        f"Checking inputs for {'whole of GB' if resolved_las is None else ', '.join(resolved_las)} "
+        f"({len(grid_squares)} grid squares)."
+    )
     input_paths = [
         path
         for path in get_list_s3_paths(config["data"])
@@ -126,7 +169,9 @@ if __name__ == "__main__":
         )
         sys.exit(1)
     input_paths = generate_list_expanded_square_paths(
-        input_paths, config["constant"]["sampling_areas"]["grid_squares"]
+        input_paths,
+        grid_squares,
+        absent_squares=config["constant"]["os_data_absent_grid_squares"],
     )
     missing_input_paths = get_list_missing_s3_paths(input_paths, boto3.client("s3"))
     for missing_path in missing_input_paths:

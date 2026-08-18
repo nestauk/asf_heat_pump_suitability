@@ -6,13 +6,6 @@
 # Run from the repo root regardless of where the script is invoked from
 cd "$(dirname "$0")/../../.." || exit 1
 
-echo "--> Checking S3 input paths exist: check_inputs.py"
-python asf_heat_pump_suitability/pipeline/validate/check_inputs.py
-if [ $? -ne 0 ]; then
-    echo "Error running check_inputs.py: missing S3 input paths. Aborting."
-    exit 1
-fi
-
 local_authorities=(
     "plymouth"
     "dudley"
@@ -22,6 +15,13 @@ local_authorities=(
     "south lanarkshire"
     "east lothian"
 )
+
+echo "--> Checking S3 input paths exist: check_inputs.py"
+python asf_heat_pump_suitability/pipeline/validate/check_inputs.py --local_authorities "${local_authorities[@]}"
+if [ $? -ne 0 ]; then
+    echo "Error running check_inputs.py: missing S3 input paths. Aborting."
+    exit 1
+fi
 
 succeeded = 0
 for la in "${local_authorities[@]}"; do

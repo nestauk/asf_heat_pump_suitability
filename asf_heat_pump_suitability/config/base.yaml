@@ -71,6 +71,10 @@ constant:
     outdoor_space_threshold_m2:
       within_hn_zone: 70
       outside_hn_zone: 30
+  os_data_absent_grid_squares: # 100km squares specific OS products publish no data for (remote islets and NI-overlap squares on the BNG; the tool is GB-only). Keyed by the product folder name in the S3 path. The input preflight check skips these square/product combinations. Verified 2026-08-18 against the GB-wide gpkg copies (opmplc_gb/opgrsp_gb/oproad_gb.gpkg): zero features per listed square.
+    opmplc_essh_gb: ["NQ", "NV", "SA", "SB"]
+    opgrsp_essh_gb: ["HW", "HX", "NQ", "NV", "OV", "SA", "SB"]
+    oproad_essh_gb: ["HW", "HX", "NQ", "NV", "OV", "SA", "SB"]
   sampling_areas:
     la_names:
       - "Bath and North East Somerset"
