@@ -197,7 +197,7 @@ def filter_gdf_domestic_uprns(
     # This triggers for Plymouth only as the threshold density was calculated from Plymouth data only
     if [la.lower() for la in local_authority_dict["valid_local_authorities"]] == [
         "plymouth"
-    ]:
+    ] or not local_authority_dict["valid_local_authorities"]:
         # Identify large buildings with low UPRN density which will be labelled non-domestic
         non_domestic_buildings_gdf = _generate_gdf_non_domestic_buildings_by_density(
             domestic_uprns_gdf=domestic_uprn_gdf,
