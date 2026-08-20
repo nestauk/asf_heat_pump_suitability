@@ -9,9 +9,13 @@
 # Run from the repo root regardless of where the script is invoked from
 cd "$(dirname "$0")/../../.." || exit 1
 
-# Print how to call this script, then abort
+# Print why we stopped and how to call this script, then abort. `usage` is the
+# conventional name for this helper in shell scripts
 usage() {
+    echo "Error: $1" >&2
     echo "Usage: $0 [--release_date YYYYMMDD]" >&2
+    echo "  --release_date  the release date to pin across all stages, e.g. 20260801." >&2
+    echo "                  Defaults to today." >&2
     exit 1
 }
 
@@ -20,13 +24,13 @@ release_date=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --release_date)
-            [ $# -ge 2 ] || usage
-            [ -n "$2" ] || usage
+            [ $# -ge 2 ] || usage "--release_date needs a date after it, e.g. --release_date 20260801"
+            [ -n "$2" ] || usage "--release_date was given an empty value"
             release_date="$2"
             shift 2
             ;;
         *)
-            usage
+            usage "unknown option '$1'"
             ;;
     esac
 done
@@ -36,7 +40,12 @@ done
 release_date=$(python -c "
 import sys
 from asf_heat_pump_suitability.utils.save_utils import get_str_release_date
-print(get_str_release_date(sys.argv[1] if len(sys.argv) > 1 else None))
+try:
+    print(get_str_release_date(sys.argv[1] if len(sys.argv) > 1 else None))
+except ValueError as error:
+    # sys.exit with a string prints it to stderr and exits 1, so a bad date gets
+    # the same one-line treatment as a bad flag instead of a traceback
+    sys.exit(f'Error: {error}')
 " ${release_date:+"$release_date"}) || exit 1
 echo "Release date pinned to: $release_date"
 

@@ -37,6 +37,12 @@ same `--release_date` to every stage invocation. Decisions (interviewed
    than assign; the counter only works today because `$((succeeded+1))`
    treats the unset variable as 0. One character, same file, easy to review
    separately.
+4. **Every failure prints one line saying what was wrong**, then the usage
+   block (added in review, @crispy-wonton). `usage` takes the reason as its
+   argument, and the Python one-liner catches `ValueError` and calls
+   `sys.exit(f'Error: {error}')` so a malformed date gets the same one-line
+   treatment as a bad flag instead of a traceback. Exit codes and the
+   fail-fast points are unchanged.
 
 ## Alternatives considered
 
