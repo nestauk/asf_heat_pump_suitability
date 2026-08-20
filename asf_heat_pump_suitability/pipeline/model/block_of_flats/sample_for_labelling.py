@@ -210,7 +210,7 @@ if "name" == "__main__":
         .select("building_id")
     )
 
-    # 5. Join back to original dataset and drop the index
+    # Filter population dataset to sample IDs
     sample_df = buildings_df.filter(pl.col("building_id").is_in(sampled_ids))
     sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
         sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
