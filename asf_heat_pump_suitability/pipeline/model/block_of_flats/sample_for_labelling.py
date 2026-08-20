@@ -119,7 +119,7 @@ if "name" == "__main__":
         .with_columns(
             pl.when(pl.col("construction_age_band") == "")
             .then(None)
-            .otherwise(pl.col(pl.String))
+            .otherwise(pl.col("construction_age_band"))
             .name.keep()
         )
     )
@@ -184,7 +184,9 @@ if "name" == "__main__":
             .when(pl.col("rurality").is_in(["RLN1", "RLF1", "3", "4"]))
             .then(pl.lit("large_rural"))
             .when(pl.col("rurality").is_in(["RSN1", "RSF1", "5", "6"]))
-            .then(pl.lit("small_rural")),
+            .then(pl.lit("small_rural"))
+            .otherwise(None)
+            .alias("rurality"),
         )
     )
 
