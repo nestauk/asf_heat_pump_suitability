@@ -19,7 +19,7 @@ def parse_arguments() -> argparse.Namespace:
         help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
         nargs="+",
-        default="GB",
+        default=["GB"],
         required=False,
     )
 
@@ -33,7 +33,7 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-if "name" == "__main__":
+if __name__ == "__main__":
     from datetime import date
     import simplekml
     import polars as pl
@@ -129,7 +129,7 @@ if "name" == "__main__":
     # AGGREGATE UP TO BUILDING LEVEL
     # ------------------------------------ #
     buildings_df = (
-        uprns_df.filter(pl.col("N_flats") > 1)
+        uprns_df.filter(pl.col("n_flats") > 1)
         .group_by("building_id")
         .agg(
             pl.col("UPRN").n_unique().alias("n_uprns"),
@@ -155,7 +155,7 @@ if "name" == "__main__":
             .alias("area"),
             # Group construction age bands
             pl.when(
-                pl.col("contruction_age_band").is_in(
+                pl.col("construction_age_band").is_in(
                     [
                         "England and Wales: before 1900",
                         "1900-1929",
@@ -164,17 +164,17 @@ if "name" == "__main__":
                 )
             )
             .then(pl.lit("Before 1929"))
-            .when(pl.col("contruction_age_band") == "1930-1949")
+            .when(pl.col("construction_age_band") == "1930-1949")
             .then(pl.lit("1930-1949"))
-            .when(pl.col("contruction_age_band").is_in(["1950-1966", "1966-1975"]))
+            .when(pl.col("construction_age_band").is_in(["1950-1966", "1966-1975"]))
             .then(pl.lit("1950-1975"))
             .when(
-                pl.col("contruction_age_band").is_in(
+                pl.col("construction_age_band").is_in(
                     ["1976-1983", "1983-1991", "1991-1998", "1996-2002"]
                 )
             )
             .then(pl.lit("1976-2002"))
-            .when(pl.col("contruction_age_band").is_in(["2003-2007", "2007 onwards"]))
+            .when(pl.col("construction_age_band").is_in(["2003-2007", "2007 onwards"]))
             .then(pl.lit("2003 onwards"))
             .otherwise(pl.lit("unknown"))
             .alias("grouped_construction_age_band"),
