@@ -37,12 +37,14 @@ same `--release_date` to every stage invocation. Decisions (interviewed
    than assign; the counter only works today because `$((succeeded+1))`
    treats the unset variable as 0. One character, same file, easy to review
    separately.
-4. **Every failure prints one line saying what was wrong**, then the usage
-   block (added in review, @crispy-wonton). `usage` takes the reason as its
-   argument, and the Python one-liner catches `ValueError` and calls
-   `sys.exit(f'Error: {error}')` so a malformed date gets the same one-line
-   treatment as a bad flag instead of a traceback. Exit codes and the
-   fail-fast points are unchanged.
+4. **Argument failures name what was wrong**, then print the usage block
+   (added in review, @crispy-wonton found the single-line version too terse).
+   `usage` takes the reason as its argument, so an unknown flag, a missing
+   value and an empty value are distinguishable. A malformed date still
+   surfaces as `get_str_release_date`'s traceback: catching it in the Python
+   one-liner was tried and reverted, as four extra lines inside a
+   bash-embedded Python string is not worth it for a dev-facing script.
+   Exit codes and the fail-fast points are unchanged.
 
 ## Alternatives considered
 

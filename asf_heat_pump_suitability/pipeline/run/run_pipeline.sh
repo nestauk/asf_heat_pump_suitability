@@ -9,8 +9,7 @@
 # Run from the repo root regardless of where the script is invoked from
 cd "$(dirname "$0")/../../.." || exit 1
 
-# Print why we stopped and how to call this script, then abort. `usage` is the
-# conventional name for this helper in shell scripts
+# Print why we stopped and how to call this script, then abort.
 usage() {
     echo "Error: $1" >&2
     echo "Usage: $0 [--release_date YYYYMMDD]" >&2
@@ -40,12 +39,7 @@ done
 release_date=$(python -c "
 import sys
 from asf_heat_pump_suitability.utils.save_utils import get_str_release_date
-try:
-    print(get_str_release_date(sys.argv[1] if len(sys.argv) > 1 else None))
-except ValueError as error:
-    # sys.exit with a string prints it to stderr and exits 1, so a bad date gets
-    # the same one-line treatment as a bad flag instead of a traceback
-    sys.exit(f'Error: {error}')
+print(get_str_release_date(sys.argv[1] if len(sys.argv) > 1 else None))
 " ${release_date:+"$release_date"}) || exit 1
 echo "Release date pinned to: $release_date"
 
