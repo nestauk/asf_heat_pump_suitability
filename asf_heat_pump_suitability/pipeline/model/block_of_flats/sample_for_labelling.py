@@ -39,11 +39,13 @@ if "name" == "__main__":
     import polars as pl
     import boto3
     import os
+    import math
     from asf_heat_pump_suitability.getters import load_data, load_geodata
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
 
     seed = 10
+    target_n = 3000
 
     # ------------------------------------ #
     # LOAD GRID SQUARES
@@ -151,7 +153,7 @@ if "name" == "__main__":
             .then(pl.lit("London"))
             .otherwise(pl.col("country"))
             .alias("area"),
-            # Group age bands
+            # Group construction age bands
             pl.when(
                 pl.col("contruction_age_band").is_in(
                     [
@@ -173,13 +175,46 @@ if "name" == "__main__":
             )
             .then(pl.lit("1976-2002"))
             .when(pl.col("contruction_age_band").is_in(["2003-2007", "2007 onwards"]))
-            .then(pl.lit("2003 onwards")),
+            .then(pl.lit("2003 onwards"))
+            .otherwise(pl.lit("unknown"))
+            .alias("grouped_construction_age_band"),
+            # Group IMD deciles
+            pl.when(pl.col("rurality").is_in(["UN1", "UF1", "1", "2"]))
+            .then(pl.lit("urban"))
+            .when(pl.col("rurality").is_in(["RLN1", "RLF1", "3", "4"]))
+            .then(pl.lit("large_rural"))
+            .when(pl.col("rurality").is_in(["RSN1", "RSF1", "5", "6"]))
+            .then(pl.lit("small_rural")),
         )
     )
 
     # ------------------------------------ #
     # TAKE SAMPLE
     # ------------------------------------ #
+    attributes = [
+        "area",
+        "rurality",
+        "grouped_construction_age_band",
+        "n_flats_grouped",
+    ]
+    n_combinations = math.prod([buildings_df[col].n_unique() for col in attributes])
+    sample_n = math.ceil(target_n / n_combinations)
+
+    # Sample per group
+    sampled_ids = (
+        buildings_df.group_by(attributes)
+        .agg(
+            pl.col("building_id").sample(n=sample_n, with_replacement=False, seed=seed)
+        )
+        .explode("building_id")
+        .select("building_id")
+    )
+
+    # 5. Join back to original dataset and drop the index
+    sample_df = buildings_df.filter(pl.col("building_id").is_in(sampled_ids))
+    sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
+        sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
+    )
 
     # ------------------------------------ #
     # ADD GOOGLE MAPS URL TO EACH SAMPLE
