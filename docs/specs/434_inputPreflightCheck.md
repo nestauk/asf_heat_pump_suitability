@@ -62,7 +62,8 @@ Decisions settled during kickoff interview (2026-07-22):
   sampling-squares expansion is replaced by the same derivation the pipeline
   uses. `check_inputs.py` takes `--local_authorities` (`nargs="+"`,
   `default=["GB"]` — the list form; a bare-string default would be iterated
-  character-wise downstream, the latent bug at `uprns.py:419`). Named LAs
+  character-wise downstream, the latent bug at `uprns.py:419`, fixed in this
+  PR — see #480). Named LAs
   expand `{square}` over `get_list_la_grid_squares(resolved)` — the BNG grid
   clipped to the union of the LAs' buffered boundaries — and the GB default
   uses `get_list_la_grid_squares(None)` (clipped to all LA boundaries), NOT
