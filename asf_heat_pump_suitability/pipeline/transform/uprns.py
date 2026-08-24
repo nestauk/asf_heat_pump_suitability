@@ -344,7 +344,7 @@ def get_dict_census_uprn_range(local_authorities: list[str]) -> dict:
 
     """
     # rough expected UPRN range for whole of GB. ONS estimates https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/families/bulletins/familiesandhouseholds/2024 ~29 million households in UK.
-    if local_authorities == "gb":
+    if local_authorities == ["gb"]:
         min_uprns = 27000000
         max_uprns = 40000000
 
