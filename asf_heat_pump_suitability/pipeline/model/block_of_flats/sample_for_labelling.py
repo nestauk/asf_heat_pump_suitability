@@ -3,6 +3,50 @@ Create a sample of buildings containing flats for manual labelling to use in mod
 """
 
 import argparse
+import polars as pl
+
+from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.getters import base_getters
+
+
+def load_df_lsoa_imd_decile(nation: str = None):
+    dfs = []
+    # England
+    if not nation or nation.lower() == "england":
+        df = pl.read_csv(config["data"]["imd_deciles"]["england"])
+        dfs.append(
+            df.rename(
+                {
+                    "LSOA code (2021)": "LSOA_or_DZ",
+                    "Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOAs)": "IMD_decile",
+                }
+            ).select(["LSOA_or_DZ", "IMD_decile"])
+        )
+
+    # Scotland
+    if not nation or nation.lower() == "scotland":
+        df = base_getters.get_df_from_excel_s3_path(
+            config["data"]["imd_deciles"]["scotland"],
+            sheet_name="SIMD 2020v2 DZ lookup data",
+        )
+        dfs.append(
+            df.rename({"DZ": "LSOA_or_DZ", "SIMD2020v2_Decile": "IMD_decile"}).select(
+                ["LSOA_or_DZ", "IMD_decile"]
+            )
+        )
+
+    # Wales
+    if not nation or nation.lower() == "wales":
+        df = pl.read_csv(config["data"]["imd_deciles"]["wales"])
+        dfs.append(
+            df.filter(
+                pl.col("Domain") == "WIMD", pl.col("Data description") == "Decile"
+            )
+            .rename({"Area code": "LSOA_or_DZ", "Data values": "IMD_decile"})
+            .select(["LSOA_or_DZ", "IMD_decile"])
+        )
+
+    return pl.concat(dfs)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -36,7 +80,6 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     from datetime import date
     import simplekml
-    import polars as pl
     import boto3
     import os
     import math
