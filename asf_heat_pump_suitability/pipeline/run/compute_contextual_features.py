@@ -2,11 +2,17 @@
 Script to compute contextual information for clusters including:
 - Proportion of attachment types, tenure types, EPC ratings of properties within clusters
 - Median outdoor space of properties within clusters
-- Whether any properties within clusters are in HN zones, city centres, protected areas, off-gas, within 1500m of coastline
+- Whether any properties within clusters are in protected areas, off-gas, within {COASTLINE_DISTANCE_THRESHOLD_M}m of coastline
 - Number of properties, number of properties in listed buildings and number of properties with solar PV
 
-Run:
+After computing contextual features, the script creates a geojson with:
+- clusters and contextual features per cluster
+- layers with district heat network potential areas (heat network zones and city centres)
+- metadata information including release date, local authority and variable descriptions
+
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
+
+Set `--detail "simplified"` to use simplified spatial signature polygons to label city centres. The default is "full" which uses the fully detailed spatial signatures framework.
 
 Add --save to save the output to S3 as a geojson with geometry and contextual features per cluster.
 
@@ -18,12 +24,18 @@ should pass the same --release_date to every stage.
 import argparse
 import polars as pl
 import geopandas as gpd
+import pandas as pd
 import json
 import os
 from dotenv import load_dotenv
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.cluster import cluster
+from asf_heat_pump_suitability.getters import (
+    load_boundaries,
+)
+from asf_heat_pump_suitability.pipeline.transform import city_centres
+from asf_heat_pump_suitability.utils import geo_utils
 
 # Load environment variables from .env file
 load_dotenv()
@@ -52,6 +64,14 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--detail",
+        help="Level of detail for spatial signatures dataset to label city centres. Takes values 'simplified' or 'full'. Defaults to 'full'.",
+        required=False,
+        default="full",
+        type=str,
+    )
+
+    parser.add_argument(
         "--save",
         help="Whether to save the output to S3.",
         action="store_true",
@@ -77,11 +97,9 @@ def extend_df_contextual_features(
     - tenure type proportions
     - EPC rating proportions
     - Median outdoor space
-    - HN zone flag
-    - City centre flag
     - number of properties in listed buildings
     - number of off-gas properties
-    - proximity to coastline flag (within 1500m)
+    - proximity to coastline flag (within {COASTLINE_DISTANCE_THRESHOLD_M}m of coastline)
     - protected area flag
     - within anchor load radius flag
 
@@ -170,20 +188,6 @@ def extend_df_contextual_features(
             pl.col("max_contiguous_outdoor_space_area_m2")
             .median()
             .alias("median_outdoor_space_m2"),
-            # in_hn_zone flag
-            pl.when(pl.col("in_hn_zone").is_null().all())
-            .then(pl.lit("Unknown"))
-            .when(pl.col("in_hn_zone").any())
-            .then(pl.lit("Yes"))
-            .otherwise(pl.lit("No"))
-            .alias("in_hn_zone"),
-            # in_city_centre flag
-            pl.when(pl.col("in_city_centre").is_null().all())
-            .then(pl.lit("Unknown"))
-            .when(pl.col("in_city_centre").any())
-            .then(pl.lit("Yes"))
-            .otherwise(pl.lit("No"))
-            .alias("in_city_centre"),
             # near_coastline flag
             pl.when(
                 pl.col(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline")
@@ -202,9 +206,7 @@ def extend_df_contextual_features(
             .then(pl.lit("Yes"))
             .otherwise(pl.lit("No"))
             .alias("in_protected_area"),
-            # Counts of UPRNs in HN zone, city centre, near salt water, and in protected areas
-            pl.col("in_hn_zone").sum().alias("n_uprns_in_hn_zone"),
-            pl.col("in_city_centre").sum().alias("n_uprns_in_city_centre"),
+            # Counts of UPRNs near salt water, and in protected areas
             pl.col("within_1500m_coastline")
             .sum()
             .alias("n_uprns_within_1500m_of_coastline"),
@@ -222,12 +224,8 @@ def extend_df_contextual_features(
                 "n_uprns_missing_off_gas_flag",
                 "median_estimated_energy_consumption_12_months_kwh_per_m2",
                 "median_outdoor_space_m2",
-                "in_hn_zone",
-                "in_city_centre",
                 f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline",
                 "in_protected_area",
-                "n_uprns_in_hn_zone",
-                "n_uprns_in_city_centre",
                 "n_uprns_within_1500m_of_coastline",
                 "n_uprns_in_protected_area",
             ]
@@ -273,7 +271,10 @@ def extend_df_contextual_features(
 
 
 def create_gdf_contextual_features(
-    uprns_df: pl.DataFrame, clusters_gdf: gpd.GeoDataFrame
+    uprns_df: pl.DataFrame,
+    clusters_gdf: gpd.GeoDataFrame,
+    hn_zones_gdf: gpd.GeoDataFrame,
+    spatial_signatures_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """
     Create geodataframe with cluster_id, geometry and contextual features for each cluster
@@ -281,6 +282,8 @@ def create_gdf_contextual_features(
     Args:
         uprns_df (pl.DataFrame): dataframe of UPRNs and UPRN-level features
         clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
+        hn_zones_gdf (gpd.GeoDataFrame): geodataframe of heat network zones with geometry and source annotation
+        city_centre_signatures_gdf (gpd.GeoDataFrame): geodataframe of spatial signatures representing city centre areas with geometry and source annotation
     Returns:
         gpd.GeoDataFrame: geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
     """
@@ -298,21 +301,35 @@ def create_gdf_contextual_features(
     )
 
     # Adding the geometry back to the clusters dataframe
-    clusters_with_contextual_features_gdf = (
+    clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
         clusters_with_contextual_features_df.to_pandas().merge(
             clusters_gdf[["cluster_id", "geometry"]],
             how="left",
             on="cluster_id",
+        ),
+        geometry="geometry",
+        crs="EPSG:27700",
+    )
+
+    geo_utils.verify_gdf_crs(hn_zones_gdf, target_crs="EPSG:27700")
+    geo_utils.verify_gdf_crs(spatial_signatures_gdf, target_crs="EPSG:27700")
+
+    # Add in_hn_zone and in_city_centre flags to clusters_gdf
+    clusters_with_contextual_features_gdf["in_hn_zone"] = (
+        clusters_with_contextual_features_gdf.intersects(hn_zones_gdf.union_all())
+    )
+    clusters_with_contextual_features_gdf["in_city_centre"] = (
+        clusters_with_contextual_features_gdf.intersects(
+            spatial_signatures_gdf.union_all()
         )
     )
 
-    return gpd.GeoDataFrame(
-        clusters_with_contextual_features_gdf, geometry="geometry", crs="EPSG:27700"
-    )
+    return clusters_with_contextual_features_gdf
 
 
 def create_json_contextual_features_metadata(
     clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
+    hn_potential: gpd.GeoDataFrame,
     local_authorities: str,
     release_date: str,
 ) -> json:
@@ -321,6 +338,7 @@ def create_json_contextual_features_metadata(
 
     Args:
         clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
+        hn_potential (gpd.GeoDataFrame): geodataframe with district HN potential (CRS: EPSG:4326)
         local_authorities (str): local authority or authorities for which the data was generated
         release_date (str): release date in YYYYMMDD format of the dated release directory the data belongs to
 
@@ -328,12 +346,24 @@ def create_json_contextual_features_metadata(
        json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
 
     """
+    geo_utils.verify_gdf_crs(
+        clusters_with_contextual_features_gdf, target_crs="EPSG:4326"
+    )
+    geo_utils.verify_gdf_crs(hn_potential, target_crs="EPSG:4326")
 
     print("Adding metadata and converting to geojson format...")
     # Convert to geojson format and add metadata
-    geojson_file = json.loads(
+    clusters_json = json.loads(
         clusters_with_contextual_features_gdf.to_json(drop_id=True)
     )
+
+    hn_potential_geojson = json.loads(hn_potential.to_json(drop_id=True))
+
+    for feature in clusters_json["features"]:
+        feature["properties"]["layer"] = "clusters_with_contextual_features"
+    for feature in hn_potential_geojson["features"]:
+        feature["properties"]["layer"] = "areas_of_district_heat_network_potential"
+
     metadata = {
         "Release date": release_date,
         "Local authority": local_authorities,
@@ -359,7 +389,12 @@ def create_json_contextual_features_metadata(
             ANCHOR_LOAD_RADIUS=ANCHOR_LOAD_RADIUS
         )
     )
-    geojson_file["metadata"] = metadata
+
+    geojson_file = {
+        "type": "FeatureCollection",
+        "metadata": metadata,
+        "features": clusters_json["features"] + hn_potential_geojson["features"],
+    }
 
     return geojson_file
 
@@ -372,6 +407,8 @@ if __name__ == "__main__":
 
     args = parse_arguments()
     local_authorities = args.local_authorities
+    detail_level = args.detail
+
     tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
@@ -406,9 +443,28 @@ if __name__ == "__main__":
         uprns_df=uprns_df, buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
     )
 
+    print(
+        "Loading local authority boundaries, heat network zones and spatial signatures..."
+    )
+    boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+        select_las=local_authority_dict["valid_local_authorities"]
+    )
+    # HN zones
+    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(boundary=boundary_gdf)
+
+    # Spatial signatures for city centres
+    spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
+        detail_level=detail_level,
+        boundary=boundary_gdf,
+        signature_types=city_centres.CITY_CENTRE_TYPES,
+    )
+
     print("Computing contextual features for clusters...")
     clusters_with_contextual_features_gdf = create_gdf_contextual_features(
-        uprns_df=uprns_df, clusters_gdf=clusters_gdf
+        uprns_df=uprns_df,
+        clusters_gdf=clusters_gdf,
+        hn_zones_gdf=hn_zones_gdf,
+        spatial_signatures_gdf=spatial_signatures_gdf,
     )
 
     print("Simplifying geometries using tolerance_m...")
@@ -423,9 +479,29 @@ if __name__ == "__main__":
         clusters_with_contextual_features_gdf.to_crs(epsg=4326)
     )
 
+    print("Creating layer with district HN potential and converting to EPSG:4326...")
+    hn_potential = pd.concat(
+        [
+            hn_zones_gdf[["geometry", "source_annotation"]],
+            # Create a single polygon for all spatial signatures to represent city centres
+            gpd.GeoDataFrame(
+                {
+                    "source_annotation": [
+                        spatial_signatures_gdf["source_annotation"].iloc[0]
+                    ],
+                    "geometry": [spatial_signatures_gdf.geometry.union_all()],
+                },
+                crs=spatial_signatures_gdf.crs,
+            ),
+        ]
+    ).to_crs(epsg=4326)
+
     print("Creating json with contextual features for each cluster and metadata...")
     geojson_file = create_json_contextual_features_metadata(
-        clusters_with_contextual_features_gdf, local_authorities, release_date
+        clusters_with_contextual_features_gdf=clusters_with_contextual_features_gdf,
+        hn_potential=hn_potential,
+        local_authorities=local_authorities,
+        release_date=release_date,
     )
 
     if args.save:
