@@ -148,7 +148,7 @@ def identify_df_building_most_suitable_tech(
     ]:
         if col not in tech_gdf.columns:
             raise ValueError(
-                f"Input GeoDataFrame must contain the following columns: ['UPRN', 'assigned_tech', '{id_col}', 'max_contiguous_outdoor_space_area_m2', 'in_hn_zone']."
+                f"Input GeoDataFrame must contain the following columns: ['UPRN', 'assigned_tech', '{id_col}', 'max_contiguous_outdoor_space_area_m2']."
             )
 
     tech_df = pl.from_pandas(
