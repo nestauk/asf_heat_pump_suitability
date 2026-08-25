@@ -86,7 +86,9 @@ def load_df_off_gas_pcds() -> pl.DataFrame:
     return df
 
 
-def load_df_uprn_lookup(grid_squares: Optional[List[str]], **kwargs) -> pl.DataFrame:
+def load_df_uprn_lookup(
+    grid_squares: Optional[List[str]] = None, **kwargs
+) -> pl.DataFrame:
     """
     Load UPRN national statistics lookup for all of GB or a given list of grid squares if specified.
 
@@ -108,7 +110,6 @@ def load_df_uprn_lookup(grid_squares: Optional[List[str]], **kwargs) -> pl.DataF
         )
     else:  # Load whole of GB
         bucket, prefix = s3_utils.extract_tuple_bucket_prefix(uri)
-
         fs = boto3.client("s3")
         files = s3_utils.fetch_list_file_paths_from_s3_folder(
             s3_client=fs,
