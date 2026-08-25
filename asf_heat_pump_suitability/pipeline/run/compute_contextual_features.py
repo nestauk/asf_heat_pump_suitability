@@ -2,10 +2,14 @@
 Script to compute contextual information for clusters including:
 - Proportion of attachment types, tenure types, EPC ratings of properties within clusters
 - Median outdoor space of properties within clusters
-- Whether any properties within clusters are in protected areas, off-gas, within 1500m of coastline
+- Whether any properties within clusters are in protected areas, off-gas, within {COASTLINE_DISTANCE_THRESHOLD_M}m of coastline
 - Number of properties, number of properties in listed buildings and number of properties with solar PV
 
-Run:
+After computing contextual features, the script creates a geojson with:
+- clusters and contextual features per cluster
+- layers with district heat network potential areas (heat network zones and city centres)
+- metadata information including release date, local authority and variable descriptions
+
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
 
 Set `--detail "simplified"` to use simplified spatial signature polygons to label city centres. The default is "full" which uses the fully detailed spatial signatures framework.
@@ -94,7 +98,7 @@ def extend_df_contextual_features(
     - Median outdoor space
     - number of properties in listed buildings
     - number of off-gas properties
-    - proximity to coastline flag (within 1500m)
+    - proximity to coastline flag (within {COASTLINE_DISTANCE_THRESHOLD_M}m of coastline)
     - protected area flag
     - within anchor load radius flag
 
