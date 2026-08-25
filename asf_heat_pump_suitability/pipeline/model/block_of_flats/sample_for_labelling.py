@@ -149,6 +149,7 @@ if __name__ == "__main__":
     # LOAD DOMESTIC UPRNS
     # ------------------------------------ #
     # Load our domestic UPRNs from processing
+    print("Load domestic UPRNs and NSUL...")
     slug = local_authority_dict["url_slug"]
     fpath = config["output"]["dataset"]["domestic_uprns"].format(
         local_authority=slug, release_date=release_date
@@ -175,6 +176,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # ADD IMD DECILE DATA
     # ------------------------------------ #
+    print("Add IMD decile data...")
     scotland_dz_lookup_df = load_df_scotland_postcode_lookup()
     imd_df = load_df_lsoa_imd_decile()
 
@@ -194,6 +196,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # IMPUTE FLAT LABELS
     # ------------------------------------ #
+    print("Impute flat labels...")
     flat_uprns = property_type.impute_set_flat_properties(
         uprns_df, x_col="GRIDGB1E", y_col="GRIDGB1N"
     )
@@ -202,6 +205,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # MAP UPRNS TO BUILDINGS
     # ------------------------------------ #
+    print("Map UPRNs to building footprints...")
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares
     )
@@ -219,6 +223,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # ENRICH WITH EPC BUILDING AGE DATA
     # ------------------------------------ #
+    print("Enrich with EPC building age data...")
     epc_df = (
         load_data.load_df_domestic_epc(
             grid_squares=grid_squares, columns=["UPRN", "CONSTRUCTION_AGE_BAND"]
@@ -241,6 +246,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # AGGREGATE UP TO BUILDING LEVEL
     # ------------------------------------ #
+    print("Aggregate to building level...")
     buildings_df = (
         uprns_df.filter(pl.col("n_flats") > 1)
         .group_by("building_id")
@@ -322,6 +328,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # TAKE SAMPLE
     # ------------------------------------ #
+    print("Take sample of buildings...")
     attributes = [
         "area",
         "rurality",
@@ -359,6 +366,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # ADD GOOGLE MAPS URL TO EACH SAMPLE
     # ------------------------------------ #
+    print("Enrich with Google Maps URL...")
     # Convert to 4326 projection and create google maps URL
     sample_gdf = sample_gdf.to_crs(epsg=4326)
     sample_gdf = sample_gdf.merge(
@@ -375,6 +383,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # SAVE TO KML FILE
     # ------------------------------------ #
+    print("Save to KML file...")
     today = date.today().strftime("%Y%m%d")
     s3 = boto3.resource("s3")
     BUCKET = "asf-heat-pump-suitability"
@@ -382,7 +391,7 @@ if __name__ == "__main__":
     for idx, r in sample_gdf.iterrows():
         pol = kml.newpolygon(
             name="unlabelled",
-            description=f"Location: https://www.google.com/maps/search/?api=1&query={r['y']},{r['x']}\nN flats: {r['n_flats']}\nN total: {r['n_total']}",
+            description=f"Location: {r['url']}\nN flats: {r['n_flats']}\nN total: {r['n_total']}",
             outerboundaryis=list(r["geometry"].exterior.coords),
         )
         pol.style.polystyle.color = "9939FF14"
