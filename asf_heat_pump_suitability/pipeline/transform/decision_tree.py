@@ -98,7 +98,7 @@ def identify_dict_most_suitable_tech(
                 "assigned_tech": f"{TECH_TYPES['individual_or_networked']}",
                 "decision_tree_path": "4. Not in block of flats. Unknown outdoor space",
             }
-        elif outdoor_space > OUTDOOR_SPACE_THRESHOLD_M2.get("outside_hn_zone"):
+        elif outdoor_space > OUTDOOR_SPACE_THRESHOLD_M2:
             return {
                 "assigned_tech": TECH_TYPES["individual"],
                 "decision_tree_path": "2. not in blocks of flats, large outdoor space",

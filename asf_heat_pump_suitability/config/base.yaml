@@ -68,9 +68,7 @@ constant:
     building: "ID"
   threshold:
     m2_per_predicted_UPRN: 261.608136 # Identified by analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py
-    outdoor_space_threshold_m2:
-      within_hn_zone: 70
-      outside_hn_zone: 30
+    outdoor_space_threshold_m2: 30
   sampling_areas:
     la_names:
       - "Bath and North East Somerset"
