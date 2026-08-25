@@ -125,7 +125,6 @@ if __name__ == "__main__":
     import boto3
     import os
     import math
-    from datetime import date
     from asf_heat_pump_suitability.getters import load_data, load_geodata
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
@@ -152,8 +151,7 @@ if __name__ == "__main__":
     # Load our domestic UPRNs from processing
     slug = local_authority_dict["url_slug"]
     fpath = f"s3://asf-local-heat-planning-tool/outputs/data/{slug}/{release_date}/{slug}_domestic_uprns.parquet"
-    domestic_uprns = pl.read_parquet(fpath, columns=["UPRN"], use_pyarrow=True)
-    domestic_uprns = set(domestic_uprns["UPRN"])
+    domestic_uprns = set(pl.scan_parquet(fpath).collect()["UPRN"])
 
     # Load the lookup with all the additional data
     country_mapping = {
@@ -250,7 +248,7 @@ if __name__ == "__main__":
             pl.col("construction_age_band").max().alias("construction_age_band"),
             pl.col("country").max().alias("country"),
             pl.col("ruc21ind").max().alias("rurality"),
-            pl.col("imd19ind").max().alias("IMD_decile"),
+            pl.col("IMD_decile").max().alias("IMD_decile"),
             pl.col("in_london").max().alias("in_london"),
         )
         .with_columns(
@@ -296,9 +294,9 @@ if __name__ == "__main__":
             # Group IMD deciles
             pl.when(pl.col("IMD_decile").is_in([1, 2, 3]))
             .then(pl.lit("high_deprivation"))
-            .when(pl.col("IMD_decile").is_in(4, 5, 6, 7))
+            .when(pl.col("IMD_decile").is_in([4, 5, 6, 7]))
             .then(pl.lit("middle_deprivation"))
-            .when(pl.col("IMD_decile").is_in(8, 9, 10))
+            .when(pl.col("IMD_decile").is_in([8, 9, 10]))
             .then(pl.lit("low_deprivation"))
             .otherwise(None)
             .alias("deprivation_group"),
