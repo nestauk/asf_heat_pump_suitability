@@ -78,7 +78,7 @@ def load_desnz_heat_network_zones() -> gpd.GeoDataFrame:
         path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
     ).drop(columns="index_right")
 
-    gdf = geo_utils.verify_gdf_crs(gdf=gdf)[["geometry"]]
+    gdf = geo_utils.verify_gdf_crs(gdf=gdf)
 
     return gdf
 
@@ -108,9 +108,7 @@ def load_lhees_heat_network_zones(s3_client: boto3.client) -> gpd.GeoDataFrame:
 
     # Load and standardize CRS for each dataset
     gdfs = [
-        geo_utils.verify_gdf_crs(gpd.read_file(f"s3://{s3_bucket}/{path}"))[
-            ["geometry"]
-        ]
+        geo_utils.verify_gdf_crs(gpd.read_file(f"s3://{s3_bucket}/{path}"))
         for path in file_paths
     ]
 
@@ -142,9 +140,7 @@ def load_wales_heat_network_zones(s3_client: boto3.client) -> gpd.GeoDataFrame:
 
     # Load and standardize CRS for each dataset
     gdfs = [
-        geo_utils.verify_gdf_crs(gpd.read_file(f"s3://{s3_bucket}/{path}"))[
-            ["geometry"]
-        ]
+        geo_utils.verify_gdf_crs(gpd.read_file(f"s3://{s3_bucket}/{path}"))
         for path in file_paths
     ]
 
@@ -172,15 +168,15 @@ def load_gdf_heat_network_zones(
         gpd.GeoDataFrame: polygons of heat network zones in given Local Authority or boundary.
     """
     # Load all DESNZ heat network zones in England
-    desnz_hn_gdf = load_desnz_heat_network_zones()
+    desnz_hn_gdf = load_desnz_heat_network_zones()[["geometry"]]
     desnz_hn_gdf["source_annotation"] = "DESNZ advanced heat network zoning in England"
 
     # Load LHEES heat network zones in Scotland
-    lhees_hn_gdf = load_lhees_heat_network_zones(s3_client)
+    lhees_hn_gdf = load_lhees_heat_network_zones(s3_client)[["geometry"]]
     lhees_hn_gdf["source_annotation"] = "LHEES heat network zoning in Scotland"
 
     # Load priority areas for district heat networks in Wales
-    # wales_hn_gdf = load_wales_heat_network_zones(s3_client)
+    # wales_hn_gdf = load_wales_heat_network_zones(s3_client)[["geometry"]]
     # wales_hn_gdf["source_annotation"] = (
     #     "Priority areas for district heat networks in Wales"
     # )
