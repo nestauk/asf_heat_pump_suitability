@@ -4,6 +4,7 @@ This file contains utility functions for interacting with Amazon S3.
 
 import boto3
 from typing import List
+from urllib.parse import urlparse
 
 
 def fetch_list_file_paths_from_s3_folder(
@@ -52,7 +53,10 @@ def extract_tuple_bucket_prefix(s3_uri: str) -> tuple:
     Returns:
         tuple: bucket name, folder prefix
     """
-    bucket_name = s3_uri.split("s3://")[1].split("/")[0]
-    prefix = s3_uri.split(f"s3://{bucket_name}/")[1]
-
-    return (bucket_name, prefix)
+    parsed = urlparse(s3_uri)
+    if parsed.scheme != "s3":
+        raise ValueError(f"Expected an S3 URI starting with 's3://', got: {s3_uri!r}")
+    bucket_name = parsed.netloc
+    path = parsed.path.lstrip("/")
+    prefix = path.rsplit("/", 1)[0] if "/" in path else ""
+    return bucket_name, prefix
