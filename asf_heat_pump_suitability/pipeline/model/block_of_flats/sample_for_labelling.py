@@ -157,20 +157,24 @@ if __name__ == "__main__":
     domestic_uprns = set(pl.scan_parquet(fpath).collect()["UPRN"])
 
     # Load the lookup with all the additional data
-    country_mapping = {
-        "E92000001": "England",
-        "W92000004": "Wales",
-        "S92000003": "Scotland",
-    }
     uprns_df = (
-        load_data.load_df_uprn_lookup()
-        .filter(
-            pl.col("UPRN").is_in(domestic_uprns),
+        load_data.load_df_uprn_lookup(
+            uprn_filter=domestic_uprns,
+            columns=[
+                "UPRN",
+                "ctry25cd",
+                "ladcd",
+                "PCDS",
+                "lsoa21cd",
+                "GRIDGB1E",
+                "GRIDGB1N",
+                "ruc21ind",
+            ],
         )
         .with_columns(
-            pl.col("ctry25cd").replace(country_mapping).alias("country"),
             pl.col("ladcd").str.starts_with("E09").alias("in_london"),
         )
+        .rename({"ctry25cd": "country"})
     )
 
     # ------------------------------------ #
@@ -185,7 +189,7 @@ if __name__ == "__main__":
             scotland_dz_lookup_df, how="left", left_on="PCDS", right_on="Postcode"
         )
         .with_columns(
-            pl.when(pl.col("country") == "Scotland")
+            pl.when(pl.col("country") == "S92000003")
             .then(pl.col("DataZone2011Code"))
             .otherwise(pl.col("lsoa21cd"))
             .alias("IMD_LSOA_or_DZ")
@@ -254,7 +258,7 @@ if __name__ == "__main__":
             pl.col("UPRN").n_unique().alias("n_uprns"),
             pl.col("n_flats").max().alias("n_flats"),
             pl.col("construction_age_band").max().alias("construction_age_band"),
-            pl.col("country").max().alias("country"),
+            pl.col("ctry25cd").max().alias("ctry25cd"),
             pl.col("ruc21ind").max().alias("rurality"),
             pl.col("IMD_decile").max().alias("IMD_decile"),
             pl.col("in_london").max().alias("in_london"),

@@ -87,13 +87,16 @@ def load_df_off_gas_pcds() -> pl.DataFrame:
 
 
 def load_df_uprn_lookup(
-    grid_squares: Optional[List[str]] = None, **kwargs
+    grid_squares: Optional[List[str]] = None,
+    uprn_filter: Optional[set] = None,
+    **kwargs,
 ) -> pl.DataFrame:
     """
     Load UPRN national statistics lookup for all of GB or a given list of grid squares if specified.
 
     Args:
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded. Default None to load whole GB.
+        uprn_filter (Optional[set]): set of UPRNs to filter to. Applied per file to reduce memory and I/O.
         **kwargs for polars.read_parquet()
 
     Returns:
@@ -102,12 +105,13 @@ def load_df_uprn_lookup(
     print("Loading UPRN national statistics lookup...")
     uri = config["data"]["geodata"]["gb_uprn_lookup_partitioned"]
     if grid_squares:
-        return pl.concat(
-            [
-                pl.read_parquet(uri.format(grid_square=grid_square), **kwargs)
-                for grid_square in grid_squares
-            ]
-        )
+        dfs = [
+            pl.read_parquet(uri.format(grid_square=grid_square), **kwargs)
+            for grid_square in grid_squares
+        ]
+        if uprn_filter is not None:
+            dfs = [df.filter(pl.col("UPRN").is_in(uprn_filter)) for df in dfs]
+        return pl.concat(dfs)
     else:  # Load whole of GB
         bucket, prefix = s3_utils.extract_tuple_bucket_prefix(uri)
         fs = boto3.client("s3")
@@ -118,14 +122,16 @@ def load_df_uprn_lookup(
             file_type=".parquet",
         )
 
-        return pl.concat(
-            [
-                pl.read_parquet(file, **kwargs).with_columns(
-                    pl.col("ruc21ind").cast(pl.String)
-                )
-                for file in files
-            ]
-        )
+        result = []
+        columns = kwargs.get("columns")
+        for file in files:
+            df = pl.read_parquet(file, **kwargs)
+            if columns is None or "ruc21ind" in columns:
+                df = df.with_columns(pl.col("ruc21ind").cast(pl.String))
+            if uprn_filter is not None:
+                df = df.filter(pl.col("UPRN").is_in(uprn_filter))
+            result.append(df)
+        return pl.concat(result)
 
 
 def load_df_domestic_epc(grid_squares: Optional[List[str]], **kwargs) -> pl.DataFrame:
