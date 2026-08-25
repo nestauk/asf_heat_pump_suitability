@@ -30,9 +30,9 @@ def fetch_list_file_paths_from_s3_folder(
 
     # Normalize file_type to a tuple for str.endswith()
     if isinstance(file_type, str):
-        file_types = (file_type,)
+        file_types = (file_type.lower(),)
     elif isinstance(file_type, list):
-        file_types = tuple(file_type)
+        file_types = tuple(ext.lower() for ext in file_type)
     else:
         file_types = None
 
