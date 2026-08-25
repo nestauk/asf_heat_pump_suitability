@@ -90,6 +90,8 @@ def load_gdf_country_heat_network_zones(country: str) -> gpd.GeoDataFrame:
             path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
         ).drop(columns="index_right")
 
+        gdf = _extend_gdf_hn_zone_id(gdf)
+
         return geo_utils.verify_gdf_crs(gdf=gdf)
 
     config_keys = {
