@@ -108,6 +108,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import load_data, load_geodata
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
+    from asf_heat_pump_suitability.utils import save_utils
 
     seed = 10
     target_n = 3000
@@ -283,6 +284,11 @@ if __name__ == "__main__":
             .otherwise(None)
             .alias("rurality"),
         )
+    )
+
+    save_utils.save_to_s3(
+        df=buildings_df,
+        path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_enriched_buildings_with_flats.parquet",
     )
 
     # ------------------------------------ #
