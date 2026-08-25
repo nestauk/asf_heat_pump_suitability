@@ -35,6 +35,7 @@ from asf_heat_pump_suitability.getters import (
     load_boundaries,
 )
 from asf_heat_pump_suitability.pipeline.transform import city_centres
+from asf_heat_pump_suitability.utils import geo_utils
 
 # Load environment variables from .env file
 load_dotenv()
@@ -309,6 +310,9 @@ def create_gdf_contextual_features(
         geometry="geometry",
         crs="EPSG:27700",
     )
+
+    geo_utils.verify_gdf_crs(hn_zones_gdf, target_crs="EPSG:27700")
+    geo_utils.verify_gdf_crs(spatial_signatures_gdf, target_crs="EPSG:27700")
 
     # Add in_hn_zone and in_city_centre flags to clusters_gdf
     clusters_with_contextual_features_gdf["in_hn_zone"] = (
