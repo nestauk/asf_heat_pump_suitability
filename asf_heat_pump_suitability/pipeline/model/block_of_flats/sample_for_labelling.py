@@ -151,7 +151,7 @@ if __name__ == "__main__":
     # Load our domestic UPRNs from processing
     slug = local_authority_dict["url_slug"]
     fpath = config["output"]["dataset"]["domestic_uprns"].format(
-        local_authorities=slug, release_date=release_date
+        local_authority=slug, release_date=release_date
     )
     domestic_uprns = set(pl.scan_parquet(fpath).collect()["UPRN"])
 
