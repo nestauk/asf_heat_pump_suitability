@@ -30,7 +30,7 @@ from asf_heat_pump_suitability.getters.load_geodata import (
 )
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.transform import local_authority
-from asf_heat_pump_suitability.utils import save_utils
+from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 
 OUTDOOR_SPACE_THRESHOLD_M2 = config["constant"]["threshold"][
     "outdoor_space_threshold_m2"
@@ -280,26 +280,17 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
 
 
 def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
-    local_authorities: str,
     buildings_gdf: gpd.GeoDataFrame,
     id_col: str,
     uprns_gdf: gpd.GeoDataFrame,
-    save: bool,
-    release_date: str,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Main function to identify the most suitable tech for each UPRN and building in the specified local authority or authorities.
 
-    Saves outputs to S3 if specified, to the dated release directory for `release_date`.
-
     Args:
-        local_authorities (str): local authority slug to save decision tree outputs to.
         buildings_gdf (gpd.GeoDataFrame): GeoDataFrame with building footprints.
         id_col (str): The name of the column in `buildings_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
         uprns_gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN data.
-        save (bool): Whether to save outputs to S3.
-        release_date (str): release date in YYYYMMDD format used for the dated output
-            directory, as returned by `save_utils.get_str_release_date`.
 
     Returns:
         tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]: A tuple containing:
@@ -376,22 +367,6 @@ def identify_gdf_tuple_most_suitable_tech_uprn_and_building(
         solutions_per_footprint_gdf.geometry.nunique(),
     )
 
-    if save:
-        uprns_gdf.to_parquet(
-            save_utils.get_str_output_path(
-                "uprns_most_suitable_tech",
-                release_date=release_date,
-                local_authorities=local_authorities,
-            )
-        )
-        solutions_per_footprint_gdf.to_parquet(
-            save_utils.get_str_output_path(
-                "buildings_most_suitable_tech",
-                release_date=release_date,
-                local_authorities=local_authorities,
-            )
-        )
-
     return uprns_gdf, solutions_per_footprint_gdf
 
 
@@ -419,11 +394,32 @@ if __name__ == "__main__":
     )
     uprns_with_features_gdf = uprns.generate_gdf_uprn_coords(df=uprns_with_features_df)
 
-    identify_gdf_tuple_most_suitable_tech_uprn_and_building(
-        local_authorities=local_authority_dict["url_slug"],
-        buildings_gdf=buildings_gdf,
-        id_col="ID",
-        uprns_gdf=uprns_with_features_gdf,
-        save=args.save,
-        release_date=release_date,
+    uprns_tech_gdf, buildings_tech_gdf = (
+        identify_gdf_tuple_most_suitable_tech_uprn_and_building(
+            buildings_gdf=buildings_gdf,
+            id_col="ID",
+            uprns_gdf=uprns_with_features_gdf,
+        )
     )
+
+    if args.save:
+        for dataset, output_gdf in [
+            ("uprns_most_suitable_tech", uprns_tech_gdf),
+            ("buildings_most_suitable_tech", buildings_tech_gdf),
+        ]:
+            output_path = save_utils.get_str_output_path(
+                dataset,
+                release_date=release_date,
+                local_authorities=local_authority_dict["url_slug"],
+            )
+            save_utils.save_to_s3(output_gdf, output_path)
+            manifest_utils.generate_and_save_run_manifest_to_s3(
+                output_path,
+                stage="decision_tree",
+                local_authority=local_authority_dict["url_slug"],
+                row_count=len(output_gdf),
+                params={
+                    "local_authorities": args.local_authorities,
+                    "release_date": release_date,
+                },
+            )

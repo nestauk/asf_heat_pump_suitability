@@ -27,7 +27,7 @@ from asf_heat_pump_suitability.pipeline.transform import local_authority
 import libpysal
 import warnings
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.utils import save_utils
+from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
 ANCHOR_RADIUS = config["constant"]["anchor_radius"]
@@ -860,11 +860,19 @@ if __name__ == "__main__":
     )
 
     if args.save:
-        save_utils.save_to_s3(
-            clusters_gdf,
-            save_utils.get_str_output_path(
-                "tech_clusters",
-                release_date=release_date,
-                local_authorities=local_authority_dict["url_slug"],
-            ),
+        output_path = save_utils.get_str_output_path(
+            "tech_clusters",
+            release_date=release_date,
+            local_authorities=local_authority_dict["url_slug"],
+        )
+        save_utils.save_to_s3(clusters_gdf, output_path)
+        manifest_utils.generate_and_save_run_manifest_to_s3(
+            output_path,
+            stage="cluster",
+            local_authority=local_authority_dict["url_slug"],
+            row_count=len(clusters_gdf),
+            params={
+                "local_authorities": args.local_authorities,
+                "release_date": release_date,
+            },
         )
