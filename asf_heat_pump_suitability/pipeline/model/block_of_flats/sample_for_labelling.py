@@ -9,6 +9,13 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 
 
+def load_df_scotland_postcode_lookup():
+    df = pl.read_csv(config["data"]["lookups"]["scotland"])
+    return df.with_columns(
+        pl.col("Postcode").str.strip_chars().name.keep(),
+    ).select(["Postcode", "DataZone2011Code"])
+
+
 def load_df_lsoa_imd_decile(nation: str = None):
     dfs = []
     # England
@@ -122,6 +129,25 @@ if __name__ == "__main__":
     )
 
     # ------------------------------------ #
+    # ADD IMD DECILE DATA
+    # ------------------------------------ #
+    scotland_dz_lookup_df = load_df_scotland_postcode_lookup()
+    imd_df = load_df_lsoa_imd_decile()
+
+    uprns_df = (
+        uprns_df.join(
+            scotland_dz_lookup_df, how="left", left_on="PCDS", right_on="Postcode"
+        )
+        .with_columns(
+            pl.when(pl.col("country") == "Scotland")
+            .then(pl.col("DataZone2011Code"))
+            .otherwise(pl.col("lsoa21cd"))
+            .alias("IMD_LSOA_or_DZ")
+        )
+        .join(imd_df, how="left", left_on="IMD_LSOA_or_DZ", right_on="LSOA_or_DZ")
+    )
+
+    # ------------------------------------ #
     # IMPUTE FLAT LABELS
     # ------------------------------------ #
     flat_uprns = property_type.impute_set_flat_properties(
@@ -184,6 +210,7 @@ if __name__ == "__main__":
             pl.col("in_london").max().alias("in_london"),
         )
         .with_columns(
+            # Group flat count
             pl.when(pl.col("n_flats").is_between(2, 6, closed="both"))
             .then(pl.lit("2-6_flats"))
             .when(pl.col("n_flats").is_between(7, 15, closed="both"))
@@ -192,6 +219,7 @@ if __name__ == "__main__":
             .then(pl.lit("16+_flats"))
             .otherwise(None)
             .alias("n_flats_grouped"),
+            # Add London as a separate area
             pl.when(pl.col("in_london"))
             .then(pl.lit("London"))
             .otherwise(pl.col("country"))
@@ -219,9 +247,18 @@ if __name__ == "__main__":
             .then(pl.lit("1976-2002"))
             .when(pl.col("construction_age_band").is_in(["2003-2007", "2007 onwards"]))
             .then(pl.lit("2003 onwards"))
-            .otherwise(pl.lit("unknown"))
+            .otherwise(None)
             .alias("grouped_construction_age_band"),
             # Group IMD deciles
+            pl.when(pl.col("IMD_decile").is_in([1, 2, 3]))
+            .then(pl.lit("high_deprivation"))
+            .when(pl.col("IMD_decile").is_in(4, 5, 6, 7))
+            .then(pl.lit("middle_deprivation"))
+            .when(pl.col("IMD_decile").is_in(8, 9, 10))
+            .then(pl.lit("low_deprivation"))
+            .otherwise(None)
+            .alias("deprivation_group"),
+            # Group rurality
             pl.when(pl.col("rurality").is_in(["UN1", "UF1", "1", "2"]))
             .then(pl.lit("urban"))
             .when(pl.col("rurality").is_in(["RLN1", "RLF1", "3", "4"]))
@@ -241,9 +278,18 @@ if __name__ == "__main__":
         "rurality",
         "grouped_construction_age_band",
         "n_flats_grouped",
+        "IMD_decile",
     ]
+
+    buildings_df = buildings_df.with_columns(
+        pl.col(attributes).cast(pl.String).fill_null("unknown")
+    )
+    # TODO - might need to update this if certain nations have unknown values but others don't
     n_combinations = math.prod([buildings_df[col].n_unique() for col in attributes])
     sample_n = math.ceil(target_n / n_combinations)
+    print(
+        f"There are {n_combinations} groups to sample from. Taking {sample_n} samples from each group."
+    )
 
     # Sample per group
     sampled_ids = (
