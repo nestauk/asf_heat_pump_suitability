@@ -63,6 +63,17 @@ data:
       EW_parquet: "s3://asf-local-heat-planning-tool/inputs/epc/v092025_EPC_NonDomestic_EW.parquet"
       S_parquet: "s3://asf-local-heat-planning-tool/inputs/epc/v122025_EPC_NonDomestic_S.parquet"
 
+  imd_deciles:
+    # England source: https://www.gov.uk/government/statistics/english-indices-of-deprivation-2025
+    england: "s3://asf-local-heat-planning-tool/inputs/lookup/IMD2025_All_Ranks_Scores_Deciles_Population_Denominators_England.csv"
+    # Scotland source: https://www.gov.scot/publications/scottish-index-of-multiple-deprivation-2020v2-data-zone-look-up/
+    scotland: "s3://asf-local-heat-planning-tool/inputs/lookup/SIMD_2020v2_datazone_lookup_updated_2025.xlsx"
+    # Wales source: https://stats.gov.wales/en-GB/9706edd9-73ad-4902-bb12-7ccd7038626e#data
+    wales: "s3://asf-local-heat-planning-tool/inputs/lookup/welsh-index-of-multiple-deprivation-wimd-2025-index-and-domain-ranks-and-groups-for-lower-layer-super-output-areas-lsoa-v7-en-gb.csv"
+  lookups:
+    # Scotland source: https://www.nrscotland.gov.uk/publications/scottish-statistics-postcode-lookup/
+    scotland: "s3://asf-local-heat-planning-tool/inputs/lookup/Scotland_postcode_lookup.csv"
+
   # Preprocessed data
   processed:
     non_domestic_poi_categories: "s3://asf-local-heat-planning-tool/inputs/processed/non_residential_poi_categories.csv"
