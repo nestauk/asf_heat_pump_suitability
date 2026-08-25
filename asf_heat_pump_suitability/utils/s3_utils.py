@@ -25,7 +25,7 @@ def fetch_list_file_paths_from_s3_folder(
         List[str]: list of strings with the file paths.
     """
     # Normalize prefix: ensuring it ends with '/'
-    if path_folder and not path_folder.endswith("/"):
+    if not path_folder.endswith("/"):
         path_folder += "/"
 
     # Normalize file_type to a tuple for str.endswith()
