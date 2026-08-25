@@ -150,7 +150,9 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # Load our domestic UPRNs from processing
     slug = local_authority_dict["url_slug"]
-    fpath = f"s3://asf-local-heat-planning-tool/outputs/data/{slug}/{release_date}/{slug}_domestic_uprns.parquet"
+    fpath = config["output"]["dataset"]["domestic_uprns"].format(
+        local_authorities=slug, release_date=release_date
+    )
     domestic_uprns = set(pl.scan_parquet(fpath).collect()["UPRN"])
 
     # Load the lookup with all the additional data
