@@ -8,7 +8,7 @@ import s3fs
 import shapely
 import logging
 import warnings
-
+from pathlib import Path
 from tenacity import retry, stop_after_attempt
 from osbng import grids
 from pyogrio.errors import DataSourceError
@@ -96,19 +96,21 @@ def load_lhees_heat_network_zones(s3_client: boto3.client) -> gpd.GeoDataFrame:
     print("Loading LHEES heat network zones...")
     s3_full_path = config["data"]["geodata"]["heat_network_zones"]["lhees_files"]
 
-    s3_bucket = s3_full_path.split("s3://")[1].split("/")[0]
-    folder_path = s3_full_path.split(f"s3://{s3_bucket}/")[1]
+    s3_full_path = Path(s3_full_path)
+    s3_bucket = s3_full_path.parts[1]
+    folder_path = Path(*s3_full_path.parts[2:])
 
     file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
         s3_client=s3_client,
         s3_bucket=s3_bucket,
-        path_folder=folder_path,
+        path_folder=str(folder_path),
         file_type=[".geojson", ".gpkg"],
     )
 
+    print(os.path.join(s3_full_path, file_paths[0]))
     # Load and standardize CRS for each dataset
     gdfs = [
-        geo_utils.verify_gdf_crs(gpd.read_file(f"s3://{s3_bucket}/{path}"))
+        geo_utils.verify_gdf_crs(gpd.read_file(os.path.join(f"s3://{s3_bucket}", path)))
         for path in file_paths
     ]
 
@@ -128,19 +130,20 @@ def load_wales_heat_network_zones(s3_client: boto3.client) -> gpd.GeoDataFrame:
     print("Loading Wales heat network zones...")
     s3_full_path = config["data"]["geodata"]["heat_network_zones"]["wales_files"]
 
-    s3_bucket = s3_full_path.split("s3://")[1].split("/")[0]
-    folder_path = s3_full_path.split(f"s3://{s3_bucket}/")[1]
+    s3_full_path = Path(s3_full_path)
+    s3_bucket = s3_full_path.parts[1]
+    folder_path = Path(*s3_full_path.parts[2:])
 
     file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
         s3_client=s3_client,
         s3_bucket=s3_bucket,
-        path_folder=folder_path,
+        path_folder=str(folder_path),
         file_type=[".geojson", ".gpkg"],
     )
 
     # Load and standardize CRS for each dataset
     gdfs = [
-        geo_utils.verify_gdf_crs(gpd.read_file(f"s3://{s3_bucket}/{path}"))
+        geo_utils.verify_gdf_crs(gpd.read_file(os.path.join(f"s3://{s3_bucket}", path)))
         for path in file_paths
     ]
 
