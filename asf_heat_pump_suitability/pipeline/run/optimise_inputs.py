@@ -246,9 +246,8 @@ if __name__ == "__main__":
 
         uprn_lookup_dfs = []
         for file in uprn_lookup_files:
-            fpath = f"s3://asf-local-heat-planning-tool/{file}"
-            print(f"Loading UPRN lookup from: {fpath}")
-            uprn_lookup_df = pl.read_csv(fpath)
+            print(f"Loading UPRN lookup from: {file}")
+            uprn_lookup_df = pl.read_csv(file)
             uprn_lookup_dfs.append(
                 assign_df_grid_squares(
                     df=uprn_lookup_df,

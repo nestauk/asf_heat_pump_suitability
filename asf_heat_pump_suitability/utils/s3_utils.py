@@ -20,7 +20,7 @@ def fetch_list_file_paths_from_s3_folder(
         file_type (str): The type of files to fetch (e.g., ".parquet", ".csv", ".geojson"). If None, fetches all files.
 
     Returns:
-        List[str]: list of strings with the file paths.
+        List[str]: list of full S3 URIs.
     """
     # Normalize prefix: ensuring it ends with '/'
     if path_folder and not path_folder.endswith("/"):
@@ -38,7 +38,7 @@ def fetch_list_file_paths_from_s3_folder(
             key = obj["Key"]
             # Filter to include only files of the specified type (if file_type is provided)
             if file_type is None or key.endswith(file_type):
-                file_paths.append(key)
+                file_paths.append(f"s3://{s3_bucket}/{key}")
 
     return file_paths
 
