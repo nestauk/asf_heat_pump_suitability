@@ -9,14 +9,29 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 
 
-def load_df_scotland_postcode_lookup():
+def load_df_scotland_postcode_lookup() -> pl.DataFrame:
+    """
+    Load Scotland postcode lookup containing Scottish postcodes and their corresponding population data.
+
+    Returns:
+        pl.DataFrame: Scotland postcode lookup
+    """
     df = pl.read_csv(config["data"]["lookups"]["scotland"])
     return df.with_columns(
         pl.col("Postcode").str.strip_chars().name.keep(),
     ).select(["Postcode", "DataZone2011Code"])
 
 
-def load_df_lsoa_imd_decile(nation: str = None):
+def load_df_lsoa_imd_decile(nation: str = None) -> pl.DataFrame:
+    """
+    Load IMD decile for LSOAs (England & Wales) or Data Zones (Scotland) in GB.
+
+    Args:
+        nation (str): nation to load IMD decile data for, of "England", "Scotland" or "Wales". Default None to load all nations.
+
+    Returns:
+        pl.DataFrame: IMD decile data per LSOA / Data Zone for specified nation.
+    """
     dfs = []
     # England
     if not nation or nation.lower() == "england":
