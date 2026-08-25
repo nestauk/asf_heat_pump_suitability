@@ -364,7 +364,7 @@ run_manifest:
   # Remember to update stage_input_keys below when a pipeline script starts reading a new input data source.
   stage_input_keys:
     uprns:
-      - "geodata.uk_osopen_uprn"
+      - "geodata.uk_osopen_uprn_partitioned"
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.UK_poi_locations"
       - "geodata.grid_square_os_openmap_local"
