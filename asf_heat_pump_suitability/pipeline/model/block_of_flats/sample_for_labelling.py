@@ -319,95 +319,80 @@ if __name__ == "__main__":
         path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_enriched_buildings_with_flats.parquet",
     )
 
-    # # ------------------------------------ #
-    # # TAKE SAMPLE
-    # # ------------------------------------ #
-    # attributes = [
-    #     "area",
-    #     "rurality",
-    #     "grouped_construction_age_band",
-    #     "n_flats_grouped",
-    #     "IMD_decile",
-    # ]
-    #
-    # buildings_df = buildings_df.with_columns(
-    #     pl.col(attributes).cast(pl.String).fill_null("unknown")
-    # )
-    # # TODO - might need to update this if certain nations have unknown values but others don't
-    # n_combinations = math.prod([buildings_df[col].n_unique() for col in attributes])
-    # sample_n = math.ceil(target_n / n_combinations)
-    # print(
-    #     f"There are {n_combinations} groups to sample from. Taking {sample_n} samples from each group."
-    # )
-    #
-    # # Sample per group
-    # sampled_ids = (
-    #     buildings_df.group_by(attributes)
-    #     .agg(
-    #         pl.col("building_id").sample(n=sample_n, with_replacement=False, seed=seed)
-    #     )
-    #     .explode("building_id")
-    #     .select("building_id")
-    # )
-    #
-    # # Filter population dataset to sample IDs
-    # sample_df = buildings_df.filter(pl.col("building_id").is_in(sampled_ids))
-    # sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
-    #     sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
-    # )
-    #
-    # # ------------------------------------ #
-    # # ADD GOOGLE MAPS URL TO EACH SAMPLE
-    # # ------------------------------------ #
-    # # Convert to 4326 projection and create google maps URL
-    # sample_gdf = sample_gdf.to_crs(epsg=4326)
-    # sample_gdf = sample_gdf.merge(
-    #     sample_gdf.centroid.get_coordinates(),
-    #     how="left",
-    #     left_index=True,
-    #     right_index=True,
-    # )
-    # sample_gdf["url"] = sample_gdf.apply(
-    #     lambda row: f"https://www.google.com/maps/search/?api=1&query={row['y']},{row['x']}",
-    #     axis=1,
-    # )
-    #
-    # # ------------------------------------ #
-    # # SAVE TO KML FILE
-    # # ------------------------------------ #
-    # today = date.today().strftime("%Y%m%d")
-    # s3 = boto3.resource("s3")
-    # BUCKET = "asf-heat-pump-suitability"
-    # kml = simplekml.Kml()
-    # for idx, r in sample_gdf.iterrows():
-    #     pol = kml.newpolygon(
-    #         name="unlabelled",
-    #         description=f"Location: https://www.google.com/maps/search/?api=1&query={r['y']},{r['x']}\nN flats: {r['n_flats']}\nN total: {r['n_total']}",
-    #         outerboundaryis=list(r["geometry"].exterior.coords),
-    #     )
-    #     pol.style.polystyle.color = "9939FF14"
-    #     pol.style.polystyle.outline = 1
-    # l = len(sample_gdf)
-    # fpath = (
-    #     f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
-    # )
-    # kml.save(fpath)
-    # s3.Bucket(BUCKET).upload_file(
-    #     os.path.join(os.getcwd(), fpath),
-    #     os.path.join("local_heat_planning", "labelling", fpath),
-    # )
+    # ------------------------------------ #
+    # TAKE SAMPLE
+    # ------------------------------------ #
+    attributes = [
+        "area",
+        "rurality",
+        "grouped_construction_age_band",
+        "n_flats_grouped",
+        "IMD_decile",
+    ]
 
+    buildings_df = buildings_df.with_columns(
+        pl.col(attributes).cast(pl.String).fill_null("unknown")
+    )
+    # TODO - might need to update this if certain nations have unknown values but others don't
+    n_combinations = math.prod([buildings_df[col].n_unique() for col in attributes])
+    sample_n = math.ceil(target_n / n_combinations)
+    print(
+        f"There are {n_combinations} groups to sample from. Taking {sample_n} samples from each group."
+    )
 
-# STEP-BY-STEP APPROACH
-# 1. [DONE] Label all UPRNs as flats or not.
-# 2. [DONE] Identify all buildings containing flats.
-# 3. [DONE] Label buildings with rural/urban indicator
-# 4. [DONE] Label buildings with IMD decile
-# 5. [DONE] Label buildings with country
-# 7. [DONE] Get count of flats per building
-# 8. [DONE] Label buildings with grouped-count
-# 9. Sample based on rural/urban indicator; IMD decile; country; and grouped count
-# 10. [DONE] Enrich sample with additional data:
-# [DONE] - URL
-# [DONE] - Count of UPRNs per building
-# 11. [DONE] Convert to kml file
+    # Sample per group
+    sampled_ids = (
+        buildings_df.group_by(attributes)
+        .agg(
+            pl.col("building_id").sample(n=sample_n, with_replacement=False, seed=seed)
+        )
+        .explode("building_id")
+        .select("building_id")
+    )
+
+    # Filter population dataset to sample IDs
+    sample_df = buildings_df.filter(pl.col("building_id").is_in(sampled_ids))
+    sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
+        sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
+    )
+
+    # ------------------------------------ #
+    # ADD GOOGLE MAPS URL TO EACH SAMPLE
+    # ------------------------------------ #
+    # Convert to 4326 projection and create google maps URL
+    sample_gdf = sample_gdf.to_crs(epsg=4326)
+    sample_gdf = sample_gdf.merge(
+        sample_gdf.centroid.get_coordinates(),
+        how="left",
+        left_index=True,
+        right_index=True,
+    )
+    sample_gdf["url"] = sample_gdf.apply(
+        lambda row: f"https://www.google.com/maps/search/?api=1&query={row['y']},{row['x']}",
+        axis=1,
+    )
+
+    # ------------------------------------ #
+    # SAVE TO KML FILE
+    # ------------------------------------ #
+    today = date.today().strftime("%Y%m%d")
+    s3 = boto3.resource("s3")
+    BUCKET = "asf-heat-pump-suitability"
+    kml = simplekml.Kml()
+    for idx, r in sample_gdf.iterrows():
+        pol = kml.newpolygon(
+            name="unlabelled",
+            description=f"Location: https://www.google.com/maps/search/?api=1&query={r['y']},{r['x']}\nN flats: {r['n_flats']}\nN total: {r['n_total']}",
+            outerboundaryis=list(r["geometry"].exterior.coords),
+        )
+        pol.style.polystyle.color = "9939FF14"
+        pol.style.polystyle.outline = 1
+    l = len(sample_gdf)
+    fpath = (
+        f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
+    )
+    kml.save(fpath)
+    s3.Bucket(BUCKET).upload_file(
+        os.path.join(os.getcwd(), fpath),
+        os.path.join("local_heat_planning", "labelling", fpath),
+    )
