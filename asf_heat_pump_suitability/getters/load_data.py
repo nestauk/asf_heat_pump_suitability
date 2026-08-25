@@ -118,7 +118,14 @@ def load_df_uprn_lookup(
             file_type=".parquet",
         )
 
-        return pl.concat([pl.read_parquet(file, **kwargs) for file in files])
+        return pl.concat(
+            [
+                pl.read_parquet(file, **kwargs).with_columns(
+                    pl.col("ruc21ind").cast(pl.String)
+                )
+                for file in files
+            ]
+        )
 
 
 def load_df_domestic_epc(grid_squares: Optional[List[str]], **kwargs) -> pl.DataFrame:
