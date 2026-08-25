@@ -368,7 +368,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import load_geodata
     from asf_heat_pump_suitability.pipeline.transform import local_authority
     from asf_heat_pump_suitability import config
-    from asf_heat_pump_suitability.utils import save_utils
+    from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 
     args = parse_arguments()
     local_authorities = args.local_authorities
@@ -453,4 +453,18 @@ if __name__ == "__main__":
             os.path.join(
                 "s3://", front_end_s3_bucket, front_end_staging_s3_path, file_name
             ),
+        )
+
+        # Only the dated data-science copy gets a run manifest; the undated
+        # front-end copy above is overwritten every run, so there is no
+        # version history to attach lineage to.
+        manifest_utils.generate_and_save_run_manifest_to_s3(
+            s3_file_path,
+            stage="compute_contextual_features",
+            local_authority=local_authority_dict["url_slug"],
+            row_count=len(clusters_with_contextual_features_gdf),
+            params={
+                "local_authorities": args.local_authorities,
+                "release_date": release_date,
+            },
         )
