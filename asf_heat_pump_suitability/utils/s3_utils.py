@@ -47,7 +47,7 @@ def fetch_list_file_paths_from_s3_folder(
         for obj in page.get("Contents", []):
             key = obj["Key"]
 
-            # Skip directory markers (e.g., if path_folder itself is returned)
+            # Skip directory markers i.e. if path_folder itself is returned (e.g., this avoids including 'path/to/folder/' as a file)
             if key.endswith("/"):
                 continue
 
