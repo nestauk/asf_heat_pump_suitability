@@ -9,6 +9,7 @@ import shapely
 import logging
 import warnings
 from pathlib import Path
+from urllib.parse import urlparse
 from tenacity import retry, stop_after_attempt
 from osbng import grids
 from pyogrio.errors import DataSourceError
@@ -76,53 +77,55 @@ def load_gdf_country_heat_network_zones(country: str) -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: Heat network zones polygons for the specified country.
     """
-    s3_client = boto3.client("s3")
+    country_clean = country.strip().lower()
 
-    if country.lower() == "england":
+    if country_clean not in ["england", "scotland", "wales"]:
+        raise ValueError(
+            f"Invalid country: '{country}'. Must be 'England', 'Scotland', or 'Wales'."
+        )
+
+    if country_clean == "england":
         print("Loading DESNZ heat network zones for England...")
         gdf = gpd.read_parquet(
             path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
         ).drop(columns="index_right")
 
-        gdf = geo_utils.verify_gdf_crs(gdf=gdf)
+        return geo_utils.verify_gdf_crs(gdf=gdf)
 
-        return gdf
-    else:
-        if country.lower() == "scotland":
-            print("Loading LHEES heat network zones for Scotland...")
-            s3_full_path = config["data"]["geodata"]["heat_network_zones"][
-                "lhees_files"
-            ]
-        elif country.lower() == "wales":
-            print("Loading Wales heat network zones...")
-            s3_full_path = config["data"]["geodata"]["heat_network_zones"][
-                "wales_files"
-            ]
-        else:
-            raise ValueError(
-                f"Invalid country: {country}. Must be 'England', 'Scotland', or 'Wales'."
-            )
+    config_keys = {
+        "scotland": ("LHEES heat network zones for Scotland", "lhees_files"),
+        "wales": ("Wales heat network priority areas", "wales_files"),
+    }
 
-        s3_full_path = Path(s3_full_path)
-        s3_bucket = s3_full_path.parts[1]
-        folder_path = Path(*s3_full_path.parts[2:])
+    message, folder_key = config_keys[country_clean]
+    print(f"Loading {message}...")
 
-        file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
-            s3_client=s3_client,
-            s3_bucket=s3_bucket,
-            path_folder=str(folder_path),
-            file_type=[".geojson", ".gpkg"],
+    s3_uri = config["data"]["geodata"]["heat_network_zones"][folder_key]
+    parsed_s3 = urlparse(s3_uri)
+    s3_bucket = parsed_s3.netloc
+    folder_path = Path(parsed_s3.path.lstrip("/"))
+
+    s3_client = boto3.client("s3")
+
+    file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
+        s3_client=s3_client,
+        s3_bucket=s3_bucket,
+        path_folder=str(folder_path),
+        file_type=[".geojson", ".gpkg"],
+    )
+
+    if not file_paths:
+        raise FileNotFoundError(
+            f"No valid files (.geojson, .gpkg) found in s3://{s3_bucket}/{folder_path}"
         )
 
-        # Load and standardize CRS for each dataset
-        gdfs = [
-            geo_utils.verify_gdf_crs(
-                gpd.read_file(os.path.join(f"s3://{s3_bucket}", path))
-            )
-            for path in file_paths
-        ]
+    # Load and standardize CRS for each dataset
+    gdfs = [
+        geo_utils.verify_gdf_crs(gpd.read_file(os.path.join(f"s3://{s3_bucket}", path)))
+        for path in file_paths
+    ]
 
-        return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+    return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
 
 
 def load_gdf_heat_network_zones(
