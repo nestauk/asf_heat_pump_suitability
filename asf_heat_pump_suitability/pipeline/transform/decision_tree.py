@@ -237,9 +237,9 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
 
     - If the set of solutions contains "Communal", assign "Communal"
     - Else if the set of solutions contains "Networked heat pump", assign "Networked heat pump".
-    - Else if the set of solutions contains both "Individual heat pump" and "Networked heat pump", assign:
-        - "Individual heat pump" if at least 50% of properties in the building footprint have outdoor space data available and the median outdoor space area is greater than threshold defined for properties outside HN zones/ city centres
-        - "Networked heat pump" otherwise
+    - Else if outdoor space is unknown for at least one property in the building (and hence "individual_or_networked" is in the set of solutions), assign:
+        - "Individual" if median outdoor space is known
+        - "Individual or Networked" otherwise
     - Else, assign "Unexpected combination of solutions in building footprint"
 
     Args:
