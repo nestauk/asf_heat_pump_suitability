@@ -310,7 +310,7 @@ def load_gdf_spatial_signatures_gb(
     if signature_types is not None:
         gdf = gdf[gdf["type"].isin(signature_types)]
         if gdf.empty:
-            print(
+            warnings.warn(
                 f"No spatial signatures found for the specified signature types: {signature_types}."
             )
 
@@ -328,7 +328,7 @@ def load_gdf_spatial_signatures_gb(
 
             gdf = gdf[gdf["geometry"].intersects(boundary)]
         if gdf.empty:
-            print("No spatial signatures found within given boundary.")
+            warnings.warn("No spatial signatures found within given boundary.")
 
     elif local_authority is not None:
         local_authority_dict = la.get_dict_la_data(local_authority)
@@ -341,7 +341,7 @@ def load_gdf_spatial_signatures_gb(
             boundary_gdf[["geometry"]], how="inner", predicate="intersects"
         ).drop(columns="index_right")
         if gdf.empty:
-            print(
+            warnings.warn(
                 f"No spatial signatures found for Local Authority: {local_authority}."
             )
 
