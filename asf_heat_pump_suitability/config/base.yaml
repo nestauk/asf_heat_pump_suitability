@@ -1,7 +1,11 @@
 data:
   geodata:
-    # OpenMap UPRN with coordinates
-    uk_osopen_uprn: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_csv.zip"
+    # OpenMap UPRN with coordinates in original format, useful to load original data for conversion to parquet
+    uk_osopen_uprn_raw: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_csv.zip"
+    # OpenMap UPRN with coordinates in parquet format
+    uk_osopen_uprn_parquet: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510.parquet"
+    # OpenMap UPRN partitioned by 100km BNG grid square for fast spatial reads
+    uk_osopen_uprn_partitioned: "s3://asf-local-heat-planning-tool/inputs/geodata/osopenuprn_202510_partitioned/{grid_square}_uprns.parquet"
     # OpenMap Local Geopackage
     gb_os_openmap_local: "s3://asf-local-heat-planning-tool/inputs/geodata/opmplc_gb.gpkg"
     # OpenMap Local layers per 100km grid square, all GB (April 2026 release)
@@ -16,6 +20,8 @@ data:
     grid_square_os_openroad: "s3://asf-local-heat-planning-tool/inputs/geodata/oproad_essh_gb/20260708/data/{square}_RoadLink.shp"
     # UK Points of Interest
     UK_poi_locations: "s3://asf-local-heat-planning-tool/inputs/geodata/poi_uk.gpkg"
+    UK_poi_locations_parquet: "s3://asf-local-heat-planning-tool/inputs/geodata/poi_uk.parquet"
+    UK_poi_locations_partitioned: "s3://asf-local-heat-planning-tool/inputs/geodata/poi_uk_partitioned/{grid_square}_poi_uk.parquet"
     # OpenMap Code Point GB data for postcode lookup
     # TODO: move this file to a different S3 location as it's not just Plymouth data - it's GB data
     gb_code_points: "s3://asf-local-heat-planning-tool/inputs/geodata/codepo_gb.gpkg"
@@ -48,9 +54,12 @@ data:
 
   epc:
     domestic: "s3://asf-daps/lakehouse/2025_Q1/processed/epc/deduplicated/processed_dedupl-0.parquet"
+    domestic_partitioned: "s3://asf-local-heat-planning-tool/inputs/epc/domestic_partitioned/{grid_square}_epc_domestic.parquet"
     commercial:
       EW: "s3://asf-local-heat-planning-tool/inputs/epc/v092025_EPC_NonDomestic_EW.csv"
       S: "s3://asf-local-heat-planning-tool/inputs/epc/v122025_EPC_NonDomestic_S.csv"
+      EW_parquet: "s3://asf-local-heat-planning-tool/inputs/epc/v092025_EPC_NonDomestic_EW.parquet"
+      S_parquet: "s3://asf-local-heat-planning-tool/inputs/epc/v122025_EPC_NonDomestic_S.parquet"
 
   # Preprocessed data
   processed:
@@ -355,7 +364,7 @@ run_manifest:
   # Remember to update stage_input_keys below when a pipeline script starts reading a new input data source.
   stage_input_keys:
     uprns:
-      - "geodata.uk_osopen_uprn"
+      - "geodata.uk_osopen_uprn_partitioned"
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.UK_poi_locations"
       - "geodata.grid_square_os_openmap_local"
