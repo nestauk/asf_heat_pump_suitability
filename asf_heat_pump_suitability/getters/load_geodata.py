@@ -66,88 +66,63 @@ def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame.from_features(_BNG_GRID_100KM_FEATURES, crs=27700)
 
 
-def load_desnz_heat_network_zones() -> gpd.GeoDataFrame:
+def load_gdf_country_heat_network_zones(country: str) -> gpd.GeoDataFrame:
     """
-    Load DESNZ heat network zones geodataframe, CRS 27700.
-
-    Returns:
-        gpd.GeoDataFrame: DESNZ heat network zones polygons
-    """
-    print("Loading DESNZ heat network zones...")
-    gdf = gpd.read_parquet(
-        path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
-    ).drop(columns="index_right")
-
-    gdf = geo_utils.verify_gdf_crs(gdf=gdf)
-
-    return gdf
-
-
-def load_lhees_heat_network_zones(s3_client: boto3.client) -> gpd.GeoDataFrame:
-    """
-    Load LHEES heat network zones geodataframe.
+    Load heat network zones geodataframe for a specific country (England, Scotland, or Wales).
 
     Args:
-        s3_client: Boto3 S3 client instance.
+        country (str): The country for which to load heat network zones. Options: "England", "Scotland", "Wales".
 
     Returns:
-        gpd.GeoDataFrame: Combined LHEES heat network zones geometries.
+        gpd.GeoDataFrame: Heat network zones polygons for the specified country.
     """
-    print("Loading LHEES heat network zones...")
-    s3_full_path = config["data"]["geodata"]["heat_network_zones"]["lhees_files"]
+    s3_client = boto3.client("s3")
 
-    s3_full_path = Path(s3_full_path)
-    s3_bucket = s3_full_path.parts[1]
-    folder_path = Path(*s3_full_path.parts[2:])
+    if country.lower() == "england":
+        print("Loading DESNZ heat network zones for England...")
+        gdf = gpd.read_parquet(
+            path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
+        ).drop(columns="index_right")
 
-    file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
-        s3_client=s3_client,
-        s3_bucket=s3_bucket,
-        path_folder=str(folder_path),
-        file_type=[".geojson", ".gpkg"],
-    )
+        gdf = geo_utils.verify_gdf_crs(gdf=gdf)
 
-    print(os.path.join(s3_full_path, file_paths[0]))
-    # Load and standardize CRS for each dataset
-    gdfs = [
-        geo_utils.verify_gdf_crs(gpd.read_file(os.path.join(f"s3://{s3_bucket}", path)))
-        for path in file_paths
-    ]
+        return gdf
+    else:
+        if country.lower() == "scotland":
+            print("Loading LHEES heat network zones for Scotland...")
+            s3_full_path = config["data"]["geodata"]["heat_network_zones"][
+                "lhees_files"
+            ]
+        elif country.lower() == "wales":
+            print("Loading Wales heat network zones...")
+            s3_full_path = config["data"]["geodata"]["heat_network_zones"][
+                "wales_files"
+            ]
+        else:
+            raise ValueError(
+                f"Invalid country: {country}. Must be 'England', 'Scotland', or 'Wales'."
+            )
 
-    return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+        s3_full_path = Path(s3_full_path)
+        s3_bucket = s3_full_path.parts[1]
+        folder_path = Path(*s3_full_path.parts[2:])
 
+        file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
+            s3_client=s3_client,
+            s3_bucket=s3_bucket,
+            path_folder=str(folder_path),
+            file_type=[".geojson", ".gpkg"],
+        )
 
-def load_wales_heat_network_zones(s3_client: boto3.client) -> gpd.GeoDataFrame:
-    """
-    Load Wales heat network zones geodataframe, CRS 27700.
+        # Load and standardize CRS for each dataset
+        gdfs = [
+            geo_utils.verify_gdf_crs(
+                gpd.read_file(os.path.join(f"s3://{s3_bucket}", path))
+            )
+            for path in file_paths
+        ]
 
-    Args:
-        s3_client: Boto3 S3 client instance.
-
-    Returns:
-        gpd.GeoDataFrame: Wales heat network zones polygons
-    """
-    print("Loading Wales heat network zones...")
-    s3_full_path = config["data"]["geodata"]["heat_network_zones"]["wales_files"]
-
-    s3_full_path = Path(s3_full_path)
-    s3_bucket = s3_full_path.parts[1]
-    folder_path = Path(*s3_full_path.parts[2:])
-
-    file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
-        s3_client=s3_client,
-        s3_bucket=s3_bucket,
-        path_folder=str(folder_path),
-        file_type=[".geojson", ".gpkg"],
-    )
-
-    # Load and standardize CRS for each dataset
-    gdfs = [
-        geo_utils.verify_gdf_crs(gpd.read_file(os.path.join(f"s3://{s3_bucket}", path)))
-        for path in file_paths
-    ]
-
-    return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+        return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
 
 
 def load_gdf_heat_network_zones(
@@ -171,15 +146,15 @@ def load_gdf_heat_network_zones(
         gpd.GeoDataFrame: polygons of heat network zones in given Local Authority or boundary.
     """
     # Load all DESNZ heat network zones in England
-    desnz_hn_gdf = load_desnz_heat_network_zones()[["geometry"]]
+    desnz_hn_gdf = load_gdf_country_heat_network_zones("England")[["geometry"]]
     desnz_hn_gdf["source_annotation"] = "DESNZ advanced heat network zoning in England"
 
     # Load LHEES heat network zones in Scotland
-    lhees_hn_gdf = load_lhees_heat_network_zones(s3_client)[["geometry"]]
+    lhees_hn_gdf = load_gdf_country_heat_network_zones("Scotland")[["geometry"]]
     lhees_hn_gdf["source_annotation"] = "LHEES heat network zoning in Scotland"
 
     # Load priority areas for district heat networks in Wales
-    # wales_hn_gdf = load_wales_heat_network_zones(s3_client)[["geometry"]]
+    # wales_hn_gdf = load_gdf_country_heat_network_zones("Wales")[["geometry"]]
     # wales_hn_gdf["source_annotation"] = (
     #     "Priority areas for district heat networks in Wales"
     # )
