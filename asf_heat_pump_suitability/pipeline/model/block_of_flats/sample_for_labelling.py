@@ -90,6 +90,26 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the input UPRN file to access. Defaults to today's date.",
+        required=False,
+    )
+
+    parser.add_argument(
+        "--seed",
+        help="Seed for random sampling. Default 7.",
+        default=7,
+        required=False,
+    )
+
+    parser.add_argument(
+        "--target_n",
+        help="Target size of sample. Default 3000.",
+        default=3000,
+        required=False,
+    )
+
+    parser.add_argument(
         "--save",
         help="If --save is set, it saves outputs to S3.",
         required=False,
@@ -105,18 +125,23 @@ if __name__ == "__main__":
     import boto3
     import os
     import math
+    from datetime import date
     from asf_heat_pump_suitability.getters import load_data, load_geodata
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
     from asf_heat_pump_suitability.utils import save_utils
 
-    seed = 10
-    target_n = 3000
+    # ------------------------------------ #
+    # LOAD ARGS
+    # ------------------------------------ #
+    args = parse_arguments()
+    release_date = save_utils.get_str_release_date(args.release_date)
+    seed = args.seed
+    target_n = args.target_n
 
     # ------------------------------------ #
     # LOAD GRID SQUARES
     # ------------------------------------ #
-    args = parse_arguments()
     local_authorities = [la.lower() for la in args.local_authorities]
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
     grid_squares = local_authority_dict["grid_squares"]
@@ -125,7 +150,10 @@ if __name__ == "__main__":
     # LOAD DOMESTIC UPRNS
     # ------------------------------------ #
     # Load our domestic UPRNs from processing
-    domestic_uprns = set(pl.read_parquet("path", columns="UPRN")["UPRN"])
+    slug = local_authority_dict["url_slug"]
+    fpath = f"s3://asf-local-heat-planning-tool/outputs/data/{slug}/{release_date}/{slug}_domestic_uprns.parquet"
+    domestic_uprns = pl.read_parquet(fpath, columns=["UPRN"], use_pyarrow=True)
+    domestic_uprns = set(domestic_uprns["UPRN"])
 
     # Load the lookup with all the additional data
     country_mapping = {
@@ -291,83 +319,83 @@ if __name__ == "__main__":
         path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_enriched_buildings_with_flats.parquet",
     )
 
-    # ------------------------------------ #
-    # TAKE SAMPLE
-    # ------------------------------------ #
-    attributes = [
-        "area",
-        "rurality",
-        "grouped_construction_age_band",
-        "n_flats_grouped",
-        "IMD_decile",
-    ]
-
-    buildings_df = buildings_df.with_columns(
-        pl.col(attributes).cast(pl.String).fill_null("unknown")
-    )
-    # TODO - might need to update this if certain nations have unknown values but others don't
-    n_combinations = math.prod([buildings_df[col].n_unique() for col in attributes])
-    sample_n = math.ceil(target_n / n_combinations)
-    print(
-        f"There are {n_combinations} groups to sample from. Taking {sample_n} samples from each group."
-    )
-
-    # Sample per group
-    sampled_ids = (
-        buildings_df.group_by(attributes)
-        .agg(
-            pl.col("building_id").sample(n=sample_n, with_replacement=False, seed=seed)
-        )
-        .explode("building_id")
-        .select("building_id")
-    )
-
-    # Filter population dataset to sample IDs
-    sample_df = buildings_df.filter(pl.col("building_id").is_in(sampled_ids))
-    sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
-        sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
-    )
-
-    # ------------------------------------ #
-    # ADD GOOGLE MAPS URL TO EACH SAMPLE
-    # ------------------------------------ #
-    # Convert to 4326 projection and create google maps URL
-    sample_gdf = sample_gdf.to_crs(epsg=4326)
-    sample_gdf = sample_gdf.merge(
-        sample_gdf.centroid.get_coordinates(),
-        how="left",
-        left_index=True,
-        right_index=True,
-    )
-    sample_gdf["url"] = sample_gdf.apply(
-        lambda row: f"https://www.google.com/maps/search/?api=1&query={row['y']},{row['x']}",
-        axis=1,
-    )
-
-    # ------------------------------------ #
-    # SAVE TO KML FILE
-    # ------------------------------------ #
-    today = date.today().strftime("%Y%m%d")
-    s3 = boto3.resource("s3")
-    BUCKET = "asf-heat-pump-suitability"
-    kml = simplekml.Kml()
-    for idx, r in sample_gdf.iterrows():
-        pol = kml.newpolygon(
-            name="unlabelled",
-            description=f"Location: https://www.google.com/maps/search/?api=1&query={r['y']},{r['x']}\nN flats: {r['n_flats']}\nN total: {r['n_total']}",
-            outerboundaryis=list(r["geometry"].exterior.coords),
-        )
-        pol.style.polystyle.color = "9939FF14"
-        pol.style.polystyle.outline = 1
-    l = len(sample_gdf)
-    fpath = (
-        f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
-    )
-    kml.save(fpath)
-    s3.Bucket(BUCKET).upload_file(
-        os.path.join(os.getcwd(), fpath),
-        os.path.join("local_heat_planning", "labelling", fpath),
-    )
+    # # ------------------------------------ #
+    # # TAKE SAMPLE
+    # # ------------------------------------ #
+    # attributes = [
+    #     "area",
+    #     "rurality",
+    #     "grouped_construction_age_band",
+    #     "n_flats_grouped",
+    #     "IMD_decile",
+    # ]
+    #
+    # buildings_df = buildings_df.with_columns(
+    #     pl.col(attributes).cast(pl.String).fill_null("unknown")
+    # )
+    # # TODO - might need to update this if certain nations have unknown values but others don't
+    # n_combinations = math.prod([buildings_df[col].n_unique() for col in attributes])
+    # sample_n = math.ceil(target_n / n_combinations)
+    # print(
+    #     f"There are {n_combinations} groups to sample from. Taking {sample_n} samples from each group."
+    # )
+    #
+    # # Sample per group
+    # sampled_ids = (
+    #     buildings_df.group_by(attributes)
+    #     .agg(
+    #         pl.col("building_id").sample(n=sample_n, with_replacement=False, seed=seed)
+    #     )
+    #     .explode("building_id")
+    #     .select("building_id")
+    # )
+    #
+    # # Filter population dataset to sample IDs
+    # sample_df = buildings_df.filter(pl.col("building_id").is_in(sampled_ids))
+    # sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
+    #     sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
+    # )
+    #
+    # # ------------------------------------ #
+    # # ADD GOOGLE MAPS URL TO EACH SAMPLE
+    # # ------------------------------------ #
+    # # Convert to 4326 projection and create google maps URL
+    # sample_gdf = sample_gdf.to_crs(epsg=4326)
+    # sample_gdf = sample_gdf.merge(
+    #     sample_gdf.centroid.get_coordinates(),
+    #     how="left",
+    #     left_index=True,
+    #     right_index=True,
+    # )
+    # sample_gdf["url"] = sample_gdf.apply(
+    #     lambda row: f"https://www.google.com/maps/search/?api=1&query={row['y']},{row['x']}",
+    #     axis=1,
+    # )
+    #
+    # # ------------------------------------ #
+    # # SAVE TO KML FILE
+    # # ------------------------------------ #
+    # today = date.today().strftime("%Y%m%d")
+    # s3 = boto3.resource("s3")
+    # BUCKET = "asf-heat-pump-suitability"
+    # kml = simplekml.Kml()
+    # for idx, r in sample_gdf.iterrows():
+    #     pol = kml.newpolygon(
+    #         name="unlabelled",
+    #         description=f"Location: https://www.google.com/maps/search/?api=1&query={r['y']},{r['x']}\nN flats: {r['n_flats']}\nN total: {r['n_total']}",
+    #         outerboundaryis=list(r["geometry"].exterior.coords),
+    #     )
+    #     pol.style.polystyle.color = "9939FF14"
+    #     pol.style.polystyle.outline = 1
+    # l = len(sample_gdf)
+    # fpath = (
+    #     f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
+    # )
+    # kml.save(fpath)
+    # s3.Bucket(BUCKET).upload_file(
+    #     os.path.join(os.getcwd(), fpath),
+    #     os.path.join("local_heat_planning", "labelling", fpath),
+    # )
 
 
 # STEP-BY-STEP APPROACH
