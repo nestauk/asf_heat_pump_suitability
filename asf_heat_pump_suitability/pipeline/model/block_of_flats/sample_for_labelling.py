@@ -8,6 +8,21 @@ import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 
+BUILDING_CONSTRUCTION_AGES = {
+    "England and Wales: before 1900": "1_England and Wales: before 1900",
+    "Scotland: Before 1919": "2_Scotland: Before 1919",
+    "1900-1929": "3_1900-1929",
+    "1930-1949": "4_1930-1949",
+    "1950-1966": "5_1950-1966",
+    "1965-1975": "6_1965-1975",
+    "1976-1983": "7_1976-1983",
+    "1983-1991": "8_1983-1991",
+    "1991-1998": "9_1991-1998",
+    "1996-2002": "10_1996-2002",
+    "2003-2007": "11_2003-2007",
+    "2007 onwards": "12_2007 onwards",
+}
+
 
 def load_df_scotland_postcode_lookup() -> pl.DataFrame:
     """
@@ -158,6 +173,7 @@ if __name__ == "__main__":
     )
 
     if args.map_uprns_to_building:
+        print("Generating UPRN to building ID mapping...")
         all_uprns_df = load_geodata.load_df_osopen_uprn()
         all_uprns_gdf = uprns.generate_gdf_uprn_coords(all_uprns_df)
 
@@ -168,7 +184,12 @@ if __name__ == "__main__":
         del all_uprns_gdf, all_uprns_df
         # Save mapping
         fpath = "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
-        pl.DataFrame(uprn_building_mapping).write_parquet(fpath)
+        pl.DataFrame(
+            {
+                "UPRN": uprn_building_mapping.keys(),
+                "building_ID": uprn_building_mapping.values(),
+            }
+        ).write_parquet(fpath)
 
     # ------------------------------------ #
     # LOAD DOMESTIC UPRNS
@@ -179,12 +200,16 @@ if __name__ == "__main__":
     fpath = config["output"]["dataset"]["domestic_uprns"].format(
         local_authority=slug, release_date=release_date
     )
-    domestic_uprns = pl.scan_parquet(fpath).collect().select(["UPRN"])
+    domestic_uprns = (
+        pl.scan_parquet(fpath)
+        .collect()
+        .select(["UPRN"])
+        .with_columns(pl.lit(True).alias("is_domestic"))
+    )
 
     # Load the lookup with all the additional data
     uprns_df = (
         load_data.load_df_uprn_lookup(
-            uprn_filter=domestic_uprns,
             columns=[
                 "UPRN",
                 "ctry25cd",
@@ -200,6 +225,8 @@ if __name__ == "__main__":
             pl.col("lad25cd").str.starts_with("E09").alias("in_london"),
         )
         .rename({"ctry25cd": "country"})
+        .join(domestic_uprns, how="left", on="UPRN")
+        .with_columns(pl.col("is_domestic").fill_null(False))
     )
     del domestic_uprns
 
@@ -239,16 +266,21 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # Load mapping if not generated
     if not args.map_uprns_to_building:
+        print("Loading UPRN to building ID mapping...")
         uprn_building_mapping = pl.read_parquet(
             "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
         )
 
-    uprns_df = uprns_df.with_columns(
-        # Map building IDs to the UPRNs they contain
-        pl.col("UPRN")
-        .replace_strict(uprn_building_mapping, default=None)
-        .alias("building_id")
-    ).with_columns(pl.col("is_flat").sum().over("building_id").alias("n_flats"))
+    uprns_df = (
+        uprns_df.with_columns(
+            # Map building IDs to the UPRNs they contain
+            pl.col("UPRN")
+            .replace_strict(uprn_building_mapping, default=None)
+            .alias("building_id")
+        )
+        .with_columns(pl.col("is_flat").sum().over("building_id").alias("n_flats"))
+        .filter(pl.col("n_flats") > 1)
+    )
     del uprn_building_mapping
 
     # ------------------------------------ #
@@ -258,13 +290,14 @@ if __name__ == "__main__":
     epc_df = (
         load_data.load_df_domestic_epc(
             grid_squares=grid_squares, columns=["UPRN", "CONSTRUCTION_AGE_BAND"]
-        )
-        .with_columns(
+        ).with_columns(
             pl.col("CONSTRUCTION_AGE_BAND")
             .str.to_lowercase()
             .str.replace("unknown", "")
             .alias("construction_age_band")
         )
+        # This is required to replace empty string with None which we need to do so that the agg max() below works
+        # i.e. this prevents 'unknown' from being the max value
         .with_columns(
             pl.when(pl.col("construction_age_band") == "")
             .then(None)
@@ -280,16 +313,19 @@ if __name__ == "__main__":
     # ------------------------------------ #
     print("Aggregate to building level...")
     buildings_df = (
-        uprns_df.filter(pl.col("n_flats") > 1)
-        .group_by("building_id")
+        uprns_df.group_by("building_id")
         .agg(
             pl.col("UPRN").n_unique().alias("n_uprns"),
-            pl.col("n_flats").max().alias("n_flats"),
-            pl.col("construction_age_band").max().alias("construction_age_band"),
-            pl.col("country").max().alias("country"),
-            pl.col("ruc21ind").max().alias("rurality"),
-            pl.col("IMD_decile").max().alias("IMD_decile"),
-            pl.col("in_london").max().alias("in_london"),
+            pl.col("is_domestic").sum().alias("n_domestic_uprns"),
+            # The features below are not expected to have different values within the same buildings.
+            # Construction age band may vary across different UPRNs within buildings due to either errors in EPC, or
+            # due to genuine differences within a larger building footprint. For this reason, we take the earliest value.
+            pl.col("n_flats").first().alias("n_flats"),
+            pl.col("construction_age_band").min().alias("construction_age_band"),
+            pl.col("country").first().alias("country"),
+            pl.col("ruc21ind").first().alias("rurality"),
+            pl.col("IMD_decile").first().alias("IMD_decile"),
+            pl.col("in_london").first().alias("in_london"),
         )
         .with_columns(
             # Add proportion of flats
