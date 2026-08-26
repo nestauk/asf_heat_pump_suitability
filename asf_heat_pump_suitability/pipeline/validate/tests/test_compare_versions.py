@@ -1572,6 +1572,7 @@ class TestPlotDistributionOverlay:
             path,
         )
         assert path.exists(), "the plot must be saved at the given path"
+        assert path.stat().st_size > 0, "the saved plot must not be an empty file"
 
     def test_skewed_distribution_saves_a_log_binned_png(self, tmp_path):
         """A heavily right-skewed distribution (real cluster areas) still
@@ -1584,7 +1585,6 @@ class TestPlotDistributionOverlay:
             path,
         )
         assert path.exists(), "the log-binned plot must be saved at the given path"
-        assert path.stat().st_size > 0, "the saved plot must not be an empty file"
 
 
 class TestGenerateDictDistributionPlots:
