@@ -317,8 +317,11 @@ if __name__ == "__main__":
             .replace_strict(uprn_building_mapping, default=None)
             .alias("building_id")
         )
-        .with_columns(pl.col("is_flat").sum().over("building_id").alias("n_flats"))
-        .filter(pl.col("n_flats") > 1)
+        .with_columns(
+            pl.col("is_flat").sum().over("building_id").alias("n_flats"),
+            pl.col("is_domestic").sum().over("building_id").alias("n_domestic"),
+        )
+        .filter(pl.col("n_flats") > 1, pl.col("n_domestic") > 0)
     )
     del uprn_building_mapping
 
