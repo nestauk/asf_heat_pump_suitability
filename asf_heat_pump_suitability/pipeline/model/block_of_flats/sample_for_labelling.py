@@ -297,7 +297,9 @@ if __name__ == "__main__":
     flat_uprns = property_type.impute_set_flat_properties(
         uprns_df, x_col="GRIDGB1E", y_col="GRIDGB1N"
     )
-    uprns_df = uprns_df.with_columns(pl.col("UPRN").is_in(flat_uprns).alias("is_flat"))
+    uprns_df = uprns_df.with_columns(
+        (pl.col("UPRN").is_in(flat_uprns) & pl.col("is_domestic")).alias("is_flat")
+    )
     del flat_uprns
 
     # ------------------------------------ #
