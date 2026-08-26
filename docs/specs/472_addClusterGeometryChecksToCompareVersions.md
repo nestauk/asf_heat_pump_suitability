@@ -151,6 +151,12 @@ Implementation decisions from the first acceptance run on real data
   like an int in `_format_stat` (1738.0 → "1,738"), so a version whose
   column round-trips to Float64 no longer renders "1,738.0" beside the
   other version's "1,165"; non-integral floats keep one decimal place.
+- **Plots switch to log-spaced bins for heavily skewed distributions.**
+  Real cluster areas span orders of magnitude, so linear bins collapsed
+  almost every cluster into one bar. When values are all positive and
+  max/median exceeds 50 (`LOG_BINS_SKEW_RATIO`), bins are log-spaced and
+  the x-axis is log-scaled, labelled "(log scale)"; compact distributions
+  keep linear bins. Both versions still share the same bins.
 
 ## Verification
 
