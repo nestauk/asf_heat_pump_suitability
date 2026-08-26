@@ -154,7 +154,7 @@ if __name__ == "__main__":
     fpath = config["output"]["dataset"]["domestic_uprns"].format(
         local_authority=slug, release_date=release_date
     )
-    domestic_uprns = set(pl.scan_parquet(fpath).collect()["UPRN"])
+    domestic_uprns = pl.scan_parquet(fpath).collect().select(["UPRN"])
 
     # Load the lookup with all the additional data
     uprns_df = (
@@ -172,10 +172,11 @@ if __name__ == "__main__":
             ],
         )
         .with_columns(
-            pl.col("ladcd").str.starts_with("E09").alias("in_london"),
+            pl.col("lad25cd").str.starts_with("E09").alias("in_london"),
         )
         .rename({"ctry25cd": "country"})
     )
+    del domestic_uprns
 
     # ------------------------------------ #
     # ADD IMD DECILE DATA
@@ -196,6 +197,7 @@ if __name__ == "__main__":
         )
         .join(imd_df, how="left", left_on="IMD_LSOA_or_DZ", right_on="LSOA_or_DZ")
     )
+    del scotland_dz_lookup_df, imd_df
 
     # ------------------------------------ #
     # IMPUTE FLAT LABELS
@@ -205,6 +207,7 @@ if __name__ == "__main__":
         uprns_df, x_col="GRIDGB1E", y_col="GRIDGB1N"
     )
     uprns_df = uprns_df.with_columns(pl.col("UPRN").is_in(flat_uprns).alias("is_flat"))
+    del flat_uprns
 
     # ------------------------------------ #
     # MAP UPRNS TO BUILDINGS
@@ -213,7 +216,12 @@ if __name__ == "__main__":
     buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="building", grid_squares=grid_squares
     )
-    uprns_gdf = uprns.generate_gdf_uprn_coords(uprns_df, usecols=["UPRN", "is_flat"])
+    uprns_gdf = uprns.generate_gdf_uprn_coords(
+        uprns_df,
+        usecols=["UPRN", "GRIDGB1E", "GRIDGB1N"],
+        x_col="GRIDGB1E",
+        y_col="GRIDGB1N",
+    )
     uprn_building_mapping = uprns.map_dict_uprns_to_building_id(
         uprns_gdf=uprns_gdf, buildings_gdf=buildings_gdf, id_col="ID"
     )
@@ -223,6 +231,7 @@ if __name__ == "__main__":
         .replace_strict(uprn_building_mapping, default=None)
         .alias("building_id")
     ).with_columns(pl.col("is_flat").sum().over("building_id").alias("n_flats"))
+    del uprns_gdf, uprn_building_mapping
 
     # ------------------------------------ #
     # ENRICH WITH EPC BUILDING AGE DATA
@@ -246,6 +255,7 @@ if __name__ == "__main__":
         )
     )
     uprns_df = uprns_df.join(epc_df, how="left", on="UPRN")
+    del epc_df
 
     # ------------------------------------ #
     # AGGREGATE UP TO BUILDING LEVEL
@@ -258,12 +268,14 @@ if __name__ == "__main__":
             pl.col("UPRN").n_unique().alias("n_uprns"),
             pl.col("n_flats").max().alias("n_flats"),
             pl.col("construction_age_band").max().alias("construction_age_band"),
-            pl.col("ctry25cd").max().alias("ctry25cd"),
+            pl.col("country").max().alias("country"),
             pl.col("ruc21ind").max().alias("rurality"),
             pl.col("IMD_decile").max().alias("IMD_decile"),
             pl.col("in_london").max().alias("in_london"),
         )
         .with_columns(
+            # Add proportion of flats
+            (pl.col("n_flats") / pl.col("n_uprns")).alias("proportion_flats"),
             # Group flat count
             pl.when(pl.col("n_flats").is_between(2, 6, closed="both"))
             .then(pl.lit("2-6_flats"))
@@ -322,7 +334,10 @@ if __name__ == "__main__":
             .otherwise(None)
             .alias("rurality"),
         )
+        .with_columns((pl.col("proportion_flats") > 0.8).alias("over_80_pc_flats"))
     )
+
+    del uprns_df
 
     save_utils.save_to_s3(
         df=buildings_df,
@@ -338,15 +353,16 @@ if __name__ == "__main__":
         "rurality",
         "grouped_construction_age_band",
         "n_flats_grouped",
-        "IMD_decile",
+        "deprivation_group",
+        "over_80_pc_flats",
     ]
 
     buildings_df = buildings_df.with_columns(
         pl.col(attributes).cast(pl.String).fill_null("unknown")
     )
-    # TODO - might need to update this if certain nations have unknown values but others don't
-    n_combinations = math.prod([buildings_df[col].n_unique() for col in attributes])
-    sample_n = math.ceil(target_n / n_combinations)
+    # Get the number of combinations of attributes, which is the number of groups to sample from
+    n_combinations = buildings_df.group_by(attributes).agg(pl.len()).height
+    sample_n = target_n // n_combinations
     print(
         f"There are {n_combinations} groups to sample from. Taking {sample_n} samples from each group."
     )
@@ -355,6 +371,7 @@ if __name__ == "__main__":
     sampled_ids = (
         buildings_df.group_by(attributes)
         .agg(
+            # Sample building IDs from each group
             pl.col("building_id").sample(n=sample_n, with_replacement=False, seed=seed)
         )
         .explode("building_id")
@@ -363,9 +380,11 @@ if __name__ == "__main__":
 
     # Filter population dataset to sample IDs
     sample_df = buildings_df.filter(pl.col("building_id").is_in(sampled_ids))
+    del buildings_df
     sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
         sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
     )
+    del buildings_gdf
 
     # ------------------------------------ #
     # ADD GOOGLE MAPS URL TO EACH SAMPLE
