@@ -267,58 +267,18 @@ def extend_df_contextual_features(
     return clusters_df
 
 
-def create_gdf_contextual_features(
-    uprns_df: pl.DataFrame,
-    clusters_gdf: gpd.GeoDataFrame,
-    hn_zones_gdf: gpd.GeoDataFrame,
-    spatial_signatures_gdf: gpd.GeoDataFrame,
+def extend_gdf_logic_trace(
+    clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """
-    Create geodataframe with cluster_id, geometry and contextual features for each cluster
+    Add logic trace for each cluster explaining why the assigned technology was chosen.
 
     Args:
-        uprns_df (pl.DataFrame): dataframe of UPRNs and UPRN-level features
-        clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
-        hn_zones_gdf (gpd.GeoDataFrame): geodataframe of heat network zones with geometry and source annotation
-        city_centre_signatures_gdf (gpd.GeoDataFrame): geodataframe of spatial signatures representing city centre areas with geometry and source annotation
+        clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, in_hn_zone, in_city_centre, within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load, and assigned_tech features for each cluster
     Returns:
-        gpd.GeoDataFrame: geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
+        gpd.GeoDataFrame: geodataframe with logic_trace feature added for each cluster
     """
 
-    clusters_with_contextual_features_df = extend_df_contextual_features(
-        clusters_df=pl.from_pandas(
-            clusters_gdf.drop(columns="geometry")
-        ),  # drop geometry for now and use polars
-        uprns_df=uprns_df,
-    )
-
-    # TODO identify source of empty clusters and fix - temporary fix to remove empty clusters
-    clusters_with_contextual_features_df = clusters_with_contextual_features_df.filter(
-        pl.col("n_UPRNs").is_not_null()
-    )
-
-    # Adding the geometry back to the clusters dataframe
-    clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
-        clusters_with_contextual_features_df.to_pandas().merge(
-            clusters_gdf[["cluster_id", "geometry"]],
-            how="left",
-            on="cluster_id",
-        ),
-        geometry="geometry",
-        crs="EPSG:27700",
-    )
-
-    # Add in_hn_zone and in_city_centre flags to clusters_gdf
-    clusters_with_contextual_features_gdf["in_hn_zone"] = (
-        clusters_with_contextual_features_gdf.intersects(hn_zones_gdf.union_all())
-    ).map({True: "Yes", False: "No"})
-    clusters_with_contextual_features_gdf["in_city_centre"] = (
-        clusters_with_contextual_features_gdf.intersects(
-            spatial_signatures_gdf.union_all()
-        )
-    ).map({True: "Yes", False: "No"})
-
-    # Add logic trace for each cluster explaining why the assigned technology was chosen
     assigned_tech = clusters_with_contextual_features_gdf["assigned_tech"]
     tech_types = config["constant"]["tech_types"]
     dhn_potential = (clusters_with_contextual_features_gdf["in_hn_zone"] == "Yes") | (
@@ -392,6 +352,60 @@ def create_gdf_contextual_features(
     clusters_with_contextual_features_gdf["logic_trace"] = np.select(
         conditions, logic, default="Not accounted for in logic trace."
     )
+
+    return clusters_with_contextual_features_gdf
+
+
+def create_gdf_contextual_features(
+    uprns_df: pl.DataFrame,
+    clusters_gdf: gpd.GeoDataFrame,
+    hn_zones_gdf: gpd.GeoDataFrame,
+    spatial_signatures_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """
+    Create geodataframe with cluster_id, geometry and contextual features for each cluster
+
+    Args:
+        uprns_df (pl.DataFrame): dataframe of UPRNs and UPRN-level features
+        clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
+        hn_zones_gdf (gpd.GeoDataFrame): geodataframe of heat network zones with geometry and source annotation
+        city_centre_signatures_gdf (gpd.GeoDataFrame): geodataframe of spatial signatures representing city centre areas with geometry and source annotation
+    Returns:
+        gpd.GeoDataFrame: geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
+    """
+
+    clusters_with_contextual_features_df = extend_df_contextual_features(
+        clusters_df=pl.from_pandas(
+            clusters_gdf.drop(columns="geometry")
+        ),  # drop geometry for now and use polars
+        uprns_df=uprns_df,
+    )
+
+    # TODO identify source of empty clusters and fix - temporary fix to remove empty clusters
+    clusters_with_contextual_features_df = clusters_with_contextual_features_df.filter(
+        pl.col("n_UPRNs").is_not_null()
+    )
+
+    # Adding the geometry back to the clusters dataframe
+    clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
+        clusters_with_contextual_features_df.to_pandas().merge(
+            clusters_gdf[["cluster_id", "geometry"]],
+            how="left",
+            on="cluster_id",
+        ),
+        geometry="geometry",
+        crs="EPSG:27700",
+    )
+
+    # Add in_hn_zone and in_city_centre flags to clusters_gdf
+    clusters_with_contextual_features_gdf["in_hn_zone"] = (
+        clusters_with_contextual_features_gdf.intersects(hn_zones_gdf.union_all())
+    ).map({True: "Yes", False: "No"})
+    clusters_with_contextual_features_gdf["in_city_centre"] = (
+        clusters_with_contextual_features_gdf.intersects(
+            spatial_signatures_gdf.union_all()
+        )
+    ).map({True: "Yes", False: "No"})
 
     return clusters_with_contextual_features_gdf
 
@@ -532,6 +546,13 @@ if __name__ == "__main__":
         clusters_gdf=clusters_gdf,
         hn_zones_gdf=hn_zones_gdf,
         spatial_signatures_gdf=spatial_signatures_gdf,
+    )
+
+    print(
+        "Add logic trace for each cluster explaining why the assigned technology was chosen..."
+    )
+    clusters_with_contextual_features_gdf = extend_gdf_logic_trace(
+        clusters_with_contextual_features_gdf=clusters_with_contextual_features_gdf
     )
 
     print("Simplifying geometries using tolerance_m...")
