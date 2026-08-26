@@ -1129,6 +1129,52 @@ class TestGenerateStrReportGeometrySections:
             f"`{compare_versions.CLUSTER_LAYER}` layer only" in report
         ), "the report must state the headline checks cover the clusters layer only"
 
+    def test_per_layer_table_keeps_non_cluster_layers_visible(
+        self, df_clusters_old, df_areas_old
+    ):
+        """Filtered-out layers must not vanish silently: the geometry
+        section tabulates rows and total area per layer over both versions,
+        with the pre-layers old version shown as a single labelled row."""
+        df_new = pl.DataFrame(
+            {
+                "cluster_id": ["HP_1", "DHN_1", None],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                ],
+            }
+        )
+        df_areas_new = pl.DataFrame(
+            {
+                "area_m2": [210.0, 100.0, 5_000_000.0],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                ],
+            }
+        )
+        report = generate_report(
+            df_clusters_old,
+            df_new,
+            None,
+            None,
+            stage="compute_contextual_features",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_new,
+        )
+        assert (
+            "| ward_boundaries | — | 1 | — | 5,000,000.0 |" in report
+        ), "the excluded ward layer must stay visible with its rows and area"
+        assert (
+            f"| {compare_versions.PRE_LAYERS_LABEL} | 3 | — | 300.0 | — |" in report
+        ), "the pre-layers old version must appear as its own labelled row"
+        assert (
+            f"| {compare_versions.CLUSTER_LAYER} | — | 2 | — | 310.0 |" in report
+        ), "the clusters layer's own tallies must appear in the table"
+
     def test_unlayered_versions_carry_no_layer_filtering_note(
         self, df_clusters_old, df_areas_old
     ):
@@ -1147,6 +1193,9 @@ class TestGenerateStrReportGeometrySections:
         assert (
             "layer only" not in report
         ), "no layer column anywhere means no filtering note may appear"
+        assert (
+            "per layer" not in report
+        ), "no layer column anywhere means no per-layer table may appear"
 
     def test_geometry_sections_only_for_geometry_stages(
         self, df_old, df_new_identical, manifests, mocker
@@ -1404,6 +1453,80 @@ class TestGenerateDictTotalAreaDelta:
         assert (
             totals["area_m2_new"] == 0.0 and totals["area_m2_delta"] == -300.0
         ), "a version with no clusters must total zero area, not crash"
+
+
+class TestGenerateDfLayerSummary:
+    """Tests for `generate_df_layer_summary`."""
+
+    def test_tallies_rows_and_area_per_layer_over_the_union(self):
+        """Each layer of either version gets one row with per-version row
+        counts and total areas; a layer absent from one side stays null
+        there rather than reading as zero features."""
+        old = pl.DataFrame(
+            {
+                "area_m2": [1.0, 2.0, 30.0],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "anchor_loads",
+                ],
+            }
+        )
+        new = pl.DataFrame(
+            {
+                "area_m2": [3.0, 400.0],
+                "layer": [compare_versions.CLUSTER_LAYER, "ward_boundaries"],
+            }
+        )
+        summary = compare_versions.generate_df_layer_summary(old, new)
+        by_layer = {row["layer"]: row for row in summary.iter_rows(named=True)}
+        assert set(by_layer) == {
+            compare_versions.CLUSTER_LAYER,
+            "anchor_loads",
+            "ward_boundaries",
+        }, "the table must cover the union of both versions' layers"
+        clusters = by_layer[compare_versions.CLUSTER_LAYER]
+        assert (
+            clusters["rows_old"] == 2 and clusters["area_m2_old"] == 3.0
+        ), "the old clusters layer must tally its two rows and 3 m²"
+        assert (
+            clusters["rows_new"] == 1 and clusters["area_m2_new"] == 3.0
+        ), "the new clusters layer must tally its one row and 3 m²"
+        assert (
+            by_layer["ward_boundaries"]["rows_old"] is None
+        ), "a layer absent from the old version must stay null, not zero"
+        assert (
+            by_layer["anchor_loads"]["rows_new"] is None
+        ), "a layer absent from the new version must stay null, not zero"
+
+    def test_pre_layers_version_appears_as_a_single_row(self, df_areas_old):
+        """A version without a `layer` column is one pre-layers output; it
+        gets a single labelled row so the table still shows both versions."""
+        new = pl.DataFrame(
+            {
+                "area_m2": [3.0, 400.0],
+                "layer": [compare_versions.CLUSTER_LAYER, "ward_boundaries"],
+            }
+        )
+        summary = compare_versions.generate_df_layer_summary(df_areas_old, new)
+        by_layer = {row["layer"]: row for row in summary.iter_rows(named=True)}
+        pre_layers = by_layer[compare_versions.PRE_LAYERS_LABEL]
+        assert (
+            pre_layers["rows_old"] == 3 and pre_layers["area_m2_old"] == 300.0
+        ), "the pre-layers version must appear as one row tallying all its features"
+        assert (
+            pre_layers["rows_new"] is None
+        ), "the layered version has no pre-layers row, so its side stays null"
+
+    def test_returns_none_when_neither_version_is_layered(self, df_areas_old):
+        """Two pre-layers versions have no layers to tabulate; the section
+        must get None so no table is rendered."""
+        assert (
+            compare_versions.generate_df_layer_summary(
+                df_areas_old, df_areas_old.clone()
+            )
+            is None
+        ), "no layer column on either side means no per-layer table"
 
 
 class TestLoadDfClusterAreas:
