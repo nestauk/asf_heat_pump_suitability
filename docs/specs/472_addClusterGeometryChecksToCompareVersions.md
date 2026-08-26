@@ -79,6 +79,13 @@ Decisions settled during kickoff interview (2026-08-13):
   them as an open question only** — rejected; the helper would be
   retrofitted just as distributions multiply, and the geometry
   distributions would get plots retroactively.
+- **A per-layer rows/area summary table in the geometry section** —
+  implemented alongside the layer filtering, then removed (2026-08-26):
+  on real output it mostly paired numbers with dashes, duplicated the
+  headline comparison, and its accounting value (where did the
+  non-cluster rows go) is already covered by the scope note and the
+  whole-file row counts. If layer-presence drift ever needs flagging,
+  the thresholding follow-on can add it as a check rather than a table.
 
 ## Out of scope
 
@@ -131,14 +138,15 @@ Implementation decisions from the first acceptance run on real data
 - **The clusters layer name is config, not code:**
   `compare_versions.cluster_layer` in `base.yaml`, verified against the
   20260806 East Lothian output — a front-end rename is a config change.
-- **A per-layer summary table keeps excluded layers visible.** The
-  geometry section tabulates rows and total area (m²) per layer over the
-  union of both versions' layers, so non-cluster layers are surfaced
-  rather than silently dropped; a version without a `layer` column shows
-  as a single `(pre-layers output)` row, and a side lacking a layer
-  renders as a dash, not a misleading zero. When filtering was applied,
-  the section states that the headline checks cover the clusters layer
-  only.
+- **No per-layer summary table** (removed 2026-08-26, Aidan's call, after
+  reading it on real output). The report's job is to compare clusters
+  between versions, and that comparison is the headline table. During the
+  format transition the per-layer table was a grid of dashes pairing each
+  number with nothing, and its useful content is carried elsewhere: the
+  scope note says filtering happened and names the clusters layer, and the
+  whole-file row counts at the top already reveal that non-cluster rows
+  exist. When filtering was applied, the section states that the headline
+  checks cover the clusters layer only.
 - **Stats render consistently across dtypes:** an integral float renders
   like an int in `_format_stat` (1738.0 → "1,738"), so a version whose
   column round-trips to Float64 no longer renders "1,738.0" beside the
@@ -162,11 +170,8 @@ Implementation decisions from the first acceptance run on real data
       and plots cover the config-named clusters layer only
       (`compare_versions.cluster_layer`), with the scope stated in the
       report
-- [x] Per-layer summary table reports rows and total area (m²) per layer,
-      old vs new, over the union of both versions' layers
 - [x] A version without a `layer` column is treated as all-clusters
-      (back-compat across the format change) and shown as a single
-      pre-layers row in the per-layer table
+      (back-compat across the format change)
 - [x] Statistics render consistently across versions: integral floats
       render like ints, non-integral floats keep one decimal place
       (acceptance re-run against East Lothian 20260708 vs 20260806

@@ -50,8 +50,6 @@ AREA_COL = "area_m2"
 # Multi-layer front-end outputs (August 2026 onwards) tag every row with
 # the layer it belongs to; earlier outputs have no such column.
 LAYER_COL = "layer"
-# Row label for a version without a layer column in the per-layer table.
-PRE_LAYERS_LABEL = "(pre-layers output)"
 # Stages whose outputs carry cluster geometry, and so get the cluster
 # count, area and distribution sections.
 GEOMETRY_STAGES = ("cluster", "compute_contextual_features")
@@ -179,49 +177,6 @@ def generate_dict_total_area_delta(
         "area_m2_new": total_new,
         "area_m2_delta": total_new - total_old,
     }
-
-
-def generate_df_layer_summary(
-    df_areas_old: pl.DataFrame, df_areas_new: pl.DataFrame
-) -> pl.DataFrame | None:
-    """
-    Tally row counts and total area per layer, over both versions' layers.
-
-    Keeps the layers the cluster checks filter out (ward boundaries, anchor
-    loads) visible instead of silently excluded. A version without a
-    `layer` column tallies as a single pre-layers row; a layer absent from
-    one version stays null on that side rather than reading as zero
-    features.
-
-    Args:
-        df_areas_old: older version's per-row areas, with `layer` when the
-            source has it
-        df_areas_new: newer version's per-row areas, likewise
-
-    Returns:
-        pl.DataFrame: one row per layer with rows_old/new and
-            area_m2_old/new, sorted by layer, or None when neither version
-            has a `layer` column (nothing was filtered)
-    """
-    if LAYER_COL not in df_areas_old.columns and LAYER_COL not in df_areas_new.columns:
-        return None
-
-    def tally(df_areas: pl.DataFrame, suffix: str) -> pl.DataFrame:
-        layer = (
-            pl.col(LAYER_COL)
-            if LAYER_COL in df_areas.columns
-            else pl.lit(PRE_LAYERS_LABEL)
-        )
-        return df_areas.group_by(layer.alias(LAYER_COL)).agg(
-            pl.len().cast(pl.Int64).alias(f"rows_{suffix}"),
-            pl.col(AREA_COL).sum().alias(f"area_m2_{suffix}"),
-        )
-
-    return (
-        tally(df_areas_old, "old")
-        .join(tally(df_areas_new, "new"), on=LAYER_COL, how="full", coalesce=True)
-        .sort(LAYER_COL)
-    )
 
 
 def generate_dict_distribution_stats(df: pl.DataFrame, column: str) -> dict | None:
@@ -833,8 +788,7 @@ def load_df_cluster_areas(path: str) -> pl.DataFrame:
     CRS — the contextual-features geojson is EPSG:4326, with simplified
     geometry — is reprojected first. A zero-feature geojson degrades to an
     empty frame. A multi-layer output's `layer` column rides along with the
-    areas, so the checks can filter to the clusters layer and the per-layer
-    table can tally the rest.
+    areas, so the checks can filter to the clusters layer.
 
     Args:
         path: S3 path of the stage output (.parquet or .geojson)
@@ -1013,44 +967,16 @@ def _format_stat(value: float | int) -> str:
     return f"{value:,.0f}"
 
 
-def _format_layer_cell(value: int | float | None) -> str:
-    """Format one per-layer table cell; a side lacking the layer shows an
-    em dash rather than a misleading zero."""
-    if value is None:
-        return "—"
-    return f"{value:,.1f}" if isinstance(value, float) else f"{value:,}"
-
-
-def _generate_list_layer_table_lines(layer_summary: pl.DataFrame) -> list[str]:
-    """Render the per-layer rows/area summary as markdown table lines."""
-    lines = [
-        "",
-        "Rows and total area per layer, across all of the file's layers:",
-        "",
-        "| Layer | Rows (old) | Rows (new) "
-        "| Total area m² (old) | Total area m² (new) |",
-        "| --- | --- | --- | --- | --- |",
-    ]
-    for row in layer_summary.iter_rows(named=True):
-        cells = " | ".join(
-            _format_layer_cell(row[field])
-            for field in ("rows_old", "rows_new", "area_m2_old", "area_m2_new")
-        )
-        lines.append(f"| {row[LAYER_COL]} | {cells} |")
-    return lines
-
-
 def _generate_str_cluster_geometry_section(
     count_delta: dict | None,
     area_delta: dict | None,
     stage: str,
     layer_filtered: bool = False,
-    layer_summary: pl.DataFrame | None = None,
 ) -> str:
     """Render cluster count and total area deltas as a markdown section,
-    with the CRS/units stated, the clusters-layer scope named and the
-    per-layer summary tabulated when a multi-layer output was filtered,
-    and the simplified-geometry caveat for the contextual-features stage."""
+    with the CRS/units stated, the clusters-layer scope named when a
+    multi-layer output was filtered, and the simplified-geometry caveat
+    for the contextual-features stage."""
     lines = [
         "| Metric | Old | New | Delta |",
         "| --- | --- | --- | --- |",
@@ -1077,8 +1003,6 @@ def _generate_str_cluster_geometry_section(
                 "layered outputs and counts entirely as clusters.",
             ]
         )
-    if layer_summary is not None:
-        lines.extend(_generate_list_layer_table_lines(layer_summary))
     if count_delta is None:
         lines.extend(
             [
@@ -1320,11 +1244,6 @@ def generate_str_report(
             for frame in (df_old, df_new, df_areas_old, df_areas_new)
             if frame is not None
         )
-        layer_summary = (
-            generate_df_layer_summary(df_areas_old, df_areas_new)
-            if df_areas_old is not None and df_areas_new is not None
-            else None
-        )
         sections.append(
             _generate_str_cluster_geometry_section(
                 generate_dict_cluster_count_delta(
@@ -1333,7 +1252,6 @@ def generate_str_report(
                 area_delta,
                 stage,
                 layer_filtered,
-                layer_summary,
             )
         )
         frames = get_dict_distribution_frames(
