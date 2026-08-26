@@ -8,6 +8,7 @@ pytest asf_heat_pump_suitability/pipeline/validate/tests/test_compare_versions.p
 import json
 import subprocess
 
+import numpy as np
 import polars as pl
 import pytest
 
@@ -1755,6 +1756,35 @@ class TestGetDictDistributionFrames:
         ], "whole-county ward polygons must not enter the area distribution"
 
 
+class TestUseLogBins:
+    """Tests for `_use_log_bins`."""
+
+    def test_heavily_right_skewed_positive_values_use_log_bins(self):
+        """Cluster areas span orders of magnitude (a few huge clusters, a
+        bulk of small ones); linear bins would collapse the bulk into one
+        bar, so log bins apply."""
+        values = np.array([10.0] * 99 + [1_000_000.0])
+        assert compare_versions._use_log_bins(
+            values
+        ), "a max thousands of times the median must switch to log bins"
+
+    def test_compact_values_keep_linear_bins(self):
+        """A distribution without an extreme tail reads best on the familiar
+        linear axis."""
+        values = np.array([80.0, 100.0, 120.0, 150.0])
+        assert not compare_versions._use_log_bins(
+            values
+        ), "values within one order of magnitude must keep linear bins"
+
+    def test_nonpositive_values_keep_linear_bins(self):
+        """Log bins cannot represent zero or negative values, so any such
+        value forces linear bins."""
+        values = np.array([0.0, 10.0, 1_000_000.0])
+        assert not compare_versions._use_log_bins(
+            values
+        ), "a zero value must force linear bins - log10(0) is undefined"
+
+
 class TestPlotDistributionOverlay:
     """Tests for `plot_distribution_overlay`."""
 
@@ -1768,6 +1798,18 @@ class TestPlotDistributionOverlay:
             path,
         )
         assert path.exists(), "the plot must be saved at the given path"
+
+    def test_skewed_distribution_saves_a_log_binned_png(self, tmp_path):
+        """A heavily right-skewed distribution (real cluster areas) still
+        plots cleanly on the log-spaced bins."""
+        path = tmp_path / "cluster_plymouth_area_m2.png"
+        compare_versions.plot_distribution_overlay(
+            pl.Series("area_m2", [20.0] * 50 + [3_000.0] * 10 + [400_000.0]),
+            pl.Series("area_m2", [25.0] * 60 + [300_000_000.0]),
+            "area_m2",
+            path,
+        )
+        assert path.exists(), "the log-binned plot must be saved at the given path"
         assert path.stat().st_size > 0, "the saved plot must not be an empty file"
 
 

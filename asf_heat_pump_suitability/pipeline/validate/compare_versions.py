@@ -250,13 +250,31 @@ def get_dict_distribution_frames(
     return frames
 
 
+# Max-to-median ratio above which a distribution is drawn on log-spaced
+# bins: cluster areas and UPRNs-per-cluster are heavily right-skewed, and
+# linear bins collapse almost every value into one bar.
+LOG_BINS_SKEW_RATIO = 50
+
+
+def _use_log_bins(values: np.ndarray) -> bool:
+    """Log-spaced bins suit a heavily right-skewed, all-positive
+    distribution; anything else keeps linear bins."""
+    if values.min() <= 0:
+        return False
+    return values.max() / np.median(values) > LOG_BINS_SKEW_RATIO
+
+
 def plot_distribution_overlay(
     values_old: pl.Series, values_new: pl.Series, label: str, path: Path
 ) -> None:
     """
     Save an overlaid old-vs-new histogram of one distribution as a PNG.
 
-    Both versions share the same bins so the shapes are comparable.
+    Both versions share the same bins so the shapes are comparable. A
+    heavily right-skewed distribution (see `_use_log_bins`) is drawn on
+    log-spaced bins with a log x-axis, so the bulk of the values stays
+    readable instead of collapsing into one bar next to the extremes; the
+    x-axis label says when this applied.
 
     Args:
         values_old: older version's values
@@ -265,11 +283,18 @@ def plot_distribution_overlay(
         path: file path the PNG is saved to
     """
     old, new = values_old.to_numpy(), values_new.to_numpy()
-    bins = np.histogram_bin_edges(np.concatenate([old, new]), bins=40)
+    combined = np.concatenate([old, new])
+    log_bins = _use_log_bins(combined)
+    if log_bins:
+        bins = np.logspace(np.log10(combined.min()), np.log10(combined.max()), num=41)
+    else:
+        bins = np.histogram_bin_edges(combined, bins=40)
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.hist(old, bins=bins, alpha=0.6, label="Old", color="tab:blue")
     ax.hist(new, bins=bins, alpha=0.6, label="New", color="tab:orange")
-    ax.set_xlabel(label)
+    if log_bins:
+        ax.set_xscale("log")
+    ax.set_xlabel(f"{label} (log scale)" if log_bins else label)
     ax.set_ylabel("Count")
     ax.set_title(f"Distribution of {label}: old vs new")
     ax.legend()
