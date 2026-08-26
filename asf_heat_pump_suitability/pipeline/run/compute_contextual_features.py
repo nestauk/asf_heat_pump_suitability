@@ -352,6 +352,7 @@ def create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf, target_crs="EPSG:4326"
     )
     geo_utils.verify_gdf_crs(hn_potential, target_crs="EPSG:4326")
+    geo_utils.verify_gdf_crs(anchor_loads, target_crs="EPSG:4326")
 
     print("Adding metadata and converting to geojson format...")
     # Convert to geojson format and add metadata
