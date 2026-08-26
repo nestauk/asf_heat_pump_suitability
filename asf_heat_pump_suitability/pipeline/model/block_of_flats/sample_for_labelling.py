@@ -8,9 +8,9 @@ import polars as pl
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 
-BUILDING_CONSTRUCTION_AGES = {
-    "England and Wales: before 1900": "1_England and Wales: before 1900",
-    "Scotland: Before 1919": "2_Scotland: Before 1919",
+BUILDING_CONSTRUCTION_AGE_MAPPING = {
+    "england and wales: before 1900": "1_England and Wales: before 1900",
+    "scotland: before 1919": "2_Scotland: Before 1919",
     "1900-1929": "3_1900-1929",
     "1930-1949": "4_1930-1949",
     "1950-1966": "5_1950-1966",
@@ -21,6 +21,7 @@ BUILDING_CONSTRUCTION_AGES = {
     "1996-2002": "10_1996-2002",
     "2003-2007": "11_2003-2007",
     "2007 onwards": "12_2007 onwards",
+    "unknown": "",
 }
 
 
@@ -293,11 +294,11 @@ if __name__ == "__main__":
         ).with_columns(
             pl.col("CONSTRUCTION_AGE_BAND")
             .str.to_lowercase()
-            .str.replace("unknown", "")
+            .str.replace(BUILDING_CONSTRUCTION_AGE_MAPPING)
             .alias("construction_age_band")
         )
         # This is required to replace empty string with None which we need to do so that the agg max() below works
-        # i.e. this prevents 'unknown' from being the max value
+        # i.e. this prevents 'unknown' from being the max value and ensures consistency in treatment of Null values.
         .with_columns(
             pl.when(pl.col("construction_age_band") == "")
             .then(None)
@@ -348,24 +349,28 @@ if __name__ == "__main__":
             pl.when(
                 pl.col("construction_age_band").is_in(
                     [
-                        "England and Wales: before 1900",
-                        "1900-1929",
-                        "Scotland: Before 1919",
+                        "1_England and Wales: before 1900",
+                        "2_Scotland: Before 1919",
+                        "3_1900-1929",
                     ]
                 )
             )
             .then(pl.lit("Before 1929"))
-            .when(pl.col("construction_age_band") == "1930-1949")
+            .when(pl.col("construction_age_band") == "4_1930-1949")
             .then(pl.lit("1930-1949"))
-            .when(pl.col("construction_age_band").is_in(["1950-1966", "1966-1975"]))
+            .when(pl.col("construction_age_band").is_in(["5_1950-1966", "6_1966-1975"]))
             .then(pl.lit("1950-1975"))
             .when(
                 pl.col("construction_age_band").is_in(
-                    ["1976-1983", "1983-1991", "1991-1998", "1996-2002"]
+                    ["7_1976-1983", "8_1983-1991", "9_1991-1998", "10_1996-2002"]
                 )
             )
             .then(pl.lit("1976-2002"))
-            .when(pl.col("construction_age_band").is_in(["2003-2007", "2007 onwards"]))
+            .when(
+                pl.col("construction_age_band").is_in(
+                    ["11_2003-2007", "12_2007 onwards"]
+                )
+            )
             .then(pl.lit("2003 onwards"))
             .otherwise(None)
             .alias("grouped_construction_age_band"),
