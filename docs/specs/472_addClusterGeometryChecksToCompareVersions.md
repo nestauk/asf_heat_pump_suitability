@@ -111,6 +111,37 @@ Implementation decisions within the spec's frame (2026-08-13):
   distribution with a missing column or no values on one side skips its
   plot with a warning — its stats section already notes the gap.
 
+Implementation decisions from the first acceptance run on real data
+(2026-08-26):
+
+- **The geometry checks filter to the clusters layer.** As of ~August 2026
+  the contextual-features geojson is a multi-layer front-end file: a
+  `layer` column tags each row (`clusters_with_contextual_features`,
+  `ward_boundaries`, `anchor_loads`,
+  `areas_of_district_heat_network_potential`). Aggregating all layers let
+  six whole-county ward polygons swamp the cluster signal (+679.5M m²
+  total-area delta on East Lothian 20260708 vs 20260806). Cluster count,
+  total area, distribution stats and plots now cover the clusters layer
+  only — one shared filter (`filter_df_clusters_layer`) applied to both
+  the tabular and geometry-derived frames. A version without a `layer`
+  column (pre-August outputs) is treated as all-clusters, so comparisons
+  across the format change keep working.
+- **The clusters layer name is config, not code:**
+  `compare_versions.cluster_layer` in `base.yaml`, verified against the
+  20260806 East Lothian output — a front-end rename is a config change.
+- **A per-layer summary table keeps excluded layers visible.** The
+  geometry section tabulates rows and total area (m²) per layer over the
+  union of both versions' layers, so non-cluster layers are surfaced
+  rather than silently dropped; a version without a `layer` column shows
+  as a single `(pre-layers output)` row, and a side lacking a layer
+  renders as a dash, not a misleading zero. When filtering was applied,
+  the section states that the headline checks cover the clusters layer
+  only.
+- **Stats render consistently across dtypes:** an integral float renders
+  like an int in `_format_stat` (1738.0 → "1,738"), so a version whose
+  column round-trips to Float64 no longer renders "1,738.0" beside the
+  other version's "1,165"; non-integral floats keep one decimal place.
+
 ## Verification
 
 - [x] Cluster count delta reported for both stages
@@ -125,3 +156,16 @@ Implementation decisions within the spec's frame (2026-08-13):
 - [x] Unit tests cover at least one genuine geometry-drift case and one
       stable case (a cluster merge vs identical versions; acceptance runs
       against Plymouth 20260806 vs 20260812 exercised both stages on S3)
+- [x] Multi-layer outputs: cluster count, total area, distribution stats
+      and plots cover the config-named clusters layer only
+      (`compare_versions.cluster_layer`), with the scope stated in the
+      report
+- [x] Per-layer summary table reports rows and total area (m²) per layer,
+      old vs new, over the union of both versions' layers
+- [x] A version without a `layer` column is treated as all-clusters
+      (back-compat across the format change) and shown as a single
+      pre-layers row in the per-layer table
+- [x] Statistics render consistently across versions: integral floats
+      render like ints, non-integral floats keep one decimal place
+      (acceptance re-run against East Lothian 20260708 vs 20260806
+      exercised the multi-layer path on S3)
