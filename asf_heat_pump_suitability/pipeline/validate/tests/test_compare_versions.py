@@ -1340,7 +1340,7 @@ def df_clusters_old():
 
 
 @pytest.fixture(scope="module")
-def df_clusters_merged(df_clusters_old):
+def df_clusters_merged():
     """New-version cluster-level output with genuine geometry drift: the two
     heat-pump clusters merged into one."""
     return pl.DataFrame(

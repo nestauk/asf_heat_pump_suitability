@@ -996,7 +996,7 @@ def _generate_str_cluster_geometry_section(
     count_delta: dict | None,
     area_delta: dict | None,
     stage: str,
-    layer_filtered: bool = False,
+    layer_filtered: bool,
 ) -> str:
     """Render cluster count and total area deltas as a markdown section,
     with the CRS/units stated, the clusters-layer scope named when a
