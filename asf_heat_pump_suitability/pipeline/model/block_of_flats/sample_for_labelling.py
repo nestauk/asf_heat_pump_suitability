@@ -419,21 +419,81 @@ if __name__ == "__main__":
     buildings_df = buildings_df.with_columns(
         pl.col(attributes).cast(pl.String).fill_null("unknown")
     )
-    # Get the number of combinations of attributes, which is the number of groups to sample from
+    # Compute group sizes and initial per-group quota (capped at sample_n)
     n_combinations = buildings_df.group_by(attributes).agg(pl.len()).height
     sample_n = target_n // n_combinations
     print(
-        f"There are {n_combinations} groups to sample from. Taking {sample_n} samples from each group."
+        f"There are {n_combinations} groups to sample from. Target of {sample_n} samples per group."
     )
 
-    # Sample per group
-    sampled_ids = (
+    group_counts = (
         buildings_df.group_by(attributes)
-        .agg(
-            # Sample building IDs from each group
-            pl.col("building_id").sample(n=sample_n, with_replacement=False, seed=seed)
+        .agg(pl.len().alias("group_size"))
+        .with_columns(
+            pl.min_horizontal(pl.col("group_size"), pl.lit(sample_n)).alias(
+                "n_to_sample"
+            )
         )
-        .explode("building_id")
+    )
+
+    # Distribute shortfall (from underpopulated groups) evenly across groups with remaining capacity
+    shortfall = target_n - int(group_counts["n_to_sample"].sum())
+    if shortfall > 0:
+        eligible = group_counts.filter(pl.col("group_size") > pl.col("n_to_sample"))
+        n_eligible = len(eligible)
+        print(
+            f"Shortfall of {shortfall} samples. Redistributing evenly across {n_eligible} eligible groups..."
+        )
+        base_extra = shortfall // n_eligible
+        remainder = shortfall % n_eligible
+        # First `remainder` groups (sorted by size descending for tiebreaking) get one extra
+        eligible = (
+            eligible.sort("group_size", descending=True)
+            .with_columns(
+                pl.Series(
+                    "allocated_extra",
+                    [
+                        base_extra + (1 if i < remainder else 0)
+                        for i in range(n_eligible)
+                    ],
+                )
+            )
+            .with_columns(
+                # Cap at each group's remaining capacity
+                pl.min_horizontal(
+                    pl.col("allocated_extra"),
+                    pl.col("group_size") - pl.col("n_to_sample"),
+                ).alias("actual_extra")
+            )
+        )
+        group_counts = (
+            group_counts.join(
+                eligible.select(attributes + ["actual_extra"]),
+                on=attributes,
+                how="left",
+            )
+            .with_columns(
+                (pl.col("n_to_sample") + pl.col("actual_extra").fill_null(0)).alias(
+                    "n_to_sample"
+                )
+            )
+            .drop("actual_extra")
+        )
+
+    print(f"Total samples to be taken: {int(group_counts['n_to_sample'].sum())}")
+
+    # Sample per group using per-group quota
+    buildings_with_quota = buildings_df.join(
+        group_counts.select(attributes + ["n_to_sample"]),
+        on=attributes,
+        how="left",
+    )
+
+    sampled_ids = (
+        buildings_with_quota.with_columns(
+            pl.int_range(pl.len()).shuffle(seed=seed).over(attributes).alias("_rank")
+        )
+        .filter(pl.col("_rank") < pl.col("n_to_sample"))
         .select("building_id")
     )
 
