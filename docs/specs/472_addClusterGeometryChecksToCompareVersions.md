@@ -2,7 +2,9 @@
 title: Cross-version comparison script — cluster geometry checks
 status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/472
-pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/475
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/486 (1/3),
+  https://github.com/nestauk/asf_heat_pump_suitability/pull/487 (2/3),
+  https://github.com/nestauk/asf_heat_pump_suitability/pull/475 (3/3)
 asana: https://app.asana.com/1/5571817120120/project/1214222223606748/task/1216704619895657
 created: 2026-08-13
 ---
