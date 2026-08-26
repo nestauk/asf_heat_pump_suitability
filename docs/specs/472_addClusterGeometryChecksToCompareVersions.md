@@ -1,8 +1,10 @@
 ---
 title: Cross-version comparison script — cluster geometry checks
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/472
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/486 (1/3),
+  https://github.com/nestauk/asf_heat_pump_suitability/pull/487 (2/3),
+  https://github.com/nestauk/asf_heat_pump_suitability/pull/475 (3/3)
 asana: https://app.asana.com/1/5571817120120/project/1214222223606748/task/1216704619895657
 created: 2026-08-13
 ---
@@ -77,6 +79,13 @@ Decisions settled during kickoff interview (2026-08-13):
   them as an open question only** — rejected; the helper would be
   retrofitted just as distributions multiply, and the geometry
   distributions would get plots retroactively.
+- **A per-layer rows/area summary table in the geometry section** —
+  implemented alongside the layer filtering, then removed (2026-08-26):
+  on real output it mostly paired numbers with dashes, duplicated the
+  headline comparison, and its accounting value (where did the
+  non-cluster rows go) is already covered by the scope note and the
+  whole-file row counts. If layer-presence drift ever needs flagging,
+  the thresholding follow-on can add it as a check rather than a table.
 
 ## Out of scope
 
@@ -111,6 +120,44 @@ Implementation decisions within the spec's frame (2026-08-13):
   distribution with a missing column or no values on one side skips its
   plot with a warning — its stats section already notes the gap.
 
+Implementation decisions from the first acceptance run on real data
+(2026-08-26):
+
+- **The geometry checks filter to the clusters layer.** As of ~August 2026
+  the contextual-features geojson is a multi-layer front-end file: a
+  `layer` column tags each row (`clusters_with_contextual_features`,
+  `ward_boundaries`, `anchor_loads`,
+  `areas_of_district_heat_network_potential`). Aggregating all layers let
+  six whole-county ward polygons swamp the cluster signal (+679.5M m²
+  total-area delta on East Lothian 20260708 vs 20260806). Cluster count,
+  total area, distribution stats and plots now cover the clusters layer
+  only — one shared filter (`filter_df_clusters_layer`) applied to both
+  the tabular and geometry-derived frames. A version without a `layer`
+  column (pre-August outputs) is treated as all-clusters, so comparisons
+  across the format change keep working.
+- **The clusters layer name is config, not code:**
+  `compare_versions.cluster_layer` in `base.yaml`, verified against the
+  20260806 East Lothian output — a front-end rename is a config change.
+- **No per-layer summary table** (removed 2026-08-26, Aidan's call, after
+  reading it on real output). The report's job is to compare clusters
+  between versions, and that comparison is the headline table. During the
+  format transition the per-layer table was a grid of dashes pairing each
+  number with nothing, and its useful content is carried elsewhere: the
+  scope note says filtering happened and names the clusters layer, and the
+  whole-file row counts at the top already reveal that non-cluster rows
+  exist. When filtering was applied, the section states that the headline
+  checks cover the clusters layer only.
+- **Stats render consistently across dtypes:** an integral float renders
+  like an int in `_format_stat` (1738.0 → "1,738"), so a version whose
+  column round-trips to Float64 no longer renders "1,738.0" beside the
+  other version's "1,165"; non-integral floats keep one decimal place.
+- **Plots switch to log-spaced bins for heavily skewed distributions.**
+  Real cluster areas span orders of magnitude, so linear bins collapsed
+  almost every cluster into one bar. When values are all positive and
+  max/median exceeds 50 (`LOG_BINS_SKEW_RATIO`), bins are log-spaced and
+  the x-axis is log-scaled, labelled "(log scale)"; compact distributions
+  keep linear bins. Both versions still share the same bins.
+
 ## Verification
 
 - [x] Cluster count delta reported for both stages
@@ -125,3 +172,13 @@ Implementation decisions within the spec's frame (2026-08-13):
 - [x] Unit tests cover at least one genuine geometry-drift case and one
       stable case (a cluster merge vs identical versions; acceptance runs
       against Plymouth 20260806 vs 20260812 exercised both stages on S3)
+- [x] Multi-layer outputs: cluster count, total area, distribution stats
+      and plots cover the config-named clusters layer only
+      (`compare_versions.cluster_layer`), with the scope stated in the
+      report
+- [x] A version without a `layer` column is treated as all-clusters
+      (back-compat across the format change)
+- [x] Statistics render consistently across versions: integral floats
+      render like ints, non-integral floats keep one decimal place
+      (acceptance re-run against East Lothian 20260708 vs 20260806
+      exercised the multi-layer path on S3)
