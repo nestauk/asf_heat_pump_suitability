@@ -2,10 +2,14 @@
 Script to compute contextual information for clusters including:
 - Proportion of attachment types, tenure types, EPC ratings of properties within clusters
 - Median outdoor space of properties within clusters
-- Whether any properties within clusters are in protected areas, off-gas, within 1500m of coastline
+- Whether any properties within clusters are in protected areas, off-gas, within {COASTLINE_DISTANCE_THRESHOLD_M}m of coastline
 - Number of properties, number of properties in listed buildings and number of properties with solar PV
 
-Run:
+After computing contextual features, the script creates a geojson with:
+- clusters and contextual features per cluster
+- layers with district heat network potential areas (heat network zones and city centres)
+- metadata information including release date, local authority and variable descriptions
+
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
 
 Set `--detail "simplified"` to use simplified spatial signature polygons to label city centres. The default is "full" which uses the fully detailed spatial signatures framework.
@@ -31,6 +35,7 @@ from asf_heat_pump_suitability.getters import (
     load_boundaries,
 )
 from asf_heat_pump_suitability.pipeline.transform import city_centres
+from asf_heat_pump_suitability.utils import geo_utils
 
 # Load environment variables from .env file
 load_dotenv()
@@ -94,7 +99,7 @@ def extend_df_contextual_features(
     - Median outdoor space
     - number of properties in listed buildings
     - number of off-gas properties
-    - proximity to coastline flag (within 1500m)
+    - proximity to coastline flag (within {COASTLINE_DISTANCE_THRESHOLD_M}m of coastline)
     - protected area flag
     - within anchor load radius flag
 
@@ -306,6 +311,9 @@ def create_gdf_contextual_features(
         crs="EPSG:27700",
     )
 
+    geo_utils.verify_gdf_crs(hn_zones_gdf, target_crs="EPSG:27700")
+    geo_utils.verify_gdf_crs(spatial_signatures_gdf, target_crs="EPSG:27700")
+
     # Add in_hn_zone and in_city_centre flags to clusters_gdf
     clusters_with_contextual_features_gdf["in_hn_zone"] = (
         clusters_with_contextual_features_gdf.intersects(hn_zones_gdf.union_all())
@@ -338,6 +346,11 @@ def create_json_contextual_features_metadata(
        json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
 
     """
+    geo_utils.verify_gdf_crs(
+        clusters_with_contextual_features_gdf, target_crs="EPSG:4326"
+    )
+    geo_utils.verify_gdf_crs(hn_potential, target_crs="EPSG:4326")
+    geo_utils.verify_gdf_crs(anchor_loads, target_crs="EPSG:4326")
 
     print("Adding metadata and converting to geojson format...")
     # Convert to geojson format and add metadata
@@ -393,7 +406,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.getters import load_geodata
     from asf_heat_pump_suitability.pipeline.transform import local_authority
     from asf_heat_pump_suitability import config
-    from asf_heat_pump_suitability.utils import save_utils
+    from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 
     args = parse_arguments()
     local_authorities = args.local_authorities
@@ -540,4 +553,18 @@ if __name__ == "__main__":
             os.path.join(
                 "s3://", front_end_s3_bucket, front_end_staging_s3_path, file_name
             ),
+        )
+
+        # Only the dated data-science copy gets a run manifest; the undated
+        # front-end copy above is overwritten every run, so there is no
+        # version history to attach lineage to.
+        manifest_utils.generate_and_save_run_manifest_to_s3(
+            s3_file_path,
+            stage="compute_contextual_features",
+            local_authority=local_authority_dict["url_slug"],
+            row_count=len(clusters_with_contextual_features_gdf),
+            params={
+                "local_authorities": args.local_authorities,
+                "release_date": release_date,
+            },
         )

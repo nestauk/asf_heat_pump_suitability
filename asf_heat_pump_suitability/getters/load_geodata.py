@@ -8,7 +8,8 @@ import s3fs
 import shapely
 import logging
 import warnings
-
+from pathlib import Path
+from urllib.parse import urlparse
 from tenacity import retry, stop_after_attempt
 from osbng import grids
 from pyogrio.errors import DataSourceError
@@ -66,85 +67,63 @@ def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame.from_features(_BNG_GRID_100KM_FEATURES, crs=27700)
 
 
-def load_desnz_heat_network_zones() -> gpd.GeoDataFrame:
+def load_gdf_country_heat_network_zones(country: str) -> gpd.GeoDataFrame:
     """
-    Load DESNZ heat network zones geodataframe, CRS 27700.
-
-    Returns:
-        gpd.GeoDataFrame: DESNZ heat network zones polygons
-    """
-    print("Loading DESNZ heat network zones...")
-    gdf = gpd.read_parquet(
-        path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
-    ).drop(columns="index_right")
-
-    gdf = geo_utils.verify_gdf_crs(gdf=gdf)[["geometry"]]
-
-    return gdf
-
-
-def load_lhees_heat_network_zones(s3_client: boto3.client) -> gpd.GeoDataFrame:
-    """
-    Load LHEES heat network zones geodataframe.
+    Load heat network zones geodataframe for a specific country (England, Scotland, or Wales).
 
     Args:
-        s3_client: Boto3 S3 client instance.
+        country (str): The country for which to load heat network zones. Options: "England", "Scotland", "Wales".
 
     Returns:
-        gpd.GeoDataFrame: Combined LHEES heat network zones geometries.
+        gpd.GeoDataFrame: Heat network zones polygons for the specified country.
     """
-    print("Loading LHEES heat network zones...")
-    s3_full_path = config["data"]["geodata"]["heat_network_zones"]["lhees_files"]
+    country_clean = country.strip().lower()
 
-    s3_bucket = s3_full_path.split("s3://")[1].split("/")[0]
-    folder_path = s3_full_path.split(f"s3://{s3_bucket}/")[1]
+    if country_clean not in ["england", "scotland", "wales"]:
+        raise ValueError(
+            f"Invalid country: '{country}'. Must be 'England', 'Scotland', or 'Wales'."
+        )
+
+    if country_clean == "england":
+        print("Loading DESNZ heat network zones for England...")
+        gdf = gpd.read_parquet(
+            path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
+        ).drop(columns="index_right")
+
+        gdf = _extend_gdf_hn_zone_id(gdf)
+
+        return geo_utils.verify_gdf_crs(gdf=gdf)
+
+    config_keys = {
+        "scotland": ("LHEES heat network zones for Scotland", "lhees_files"),
+        "wales": ("Wales heat network priority areas", "wales_files"),
+    }
+
+    message, folder_key = config_keys[country_clean]
+    print(f"Loading {message}...")
+
+    s3_uri = config["data"]["geodata"]["heat_network_zones"][folder_key]
+    parsed_s3 = urlparse(s3_uri)
+    s3_bucket = parsed_s3.netloc
+    folder_path = Path(parsed_s3.path.lstrip("/"))
+
+    s3_client = boto3.client("s3")
 
     file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
         s3_client=s3_client,
         s3_bucket=s3_bucket,
-        path_folder=folder_path,
+        path_folder=str(folder_path),
         file_type=[".geojson", ".gpkg"],
     )
 
-    # Load and standardize CRS for each dataset
-    gdfs = [
-        geo_utils.verify_gdf_crs(gpd.read_file(f"s3://{s3_bucket}/{path}"))[
-            ["geometry"]
-        ]
-        for path in file_paths
-    ]
-
-    return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
-
-
-def load_wales_heat_network_zones(s3_client: boto3.client) -> gpd.GeoDataFrame:
-    """
-    Load Wales heat network zones geodataframe, CRS 27700.
-
-    Args:
-        s3_client: Boto3 S3 client instance.
-
-    Returns:
-        gpd.GeoDataFrame: Wales heat network zones polygons
-    """
-    print("Loading Wales heat network zones...")
-    s3_full_path = config["data"]["geodata"]["heat_network_zones"]["wales_files"]
-
-    s3_bucket = s3_full_path.split("s3://")[1].split("/")[0]
-    folder_path = s3_full_path.split(f"s3://{s3_bucket}/")[1]
-
-    file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
-        s3_client=s3_client,
-        s3_bucket=s3_bucket,
-        path_folder=folder_path,
-        file_type=[".geojson", ".gpkg"],
-    )
+    if not file_paths:
+        raise FileNotFoundError(
+            f"No valid files (.geojson, .gpkg) found in s3://{s3_bucket}/{folder_path}"
+        )
 
     # Load and standardize CRS for each dataset
     gdfs = [
-        geo_utils.verify_gdf_crs(gpd.read_file(f"s3://{s3_bucket}/{path}"))[
-            ["geometry"]
-        ]
+        geo_utils.verify_gdf_crs(gpd.read_file(os.path.join(f"s3://{s3_bucket}", path)))
         for path in file_paths
     ]
 
@@ -172,15 +151,15 @@ def load_gdf_heat_network_zones(
         gpd.GeoDataFrame: polygons of heat network zones in given Local Authority or boundary.
     """
     # Load all DESNZ heat network zones in England
-    desnz_hn_gdf = load_desnz_heat_network_zones()
+    desnz_hn_gdf = load_gdf_country_heat_network_zones("England")[["geometry"]]
     desnz_hn_gdf["source_annotation"] = "DESNZ advanced heat network zoning in England"
 
     # Load LHEES heat network zones in Scotland
-    lhees_hn_gdf = load_lhees_heat_network_zones(s3_client)
+    lhees_hn_gdf = load_gdf_country_heat_network_zones("Scotland")[["geometry"]]
     lhees_hn_gdf["source_annotation"] = "LHEES heat network zoning in Scotland"
 
     # Load priority areas for district heat networks in Wales
-    # wales_hn_gdf = load_wales_heat_network_zones(s3_client)
+    # wales_hn_gdf = load_gdf_country_heat_network_zones("Wales")[["geometry"]]
     # wales_hn_gdf["source_annotation"] = (
     #     "Priority areas for district heat networks in Wales"
     # )
@@ -310,7 +289,7 @@ def load_gdf_spatial_signatures_gb(
     if signature_types is not None:
         gdf = gdf[gdf["type"].isin(signature_types)]
         if gdf.empty:
-            print(
+            warnings.warn(
                 f"No spatial signatures found for the specified signature types: {signature_types}."
             )
 
@@ -328,7 +307,7 @@ def load_gdf_spatial_signatures_gb(
 
             gdf = gdf[gdf["geometry"].intersects(boundary)]
         if gdf.empty:
-            print("No spatial signatures found within given boundary.")
+            warnings.warn("No spatial signatures found within given boundary.")
 
     elif local_authority is not None:
         local_authority_dict = la.get_dict_la_data(local_authority)
@@ -341,7 +320,7 @@ def load_gdf_spatial_signatures_gb(
             boundary_gdf[["geometry"]], how="inner", predicate="intersects"
         ).drop(columns="index_right")
         if gdf.empty:
-            print(
+            warnings.warn(
                 f"No spatial signatures found for Local Authority: {local_authority}."
             )
 
