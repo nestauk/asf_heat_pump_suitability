@@ -1,5 +1,43 @@
 """
-Create a sample of buildings containing flats for manual labelling to use in model training.
+Create a disproportional stratified sample of buildings containing flats for manual labelling to use in block of flats
+classifier model training.
+
+Buildings are grouped by area, rurality, construction age band, number of flats, deprivation
+group, and whether the building is predominantly flats (>80%). A target number of samples is
+distributed as evenly as possible across these groups. Where a group has fewer buildings than
+the per-group target, the remainder is redistributed evenly across groups with remaining
+capacity. The sample is enriched with Google Maps URLs and saved as a KML file to S3
+for labelling.
+
+Usage:
+    python sample_for_labelling.py [options]
+
+Options:
+    --local_authorities     One or more local authority names to filter to.
+                            Defaults to all of GB.
+                            e.g. --local_authorities plymouth
+                                 --local_authorities "glasgow city" "south lanarkshire"
+    --release_date          Release date of the input UPRN file in YYYYMMDD format.
+                            Defaults to today's date.
+    --seed                  Random seed for reproducibility. Default: 7.
+    --target_n              Target number of buildings in the sample. Default: 3000.
+    -m, --map_uprns_to_building
+                            If set, regenerates the UPRN-to-building-ID mapping from scratch
+                            and saves it to S3. Otherwise loads the existing mapping.
+    --save                  If set, saves intermediate outputs to S3.
+
+Examples:
+    # Run for all of GB with defaults
+    python sample_for_labelling.py
+
+    # Run for Plymouth with a smaller sample
+    python sample_for_labelling.py --local_authorities plymouth --target_n 500
+
+    # Run for multiple local authorities and save outputs
+    python sample_for_labelling.py --local_authorities "glasgow city" "south lanarkshire" --save
+
+    # Regenerate UPRN to building ID mapping and save
+    python sample_for_labelling.py --map_uprns_to_building --save
 """
 
 import argparse
