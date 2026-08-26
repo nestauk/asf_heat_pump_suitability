@@ -508,7 +508,6 @@ if __name__ == "__main__":
 
     print("Loading ward boundaries and transforming to EPSG:4326...")
     ward_boundaries_gdf = load_boundaries.load_gdf_ward_boundaries(
-        select_las=local_authority_dict["valid_local_authorities"],
         la_boundaries_gdf=boundary_gdf,
     )[["geometry"]].to_crs(epsg=4326)
 
