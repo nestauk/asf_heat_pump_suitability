@@ -78,7 +78,7 @@ def load_gdf_ward_boundaries(
     """
 
     wards_gdf = gpd.read_file(
-        config["data"]["geodata"]["boundaries"]["UK_ward_boundaries"]
+        config["data"]["geodata"]["boundaries"]["UK_ons_ward_boundaries"]
     ).to_crs(epsg=27700)
 
     if la_boundaries_gdf is not None:
