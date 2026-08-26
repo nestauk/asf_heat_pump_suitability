@@ -2,6 +2,7 @@
 Functions to load raw census geography boundaries, like Local Authority; ward; output areas, etc. No/minimal preprocessing occurs in these functions.
 """
 
+import pandas as pd
 import geopandas as gpd
 import shapely
 from typing import List
@@ -57,3 +58,44 @@ def load_gdf_local_authority_boundaries(
             )
         else:
             return la_boundaries_gdf
+
+
+def load_gdf_ward_boundaries(
+    la_boundaries_gdf: gpd.GeoDataFrame = None,
+) -> gpd.GeoDataFrame:
+    """
+    Load boundaries for wards in the whole of the UK.
+
+    If la_boundaries_gdf is specified, load boundaries for the specified Local Authority Districts.
+
+    CRS British National Grid (27700).
+
+    Args:
+        la_boundaries_gdf (gpd.GeoDataFrame): boundaries for specified Local Authority Districts. Optional. Default None to load all.
+
+    Returns:
+        gpd.GeoDataFrame: wards boundaries for specified Local Authority Districts or all UK if no selection is made.
+    """
+
+    wards_gdf = gpd.read_file(
+        config["data"]["geodata"]["boundaries"]["UK_ons_ward_boundaries"]
+    ).to_crs(epsg=27700)
+
+    if la_boundaries_gdf is not None:
+        print(
+            "Loading ward boundaries for {} Local Authority Districts...".format(
+                len(la_boundaries_gdf)
+            )
+        )
+
+        la_boundaries_with_buffer_gdf = la_boundaries_gdf.copy()
+        la_boundaries_with_buffer_gdf["geometry"] = la_boundaries_with_buffer_gdf[
+            "geometry"
+        ].buffer(50)
+        wards_gdf = wards_gdf.sjoin(
+            la_boundaries_with_buffer_gdf, how="inner", predicate="covered_by"
+        )
+        return wards_gdf
+    else:
+        print("Loading ward boundaries for the whole of the UK...")
+        return wards_gdf
