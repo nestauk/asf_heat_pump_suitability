@@ -6,6 +6,7 @@ from asf_heat_pump_suitability.pipeline.validate.check_inputs import (
     generate_list_expanded_square_paths,
     get_list_missing_s3_paths,
     get_list_s3_paths,
+    get_set_squares_absent_for_path,
     get_str_common_prefix,
 )
 
@@ -60,6 +61,27 @@ class TestGetListS3Paths:
             "only strings starting with s3:// should be collected; numbers, "
             "plain strings and non-S3 URLs should be skipped"
         )
+
+
+class TestGetSetSquaresAbsentForPath:
+    """Tests for `get_set_squares_absent_for_path`."""
+
+    def test_squares_returned_for_matching_product_only(self):
+        """Only the squares listed against the product named in the path are returned."""
+        absent = {"oproad_essh_gb": ["HW", "OV"], "opmplc_essh_gb": ["NQ"]}
+        path = "s3://bucket/inputs/oproad_essh_gb/data/{square}_RoadLink.shp"
+        assert get_set_squares_absent_for_path(path, absent) == {"HW", "OV"}, (
+            "the squares of the product whose folder name appears in the path "
+            "should be returned, and no others"
+        )
+
+    def test_empty_set_when_no_product_matches(self):
+        """A path belonging to no listed product skips no squares."""
+        absent = {"oproad_essh_gb": ["HW"]}
+        path = "s3://bucket/inputs/other_product/data/{square}.shp"
+        assert (
+            get_set_squares_absent_for_path(path, absent) == set()
+        ), "a path matching no configured product should skip no squares"
 
 
 class TestGenerateListExpandedSquarePaths:
