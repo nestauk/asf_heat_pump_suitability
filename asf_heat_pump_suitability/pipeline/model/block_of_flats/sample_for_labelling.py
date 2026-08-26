@@ -340,7 +340,7 @@ if __name__ == "__main__":
         ).with_columns(
             pl.col("CONSTRUCTION_AGE_BAND")
             .str.to_lowercase()
-            .str.replace(BUILDING_CONSTRUCTION_AGE_MAPPING)
+            .replace(BUILDING_CONSTRUCTION_AGE_MAPPING)
             .alias("construction_age_band")
         )
         # This is required to replace empty string with None which we need to do so that the agg max() below works
@@ -544,7 +544,9 @@ if __name__ == "__main__":
     )
 
     # Filter population dataset to sample IDs
-    sample_df = buildings_df.filter(pl.col("building_id").is_in(sampled_ids))
+    sample_df = buildings_df.filter(
+        pl.col("building_id").is_in(sampled_ids["building_id"].to_list())
+    )
     del buildings_df
     sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
         sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
@@ -556,13 +558,12 @@ if __name__ == "__main__":
     # ------------------------------------ #
     print("Enrich with Google Maps URL...")
     # Convert to 4326 projection and create google maps URL
-    sample_gdf = sample_gdf.to_crs(epsg=4326)
     sample_gdf = sample_gdf.merge(
         sample_gdf.centroid.get_coordinates(),
         how="left",
         left_index=True,
         right_index=True,
-    )
+    ).to_crs(epsg=4326)
     sample_gdf["url"] = sample_gdf.apply(
         lambda row: f"https://www.google.com/maps/search/?api=1&query={row['y']},{row['x']}",
         axis=1,
@@ -574,7 +575,7 @@ if __name__ == "__main__":
     print("Save to KML file...")
     today = date.today().strftime("%Y%m%d")
     s3 = boto3.resource("s3")
-    BUCKET = "asf-heat-pump-suitability"
+    BUCKET = "asf-local-heat-planning-tool"
     kml = simplekml.Kml()
     for idx, r in sample_gdf.iterrows():
         pol = kml.newpolygon(
@@ -591,5 +592,5 @@ if __name__ == "__main__":
     kml.save(fpath)
     s3.Bucket(BUCKET).upload_file(
         os.path.join(os.getcwd(), fpath),
-        os.path.join("local_heat_planning", "labelling", fpath),
+        os.path.join("outputs", "models", "block_of_flats_classifier", fpath),
     )
