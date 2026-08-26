@@ -405,6 +405,10 @@ compare_versions:
     cluster: "tech_clusters"
     compute_contextual_features: "clusters_tech_contextual_info"
   decision_tree_buildings_dataset: "buildings_most_suitable_tech"
+  # The `layer` value carrying the clusters in the multi-layer front-end
+  # geojson; the cluster checks filter to it. Versions without a `layer`
+  # column (pre-August-2026 outputs) are treated as all-clusters.
+  cluster_layer: "clusters_with_contextual_features"
   # Columns whose distributions the report compares per stage (Q1/Q3, min,
   # max, mean, old vs new). Real output columns only: derived metrics such
   # as cluster area are computed from geometry in code and fed through the

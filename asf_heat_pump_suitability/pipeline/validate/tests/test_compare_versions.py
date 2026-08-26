@@ -1082,6 +1082,72 @@ class TestGenerateStrReportGeometrySections:
             "cluster_id" in report and "Cluster geometry" in report
         ), "the missing cluster_id must be noted inside the geometry section"
 
+    def test_layered_output_scopes_headline_checks_to_the_clusters_layer(
+        self, df_clusters_old, df_areas_old
+    ):
+        """A new-format multi-layer output (ward boundaries bundled with the
+        clusters) must not swamp the cluster count and total area: the
+        headline checks cover the clusters layer only, the pre-layers old
+        version counts entirely as clusters, and the report says so."""
+        df_new = pl.DataFrame(
+            {
+                "cluster_id": ["HP_1", "DHN_1", None],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                ],
+            }
+        )
+        df_areas_new = pl.DataFrame(
+            {
+                "area_m2": [210.0, 100.0, 5_000_000.0],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                ],
+            }
+        )
+        report = generate_report(
+            df_clusters_old,
+            df_new,
+            None,
+            None,
+            stage="compute_contextual_features",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_new,
+        )
+        assert (
+            "| Clusters | 3 | 2 | -1 |" in report
+        ), "the ward row (null cluster_id) must not count as a cluster"
+        assert (
+            "| Total area (m²) | 300.0 | 310.0 | +10.0 |" in report
+        ), "the 5M m² ward polygon must not enter the total-area check"
+        assert (
+            f"`{compare_versions.CLUSTER_LAYER}` layer only" in report
+        ), "the report must state the headline checks cover the clusters layer only"
+
+    def test_unlayered_versions_carry_no_layer_filtering_note(
+        self, df_clusters_old, df_areas_old
+    ):
+        """Two pre-layers versions have nothing filtered, so the report
+        must not claim a layer scope that was never applied."""
+        report = generate_report(
+            df_clusters_old,
+            df_clusters_old.clone(),
+            None,
+            None,
+            stage="cluster",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_old.clone(),
+        )
+        assert (
+            "layer only" not in report
+        ), "no layer column anywhere means no filtering note may appear"
+
     def test_geometry_sections_only_for_geometry_stages(
         self, df_old, df_new_identical, manifests, mocker
     ):
@@ -1418,6 +1484,87 @@ class TestLoadDfClusterAreas:
         with pytest.raises(ValueError, match="csv"):
             compare_versions.load_df_cluster_areas("s3://bucket/dir/output.csv")
 
+    def test_geojson_layer_column_is_carried_alongside_areas(self, mocker):
+        """A multi-layer front-end geojson's areas must keep each feature's
+        layer, so the checks can filter to clusters and the per-layer table
+        can tally the rest."""
+        gdf = self.gdf_two_squares("EPSG:4326")
+        gdf["layer"] = [compare_versions.CLUSTER_LAYER, "ward_boundaries"]
+        mocker.patch(
+            "asf_heat_pump_suitability.getters.base_getters.load_gdf_from_s3_geojson",
+            return_value=gdf,
+        )
+        df = compare_versions.load_df_cluster_areas("s3://bucket/dir/output.geojson")
+        assert df.columns == [
+            "area_m2",
+            "layer",
+        ], "a layered source must yield areas alongside their layer"
+        assert df["layer"].to_list() == [
+            compare_versions.CLUSTER_LAYER,
+            "ward_boundaries",
+        ], "each area row must keep its feature's layer"
+
+    def test_geoparquet_layer_column_is_carried_alongside_areas(self, tmp_path):
+        """The loader carries `layer` from geoparquet too, so a future
+        layered parquet output filters the same way as the geojson."""
+        path = tmp_path / "clusters.parquet"
+        gdf = self.gdf_two_squares("EPSG:27700")
+        gdf["layer"] = [compare_versions.CLUSTER_LAYER, "anchor_loads"]
+        gdf.to_parquet(path)
+        df = compare_versions.load_df_cluster_areas(str(path))
+        assert df["layer"].to_list() == [
+            compare_versions.CLUSTER_LAYER,
+            "anchor_loads",
+        ], "geoparquet area rows must keep their feature's layer too"
+
+
+class TestFilterDfClustersLayer:
+    """Tests for `filter_df_clusters_layer`."""
+
+    def test_keeps_only_the_configured_clusters_layer(self):
+        """A multi-layer front-end output bundles whole-county ward polygons
+        with the clusters; the filter must keep clusters-layer rows only so
+        the wards cannot swamp the cluster checks."""
+        df = pl.DataFrame(
+            {
+                "cluster_id": ["HP_1", None, "HP_2"],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                    compare_versions.CLUSTER_LAYER,
+                ],
+            }
+        )
+        filtered = compare_versions.filter_df_clusters_layer(df)
+        assert filtered.height == 2, "only the two clusters-layer rows may survive"
+        assert filtered["layer"].unique().to_list() == [
+            compare_versions.CLUSTER_LAYER
+        ], "no other layer's rows may survive the filter"
+
+    def test_frame_without_a_layer_column_passes_through_unchanged(
+        self, df_clusters_old
+    ):
+        """Pre-layers outputs have no `layer` column and are treated as
+        all-clusters, so old-vs-new comparisons across the format change
+        keep working."""
+        assert (
+            compare_versions.filter_df_clusters_layer(df_clusters_old)
+            is df_clusters_old
+        ), "a frame without a layer column must pass through as the same frame"
+
+    def test_clusters_layer_name_comes_from_config(self):
+        """The clusters layer name is config, not code, and must match the
+        front-end file's real layer value (verified against the 20260806
+        East Lothian output)."""
+        assert (
+            config["compare_versions"]["cluster_layer"]
+            == "clusters_with_contextual_features"
+        ), "base.yaml must name the front-end file's real clusters layer"
+        assert (
+            compare_versions.CLUSTER_LAYER
+            == config["compare_versions"]["cluster_layer"]
+        ), "the module must read the clusters layer name from config"
+
 
 class TestGenerateDictDistributionStats:
     """Tests for `generate_dict_distribution_stats`."""
@@ -1527,6 +1674,46 @@ class TestGetDictDistributionFrames:
             "decision_tree", df_old, df_old, None, None
         )
         assert frames == {}, "a stage without geometry or configured columns gets none"
+
+    def test_layered_frames_are_filtered_to_the_clusters_layer(self):
+        """Multi-layer outputs bundle ward polygons and anchor loads with
+        the clusters; every distribution (and so every plot fed from here)
+        must cover the clusters layer only."""
+        df_tabular = pl.DataFrame(
+            {
+                "n_UPRNs": [5, 8, None],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                ],
+            }
+        )
+        df_areas = pl.DataFrame(
+            {
+                "area_m2": [100.0, 200.0, 5_000_000.0],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                ],
+            }
+        )
+        frames = compare_versions.get_dict_distribution_frames(
+            "compute_contextual_features",
+            df_tabular,
+            df_tabular,
+            df_areas,
+            df_areas,
+        )
+        assert frames["n_UPRNs"][0]["n_UPRNs"].drop_nulls().to_list() == [
+            5,
+            8,
+        ], "ward rows must not enter the n_UPRNs distribution"
+        assert frames["area_m2"][1]["area_m2"].to_list() == [
+            100.0,
+            200.0,
+        ], "whole-county ward polygons must not enter the area distribution"
 
 
 class TestPlotDistributionOverlay:
