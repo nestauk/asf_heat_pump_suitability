@@ -61,31 +61,33 @@ def load_gdf_local_authority_boundaries(
 
 
 def load_gdf_ward_boundaries(
-    select_las: str | List[str] = None, la_boundaries_gdf: gpd.GeoDataFrame = None
+    la_boundaries_gdf: gpd.GeoDataFrame = None,
 ) -> gpd.GeoDataFrame:
     """
-    Load boundaries for the whole of the UK.
-    If select_las and la_boundaries_gdf are specified, load boundaries for the specified Local Authority Districts.
+    Load boundaries for wards in the whole of the UK.
+
+    If la_boundaries_gdf is specified, load boundaries for the specified Local Authority Districts.
+
     CRS British National Grid (27700).
 
     Args:
-        select_las (str | List[str]): selected Local Authorities to load boundaries for. Optional. Default None to load all.
         la_boundaries_gdf (gpd.GeoDataFrame): boundaries for specified Local Authority Districts. Optional. Default None to load all.
 
     Returns:
-        gpd.GeoDataFrame: boundaries for specified Local Authority Districts or all UK if no selection is made.
+        gpd.GeoDataFrame: wards boundaries for specified Local Authority Districts or all UK if no selection is made.
     """
 
     wards_gdf = gpd.read_file(
         config["data"]["geodata"]["boundaries"]["UK_ward_boundaries"]
     ).to_crs(epsg=27700)
 
-    if select_las:
-        if la_boundaries_gdf is None:
-            raise ValueError(
-                "la_boundaries_gdf must be provided if select_las is specified."
+    if la_boundaries_gdf is not None:
+        print(
+            "Loading ward boundaries for {} Local Authority Districts...".format(
+                len(la_boundaries_gdf)
             )
-        print(f"Loading ward boundaries for {select_las}...")
+        )
+
         la_boundaries_with_buffer_gdf = la_boundaries_gdf.copy()
         la_boundaries_with_buffer_gdf["geometry"] = la_boundaries_with_buffer_gdf[
             "geometry"
