@@ -1005,8 +1005,12 @@ def _generate_str_churn_section(
 
 
 def _format_stat(value: float | int) -> str:
-    """Format a statistic for a report table (floats to one decimal place)."""
-    return f"{value:,.1f}" if isinstance(value, float) else f"{value:,}"
+    """Format a statistic for a report table. An integral float renders like
+    an int (1738.0 -> "1,738"), so a version whose column loaded as Float64
+    lines up with an Int64 one; non-integral floats keep one decimal place."""
+    if isinstance(value, float) and not value.is_integer():
+        return f"{value:,.1f}"
+    return f"{value:,.0f}"
 
 
 def _format_layer_cell(value: int | float | None) -> str:
