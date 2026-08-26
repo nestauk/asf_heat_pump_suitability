@@ -4,6 +4,7 @@ Unit tests for functions in cluster.py
 
 import os
 import pytest
+import pandas as pd
 import geopandas as gpd
 import shapely
 from shapely.geometry import Polygon
@@ -266,6 +267,11 @@ def tech_gdf(gdf_mixed_buildings):
         utils.assign_str_tech_type, args=(tech_mapping,)
     )
 
+    # Decision-tree communal buildings are blocks of flats; other techs have no communal origin
+    gdf_mixed_buildings["communal_origin"] = gdf_mixed_buildings["assigned_tech"].map(
+        {"Communal solution": "block of flats"}
+    )
+
     return gdf_mixed_buildings
 
 
@@ -424,6 +430,53 @@ class TestGenerateGdfClusters:
         assert sorted(resulting_tech_types) == sorted(
             expected_tech_types
         ), "Test tech types do not match expected tech types"
+
+    def test_cluster_dissolve_splits_communal_origins(
+        self,
+        gdf_mixed_buildings,
+        gdf_enclosing_boundary,
+        tech_gdf,
+        empty_gdf,
+    ):
+        """Test adjacent communal buildings with different origins form separate clusters."""
+        # B11 and B12 are the neighbouring communal buildings that merge into one
+        # cluster when their origins match (see `test_cluster_dissolve`: 9 clusters)
+        split_tech_gdf = tech_gdf.copy()
+        split_tech_gdf.loc[
+            split_tech_gdf["building_id"] == "B12", "communal_origin"
+        ] = "anchor proximity"
+
+        results = generate_gdf_clusters(
+            buildings_gdf=gdf_mixed_buildings,
+            boundary_gdf=gdf_enclosing_boundary,
+            tech_gdf=split_tech_gdf,
+            line_overlay_gdf=empty_gdf,
+            polygon_overlay_gdf=empty_gdf,
+            combined_anchor_gdf=empty_gdf,
+            radius=50,
+            id_col="building_id",
+            local_authorities_slug="TEST",
+        )
+
+        assert (
+            len(results) == 10
+        ), "splitting one communal origin must add exactly one cluster over the same-origin baseline of 9"
+
+        communal_clusters = results[results["assigned_tech"] == "Communal solution"]
+        assert (
+            len(communal_clusters) == 4
+        ), "B11 and B12 must no longer merge when their communal origins differ"
+        assert sorted(communal_clusters["communal_origin"]) == [
+            "anchor proximity",
+            "block of flats",
+            "block of flats",
+            "block of flats",
+        ], "each communal cluster must carry the single origin of its buildings"
+
+        non_communal_clusters = results[results["assigned_tech"] != "Communal solution"]
+        assert (
+            non_communal_clusters["communal_origin"].isna().all()
+        ), "non-communal clusters must have a null communal origin"
 
 
 class TestExtendEdgesGdf:
@@ -861,3 +914,40 @@ class TestReassignGdfAnchorProperties:
         assert (
             results == expected
         ), "Technology reassignment for building intersecting anchor property radius failed"
+
+    def test_flipped_buildings_get_anchor_proximity_origin(
+        self, tech_gdf, gdf_anchor_property
+    ):
+        """Test buildings flipped to communal by anchor proximity get the anchor-proximity origin."""
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
+        )
+        results = reassigned_gdf.set_index("building_id")["communal_origin"]
+        for building in ["B02", "B03", "B04"]:
+            assert (
+                results[building] == "anchor proximity"
+            ), f"networked building {building} flipped by the anchor must carry the anchor-proximity origin"
+
+    def test_block_of_flats_buildings_keep_origin_within_radius(
+        self, tech_gdf, gdf_anchor_property
+    ):
+        """Test a block of flats within the anchor radius keeps its block-of-flats origin."""
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
+        )
+        results = reassigned_gdf.set_index("building_id")["communal_origin"]
+        for building in ["B07", "B11", "B12", "B13"]:
+            assert (
+                results[building] == "block of flats"
+            ), f"communal building {building} must keep its decision-tree origin inside the anchor radius"
+
+    def test_untouched_buildings_keep_null_origin(self, tech_gdf, gdf_anchor_property):
+        """Test buildings the anchor reassignment does not flip keep a null origin."""
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
+        )
+        results = reassigned_gdf.set_index("building_id")["communal_origin"]
+        for building in ["B01", "B09"]:
+            assert pd.isna(
+                results[building]
+            ), f"non-communal building {building} must keep a null communal origin"
