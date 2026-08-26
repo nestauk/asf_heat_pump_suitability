@@ -73,23 +73,21 @@ def get_set_squares_absent_for_path(path: str, absent_squares: dict) -> set:
     Collect the grid squares that publish no data for the product in a path.
 
     A path belongs to a product when the product's folder name appears in it,
-    e.g. "oproad_essh_gb" in
-    "s3://.../geodata/oproad_essh_gb/20260708/data/{square}_RoadLink.shp".
+    e.g. "oproad_essh_gb" in ".../oproad_essh_gb/20260708/{square}_RoadLink.shp".
 
     Args:
         path: configured s3:// path, templated or not.
-        absent_squares: mapping of product folder name to the grid squares that
+        absent_squares: mapping of product folder name to the squares that
             product publishes no data for.
 
     Returns:
-        set: grid squares to skip for this path; empty if no product matches.
+        set: squares to skip for this path; empty if no product matches.
     """
-    return {
-        square
-        for product, product_absent_squares in absent_squares.items()
-        if product in path
-        for square in product_absent_squares
-    }
+    squares_to_skip = set()
+    for product_folder, product_squares in absent_squares.items():
+        if product_folder in path:
+            squares_to_skip.update(product_squares)
+    return squares_to_skip
 
 
 def generate_list_expanded_square_paths(
