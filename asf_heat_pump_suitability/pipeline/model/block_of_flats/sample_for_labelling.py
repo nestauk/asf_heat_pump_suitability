@@ -311,6 +311,9 @@ if __name__ == "__main__":
         uprn_building_mapping = pl.read_parquet(
             "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
         )
+        uprn_building_mapping = dict(
+            zip(uprn_building_mapping["UPRN"], uprn_building_mapping["building_ID"])
+        )
 
     uprns_df = (
         uprns_df.with_columns(
