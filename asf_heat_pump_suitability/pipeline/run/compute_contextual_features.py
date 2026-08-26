@@ -330,6 +330,7 @@ def create_gdf_contextual_features(
 def create_json_contextual_features_metadata(
     clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
     hn_potential: gpd.GeoDataFrame,
+    anchor_loads: gpd.GeoDataFrame,
     local_authorities: str,
     release_date: str,
 ) -> json:
@@ -339,6 +340,7 @@ def create_json_contextual_features_metadata(
     Args:
         clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
         hn_potential (gpd.GeoDataFrame): geodataframe with district HN potential (CRS: EPSG:4326)
+        anchor_loads (gpd.GeoDataFrame): geodataframe with anchor load properties (CRS: EPSG:4326)
         local_authorities (str): local authority or authorities for which the data was generated
         release_date (str): release date in YYYYMMDD format of the dated release directory the data belongs to
 
@@ -350,6 +352,7 @@ def create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf, target_crs="EPSG:4326"
     )
     geo_utils.verify_gdf_crs(hn_potential, target_crs="EPSG:4326")
+    geo_utils.verify_gdf_crs(anchor_loads, target_crs="EPSG:4326")
 
     print("Adding metadata and converting to geojson format...")
     # Convert to geojson format and add metadata
@@ -359,10 +362,14 @@ def create_json_contextual_features_metadata(
 
     hn_potential_geojson = json.loads(hn_potential.to_json(drop_id=True))
 
+    anchor_loads_geojson = json.loads(anchor_loads.to_json(drop_id=True))
+
     for feature in clusters_json["features"]:
         feature["properties"]["layer"] = "clusters_with_contextual_features"
     for feature in hn_potential_geojson["features"]:
         feature["properties"]["layer"] = "areas_of_district_heat_network_potential"
+    for feature in anchor_loads_geojson["features"]:
+        feature["properties"]["layer"] = "anchor_loads"
 
     metadata = {
         "Release date": release_date,
@@ -496,10 +503,20 @@ if __name__ == "__main__":
         ]
     ).to_crs(epsg=4326)
 
+    print("Loading anchor property geodataframes and transforming to EPSG:4326...")
+    combined_anchor_gdf = cluster.load_transform_anchor_property_gdfs(
+        buildings_gdf=buildings_gdf, grid_squares=local_authority_dict["grid_squares"]
+    )[["geometry"]]
+
+    combined_anchor_gdf = combined_anchor_gdf[
+        combined_anchor_gdf["geometry"].intersects(boundary_gdf.union_all())
+    ].to_crs(epsg=4326)
+
     print("Creating json with contextual features for each cluster and metadata...")
     geojson_file = create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf=clusters_with_contextual_features_gdf,
         hn_potential=hn_potential,
+        anchor_loads=combined_anchor_gdf,
         local_authorities=local_authorities,
         release_date=release_date,
     )
