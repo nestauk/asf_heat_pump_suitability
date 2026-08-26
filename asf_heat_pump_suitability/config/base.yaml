@@ -104,6 +104,9 @@ constant:
     heat_networks: "DHNZ"
     individual_or_networked: "IND_or_NHP"
     individual_or_heat_network: "IND_or_DHNZ"
+  communal_origin: # route by which a building was assigned "Communal solution"
+    block_of_flats: "block of flats"
+    anchor_proximity: "anchor proximity"
   tech_colour_mapping:
     individual: "#00B197"
     networked: "#0E0EFE"
