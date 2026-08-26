@@ -110,6 +110,14 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "-m",
+        "--map_uprns_to_building",
+        help="Set to generate UPRN to building ID mapping. Otherwise, existing mapping loaded.",
+        required=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
         "--save",
         help="If --save is set, it saves outputs to S3.",
         required=False,
@@ -124,7 +132,6 @@ if __name__ == "__main__":
     import simplekml
     import boto3
     import os
-    import math
     from asf_heat_pump_suitability.getters import load_data, load_geodata
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
@@ -144,6 +151,24 @@ if __name__ == "__main__":
     local_authorities = [la.lower() for la in args.local_authorities]
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
     grid_squares = local_authority_dict["grid_squares"]
+
+    print("Map UPRNs to building footprints...")
+    buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
+        layer="building", grid_squares=grid_squares
+    )
+
+    if args.map_uprns_to_building:
+        all_uprns_df = load_geodata.load_df_osopen_uprn()
+        all_uprns_gdf = uprns.generate_gdf_uprn_coords(all_uprns_df)
+
+        uprn_building_mapping = uprns.map_dict_uprns_to_building_id(
+            uprns_gdf=all_uprns_gdf, buildings_gdf=buildings_gdf, id_col="ID"
+        )
+
+        del all_uprns_gdf, all_uprns_df
+        # Save mapping
+        fpath = "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
+        pl.DataFrame(uprn_building_mapping).write_parquet(fpath)
 
     # ------------------------------------ #
     # LOAD DOMESTIC UPRNS
@@ -212,26 +237,19 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # MAP UPRNS TO BUILDINGS
     # ------------------------------------ #
-    print("Map UPRNs to building footprints...")
-    buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="building", grid_squares=grid_squares
-    )
-    uprns_gdf = uprns.generate_gdf_uprn_coords(
-        uprns_df,
-        usecols=["UPRN", "GRIDGB1E", "GRIDGB1N"],
-        x_col="GRIDGB1E",
-        y_col="GRIDGB1N",
-    )
-    uprn_building_mapping = uprns.map_dict_uprns_to_building_id(
-        uprns_gdf=uprns_gdf, buildings_gdf=buildings_gdf, id_col="ID"
-    )
+    # Load mapping if not generated
+    if not args.map_uprns_to_building:
+        uprn_building_mapping = pl.read_parquet(
+            "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
+        )
+
     uprns_df = uprns_df.with_columns(
         # Map building IDs to the UPRNs they contain
         pl.col("UPRN")
         .replace_strict(uprn_building_mapping, default=None)
         .alias("building_id")
     ).with_columns(pl.col("is_flat").sum().over("building_id").alias("n_flats"))
-    del uprns_gdf, uprn_building_mapping
+    del uprn_building_mapping
 
     # ------------------------------------ #
     # ENRICH WITH EPC BUILDING AGE DATA
