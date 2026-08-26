@@ -125,11 +125,12 @@ def load_df_uprn_lookup(
         result = []
         columns = kwargs.get("columns")
         for file in files:
+            print(f"Loading UPRN national statistics lookup file: {file}...")
             df = pl.read_parquet(file, **kwargs)
             if columns is None or "ruc21ind" in columns:
                 df = df.with_columns(pl.col("ruc21ind").cast(pl.String))
             if uprn_filter is not None:
-                df = df.filter(pl.col("UPRN").is_in(uprn_filter))
+                df = df.join(uprn_filter, how="semi", on="UPRN")
             result.append(df)
         return pl.concat(result)
 
