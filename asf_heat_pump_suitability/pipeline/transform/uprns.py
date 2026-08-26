@@ -433,7 +433,7 @@ def parse_arguments() -> argparse.Namespace:
         help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
         nargs="+",
-        default="GB",
+        default=["GB"],
         required=False,
     )
 
