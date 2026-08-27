@@ -2,7 +2,7 @@
 title: Separate communal clusters by assignment origin
 status: draft
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/485
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/490
 asana: https://app.asana.com/1/5571817120120/project/1214222223606748/task/1217818496734712
 created: 2026-08-26
 ---
