@@ -98,12 +98,13 @@ def generate_gdf_clusters(
 
     # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
     for boundary in boundary_gdf["geometry"].unique():
+        bounded_tech_gdf = tech_gdf[tech_gdf.within(boundary)]
         voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
 
         # One cell per building
         cells_gdf = overlay_gdf_physical_barriers(
             voronoi_gdf=voronoi_gdf,
-            tech_gdf=tech_gdf,
+            tech_gdf=bounded_tech_gdf,
             line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
             id_col=id_col,
@@ -325,6 +326,8 @@ def extend_edges_gdf(
     arr = voronoi_gdf.sort_values(building_id_col)
     unique_ids, first_idx = np.unique(arr[building_id_col].values, return_index=True)
     # Split the Voronoi geometries into groups. One group == one building ID
+    # first_idx[1:] skips the first element which is always 0. This is because np.split splits the array at the locations of
+    # each index. If we included index 0, it would create an empty group at the start.
     geom_groups = np.split(arr.geometry.values, first_idx[1:])
     voronoi_gdf = gpd.GeoDataFrame(
         {building_id_col: unique_ids},
