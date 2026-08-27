@@ -29,7 +29,8 @@ Interview decisions (2026-08-26), each with rationale:
 3. **Dissolve on `(assigned_tech, communal_origin)`** instead of `assigned_tech` alone in `generate_gdf_clusters`. Adjacent communal buildings with the same origin still merge; different origins never do. Cluster IDs are built after the dissolve, so `COM_n_{la}` IDs keep working. _Rationale: minimal change that delivers exactly the separation the PR #466 TODOs describe._
 4. **Mixed-building origin dropped** (amended 2026-08-26; originally "mixed buildings get their own origin value"). Implementation found the mixed DHN/NHP → Communal rule does not exist on this branch's base — the #452/#459 chain removed the DHN decision-tree path and the mixing rule (commit 67de5cc) — so a third origin value would be dead code. _Rationale: no untriggerable code; if DHN mixing returns after the chain merges, adding a third origin value is a small additive change with real behaviour to test against._
 5. **This work includes the logic-trace rewrite** in `pipeline/run/compute_contextual_features.py`: communal trace text keyed on cluster origin, hedging sentences and both TODOs removed, and the two runtime bugs on the communal branches fixed (missing comma making a tuple get called; `assigned_tech == tech_types["communal"] & dhn_potential` operator precedence). _Rationale: the trace is the user-visible payoff; leaving it to a later PR ships the plumbing without the fix._
-6. **Branch is stacked on `459_logic_trace`** (PR #466) rather than `dev`, diverging from the usual branch-off-`dev` rule. PRs into `459_logic_trace`, or retargets `dev` if #466 merges first. _Rationale: the trace rewrite edits code that only exists on that branch; stacking respects PR #466's ownership instead of superseding it. Needs coordinating with its author._
+6. **`communal_origin` stays in the tool-facing output, documented** (review decision, 2026-08-27): the column flows into the cluster geojson and gets a "Variable names and descriptions" metadata row in `base.yaml`. _Rationale: the front end can then show why a cluster is communal — the point of the feature; an undocumented column would be an unexplained contract._
+7. **Branch is stacked on `459_logic_trace`** (PR #466) rather than `dev`, diverging from the usual branch-off-`dev` rule. PRs into `459_logic_trace`, or retargets `dev` if #466 merges first. _Rationale: the trace rewrite edits code that only exists on that branch; stacking respects PR #466's ownership instead of superseding it. Needs coordinating with its author._
 
 ## Alternatives considered
 
@@ -49,8 +50,7 @@ Interview decisions (2026-08-26), each with rationale:
 
 ## Open questions
 
-- Exact user-facing wording of the three communal trace sentences (product/Roisin call; engineering only needs the three-way split).
-- Should `communal_origin` be exposed in the final tool outputs beyond feeding the trace (e.g. as a cluster attribute for the front end)?
+- Exact user-facing wording of the communal trace sentences (product/Roisin call; engineering only needs the origin split).
 - Naming of the origin values and column (settle in implementation, follow config conventions in `base.yaml` if they become constants).
 
 ## Verification
