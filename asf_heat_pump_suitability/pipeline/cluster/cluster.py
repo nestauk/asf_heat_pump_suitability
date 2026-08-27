@@ -67,7 +67,6 @@ def generate_gdf_clusters(
     buildings_gdf: gpd.GeoDataFrame,
     boundary_gdf: gpd.GeoDataFrame,
     tech_gdf: gpd.GeoDataFrame,
-    line_overlay_gdf: gpd.GeoDataFrame,
     polygon_overlay_gdf: gpd.GeoDataFrame,
     combined_anchor_gdf: gpd.GeoDataFrame,
     radius: float,
@@ -84,7 +83,6 @@ def generate_gdf_clusters(
         buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
         boundary_gdf (gpd.GeoDataFrame): boundaries of Local Authorities to generate clusters for.
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
-        line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries to separate clusters by.
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
         combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
         radius (float): radius in metres around anchor property within which communal solutions should be assigned
@@ -105,7 +103,6 @@ def generate_gdf_clusters(
         cells_gdf = overlay_gdf_physical_barriers(
             voronoi_gdf=voronoi_gdf,
             tech_gdf=bounded_tech_gdf,
-            line_overlay_gdf=line_overlay_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
             id_col=id_col,
         )
@@ -396,7 +393,6 @@ def _clip_gdf_voronoi_cells_polygon_buffer(
 def overlay_gdf_physical_barriers(
     voronoi_gdf: gpd.GeoDataFrame,
     tech_gdf: gpd.GeoDataFrame,
-    line_overlay_gdf: gpd.GeoDataFrame,
     polygon_overlay_gdf: gpd.GeoDataFrame,
     id_col: str,
 ) -> gpd.GeoDataFrame:
@@ -409,7 +405,6 @@ def overlay_gdf_physical_barriers(
     Args:
         voronoi_gdf (gpd.GeoDataFrame): Voronoi polygons around building footprints
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types
-        line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries.
         id_col (str): building ID column.
 
@@ -442,11 +437,9 @@ def overlay_gdf_physical_barriers(
     ].drop(columns="select_id")
 
     # Remove areas covered by polygons and lines
-    cells_gdf = (
-        domestic_voronoi_gdf.overlay(polygon_overlay_gdf, how="difference")
-        .overlay(line_overlay_gdf, how="difference")
-        .explode()
-    )
+    cells_gdf = domestic_voronoi_gdf.overlay(
+        polygon_overlay_gdf, how="difference"
+    ).explode()
 
     # Deal with buildings that have multiple cell fragments
     # This happens in edge cases where a barrier bisects a Voronoi polygon
@@ -581,43 +574,6 @@ def sjoin_gdf_max_intersection(
     )
 
 
-def load_transform_gdf_linestring_barriers(
-    grid_squares: Optional[List[str]],
-) -> gpd.GeoDataFrame:
-    """
-    Load physical barriers with (Multi)LineString geometries - major roads and railways - for the specified grid squares. A
-    buffer is added around each geometry to cover the width of the road / railway.
-
-    # TODO add road types to docstring
-
-    Args:
-        grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
-        Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
-
-    Returns:
-        gpd.GeoDataFrame: physical barriers with (Multi)LineString geometries
-    """
-    # Linestrings
-    roads_gdf = load_geodata.load_gdf_os_openroad(grid_squares=grid_squares)
-
-    railways_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="railway_track", grid_squares=grid_squares
-    )
-
-    barrier_road_types = ["A Road", "B Road", "Motorway", "Minor Road"]
-
-    barrier_roads_gdf = roads_gdf[roads_gdf["function"].isin(barrier_road_types)]
-
-    line_overlays = [barrier_roads_gdf, railways_gdf]
-    line_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in line_overlays])
-
-    # TODO make more specific for different road types
-    # Add buffer assumed to be width of road / railway (3.5m total - 1.75m either side)
-    line_overlay_gdf["geometry"] = line_overlay_gdf.geometry.buffer(1.75)
-
-    return line_overlay_gdf
-
-
 def load_transform_gdf_polygon_barriers(
     grid_squares: Optional[List[str]],
 ) -> gpd.GeoDataFrame:
@@ -627,6 +583,11 @@ def load_transform_gdf_polygon_barriers(
     - Water bodies
     - Tidal boundaries
     - Woodland
+
+    Additionally, load physical barriers with (Multi)LineString geometries - major roads and railways - for the
+    specified grid squares. A buffer is added around each geometry to cover the width of the road / railway.
+
+    # TODO add road types to docstring
 
     Args:
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
@@ -652,9 +613,31 @@ def load_transform_gdf_polygon_barriers(
         layer="tidal_water", grid_squares=grid_squares
     )
 
-    polygon_overlays = [forest_gdf, greenspace_gdf, tidal_water_gdf, surface_water_gdf]
+    # Linestrings
+    roads_gdf = load_geodata.load_gdf_os_openroad(grid_squares=grid_squares)
+    barrier_road_types = ["A Road", "B Road", "Motorway", "Minor Road"]
+    barrier_roads_gdf = roads_gdf[roads_gdf["function"].isin(barrier_road_types)]
 
-    return pd.concat([gdf[["geometry"]] for gdf in polygon_overlays])
+    railways_gdf = load_geodata.load_gdf_os_openmap_layer(
+        layer="railway_track", grid_squares=grid_squares
+    )
+
+    line_overlays = [barrier_roads_gdf, railways_gdf]
+    line_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in line_overlays])
+
+    # TODO make more specific for different road types
+    # Add buffer assumed to be width of road / railway (3.5m total - 1.75m either side)
+    line_overlay_gdf["geometry"] = line_overlay_gdf.geometry.buffer(1.75)
+
+    overlays = [
+        forest_gdf,
+        greenspace_gdf,
+        tidal_water_gdf,
+        surface_water_gdf,
+        line_overlay_gdf,
+    ]
+
+    return pd.concat([gdf[["geometry"]] for gdf in overlays])
 
 
 def reassign_gdf_communal_networked(
@@ -928,9 +911,6 @@ if __name__ == "__main__":
     )
 
     # Load and transform physical barriers for clusters
-    line_overlay_gdf = load_transform_gdf_linestring_barriers(
-        local_authority_dict["grid_squares"]
-    )
     polygon_overlay_gdf = load_transform_gdf_polygon_barriers(
         local_authority_dict["grid_squares"]
     )
@@ -944,7 +924,6 @@ if __name__ == "__main__":
         buildings_gdf=buildings_gdf,
         boundary_gdf=boundary_gdf,
         tech_gdf=tech_gdf,
-        line_overlay_gdf=line_overlay_gdf,
         polygon_overlay_gdf=polygon_overlay_gdf,
         combined_anchor_gdf=combined_anchor_gdf,
         radius=ANCHOR_RADIUS,
