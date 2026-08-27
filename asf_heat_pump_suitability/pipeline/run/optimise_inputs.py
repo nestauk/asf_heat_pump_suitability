@@ -92,8 +92,8 @@ def assign_df_grid_squares(
 
 def partition_geofile_to_grid_squares(
     df: pl.DataFrame | List[pl.DataFrame],
-    grid_squares: list,
     fpath: str,
+    grid_squares: list = None,
     multi_file: bool = False,
 ) -> None:
     """
@@ -101,9 +101,9 @@ def partition_geofile_to_grid_squares(
 
     Args:
         df (pl.DataFrame): dataframe or list of dataframes to partition containing `grid_square` column
-        grid_squares (list): all grid squares contained in `df`
         fpath (str): generic path to save partitioned files to. String must contain `{grid_square}` for formatting corresponding
         grid square for each file.
+        grid_squares (list): selected grid squares contained in `df`. Default None to using all grid squares in the dataframe.
         multi_file (bool): set to True if multiple source files are being partitioned. This handles grid squares spanning
         across several files. Default False.
     """
@@ -117,13 +117,18 @@ def partition_geofile_to_grid_squares(
         existing_suffixes = defaultdict(int)
 
         for chunk_df in df:
-            grid_squares = chunk_df["grid_square"].unique()
-            for grid_square in grid_squares:
+            # Only filter to grid squares contained in each df
+            _grid_squares = (
+                chunk_df["grid_square"].unique() if not grid_squares else grid_squares
+            )
+            for grid_square in _grid_squares:
                 partition = chunk_df.filter(pl.col("grid_square") == grid_square).drop(
                     "grid_square"
                 )
                 if grid_square in existing_gs:
+                    # This will represent the count of file suffixes for each grid square
                     existing_suffixes[grid_square] += 1
+                    # Create a new suffix if the grid square already exists, e.g. SX_1
                     fsuffix = grid_square + "_" + str(existing_suffixes[grid_square])
                 else:
                     fsuffix = grid_square
@@ -144,6 +149,7 @@ def partition_geofile_to_grid_squares(
         # Extract dataframe from list if there is just a single one
         if isinstance(df, list) and len(df) == 1:
             df = df[0]
+        grid_squares = df["grid_square"].unique() if not grid_squares else grid_squares
         for grid_square in grid_squares:
             partition = df.filter(pl.col("grid_square") == grid_square).drop(
                 "grid_square"
@@ -180,9 +186,6 @@ def _flatten_grid_square_files(suffixes: dict, fpath: str, clean_up: bool = True
         fsuffixes = [grid_square + "_" + str(suffix) for suffix in gs_suffixes]
         suffix_paths = [fpath.format(grid_square=fsuffix) for fsuffix in fsuffixes]
         dfs.extend([pl.read_parquet(fpath) for fpath in suffix_paths])
-        # Cast to same schema - some dfs read ruc21ind col as Int while others read as string because of formatting
-        # diffs between Scotland and England & Wales
-        dfs = [df.cast(nsul_schema.schema) for df in dfs]
         print(
             f"Concatenating {len(dfs)} files for grid square {grid_square} and saving to {fpath.format(grid_square=grid_square)}..."
         )
@@ -247,7 +250,9 @@ if __name__ == "__main__":
         uprn_lookup_dfs = []
         for file in uprn_lookup_files:
             print(f"Loading UPRN lookup from: {file}")
-            uprn_lookup_df = pl.read_csv(file)
+            # Cast to same schema - some dfs read ruc21ind col as Int while others read as string because of formatting
+            # diffs between Scotland and England & Wales
+            uprn_lookup_df = pl.read_csv(file).cast(nsul_schema.schema)
             uprn_lookup_dfs.append(
                 assign_df_grid_squares(
                     df=uprn_lookup_df,
