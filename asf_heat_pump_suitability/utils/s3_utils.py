@@ -25,14 +25,14 @@ def fetch_list_file_paths_from_s3_folder(
         List[str]: list of strings with the file paths.
     """
     # Normalize prefix: ensuring it ends with '/'
-    if path_folder and not path_folder.endswith("/"):
+    if not path_folder.endswith("/"):
         path_folder += "/"
 
     # Normalize file_type to a tuple for str.endswith()
     if isinstance(file_type, str):
-        file_types = (file_type,)
+        file_types = (file_type.lower(),)
     elif isinstance(file_type, list):
-        file_types = tuple(file_type)
+        file_types = tuple(ext.lower() for ext in file_type)
     else:
         file_types = None
 
@@ -47,7 +47,7 @@ def fetch_list_file_paths_from_s3_folder(
         for obj in page.get("Contents", []):
             key = obj["Key"]
 
-            # Skip directory markers (e.g., if path_folder itself is returned)
+            # Skip directory markers i.e. if path_folder itself is returned (e.g., this avoids including 'path/to/folder/' as a file)
             if key.endswith("/"):
                 continue
 

@@ -27,7 +27,7 @@ data:
     boundaries:
       # UK LA boundaries
       UK_ons_lad_bounds: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/Local_Authority_Districts_December_2023_Boundaries_UK_BFE_-2600600853110041429/LAD_DEC_2023_UK_BFE.shp"
-      UK_ward_boundaries: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/wards/WD_MAY_2026_UK_BGC_-4779218457944992933.gpkg"
+      UK_ons_ward_boundaries: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/wards/20260817_ons_ward_boundaries_uk.gpkg"
 
     heat_network_zones:
       desnz_files: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_network_desnz_data/"
@@ -71,9 +71,7 @@ constant:
     building: "ID"
   threshold:
     m2_per_predicted_UPRN: 261.608136 # Identified by analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py
-    outdoor_space_threshold_m2:
-      within_hn_zone: 70
-      outside_hn_zone: 30
+    outdoor_space_threshold_m2: 30
   sampling_areas:
     la_names:
       - "Bath and North East Somerset"
@@ -353,3 +351,49 @@ tech_types:
   - "SGL_N"
   - "HN_S"
   - "HN_N"
+
+run_manifest:
+  # Remember to update stage_input_keys below when a pipeline script starts reading a new input data source.
+  stage_input_keys:
+    uprns:
+      - "geodata.uk_osopen_uprn"
+      - "geodata.boundaries.UK_ons_lad_bounds"
+      - "geodata.UK_poi_locations"
+      - "geodata.grid_square_os_openmap_local"
+      - "processed.non_domestic_poi_categories"
+      - "processed.valid_la_names"
+      - "epc.domestic"
+      - "epc.commercial.EW"
+      - "epc.commercial.S"
+      - "EW_household_census_data"
+      - "S_household_census_data"
+    add_features:
+      - "geodata.boundaries.UK_ons_lad_bounds"
+      - "geodata.grid_square_os_openmap_local"
+      - "processed.valid_la_names"
+      - "processed.manually_labelled_block_of_flats"
+      - "geodata.heat_network_zones.desnz_files"
+      - "geodata.heat_network_zones.desnz_polygons"
+      - "geodata.gb_spatial_signatures.full"
+      - "geodata.gb_spatial_signatures.simplified"
+      - "processed.inspire_file_names"
+      - "epc.domestic"
+      - "geodata.gb_code_points"
+      - "geodata.gb_coast_boundaries"
+      - "geodata.gb_uprn_country_mapping"
+    decision_tree:
+      - "geodata.boundaries.UK_ons_lad_bounds"
+      - "geodata.grid_square_os_openmap_local"
+      - "processed.valid_la_names"
+    cluster:
+      - "geodata.boundaries.UK_ons_lad_bounds"
+      - "geodata.grid_square_os_openmap_local"
+      - "geodata.grid_square_os_openmap_greenspace"
+      - "geodata.grid_square_os_openroad"
+      - "processed.poi_anchor_properties"
+      - "geodata.heat_network_zones.desnz_polygons"
+      - "processed.valid_la_names"
+    compute_contextual_features:
+      - "geodata.boundaries.UK_ons_lad_bounds"
+      - "geodata.grid_square_os_openmap_local"
+      - "processed.valid_la_names"
