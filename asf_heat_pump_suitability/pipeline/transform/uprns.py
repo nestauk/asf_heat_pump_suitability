@@ -465,7 +465,7 @@ if __name__ == "__main__":
         poi,
         local_authority,
     )
-    from asf_heat_pump_suitability.utils import save_utils
+    from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 
     args = parse_arguments()
 
@@ -572,11 +572,19 @@ if __name__ == "__main__":
     # ---------------------------
 
     if args.save:
-        save_utils.save_to_s3(
-            df,
-            save_utils.get_str_output_path(
-                "domestic_uprns",
-                release_date=release_date,
-                local_authority=local_authority_dict["url_slug"],
-            ),
+        output_path = save_utils.get_str_output_path(
+            "domestic_uprns",
+            release_date=release_date,
+            local_authority=local_authority_dict["url_slug"],
+        )
+        save_utils.save_to_s3(df, output_path)
+        manifest_utils.generate_and_save_run_manifest_to_s3(
+            output_path,
+            stage="uprns",
+            local_authority=local_authority_dict["url_slug"],
+            row_count=len(df),
+            params={
+                "local_authorities": args.local_authorities,
+                "release_date": release_date,
+            },
         )
