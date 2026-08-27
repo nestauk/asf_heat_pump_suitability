@@ -394,7 +394,7 @@ run_manifest:
       - "epc.domestic"
       - "geodata.gb_code_points"
       - "geodata.gb_coast_boundaries"
-      - "geodata.gb_uprn_country_mapping"
+      - "geodata.gb_uprn_lookup_partitioned"
     decision_tree:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
