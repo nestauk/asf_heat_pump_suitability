@@ -47,8 +47,11 @@ def load_df_osopen_uprn(
                 for sq in grid_squares
             ]
             return pl.read_parquet(paths, **kwargs)
-        path = config["data"]["geodata"]["uk_osopen_uprn_parquet"]
-        return pl.read_parquet(path, **kwargs)
+        if not grid_squares or set(grid_squares) == set(
+            config["constant"]["land_grid_squares"]
+        ):
+            path = config["data"]["geodata"]["uk_osopen_uprn_parquet"]
+            return pl.read_parquet(path, **kwargs)
     else:
         path = config["data"]["geodata"]["uk_osopen_uprn_raw"]
         filename = os.path.basename(path).split("_csv")[0]
