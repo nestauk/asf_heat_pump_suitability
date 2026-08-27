@@ -24,6 +24,7 @@ should pass the same --release_date to every stage.
 import argparse
 import polars as pl
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import json
 import os
@@ -102,6 +103,7 @@ def extend_df_contextual_features(
     - proximity to coastline flag (within {COASTLINE_DISTANCE_THRESHOLD_M}m of coastline)
     - protected area flag
     - within anchor load radius flag
+    - Logic trace for each cluster explaining why the assigned technology was chosen
 
     Args:
         clusters_df (pl.DataFrame): dataframe of clusters with cluster_id and `within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` feature
@@ -270,6 +272,95 @@ def extend_df_contextual_features(
     return clusters_df
 
 
+def extend_gdf_logic_trace(
+    clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """
+    Add logic trace for each cluster explaining why the assigned technology was chosen.
+
+    Args:
+        clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, in_hn_zone, in_city_centre, within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load, and assigned_tech features for each cluster
+    Returns:
+        gpd.GeoDataFrame: geodataframe with logic_trace feature added for each cluster
+    """
+
+    assigned_tech = clusters_with_contextual_features_gdf["assigned_tech"]
+    tech_types = config["constant"]["tech_types"]
+    dhn_potential = (clusters_with_contextual_features_gdf["in_hn_zone"] == "Yes") | (
+        clusters_with_contextual_features_gdf["in_city_centre"] == "Yes"
+    )
+    near_anchor_load = (
+        clusters_with_contextual_features_gdf[
+            f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
+        ]
+        == "Yes"
+    )
+
+    logic_trace = [
+        # 1) Communal solution + near anchor load + DHN potential
+        # TODO: remove sentence about blocks of flats once we separate clusters that are communal due to blocks of flats from those that are communal due to anchor load proximity
+        (
+            (assigned_tech == tech_types["communal"])
+            & near_anchor_load
+            & dhn_potential,
+            f"This cluster:\n- is in an area of 'district heat network' potential,\n- contains homes that have no or little outdoor space (up to 30m2),\n and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school),\n so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed. \n A 'communal solution' could be considered as an alternative solution because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school). This 'communal solution' could be integrated into a 'district heat newtork' in the future.\n There might also be one or multiple blocks of flats in the cluster.\n",
+        ),
+        # 2) Communal solution + near anchor load
+        # TODO: remove sentence about blocks of flats once we separate clusters that are communal due to blocks of flats from those that are communal due to anchor load proximity
+        (
+            (assigned_tech == tech_types["communal"]) & near_anchor_load,
+            f"This cluster is assigned 'communal solution' because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school).\n There might also be one or multiple blocks of flats in the cluster.",
+        ),
+        # 3) Communal solution (blocks of flats)+ DHN potential
+        (
+            (assigned_tech == tech_types["communal"] & dhn_potential),
+            "This cluster is in an area of 'district heat network' potential and it contains one or multiple blocks of flats, so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed.\n A ‘communal solution’ could also be considered as an alternative solution, because it contains one or multiple blocks of flats. This 'communal solution' could be integrated into a 'district heat network' in the future.",
+        ),
+        # 4) Communal solution (blocks of flats)
+        (
+            (assigned_tech == tech_types["communal"]),
+            "This cluster is assigned 'communal solution' because it contains one or multiple blocks of flats.",
+        ),
+        # 5) Networked heat pump + DHN potential
+        (
+            (assigned_tech == tech_types["networked"]) & dhn_potential,
+            "This cluster is in an area of 'district heat network' potential and homes have no or little outdoor space (up to 30m2), so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed.\n A 'networked heat pump' could be considered as an alternative solution because multiple properties within these buildings have no or little outdoor space (up to 30m2).\n",
+        ),
+        # 6) Networked heat pump
+        (
+            (assigned_tech == tech_types["networked"]),
+            "This cluster is assigned 'networked heat pump' because multiple properties within these buildings have no or little outdoor space (up to 30m2)",
+        ),
+        # 7) Individual solution or networked HP (lack of outdoor space info) + DHN potential
+        (
+            (assigned_tech == tech_types["individual_or_networked"]) & dhn_potential,
+            "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space:\n -This cluster is in an area of 'district heat network' potential and if homes have no or little outdoor space (up to 30m2), then homes would be most suitable for a district heat network connection when/if a 'district heat network' is constructed.\n A 'networked heat pump' could also be considered as an alternative solution, because multiple properties within these buildings have no or little outdoor space (up to 30m2).\n\nIf there is sufficient outdoor space for each property (above 30m2):\n - 'Individual solutions' will be the most suitable option for properties in this cluster because outdoor space is above 30m2 for all properties.\n - The cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
+        ),
+        # 8) Individual solution or networked HP (lack of outdoor space info)
+        (
+            (assigned_tech == tech_types["individual_or_networked"]),
+            "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space, a 'networked heat pump' solution is most suitable. If there is sufficient outdoor space for each property (above 30m2) an 'individual solution' will be most suitable.",
+        ),
+        # 9) Individual solution + DHN potential
+        (
+            (assigned_tech == tech_types["individual"]) & dhn_potential,
+            "This cluster is assigned 'individual solution' because outdoor space is above 30m2 for all properties in this cluster.\nThe cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
+        ),
+        # 10) Individual solution
+        (
+            (assigned_tech == tech_types["individual"]),
+            "This cluster is assigned 'individual solution' because outdoor space is above 30m2 for all properties in this cluster.",
+        ),
+    ]
+
+    conditions, logic = zip(*logic_trace)
+    clusters_with_contextual_features_gdf["logic_trace"] = np.select(
+        conditions, logic, default="Not accounted for in logic trace."
+    )
+
+    return clusters_with_contextual_features_gdf
+
+
 def create_gdf_contextual_features(
     uprns_df: pl.DataFrame,
     clusters_gdf: gpd.GeoDataFrame,
@@ -317,12 +408,12 @@ def create_gdf_contextual_features(
     # Add in_hn_zone and in_city_centre flags to clusters_gdf
     clusters_with_contextual_features_gdf["in_hn_zone"] = (
         clusters_with_contextual_features_gdf.intersects(hn_zones_gdf.union_all())
-    )
+    ).map({True: "Yes", False: "No"})
     clusters_with_contextual_features_gdf["in_city_centre"] = (
         clusters_with_contextual_features_gdf.intersects(
             spatial_signatures_gdf.union_all()
         )
-    )
+    ).map({True: "Yes", False: "No"})
 
     return clusters_with_contextual_features_gdf
 
@@ -466,6 +557,13 @@ if __name__ == "__main__":
         clusters_gdf=clusters_gdf,
         hn_zones_gdf=hn_zones_gdf,
         spatial_signatures_gdf=spatial_signatures_gdf,
+    )
+
+    print(
+        "Add logic trace for each cluster explaining why the assigned technology was chosen..."
+    )
+    clusters_with_contextual_features_gdf = extend_gdf_logic_trace(
+        clusters_with_contextual_features_gdf=clusters_with_contextual_features_gdf
     )
 
     print("Simplifying geometries using tolerance_m...")
