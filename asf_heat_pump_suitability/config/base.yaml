@@ -104,6 +104,9 @@ constant:
     heat_networks: "DHNZ"
     individual_or_networked: "IND_or_NHP"
     individual_or_heat_network: "IND_or_DHNZ"
+  communal_origin: # route by which a building was assigned "Communal solution"
+    block_of_flats: "block of flats"
+    anchor_proximity: "anchor proximity"
   tech_colour_mapping:
     individual: "#00B197"
     networked: "#0E0EFE"
@@ -146,6 +149,7 @@ metadata:
   "Variable names and descriptions":
     "cluster_id": "Unique identifier for each cluster."
     "assigned_tech": "Assigned low-carbon heating technology category. Categories are: `Individual solution`, `Networked heat pump`, `Communal solution`, `District heat network`. Can additionally contain `DESNZ_HNZ` values (if the local authority was part of the DESNZ heat network zoning pilot)."
+    "communal_origin": "Route by which a `Communal solution` cluster was assigned: `block of flats` (the cluster contains blocks of flats) or `anchor proximity` (buildings near an anchor load such as a school or hospital). Null for non-communal clusters."
     "geometry": "Polygon geometry of the cluster"
     "n_UPRNs": "Number of domestic UPRNs (properties) within the cluster"
     "n_uprns_in_listed_building": "Number of UPRNs (properties) within the cluster that are in listed buildings"
