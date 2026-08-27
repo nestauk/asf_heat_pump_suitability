@@ -66,7 +66,7 @@ if __name__ == "__main__":
     import pandas as pd
 
     from asf_heat_pump_suitability import config
-    from asf_heat_pump_suitability.utils import geo_utils, save_utils
+    from asf_heat_pump_suitability.utils import geo_utils, manifest_utils, save_utils
     from asf_heat_pump_suitability.getters import (
         base_getters,
         load_data,
@@ -83,9 +83,7 @@ if __name__ == "__main__":
         outdoor_space,
         epc,
         coast,
-        heat_network_zones,
         lookups,
-        city_centres,
         local_authority,
         listed_buildings,
         off_gas,
@@ -273,7 +271,7 @@ if __name__ == "__main__":
     # Add listed building boolean flag
 
     # Load listed buildings geodataframe for relevant nations
-    countries = features_df["country"].unique()
+    countries = features_df["country"].drop_nulls().unique()
     if len(countries) > 1:
         nation = "GB"
     else:
@@ -348,11 +346,20 @@ if __name__ == "__main__":
     # SAVE OUTPUTS
 
     if args.save:
-        save_utils.save_to_s3(
-            features_df,
-            path=save_utils.get_str_output_path(
-                "domestic_uprns_with_features",
-                release_date=release_date,
-                local_authority=local_authority_dict["url_slug"],
-            ),
+        output_path = save_utils.get_str_output_path(
+            "domestic_uprns_with_features",
+            release_date=release_date,
+            local_authority=local_authority_dict["url_slug"],
+        )
+        save_utils.save_to_s3(features_df, path=output_path)
+        manifest_utils.generate_and_save_run_manifest_to_s3(
+            output_path,
+            stage="add_features",
+            local_authority=local_authority_dict["url_slug"],
+            row_count=len(features_df),
+            params={
+                "local_authorities": args.local_authorities,
+                "release_date": release_date,
+                "detail": args.detail,
+            },
         )

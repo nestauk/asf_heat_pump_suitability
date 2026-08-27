@@ -151,7 +151,10 @@ def generate_gdf_outdoor_space(
     )
 
     # Use a row-wise difference. This is quicker than using overlay with difference due to not needing to create a spatial index.
-    # Difference geometry - equivalent to land minus buildings - MultiPolygons will be created for land parcels which get split into multi-parts
+    # Difference geometry - equivalent to land minus buildings - MultiPolygons will be created for land parcels which get split into multi-parts.
+    # Note: land parcels which do not match with any buildings will end up with null geometries and later be dropped.
+    # This is intentional, as a UPRN in a parcel with no buildings indicates an underlying data issue. In any case,
+    # this will only happen in rare cases where a UPRN has no associated building footprint.
     diff_geom = land_and_buildings_gdf["geometry"].difference(
         land_and_buildings_gdf["building_geometry"]
     )

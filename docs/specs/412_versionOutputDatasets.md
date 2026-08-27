@@ -1,6 +1,6 @@
 ---
 title: Version output datasets by release date
-status: in-review
+status: implemented
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/412
 pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/413
 asana: https://app.asana.com/1/5571817120120/project/1214222223606748/task/1216293268467175
@@ -16,13 +16,13 @@ created: 2026-07-07
 
 ## Task
 
-Introduce a versioning scheme for the pipeline's output datasets on S3 (`s3://asf-local-heat-planning-tool/outputs/data/...`), which today are written to fixed, unversioned per-LA paths and silently overwritten on every `--save` run. Raw *inputs* carry version tokens in their filenames (`{pub_date}_v{version}_...`), but outputs (per-LA parquets and the final `clusters_contextual_features_{tolerance_m}m.geojson` consumed by the heat planning tool) carry no release information at all, so there is no way to pin, compare, or roll back a dataset release. Per the task comments and Aidan's confirmation (2026-07-07), the scheme is decided: outputs are written under `{LA_slug}/{YYYYMMDD}` release directories rather than version tokens. The work is to thread that dated path through every write *and* every inter-stage read, and record the date in the geojson metadata.
+Introduce a versioning scheme for the pipeline's output datasets on S3 (`s3://asf-local-heat-planning-tool/outputs/data/...`), which today are written to fixed, unversioned per-LA paths and silently overwritten on every `--save` run. Raw _inputs_ carry version tokens in their filenames (`{pub_date}_v{version}_...`), but outputs (per-LA parquets and the final `clusters_contextual_features_{tolerance_m}m.geojson` consumed by the heat planning tool) carry no release information at all, so there is no way to pin, compare, or roll back a dataset release. Per the task comments and Aidan's confirmation (2026-07-07), the scheme is decided: outputs are written under `{LA_slug}/{YYYYMMDD}` release directories rather than version tokens. The work is to thread that dated path through every write _and_ every inter-stage read, and record the date in the geojson metadata.
 
 ## Relevant files/functions
 
 - `asf_heat_pump_suitability/config/base.yaml` (`output:` section, lines ~110–125) — the six output path templates (`domestic_uprns`, `domestic_uprns_with_features`, `uprns_most_suitable_tech`, `buildings_most_suitable_tech`, `tech_clusters`, `clusters_tech_contextual_info`); these gain the `{LA_slug}/{YYYYMMDD}` segment — defined here, not hard-coded in scripts.
 - `asf_heat_pump_suitability/utils/save_utils.py::save_to_s3` — the single write helper all pipeline saves go through; a natural chokepoint for building the dated release paths.
-- `asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py` — writes the tool-facing geojson (line ~384) and *reads* two earlier outputs via `config["output"]` `.format()` calls (lines ~350, ~361); `create_json_contextual_features_metadata` already stamps "Data file date of creation" — the only versioning that exists today, and it lives inside the file, not the path.
+- `asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py` — writes the tool-facing geojson (line ~384) and _reads_ two earlier outputs via `config["output"]` `.format()` calls (lines ~350, ~361); `create_json_contextual_features_metadata` already stamps "Data file date of creation" — the only versioning that exists today, and it lives inside the file, not the path.
 - `asf_heat_pump_suitability/pipeline/transform/uprns.py` (~line 542), `pipeline/run/add_features.py` (~line 341), `pipeline/transform/decision_tree.py` (~lines 423–449), `pipeline/cluster/cluster.py` (~lines 845–896) — the remaining write sites and cross-stage reads that must all resolve the same release date consistently.
 - `asf_heat_pump_suitability/config/README.md` + `CLAUDE.md` — document the new `{LA_slug}/{YYYYMMDD}` output convention alongside the existing input naming convention (inputs keep their `{pub_date}_v{version}_...` scheme; the two are deliberately different).
 
@@ -51,6 +51,7 @@ Introduce a versioning scheme for the pipeline's output datasets on S3 (`s3://as
    ```
 
    Note the real listing also shows one release already spans multiple days (2–3 Jul) — see Q2's override — and that filenames on S3 don't all match config key names (`..._with_features`, `..._clustered_tech_polygons`).
+
 2. **Where does the release date come from at runtime — auto-derived from the run date, or supplied explicitly?**
    **DECIDED (Aidan, 2026-07-07): run-date default with an explicit override option** (`--release_date` CLI arg). Without the override, a single release would scatter across several `{YYYYMMDD}` directories when stages run on different days (as the listing above shows they do).
 3. **Does the front-end tool need a stable "latest" path, and who owns updating its pointer?**
