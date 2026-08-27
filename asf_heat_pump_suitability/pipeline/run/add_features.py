@@ -273,7 +273,7 @@ if __name__ == "__main__":
     # Add listed building boolean flag
 
     # Load listed buildings geodataframe for relevant nations
-    countries = features_df["country"].unique()
+    countries = features_df["country"].drop_nulls().unique()
     if len(countries) > 1:
         nation = "GB"
     else:
