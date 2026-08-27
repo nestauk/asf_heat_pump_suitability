@@ -60,3 +60,23 @@ def extract_tuple_bucket_prefix(s3_uri: str) -> tuple:
     path = parsed.path.lstrip("/")
     prefix = path.rsplit("/", 1)[0] if "/" in path else ""
     return bucket_name, prefix
+
+
+def get_bool_s3_path_exists(s3_client: boto3.client, s3_bucket: str, path: str) -> bool:
+    """
+    Check whether any object exists in S3 at or under the given path.
+
+    Uses `list_objects_v2` with `MaxKeys=1`, which works for both a folder
+    prefix and an exact file key (unlike `head_object`, which only works for
+    exact keys).
+
+    Args:
+        s3_client (boto3.client): An initialized boto3 S3 client.
+        s3_bucket (str): The name of the S3 bucket.
+        path (str): Exact object key or folder prefix within the bucket.
+
+    Returns:
+        bool: True if at least one object exists at or under the path.
+    """
+    response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=path, MaxKeys=1)
+    return response.get("KeyCount", 0) > 0
