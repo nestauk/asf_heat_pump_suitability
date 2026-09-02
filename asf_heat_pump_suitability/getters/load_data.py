@@ -92,7 +92,8 @@ def load_df_uprn_lookup(
     **kwargs,
 ) -> pl.DataFrame:
     """
-    Load UPRN national statistics lookup for all of GB or a given list of grid squares if specified.
+    Load UPRN national statistics lookup for all of GB or a given list of grid squares if specified. Filter to specified
+    UPRNs if given.
 
     Args:
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded. Default None to load whole GB.
@@ -109,7 +110,7 @@ def load_df_uprn_lookup(
             pl.read_parquet(uri.format(grid_square=grid_square), **kwargs)
             for grid_square in grid_squares
         ]
-        if uprn_filter is not None:
+        if uprn_filter:
             dfs = [df.filter(pl.col("UPRN").is_in(uprn_filter)) for df in dfs]
         return pl.concat(dfs)
     else:  # Load whole of GB
@@ -127,6 +128,8 @@ def load_df_uprn_lookup(
         for file in files:
             print(f"Loading UPRN national statistics lookup file: {file}...")
             df = pl.read_parquet(file, **kwargs)
+            # ruc21ind column has different dtypes in Scotland vs England & Wales because they use a different
+            # naming convention for their categories (int vs str)
             if columns is None or "ruc21ind" in columns:
                 df = df.with_columns(pl.col("ruc21ind").cast(pl.String))
             if uprn_filter is not None:
