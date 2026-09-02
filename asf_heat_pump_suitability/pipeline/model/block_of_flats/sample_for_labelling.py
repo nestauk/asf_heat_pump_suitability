@@ -43,7 +43,7 @@ Examples:
 import argparse
 import polars as pl
 
-from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability import config, PROJECT_DIR
 from asf_heat_pump_suitability.getters import base_getters
 
 BUILDING_CONSTRUCTION_AGE_MAPPING = {
@@ -211,9 +211,12 @@ if __name__ == "__main__":
         layer="building", grid_squares=grid_squares
     )
 
+    # Note: putting this at the top of the script prevents memory overload. The datasets loaded in this `if` statement
+    # can be very large. Therefore, we load and process them first, then delete them before moving on to the rest of the
+    # script.
     if args.map_uprns_to_building:
         print("Generating UPRN to building ID mapping...")
-        all_uprns_df = load_geodata.load_df_osopen_uprn()
+        all_uprns_df = load_geodata.load_df_osopen_uprn(grid_squares=grid_squares)
         all_uprns_gdf = uprns.generate_gdf_uprn_coords(all_uprns_df)
 
         uprn_building_mapping = uprns.map_dict_uprns_to_building_id(
@@ -222,7 +225,9 @@ if __name__ == "__main__":
 
         del all_uprns_gdf, all_uprns_df
         # Save mapping
-        fpath = "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
+        fpath = config["data"]["processed"]["uprn_to_building_id_mapping"].format(
+            local_authorities=local_authorities
+        )
         pl.DataFrame(
             {
                 "UPRN": uprn_building_mapping.keys(),
@@ -273,6 +278,10 @@ if __name__ == "__main__":
     # ADD IMD DECILE DATA
     # ------------------------------------ #
     print("Add IMD decile data...")
+    # Note: a separate Scotland lookup is required here because: the uprns_df contains 2022 Scottish Data Zones for each
+    # UPRN, but the IMD decile data for Scotland is for 2019 DZs. This additional lookup maps postcodes to 2019 DZs, so
+    # is ultimately used to map UPRNs to their 2019 DZs, which can then be mapped to their IMD decile.
+    # This is required because DZs changed between 2019 and 2022.
     scotland_dz_lookup_df = load_df_scotland_postcode_lookup()
     imd_df = load_df_lsoa_imd_decile()
 
@@ -305,7 +314,6 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # MAP UPRNS TO BUILDINGS
     # ------------------------------------ #
-    # Load mapping if not generated
     if not args.map_uprns_to_building:
         print("Loading UPRN to building ID mapping...")
         uprn_building_mapping = pl.read_parquet(
@@ -473,6 +481,8 @@ if __name__ == "__main__":
     )
 
     group_counts = (
+        # Calculates the target sample count (n_to_sample) for each attribute combination.
+        # This will be capped at sample_n (defined above) or the group's total size, whichever is smaller.
         buildings_df.group_by(attributes)
         .agg(pl.len().alias("group_size"))
         .with_columns(
@@ -535,12 +545,18 @@ if __name__ == "__main__":
         how="left",
     )
 
+    # Sample IDs randomly from each combination of attributes
     sampled_ids = (
         buildings_with_quota.with_columns(
-            pl.int_range(pl.len()).shuffle(seed=seed).over(attributes).alias("_rank")
+            # Generates a sequential integer index for all rows in the dataframe from 0 to N-1
+            pl.int_range(pl.len())
+            # Randomly shuffles the row indices independently within each combination of attributes
+            .shuffle(seed=seed).over(attributes)
+            # Assigns the randomised integer index to a temporary '_rank' column
+            .alias("_rank")
         )
-        .filter(pl.col("_rank") < pl.col("n_to_sample"))
-        .select("building_id")
+        # Keep rows where '_rank' is less than 'n_to_sample' - this is the method to identify the sample rows
+        .filter(pl.col("_rank") < pl.col("n_to_sample")).select("building_id")
     )
 
     # Filter population dataset to sample IDs
@@ -558,15 +574,13 @@ if __name__ == "__main__":
     # ------------------------------------ #
     print("Enrich with Google Maps URL...")
     # Convert to 4326 projection and create google maps URL
-    sample_gdf = sample_gdf.merge(
-        sample_gdf.centroid.get_coordinates(),
-        how="left",
-        left_index=True,
-        right_index=True,
-    ).to_crs(epsg=4326)
-    sample_gdf["url"] = sample_gdf.apply(
-        lambda row: f"https://www.google.com/maps/search/?api=1&query={row['y']},{row['x']}",
-        axis=1,
+    sample_gdf = sample_gdf.to_crs(epsg=4326)
+    sample_gdf[["x", "y"]] = sample_gdf.centroid.get_coordinates()
+    sample_gdf["url"] = (
+        "https://www.google.com/maps/search/?api=1&query="
+        + sample_gdf["y"].astype(str)
+        + ","
+        + sample_gdf["x"].astype(str)
     )
 
     # ------------------------------------ #
@@ -577,17 +591,25 @@ if __name__ == "__main__":
     s3 = boto3.resource("s3")
     BUCKET = "asf-local-heat-planning-tool"
     kml = simplekml.Kml()
-    for idx, r in sample_gdf.iterrows():
+    for url, n_flats, n_total, geom in zip(
+        sample_gdf["url"],
+        sample_gdf["n_flats"],
+        sample_gdf["n_total"],
+        sample_gdf["geometry"],
+    ):
         pol = kml.newpolygon(
             name="unlabelled",
-            description=f"Location: {r['url']}\nN flats: {r['n_flats']}\nN total: {r['n_total']}",
-            outerboundaryis=list(r["geometry"].exterior.coords),
+            description=f"Location: {url} -------- N flats: {n_flats} -------- N total: {n_total}",
+            outerboundaryis=list(geom.exterior.coords),
         )
         pol.style.polystyle.color = "9939FF14"
         pol.style.polystyle.outline = 1
     l = len(sample_gdf)
-    fpath = (
-        f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
+    fpath = os.path.join(
+        PROJECT_DIR,
+        "outputs",
+        "data",
+        f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml",
     )
     kml.save(fpath)
     s3.Bucket(BUCKET).upload_file(
