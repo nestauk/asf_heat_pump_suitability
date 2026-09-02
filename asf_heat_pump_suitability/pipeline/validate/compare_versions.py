@@ -279,8 +279,8 @@ def generate_df_tech_counts(
         )
 
     return (
-        tally(df_old, "n_old")
-        .join(tally(df_new, "n_new"), on=TECH_COL, how="full", coalesce=True)
+        tally(df=df_old, alias="n_old")
+        .join(tally(df=df_new, alias="n_new"), on=TECH_COL, how="full", coalesce=True)
         .fill_null(0)
         .with_columns((pl.col("n_new") - pl.col("n_old")).alias("n_delta"))
         .sort(TECH_COL)
@@ -440,11 +440,18 @@ def get_str_stage_output_path(
     dataset = STAGE_OUTPUT_DATASETS[stage]
     try:
         return _get_str_output_path(
-            dataset, local_authority, release_date, check_exists
+            dataset=dataset,
+            local_authority=local_authority,
+            release_date=release_date,
+            check_exists=check_exists,
         )
     except FileNotFoundError:
         matches = s3fs.S3FileSystem().glob(
-            _generate_str_output_glob(dataset, local_authority, release_date)
+            _generate_str_output_glob(
+                dataset=dataset,
+                local_authority=local_authority,
+                release_date=release_date,
+            )
         )
         if len(matches) != 1:
             raise
@@ -468,7 +475,9 @@ def generate_list_release_dates(stage: str, local_authority: str) -> list[str]:
     Returns:
         list[str]: distinct release dates in YYYYMMDD format, oldest first
     """
-    pattern = _generate_str_output_glob(STAGE_OUTPUT_DATASETS[stage], local_authority)
+    pattern = _generate_str_output_glob(
+        dataset=STAGE_OUTPUT_DATASETS[stage], local_authority=local_authority
+    )
     release_dates = set()
     for path in s3fs.S3FileSystem().glob(pattern):
         # The release date is the output file's parent directory in every
@@ -604,7 +613,9 @@ def load_tuple_df_buildings(
             release_date=release_date_new,
             check_exists=True,
         )
-        return load_df_buildings_tech(path_old), load_df_buildings_tech(path_new)
+        return load_df_buildings_tech(path=path_old), load_df_buildings_tech(
+            path=path_new
+        )
     except (OSError, ValueError) as error:
         logging.warning(
             "Building-level output unavailable (%s); its per-tech counts "
@@ -732,7 +743,7 @@ def _generate_str_tech_counts_section(
         return _render_section(
             title, "Skipped: output missing for one or both versions."
         )
-    counts = generate_df_tech_counts(df_old, df_new)
+    counts = generate_df_tech_counts(df_old=df_old, df_new=df_new)
     if counts is None:
         return _render_section(
             title,
@@ -756,7 +767,7 @@ def _generate_str_transitions_section(
 ) -> str:
     """Render the UPRN-level tech transition matrix as a markdown section."""
     title = "Tech-assignment transitions (UPRN-level)"
-    transitions = generate_df_tech_transitions(df_old, df_new)
+    transitions = generate_df_tech_transitions(df_old=df_old, df_new=df_new)
     if transitions is None:
         return _render_section(
             title,
@@ -788,7 +799,9 @@ def _generate_str_transitions_section(
 
 def _generate_str_input_changes_section(manifest_old: dict, manifest_new: dict) -> str:
     """Render the manifest-recorded input version changes as a markdown section."""
-    changes = generate_dict_input_version_changes(manifest_old, manifest_new)
+    changes = generate_dict_input_version_changes(
+        manifest_old=manifest_old, manifest_new=manifest_new
+    )
     lines = []
     if not any(changes.values()):
         lines.append("No recorded input version changes.")
@@ -810,7 +823,9 @@ def _generate_str_commit_log_section(
     commit_old = manifest_old["git_commit"]
     commit_new = manifest_new["git_commit"]
     span = f"`{commit_old[:7]}..{commit_new[:7]}`"
-    commits = generate_list_commit_log(commit_old, commit_new, stage)
+    commits = generate_list_commit_log(
+        commit_old=commit_old, commit_new=commit_new, stage=stage
+    )
     if commits is None:
         lines = [
             "Commit log unavailable: a recorded commit is unknown or not in "
@@ -882,21 +897,31 @@ def generate_str_report(
                 + datetime.now(timezone.utc).isoformat(timespec="seconds"),
             ]
         ),
-        _generate_str_counts_section(generate_dict_count_delta(df_old, df_new)),
-        _generate_str_schema_section(generate_dict_schema_diff(df_old, df_new)),
+        _generate_str_counts_section(
+            counts=generate_dict_count_delta(df_old=df_old, df_new=df_new)
+        ),
+        _generate_str_schema_section(
+            schema_diff=generate_dict_schema_diff(df_old=df_old, df_new=df_new)
+        ),
         _generate_str_churn_section(
             churn=generate_dict_uprn_churn(df_old=df_old, df_new=df_new),
             tolerances=tolerances,
         ),
     ]
     if stage == "decision_tree":
-        sections.append(_generate_str_tech_counts_section(df_old, df_new, "UPRN-level"))
         sections.append(
             _generate_str_tech_counts_section(
-                df_buildings_old, df_buildings_new, "building-level"
+                df_old=df_old, df_new=df_new, level="UPRN-level"
             )
         )
-        sections.append(_generate_str_transitions_section(df_old, df_new))
+        sections.append(
+            _generate_str_tech_counts_section(
+                df_old=df_buildings_old,
+                df_new=df_buildings_new,
+                level="building-level",
+            )
+        )
+        sections.append(_generate_str_transitions_section(df_old=df_old, df_new=df_new))
     if manifest_old is None or manifest_new is None:
         missing_versions = [
             label
@@ -911,9 +936,15 @@ def generate_str_report(
             "sections skipped."
         )
     else:
-        sections.append(_generate_str_input_changes_section(manifest_old, manifest_new))
         sections.append(
-            _generate_str_commit_log_section(manifest_old, manifest_new, stage)
+            _generate_str_input_changes_section(
+                manifest_old=manifest_old, manifest_new=manifest_new
+            )
+        )
+        sections.append(
+            _generate_str_commit_log_section(
+                manifest_old=manifest_old, manifest_new=manifest_new, stage=stage
+            )
         )
     return "\n\n".join(sections) + "\n"
 
@@ -971,7 +1002,7 @@ if __name__ == "__main__":
     local_authority = args.local_authority.lower()
     if args.old_release_date is None:
         release_date_old, release_date_new = get_tuple_default_release_dates(
-            args.stage, local_authority
+            stage=args.stage, local_authority=local_authority
         )
         logging.info(
             "No versions supplied; comparing the latest two: %s vs %s",
@@ -982,23 +1013,31 @@ if __name__ == "__main__":
         release_date_old = save_utils.get_str_release_date(args.old_release_date)
         release_date_new = save_utils.get_str_release_date(args.new_release_date)
     path_old = get_str_stage_output_path(
-        args.stage, local_authority, release_date_old, check_exists=True
+        stage=args.stage,
+        local_authority=local_authority,
+        release_date=release_date_old,
+        check_exists=True,
     )
     path_new = get_str_stage_output_path(
-        args.stage, local_authority, release_date_new, check_exists=True
+        stage=args.stage,
+        local_authority=local_authority,
+        release_date=release_date_new,
+        check_exists=True,
     )
     df_old = load_transform_df_stage_output(path_old)
     df_new = load_transform_df_stage_output(path_new)
     df_buildings_old = df_buildings_new = None
     if args.stage == "decision_tree":
         df_buildings_old, df_buildings_new = load_tuple_df_buildings(
-            local_authority, release_date_old, release_date_new
+            local_authority=local_authority,
+            release_date_old=release_date_old,
+            release_date_new=release_date_new,
         )
     report = generate_str_report(
-        df_old,
-        df_new,
-        load_dict_manifest(path_old),
-        load_dict_manifest(path_new),
+        df_old=df_old,
+        df_new=df_new,
+        manifest_old=load_dict_manifest(output_path=path_old),
+        manifest_new=load_dict_manifest(output_path=path_new),
         stage=args.stage,
         local_authority=local_authority,
         trigger=args.trigger,
@@ -1016,7 +1055,7 @@ if __name__ == "__main__":
     )
     report_path.write_text(report)
 
-    counts = generate_dict_count_delta(df_old, df_new)
+    counts = generate_dict_count_delta(df_old=df_old, df_new=df_new)
     logging.info(
         "Rows: %s -> %s (diff: %+d)",
         counts["rows_old"],
