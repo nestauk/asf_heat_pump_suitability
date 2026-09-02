@@ -183,6 +183,8 @@ class TestGenerateDictUprnChurn:
             [df_old, pl.DataFrame({"UPRN": [None, None]}, schema={"UPRN": pl.Int64})],
             how="diagonal",
         )
+        # Keep 2 of the 4 real UPRNs, so genuine removals exist alongside
+        # the nulls and the two effects can be told apart in the counts.
         df_new = df_old.head(2)
         churn = compare_versions.generate_dict_uprn_churn(df_old_nulled, df_new)
         assert (
@@ -239,13 +241,14 @@ class TestGenerateDfTechTransitions:
     def test_identical_versions_only_have_diagonal_transitions(
         self, df_old, df_new_identical
     ):
-        """No drift means every UPRN keeps its tech (diagonal matrix only)."""
+        """No drift means every UPRN keeps its tech, so every matrix entry
+        has the same old and new tech."""
         transitions = compare_versions.generate_df_tech_transitions(
             df_old, df_new_identical
         )
         assert transitions.filter(
             pl.col("assigned_tech_old") != pl.col("assigned_tech_new")
-        ).is_empty(), "no drift means no off-diagonal transitions"
+        ).is_empty(), "no drift means no UPRN may change tech"
         assert (
             transitions["n_uprns"].sum() == 4
         ), "every retained UPRN must appear exactly once in the matrix"
@@ -335,7 +338,7 @@ class TestGenerateDfTechCounts:
             "not vanish from the table"
         )
         assert by_tech["Networked heat pump"]["n_old"] == 0, (
-            "a tech new in the new version must count 0 in the old, "
+            "a new tech in the new version must count 0 in the old, "
             "not vanish from the table"
         )
         assert (
@@ -438,7 +441,8 @@ class TestStageModulePaths:
         ), "commit-log scoping must cover exactly the manifest's curated stages"
 
     def test_every_curated_path_exists_in_the_repo(self):
-        """A renamed module must break this test, not silently empty the log."""
+        """These are repo file paths (used to filter git log), not S3 paths.
+        A renamed module must break this test, not silently empty the log."""
         for stage, paths in compare_versions.STAGE_MODULE_PATHS.items():
             for path in paths:
                 assert (
@@ -452,6 +456,9 @@ class TestGenerateListCommitLog:
     def test_scopes_git_log_to_the_stages_module_paths(self, mocker):
         """git log runs over old..new restricted to the stage's curated
         paths, after confirming old is an ancestor of new."""
+        # The function makes two git calls. The side_effect list answers
+        # them in order: the ancestor check passes, then git log returns two
+        # canned commit lines.
         run = mocker.patch(
             "subprocess.run",
             side_effect=[
@@ -474,6 +481,7 @@ class TestGenerateListCommitLog:
         assert (
             f"{'a' * 40}..{'b' * 40}" in command
         ), "git log must be scoped to the old..new commit range"
+        # Everything after git's "--" separator is the path filter.
         paths = command[command.index("--") + 1 :]
         assert (
             paths == compare_versions.STAGE_MODULE_PATHS["decision_tree"]
@@ -501,6 +509,8 @@ class TestGenerateListCommitLog:
         new (e.g. old came from a since-rebased branch); this must degrade
         to None rather than return an incomplete log, and must not run
         `git log` at all once the ancestor check has failed."""
+        # A single raising side_effect: the very first git call (the
+        # ancestor check) fails.
         run = mocker.patch(
             "subprocess.run",
             side_effect=subprocess.CalledProcessError(1, "git merge-base"),
@@ -512,8 +522,11 @@ class TestGenerateListCommitLog:
         run.assert_called_once()
 
     def test_commits_missing_from_local_history_return_none(self, mocker):
-        """git log itself failing after a successful ancestor check (e.g. a
-        shallow clone missing older history) degrades to None."""
+        """The second git call (git log itself) failing after a successful
+        ancestor check, e.g. a shallow clone missing older history, degrades
+        to None. This pins the second run_git_or_none call in
+        generate_list_commit_log."""
+        # side_effect in call order: ancestor check passes, git log raises.
         run = mocker.patch(
             "subprocess.run",
             side_effect=[
@@ -569,6 +582,7 @@ class TestGetStrStageOutputPath:
             "get_str_output_path",
             side_effect=FileNotFoundError("No file found"),
         )
+        # Replace the S3 client so .glob returns a canned listing; no AWS calls.
         fs = mocker.patch("s3fs.S3FileSystem").return_value
         fs.glob.return_value = [
             "bucket/outputs/data/plymouth/20260601/"
@@ -592,6 +606,7 @@ class TestGetStrStageOutputPath:
             "get_str_output_path",
             side_effect=FileNotFoundError("No file found"),
         )
+        # Replace the S3 client so .glob returns a canned listing; no AWS calls.
         fs = mocker.patch("s3fs.S3FileSystem").return_value
         fs.glob.return_value = []
         with pytest.raises(FileNotFoundError):
@@ -609,6 +624,7 @@ class TestGenerateListReleaseDates:
     def test_lists_dated_versions_sorted_oldest_first(self, mocker):
         """Release dates come back sorted oldest first, whatever order S3
         lists them in (YYYYMMDD sorts chronologically as strings)."""
+        # Replace the S3 client so .glob returns a canned listing; no AWS calls.
         fs = mocker.patch("s3fs.S3FileSystem").return_value
         fs.glob.return_value = [
             "bucket/outputs/data/plymouth/20260722/plymouth_uprns_most_suitable_tech.parquet",
@@ -625,6 +641,7 @@ class TestGenerateListReleaseDates:
     def test_skips_directories_that_are_not_release_dates(self, mocker):
         """A stray non-date directory (e.g. a manual 'latest' copy) must be
         skipped, not returned as a version or crash date parsing."""
+        # Replace the S3 client so .glob returns a canned listing; no AWS calls.
         fs = mocker.patch("s3fs.S3FileSystem").return_value
         fs.glob.return_value = [
             "bucket/outputs/data/plymouth/latest/plymouth_uprns_most_suitable_tech.parquet",
@@ -640,6 +657,7 @@ class TestGenerateListReleaseDates:
     def test_glob_pattern_fixes_stage_and_local_authority(self, mocker):
         """The S3 glob fixes stage and LA and wildcards the dated directory,
         so another LA's versions can't leak into the list."""
+        # Replace the S3 client so .glob returns a canned listing; no AWS calls.
         fs = mocker.patch("s3fs.S3FileSystem").return_value
         fs.glob.return_value = []
         compare_versions.generate_list_release_dates("decision_tree", "plymouth")
@@ -652,6 +670,7 @@ class TestGenerateListReleaseDates:
         """The contextual-features filename embeds the clustering tolerance;
         discovery must wildcard it so versions saved under a previous
         tolerance are still found."""
+        # Replace the S3 client so .glob returns a canned listing; no AWS calls.
         fs = mocker.patch("s3fs.S3FileSystem").return_value
         fs.glob.return_value = []
         compare_versions.generate_list_release_dates(
@@ -767,8 +786,9 @@ class TestGenerateStrReport:
     def test_transition_matrix_only_for_the_decision_tree_stage(
         self, df_old, df_new_churned, manifests, mocker
     ):
-        """The tech transition matrix is UPRN-level, so only the decision-tree
-        stage's report includes it."""
+        """Only the decision-tree stage compares the per-UPRN output, so only
+        its report carries the transition matrix (each retained UPRN's old
+        tech against its new tech)."""
         mocker.patch.object(
             compare_versions, "generate_list_commit_log", return_value=[]
         )
@@ -978,7 +998,9 @@ class TestLoadTransformDfStageOutput:
             {"UPRN": [1, 2], "assigned_tech": ["Individual solution"] * 2},
             geometry=[Point(0, 0), Point(1, 1)],
             crs="EPSG:27700",
-        ).to_parquet(path)
+        ).to_parquet(
+            path
+        )  # tmp_path is pytest's throwaway directory
         df = compare_versions.load_transform_df_stage_output(str(path))
         assert "geometry" not in df.columns, "geoarrow columns must be dropped"
         assert df["UPRN"].to_list() == [1, 2], "tabular columns must survive the drop"
@@ -992,9 +1014,11 @@ class TestLoadTransformDfStageOutput:
         assert df.height == 2, "plain parquet rows must load unchanged"
 
     def test_zero_feature_geojson_degrades_to_an_empty_dataframe(self, mocker):
-        """A geojson with every feature filtered out (e.g. compute_contextual
-        features' documented empty-cluster temporary fix) must not crash the
-        comparison; it degrades to an empty output instead."""
+        """The final stage currently drops clusters with no UPRNs, so a
+        small area can produce a geojson with zero features. That must not
+        crash the comparison; it degrades to an empty output instead."""
+        # geopandas raises this ValueError when a geojson has no features;
+        # the mock reproduces that exact failure.
         mocker.patch(
             "asf_heat_pump_suitability.getters.base_getters.load_gdf_from_s3_geojson",
             side_effect=ValueError(
@@ -1033,6 +1057,12 @@ class TestLoadDfBuildingsTech:
         assert (
             df.is_empty() and "assigned_tech" not in df.columns
         ), "a missing tech column must load as empty, not raise"
+        section = compare_versions._generate_str_tech_counts_section(
+            df_old=df, df_new=df, level="building-level"
+        )
+        assert (
+            "Skipped" in section and "assigned_tech" in section
+        ), "the report must note the missing column rather than render a table"
 
 
 class TestLoadTupleDfBuildings:
