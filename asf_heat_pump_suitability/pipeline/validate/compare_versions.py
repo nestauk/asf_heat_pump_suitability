@@ -262,6 +262,20 @@ def generate_df_tech_transitions(
     )
 
 
+def _generate_df_tech_tally(df: pl.DataFrame, alias: str) -> pl.DataFrame:
+    """
+    Count rows per tech assignment in one version of an output.
+
+    Args:
+        df: one version of a decision-tree output
+        alias: name for the count column, e.g. "n_old"
+
+    Returns:
+        pl.DataFrame: one row per tech with its row count
+    """
+    return df.group_by(_expr_tech_labelled()).agg(pl.len().cast(pl.Int64).alias(alias))
+
+
 def generate_df_tech_counts(
     df_old: pl.DataFrame, df_new: pl.DataFrame
 ) -> pl.DataFrame | None:
@@ -285,18 +299,17 @@ def generate_df_tech_counts(
     """
     if TECH_COL not in df_old.columns or TECH_COL not in df_new.columns:
         return None
-
-    def tally(df: pl.DataFrame, alias: str) -> pl.DataFrame:
-        return df.group_by(_expr_tech_labelled()).agg(
-            pl.len().cast(pl.Int64).alias(alias)
-        )
-
     return (
-        tally(df=df_old, alias="n_old")
+        _generate_df_tech_tally(df=df_old, alias="n_old")
         # A full join returns both sides' tech column; coalesce=True merges
         # that pair into one column, taking whichever side is not null. It
         # only affects the join key.
-        .join(tally(df=df_new, alias="n_new"), on=TECH_COL, how="full", coalesce=True)
+        .join(
+            _generate_df_tech_tally(df=df_new, alias="n_new"),
+            on=TECH_COL,
+            how="full",
+            coalesce=True,
+        )
         .fill_null(0)
         .with_columns((pl.col("n_new") - pl.col("n_old")).alias("n_delta"))
         .sort(TECH_COL)
