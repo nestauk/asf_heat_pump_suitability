@@ -8,7 +8,7 @@ python asf_heat_pump_suitability/pipeline/cluster/cluster.py
 
 Required args:
 --local_authorities to specify which local authority / authorities to run the script for
---save - Set to save output GeoDataFrame to S3.
+--save - Set to save the clusters and anchor loads GeoDataFrames to S3.
 
 Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
 save outputs to. Defaults to running the pipeline using today's date. Multi-day runs
@@ -958,20 +958,31 @@ if __name__ == "__main__":
         local_authorities_slug=local_authority_dict["url_slug"],
     )
 
+    # Anchors in the local authority, saved so the contextual-features stage draws the
+    # same footprints and IDs that the clusters reference
+    anchors_gdf = combined_anchor_gdf[
+        combined_anchor_gdf.intersects(boundary_gdf.union_all())
+    ][["anchor_id", "geometry"]]
+
     if args.save:
-        output_path = save_utils.get_str_output_path(
-            "tech_clusters",
-            release_date=release_date,
-            local_authorities=local_authority_dict["url_slug"],
-        )
-        save_utils.save_to_s3(clusters_gdf, output_path)
-        manifest_utils.generate_and_save_run_manifest_to_s3(
-            output_path,
-            stage="cluster",
-            local_authority=local_authority_dict["url_slug"],
-            row_count=len(clusters_gdf),
-            params={
-                "local_authorities": args.local_authorities,
-                "release_date": release_date,
-            },
-        )
+        run_params = {
+            "local_authorities": args.local_authorities,
+            "release_date": release_date,
+        }
+        for dataset, output_gdf in [
+            ("tech_clusters", clusters_gdf),
+            ("anchor_loads", anchors_gdf),
+        ]:
+            output_path = save_utils.get_str_output_path(
+                dataset,
+                release_date=release_date,
+                local_authorities=local_authority_dict["url_slug"],
+            )
+            save_utils.save_to_s3(output_gdf, output_path)
+            manifest_utils.generate_and_save_run_manifest_to_s3(
+                output_path,
+                stage="cluster",
+                local_authority=local_authority_dict["url_slug"],
+                row_count=len(output_gdf),
+                params=run_params,
+            )
