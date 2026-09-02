@@ -781,23 +781,32 @@ def reassign_gdf_near_anchor_properties(
 ) -> gpd.GeoDataFrame:
     """
     Reassign building tech type to communal if within a given radius of an anchor load property, if assigned N-GSHP by the decision tree.
-    Buildings getting their technology reassigned due to anchor-proximity get `communal_origin` updated to reflect that; buildings already communal keep their original value of `communal_origin`.
+    Buildings getting their technology reassigned due to anchor-proximity get `communal_origin` updated to reflect that,
+    and the `anchor_id` of their nearest anchor; buildings already communal keep their original value of `communal_origin`.
+    A building equidistant from several anchors is linked to the lowest `anchor_id`.
 
     Args:
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types and `communal_origin`.
-        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_id`
         radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' if they were assigned N-GSHP by the decision tree.
     Returns:
-        gpd.GeoDataFrame: dataframe with `assigned_tech` column now reading communal if property is in radius of an anchor property, and was assigned N-GSHP by the decision tree.
+        gpd.GeoDataFrame: one row per building, with `assigned_tech` now reading communal if the building is in
+        radius of an anchor property and was assigned N-GSHP by the decision tree, and `anchor_id` (null unless reassigned).
     """
-    # Spatial join to find nearest anchor for every building
-
-    tech_gdf = tech_gdf.sjoin_nearest(
-        combined_anchor_gdf[["geometry"]],
-        how="left",
-        max_distance=radius,
-        distance_col="distance_m",
-    ).drop("index_right", axis=1)
+    # Spatial join to find nearest anchor for every building. Equidistant anchors give
+    # one row per tie, so keep the lowest anchor_id per building (index restored after).
+    tech_gdf = (
+        tech_gdf.reset_index(drop=True)
+        .sjoin_nearest(
+            combined_anchor_gdf[["anchor_id", "geometry"]],
+            how="left",
+            max_distance=radius,
+            distance_col="distance_m",
+        )
+        .drop("index_right", axis=1)
+        .sort_values("anchor_id", kind="stable")
+    )
+    tech_gdf = tech_gdf[~tech_gdf.index.duplicated(keep="first")].sort_index()
 
     # distance_m column now reads a number (distance from anchor) for all buildings within radius of anchor, and NaN for all outside of that radius
     # if distance column is not NaN (i.e. building is within the radius of an anchor), reassign tech type according to the map
@@ -816,6 +825,8 @@ def reassign_gdf_near_anchor_properties(
         COMMUNAL_ORIGIN["anchor_proximity"],
         tech_gdf["communal_origin"],
     )
+    # Only reassigned buildings keep the anchor's identity
+    tech_gdf["anchor_id"] = np.where(newly_communal, tech_gdf["anchor_id"], None)
     # add column with True if near anchor, False if not
     tech_gdf[f"within_{radius}m_from_anchor_load"] = np.where(
         (tech_gdf["distance_m"]).notna(), True, False
