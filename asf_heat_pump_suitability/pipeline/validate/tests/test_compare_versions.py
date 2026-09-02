@@ -220,15 +220,15 @@ class TestGetDictTolerances:
     """Tests for `get_dict_tolerances`."""
 
     @pytest.mark.parametrize("trigger", ["methodology_change", "input_release"])
-    def test_each_trigger_rubric_has_a_removed_uprn_tolerance(self, trigger):
-        """Both rubrics are configured in base.yaml with the churn tolerance."""
+    def test_each_trigger_has_a_removed_uprn_tolerance(self, trigger):
+        """Both triggers are configured in base.yaml with the churn tolerance."""
         tolerances = compare_versions.get_dict_tolerances(trigger)
         assert isinstance(
             tolerances["max_removed_uprn_share"], float
-        ), "each rubric must configure a numeric removed-UPRN tolerance"
+        ), "each trigger must configure a numeric removed-UPRN tolerance"
 
     def test_unknown_trigger_raises_keyerror(self):
-        """A trigger without a configured rubric fails loudly."""
+        """A trigger without configured tolerances fails loudly."""
         with pytest.raises(KeyError):
             compare_versions.get_dict_tolerances("vibes")
 
@@ -733,15 +733,15 @@ def generate_report(df_old, df_new, manifest_old, manifest_new, **overrides):
 class TestGenerateStrReport:
     """Tests for `generate_str_report`."""
 
-    def test_states_the_trigger_rubric_and_versions(
+    def test_states_the_trigger_and_versions(
         self, df_old, df_new_identical, manifests, mocker
     ):
-        """The report names both versions and the rubric it was read against."""
+        """The report names both versions and the trigger it was checked against."""
         mocker.patch.object(
             compare_versions, "generate_list_commit_log", return_value=[]
         )
         report = generate_report(df_old, df_new_identical, *manifests)
-        assert "methodology_change" in report, "the report must name its rubric"
+        assert "methodology_change" in report, "the report must name its trigger"
         assert "20260601" in report, "the report must name the old version"
         assert "20260722" in report, "the report must name the new version"
 
@@ -891,23 +891,23 @@ class TestGenerateStrReport:
             "was added as new UPRNs, above" in report
         ), "the warning must name the UPRN gain specifically"
 
-    def test_omitted_trigger_reports_raw_numbers_without_rubric(
+    def test_omitted_trigger_reports_numbers_without_tolerance_checks(
         self, df_old, manifests, mocker
     ):
-        """With no trigger there is no rubric to read against: the report
-        must carry no tolerance warnings even for churn that would breach
-        every configured rubric, and must say the trigger was not supplied."""
+        """With no trigger there are no tolerances to check against: the
+        report must carry no warnings even for churn that would breach every
+        configured tolerance, and must say the trigger was not supplied."""
         mocker.patch.object(
             compare_versions, "generate_list_commit_log", return_value=[]
         )
-        df_new = df_old.head(1)  # 75% UPRN loss breaches both rubrics
+        df_new = df_old.head(1)  # 75% UPRN loss breaches both tolerances
         report = generate_report(df_old, df_new, *manifests, trigger=None)
         assert (
             "WARNING" not in report
-        ), "no trigger means no rubric, so no tolerance warnings may appear"
+        ), "no trigger means no tolerances, so no warnings may appear"
         assert (
-            "read against" not in report
-        ), "the report must not claim a rubric was applied when none was supplied"
+            "Numbers are checked against" not in report
+        ), "the report must not claim tolerances were applied without a trigger"
         assert (
             "not supplied" in report
         ), "the report must state that no trigger was supplied"

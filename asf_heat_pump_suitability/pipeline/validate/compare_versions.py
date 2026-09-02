@@ -1,19 +1,21 @@
 """
 Compare two dated versions of a pipeline stage output for one local authority.
 
-Reports row/UPRN count deltas, schema diff, UPRN churn, per-tech counts and
-the tech-assignment transition matrix (decision-tree stage), and a
-module-scoped commit log between the two versions' recorded commits. With a
---trigger, checks are read against that rubric's tolerances; without one, the
-report presents raw numbers only. Writes a local markdown report and logs a
-console summary.
+The report covers row and UPRN counts, schema changes, UPRN churn, per-tech
+counts and the tech transition matrix (decision tree stage), and the commits
+that touched the stage's code between the two versions.
 
-Usage (compare the latest two versions, raw numbers only):
+Pass --trigger methodology_change or --trigger input_release to check the
+numbers against that situation's tolerances. Leave it out to get the numbers
+with no judgement applied. Writes a local markdown report and logs a console
+summary.
+
+Usage (compare the latest two versions, no tolerance checks):
 python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
     --stage decision_tree \
     --local_authority plymouth
 
-Usage (explicit versions, read against a rubric):
+Usage (explicit versions, checked against a trigger's tolerances):
 python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
     --stage decision_tree \
     --local_authority plymouth \
@@ -49,7 +51,10 @@ TOLERANCES = config["compare_versions"]["tolerances"]
 
 def get_dict_tolerances(trigger: str) -> dict:
     """
-    Get the tolerances for a comparison trigger's rubric from base.yaml.
+    Get the tolerance settings for a comparison trigger from base.yaml.
+
+    This exists instead of a plain dict lookup so that a mistyped trigger
+    fails with an error naming the valid options.
 
     Args:
         trigger: why the comparison is being run, e.g. "methodology_change"
@@ -58,13 +63,13 @@ def get_dict_tolerances(trigger: str) -> dict:
         dict: tolerance name to value
 
     Raises:
-        KeyError: if no rubric is configured for the trigger
+        KeyError: if the trigger has no tolerances configured
     """
     try:
         return TOLERANCES[trigger]
     except KeyError as error:
         raise KeyError(
-            f"No tolerance rubric configured for trigger '{trigger}'; expected "
+            f"No tolerances configured for trigger '{trigger}'; expected "
             f"one of {sorted(TOLERANCES)} in config['compare_versions']"
         ) from error
 
@@ -123,22 +128,23 @@ def generate_dict_schema_diff(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dic
     }
 
 
-def _expr_uprn_canonical() -> pl.Expr:
+def _expr_uprn_standardised() -> pl.Expr:
     """
-    Cast the UPRN column to a canonical string, safe against a numeric
-    dtype mismatch between versions (e.g. one side upcast to Float64 by a
-    pandas/geopandas round-trip). Going via Float64 then Int64 first means
-    an Int64 123 and a Float64 123.0 both land on the string "123", instead
-    of "123" vs "123.0" reading as churn.
+    Cast the UPRN column to one standard string form, so the same UPRN
+    always compares equal even when the two versions store it as different
+    numeric types (e.g. one side upcast to Float64 by a pandas round-trip).
+    Casting via Float64 then Int64 means an Int64 123 and a Float64 123.0
+    both become the string "123"; a direct string cast would give "123" and
+    "123.0", which would wrongly count as one removed and one added UPRN.
     """
     return pl.col(UPRN_COL).cast(pl.Float64).cast(pl.Int64).cast(pl.Utf8)
 
 
-def _expr_tech_canonical() -> pl.Expr:
+def _expr_tech_labelled() -> pl.Expr:
     """
-    The tech-assignment column with nulls as a regular report label, so the
-    counts table and the transition matrix cannot diverge on how a null
-    tech is presented.
+    The tech-assignment column with nulls replaced by the "(null)" label.
+    The counts table and the transition matrix both use this, so a null
+    tech is always shown the same way in the report.
     """
     return pl.col(TECH_COL).fill_null(NULL_TECH_LABEL)
 
@@ -147,8 +153,8 @@ def generate_dict_uprn_churn(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict
     """
     Count UPRNs added, removed and retained between two versions of an output.
 
-    UPRNs are compared as canonical strings so a dtype change between
-    versions does not read as full churn. Null UPRNs are excluded from the
+    UPRNs are compared in one standard string form, so a change of storage
+    type between versions is not mistaken for churn. Null UPRNs are excluded from the
     churn sets (any number of them would collapse to one set element and
     silently undercount) and reported as their own counts instead.
 
@@ -167,10 +173,16 @@ def generate_dict_uprn_churn(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict
     # Null UPRNs are counted separately below; drop them here so they cannot
     # hide in the sets (any number of nulls would collapse to one element).
     uprns_old = set(
-        df_old.drop_nulls(UPRN_COL).select(_expr_uprn_canonical()).to_series().to_list()
+        df_old.drop_nulls(UPRN_COL)
+        .select(_expr_uprn_standardised())
+        .to_series()
+        .to_list()
     )
     uprns_new = set(
-        df_new.drop_nulls(UPRN_COL).select(_expr_uprn_canonical()).to_series().to_list()
+        df_new.drop_nulls(UPRN_COL)
+        .select(_expr_uprn_standardised())
+        .to_series()
+        .to_list()
     )
     n_added = len(uprns_new - uprns_old)
     n_removed = len(uprns_old - uprns_new)
@@ -215,8 +227,9 @@ def generate_df_tech_transitions(
     """
     Count tech-assignment transitions for UPRNs present in both versions.
 
-    Null tech assignments are labelled "(null)" so they appear as a regular
-    matrix row/column. Each version is deduplicated on UPRN first, so a
+    Real outputs can contain UPRNs with no tech assignment (e.g. a UPRN
+    that never matched a building), so nulls are labelled "(null)" and shown
+    as a regular matrix row/column rather than treated as errors. Each version is deduplicated on UPRN first, so a
     duplicate UPRN (a data-quality regression, not expected but not
     prevented upstream either) can't cross-product into inflated counts —
     the count/churn checks already flag a rows-vs-UPRNs mismatch when one
@@ -234,12 +247,12 @@ def generate_df_tech_transitions(
     if TECH_COL not in df_old.columns or TECH_COL not in df_new.columns:
         return None
     old = df_old.select(
-        _expr_uprn_canonical(),
-        _expr_tech_canonical().alias("assigned_tech_old"),
+        _expr_uprn_standardised(),
+        _expr_tech_labelled().alias("assigned_tech_old"),
     ).unique(subset=[UPRN_COL], keep="first")
     new = df_new.select(
-        _expr_uprn_canonical(),
-        _expr_tech_canonical().alias("assigned_tech_new"),
+        _expr_uprn_standardised(),
+        _expr_tech_labelled().alias("assigned_tech_new"),
     ).unique(subset=[UPRN_COL], keep="first")
     return (
         old.join(new, on=UPRN_COL, how="inner")
@@ -274,12 +287,15 @@ def generate_df_tech_counts(
         return None
 
     def tally(df: pl.DataFrame, alias: str) -> pl.DataFrame:
-        return df.group_by(_expr_tech_canonical()).agg(
+        return df.group_by(_expr_tech_labelled()).agg(
             pl.len().cast(pl.Int64).alias(alias)
         )
 
     return (
         tally(df=df_old, alias="n_old")
+        # A full join returns both sides' tech column; coalesce=True merges
+        # that pair into one column, taking whichever side is not null. It
+        # only affects the join key.
         .join(tally(df=df_new, alias="n_new"), on=TECH_COL, how="full", coalesce=True)
         .fill_null(0)
         .with_columns((pl.col("n_new") - pl.col("n_old")).alias("n_delta"))
@@ -309,15 +325,16 @@ def load_dict_manifest(output_path: str) -> dict | None:
 
 def generate_dict_input_version_changes(manifest_old: dict, manifest_new: dict) -> dict:
     """
-    Diff the input dataset versions recorded in two run manifests.
+    Compare the input dataset versions recorded in two run manifests.
 
     Args:
         manifest_old: run manifest of the older output version
         manifest_new: run manifest of the newer output version
 
     Returns:
-        dict: "changed" maps input key to an (old, new) path pair; "added"
-            and "removed" map inputs recorded by only one manifest to their path
+        dict: "changed" maps an input key to its (old, new) paths. "added"
+            and "removed" hold the inputs that only one manifest records,
+            each mapped to its path.
     """
     versions_old = manifest_old["input_versions"]
     versions_new = manifest_new["input_versions"]
@@ -345,13 +362,16 @@ def generate_list_commit_log(
     Args:
         commit_old: git commit recorded in the older version's manifest
         commit_new: git commit recorded in the newer version's manifest
-        stage: pipeline stage whose curated `STAGE_MODULE_PATHS` scope the log
+        stage: pipeline stage. Its entry in `STAGE_MODULE_PATHS` decides
+            which files the log covers.
 
     Returns:
-        list[str]: one "short-hash subject" line per commit, or None when a
-            recorded commit is the "unknown" sentinel, absent from local git
-            history (e.g. an unfetched branch), or not an ancestor of the
-            newer commit (`old..new` would silently omit its side's commits)
+        list[str]: one line per commit ("short-hash subject"). An empty list
+            means no commit in the range touched this stage's files. None
+            means the log could not be built, because a recorded commit is
+            unknown, missing from local git history, or not an ancestor of
+            the newer commit (git's `old..new` range would silently drop
+            commits in that case).
     """
     if manifest_utils.UNKNOWN_GIT_COMMIT in (commit_old, commit_new):
         logging.warning("A recorded commit is unknown; cannot build a commit log.")
@@ -388,8 +408,22 @@ def generate_list_commit_log(
 def _get_str_output_path(
     dataset: str, local_authority: str, release_date: str, check_exists: bool
 ) -> str:
-    """Build an output dataset's exact dated S3 path (single site for the
-    template format kwargs; save_utils validates the date)."""
+    """
+    Build the exact dated S3 path of one output dataset.
+
+    All six output path templates share the same placeholders, and this is
+    the one place that fills them, so a new placeholder means one edit.
+    `save_utils` validates the date and can check the file exists.
+
+    Args:
+        dataset: key of the dataset in `config["output"]["dataset"]`
+        local_authority: local authority slug used in output paths
+        release_date: dated version folder in YYYYMMDD format
+        check_exists: if True, raise when no file exists at the path
+
+    Returns:
+        str: S3 path of that dataset for that version
+    """
     return save_utils.get_str_output_path(
         dataset,
         release_date=release_date,
@@ -403,9 +437,21 @@ def _get_str_output_path(
 def _generate_str_output_glob(
     dataset: str, local_authority: str, release_date: str = "*"
 ) -> str:
-    """Build an S3 glob over an output dataset's path template, wildcarding
-    the dated directory (unless given) and the clustering tolerance — so
-    versions saved under a previous tolerance stay discoverable."""
+    """
+    Build an S3 glob pattern over one output dataset's path template.
+
+    The dated directory (unless one is given) and the clustering tolerance
+    are wildcards, so versions saved under a previous tolerance value are
+    still found.
+
+    Args:
+        dataset: key of the dataset in `config["output"]["dataset"]`
+        local_authority: local authority slug used in output paths
+        release_date: dated version folder, or "*" (default) for all versions
+
+    Returns:
+        str: pattern for `s3fs.S3FileSystem().glob`
+    """
     return config["output"]["dataset"][dataset].format(
         release_date=release_date,
         local_authority=local_authority,
@@ -423,10 +469,10 @@ def get_str_stage_output_path(
     """
     Build the S3 path of the output a stage's comparison reads.
 
-    The contextual-features filename embeds the clustering tolerance; when
-    `check_exists` finds nothing under the current config tolerance, a
-    version saved under a previous tolerance is resolved by glob, so past
-    releases stay comparable across tolerance changes.
+    The final stage's filename includes the clustering tolerance from
+    config. If no file exists under the current tolerance value, a version
+    saved under a previous value is found by glob instead, so old releases
+    stay comparable after the tolerance changes.
 
     Args:
         stage: pipeline stage, a key of `STAGE_OUTPUT_DATASETS`
@@ -480,13 +526,15 @@ def generate_list_release_dates(stage: str, local_authority: str) -> list[str]:
     )
     release_dates = set()
     for path in s3fs.S3FileSystem().glob(pattern):
-        # The release date is the output file's parent directory in every
-        # output path template.
+        # The release date is the file's parent directory, e.g. "20260810"
+        # in .../east_lothian/20260810/east_lothian_domestic_uprns.parquet.
         segment = path.rsplit("/", 2)[-2]
         try:
+            # Validates the directory name is a real date, so a stray folder
+            # such as "latest" is skipped rather than listed as a version.
             release_dates.add(save_utils.get_str_release_date(segment))
         except ValueError:
-            continue  # not a dated version directory
+            continue
     return sorted(release_dates)
 
 
@@ -506,7 +554,9 @@ def get_tuple_default_release_dates(
     Raises:
         FileNotFoundError: when fewer than two dated versions exist
     """
-    release_dates = generate_list_release_dates(stage, local_authority)
+    release_dates = generate_list_release_dates(
+        stage=stage, local_authority=local_authority
+    )
     if len(release_dates) < 2:
         raise FileNotFoundError(
             f"Found {len(release_dates)} dated version(s) of {stage} for "
@@ -537,6 +587,9 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
     """
     if path.endswith(".parquet"):
         schema = pq.read_schema(path)
+        # Keep the columns polars can read: geoparquet marks geometry columns
+        # with geoarrow metadata, and those are skipped. The checks here are
+        # tabular, and skipping geometry also avoids downloading it.
         tabular = [
             field.name
             for field in schema
@@ -553,6 +606,9 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
             # this is protection for future geometry checks, not this report.
             gdf = geo_utils.verify_gdf_crs(gdf, target_crs="EPSG:4326")
         except ValueError:
+            # The final stage currently drops clusters with no UPRNs, so a
+            # small local authority can produce a geojson with zero features,
+            # which geopandas refuses to read.
             logging.warning("No features in geojson at %s; comparing as empty.", path)
             return pl.DataFrame()
         return pl.from_pandas(gdf.drop(columns="geometry"))
@@ -563,8 +619,8 @@ def load_df_buildings_tech(path: str) -> pl.DataFrame:
     """
     Load only the tech-assignment column of a building-level output.
 
-    The building-level output feeds the per-tech counts alone, so a single
-    column is fetched rather than the full parquet. A version without the
+    The building-level output is only used for the per-tech counts, so only
+    that column is fetched rather than the full file. A version without the
     column loads as an empty frame, which the counts section reports as a
     missing column.
 
@@ -631,7 +687,13 @@ def _render_section(title: str, *body: str) -> str:
 
 
 def _generate_str_counts_section(counts: dict) -> str:
-    """Render the row/UPRN count delta as a markdown section."""
+    """
+    Render the row and UPRN counts as a markdown section.
+
+    Args:
+        counts: as returned by `generate_dict_count_delta` (rows_old,
+            rows_new, rows_delta and the uprns_* equivalents)
+    """
     lines = [
         "| Metric | Old | New | Delta |",
         "| --- | --- | --- | --- |",
@@ -651,7 +713,13 @@ def _generate_str_counts_section(counts: dict) -> str:
 
 
 def _generate_str_schema_section(schema_diff: dict) -> str:
-    """Render the schema diff as a markdown section."""
+    """
+    Render the schema diff as a markdown section.
+
+    Args:
+        schema_diff: as returned by `generate_dict_schema_diff` ("added",
+            "removed" and "dtype_changed")
+    """
     lines = []
     if not any(schema_diff.values()):
         lines.append("No schema changes.")
@@ -765,7 +833,13 @@ def _generate_str_tech_counts_section(
 def _generate_str_transitions_section(
     df_old: pl.DataFrame, df_new: pl.DataFrame
 ) -> str:
-    """Render the UPRN-level tech transition matrix as a markdown section."""
+    """
+    Render the UPRN-level tech transition matrix as a markdown section.
+
+    Args:
+        df_old: older version of the UPRN-level decision-tree output
+        df_new: newer version of the UPRN-level decision-tree output
+    """
     title = "Tech-assignment transitions (UPRN-level)"
     transitions = generate_df_tech_transitions(df_old=df_old, df_new=df_new)
     if transitions is None:
@@ -778,9 +852,10 @@ def _generate_str_transitions_section(
         return _render_section(
             title, "No UPRNs retained across versions; matrix skipped."
         )
-    # Pivot the index under an internal name: a real tech label equal to
-    # "assigned_tech_old" would otherwise collide with the pivoted index
-    # column and crash the pivot.
+    # Pivot creates one column per distinct tech in "assigned_tech_new". If
+    # a tech value were literally the string "assigned_tech_old", its new
+    # column would clash with the index column's name and polars would raise
+    # a duplicate-name error. Renaming the index first avoids any clash.
     matrix = (
         transitions.rename({"assigned_tech_old": "_old_tech"})
         .pivot(on="assigned_tech_new", index="_old_tech", values="n_uprns")
@@ -798,7 +873,13 @@ def _generate_str_transitions_section(
 
 
 def _generate_str_input_changes_section(manifest_old: dict, manifest_new: dict) -> str:
-    """Render the manifest-recorded input version changes as a markdown section."""
+    """
+    Render the manifest-recorded input version changes as a markdown section.
+
+    Args:
+        manifest_old: run manifest of the older output version
+        manifest_new: run manifest of the newer output version
+    """
     changes = generate_dict_input_version_changes(
         manifest_old=manifest_old, manifest_new=manifest_new
     )
@@ -822,6 +903,7 @@ def _generate_str_commit_log_section(
     """Render the module-scoped commit log between recorded commits."""
     commit_old = manifest_old["git_commit"]
     commit_new = manifest_new["git_commit"]
+    # 7 characters is git's usual short hash, as printed by git log --oneline.
     span = f"`{commit_old[:7]}..{commit_new[:7]}`"
     commits = generate_list_commit_log(
         commit_old=commit_old, commit_new=commit_new, stage=stage
@@ -866,8 +948,8 @@ def generate_str_report(
         manifest_new: newer version's run manifest, or None when missing
         stage: pipeline stage the outputs belong to
         local_authority: local authority slug the outputs cover
-        trigger: rubric the comparison is read against, or None for raw
-            numbers with no rubric interpretation or tolerance warnings
+        trigger: why the comparison is run (picks which tolerances apply),
+            or None to show the numbers without tolerance checks
         release_date_old: dated version folder of the older output
         release_date_new: dated version folder of the newer output
         path_old: S3 path of the older output
@@ -882,9 +964,9 @@ def generate_str_report(
     """
     tolerances = get_dict_tolerances(trigger) if trigger is not None else None
     trigger_line = (
-        f"- Trigger: `{trigger}` — read against this rubric's tolerances"
+        f"- Trigger: `{trigger}`. Numbers are checked against this trigger's tolerances."
         if trigger is not None
-        else "- Trigger: not supplied — raw numbers only, no rubric interpretation"
+        else "- Trigger: not supplied. Numbers are shown without tolerance checks."
     )
     sections = [
         f"# Cross-version comparison: {stage} — {local_authority}",
@@ -959,7 +1041,12 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Compare two dated versions of a pipeline stage output."
     )
-    parser.add_argument("--stage", required=True, choices=sorted(STAGE_OUTPUT_DATASETS))
+    parser.add_argument(
+        "--stage",
+        required=True,
+        choices=sorted(STAGE_OUTPUT_DATASETS),
+        help="Pipeline stage whose output to compare.",
+    )
     parser.add_argument(
         "--local_authority",
         required=True,
@@ -973,9 +1060,10 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--new_release_date", help="Newer version, YYYYMMDD.")
     parser.add_argument(
         "--trigger",
+        required=False,
         choices=sorted(TOLERANCES),
-        help="Why the comparison is run; picks the tolerance rubric. "
-        "Omitted: raw numbers only, no rubric interpretation.",
+        help="Why the comparison is run; picks which tolerances apply. "
+        "Omitted: numbers are shown without tolerance checks.",
     )
     parser.add_argument(
         "--report_dir",
