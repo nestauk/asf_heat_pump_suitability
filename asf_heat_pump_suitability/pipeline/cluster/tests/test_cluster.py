@@ -487,6 +487,65 @@ class TestGenerateGdfClusters:
             non_communal_clusters["communal_origin"].isna().all()
         ), "non-communal clusters must have a null communal origin"
 
+    @pytest.fixture(scope="class")
+    def gdf_two_anchors(self):
+        """
+        Two anchors: A9 west of B03 (10m from B03, 20m from B02, 25m from B04) and A1 east
+        of B04 (5m from B04, 20m from B03), so B02 and B03 flip via A9 and B04 via A1.
+        """
+        west = Polygon(
+            [(400040, 400000), (400050, 400000), (400050, 400010), (400040, 400010)]
+        )
+        east = Polygon(
+            [(400090, 399995), (400100, 399995), (400100, 400005), (400090, 400005)]
+        )
+        return gpd.GeoDataFrame(
+            {"anchor_id": ["A9", "A1"], "geometry": [west, east]}, crs="EPSG:27700"
+        )
+
+    def test_anchor_origin_clusters_list_flipping_anchor_ids(
+        self,
+        gdf_mixed_buildings,
+        gdf_enclosing_boundary,
+        tech_gdf,
+        empty_gdf,
+        gdf_two_anchors,
+    ):
+        """Test anchor-origin clusters list the sorted unique IDs of the anchors that flipped
+        their buildings, and every other cluster carries no list."""
+        results = generate_gdf_clusters(
+            buildings_gdf=gdf_mixed_buildings,
+            boundary_gdf=gdf_enclosing_boundary,
+            tech_gdf=tech_gdf,
+            polygon_overlay_gdf=empty_gdf,
+            combined_anchor_gdf=gdf_two_anchors,
+            radius=30,
+            id_col="building_id",
+            local_authorities_slug="TEST",
+        )
+        cluster_of = (
+            results[["cluster_id", "geometry"]]
+            .sjoin(gdf_mixed_buildings, how="inner", predicate="contains")
+            .set_index("building_id")["cluster_id"]
+        )
+        anchor_ids = results.set_index("cluster_id")["anchor_ids"]
+
+        assert anchor_ids[cluster_of["B02"]] == [
+            "A9"
+        ], "a cluster flipped by one anchor must list just that anchor"
+        assert anchor_ids[cluster_of["B04"]] == [
+            "A1",
+            "A9",
+        ], "a cluster whose buildings were flipped by two anchors must list both, sorted"
+
+        anchor_origin = results["communal_origin"] == "anchor proximity"
+        assert (
+            anchor_ids[results.loc[~anchor_origin, "cluster_id"]].isna().all()
+        ), "clusters not of anchor origin must carry a null anchor_ids"
+        assert (
+            anchor_ids[results.loc[anchor_origin, "cluster_id"]].notna().all()
+        ), "every anchor-origin cluster must list at least one anchor"
+
 
 class TestExtendEdgesGdf:
     @pytest.fixture(scope="class")

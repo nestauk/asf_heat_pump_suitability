@@ -90,13 +90,14 @@ def generate_gdf_clusters(
         boundary_gdf (gpd.GeoDataFrame): boundaries of Local Authorities to generate clusters for.
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
-        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_id`
         radius (float): radius in metres around anchor property within which communal solutions should be assigned
         local_authorities_slug (str): slug of local authority to generate clusters for. Used to create unique cluster IDs.
         id_col (str): building ID column. Default "ID".
 
     Returns:
-        gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster
+        gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster.
+        `anchor_ids` lists the anchors that caused buildings in the cluster to be reassigned; null for clusters with none.
     """
     gdfs = []
 
@@ -168,12 +169,19 @@ def generate_gdf_clusters(
         + local_authorities_slug
     )
 
-    # Join boolean flag for each building contained in the cluster back to the cluster to aggregate
+    # Join boolean flag and reassigning anchor ID for each building contained in the cluster back to the cluster to aggregate
     clusters_gdf = clusters_gdf.sjoin(
-        reassigned_gdf[[f"within_{radius}m_from_anchor_load", "geometry"]],
+        reassigned_gdf[[f"within_{radius}m_from_anchor_load", "anchor_id", "geometry"]],
         how="left",
         predicate="contains",
     ).drop(columns="index_right")
+
+    # Sorted unique IDs of the anchors that caused a building in the cluster to be reassigned; null when none did
+    anchor_ids = (
+        clusters_gdf.groupby("cluster_id")["anchor_id"]
+        .agg(lambda ids: sorted(ids.dropna().unique()) or None)
+        .rename("anchor_ids")
+    )
 
     # At this point we have multiple rows of each cluster geometry with one row for every building within the cluster.
     # We need to flatten the cluster geometries to one row per cluster, aggregating the within_anchor_radius boolean flag.
@@ -189,6 +197,7 @@ def generate_gdf_clusters(
                 f"within_{radius}m_from_anchor_load": "max",
             }
         )
+        .join(anchor_ids)
         .reset_index()
         .set_geometry(col="geometry", crs=clusters_gdf.crs)
     )
