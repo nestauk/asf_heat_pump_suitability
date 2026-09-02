@@ -24,36 +24,48 @@ UNKNOWN_GIT_COMMIT = "unknown"
 STAGE_INPUT_KEYS = config["run_manifest"]["stage_input_keys"]
 
 
+def run_git_or_none(
+    args: list[str], warning: str, *warning_args: object
+) -> subprocess.CompletedProcess | None:
+    """
+    Run a git command in this repo's own directory, or None on failure.
+
+    `cwd=PROJECT_DIR` so callers get this repo's git state no matter where
+    the pipeline was launched from (another folder, a notebook, a scheduled
+    job). On any git failure the warning is logged and None returned —
+    lineage and reporting degrade rather than abort a run.
+
+    Args:
+        args: full git command, e.g. ["git", "rev-parse", "HEAD"]
+        warning: logging.warning format string logged on failure
+        *warning_args: values for the warning format string
+
+    Returns:
+        subprocess.CompletedProcess: completed command with captured stdout,
+            or None when git exits non-zero or cannot run
+    """
+    try:
+        return subprocess.run(
+            args, cwd=PROJECT_DIR, capture_output=True, text=True, check=True
+        )
+    except (subprocess.CalledProcessError, OSError):
+        logging.warning(warning, *warning_args)
+        return None
+
+
 def get_str_git_commit() -> str:
     """
     Get the git commit hash of the currently checked-out code.
 
-    The git command runs inside this repo's own directory (`cwd=PROJECT_DIR`),
-    not wherever the pipeline was launched from. Pipeline scripts can be run
-    from anywhere (another folder, a notebook, a scheduled job), and we always
-    want the commit of this repo's code, not of whatever directory the caller
-    happens to be in.
-
     Returns:
         str: 40-character commit hash, or "unknown" if git is unavailable
     """
-    try:
-        # capture_output=True collects what the command prints into .stdout
-        # (rather than printing it to the terminal) so the hash can be read;
-        # check=True raises if git exits with an error.
-        return subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=PROJECT_DIR,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    except (subprocess.CalledProcessError, OSError):
-        logging.warning(
-            "Could not read git commit hash; recording '%s' in run manifest.",
-            UNKNOWN_GIT_COMMIT,
-        )
-        return UNKNOWN_GIT_COMMIT
+    result = run_git_or_none(
+        ["git", "rev-parse", "HEAD"],
+        "Could not read git commit hash; recording '%s' in run manifest.",
+        UNKNOWN_GIT_COMMIT,
+    )
+    return UNKNOWN_GIT_COMMIT if result is None else result.stdout.strip()
 
 
 def generate_dict_input_versions(input_keys: list[str]) -> dict:

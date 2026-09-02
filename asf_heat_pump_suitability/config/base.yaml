@@ -112,12 +112,12 @@ constant:
     individual_or_heat_network: "grey"
   anchor_radius: 50 # radius in metres around anchor properties within which we are reassigning N-GSHP to communal
   coastline:
-    distance_from_coastline_threshold_m: 1500 # distance in metres from coastline threshold
-    simplify_tolerance_m: 150 # tolerance in m (metres) used to simplify coastline geometries
+    distance_from_coastline_threshold_m: 1500
+    simplify_tolerance_m: 150
   ID:
     building: "ID"
   clustering:
-    tolerance_m: 5 # tolerance in m (metres) used to simplify clusters geometries
+    tolerance_m: 5 # for simplifying cluster geometries
 
 output:
   dataset:
@@ -396,3 +396,47 @@ run_manifest:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
       - "processed.valid_la_names"
+
+compare_versions:
+  stage_output_datasets:
+    uprns: "domestic_uprns"
+    add_features: "domestic_uprns_with_features"
+    decision_tree: "uprns_most_suitable_tech"
+    cluster: "tech_clusters"
+    compute_contextual_features: "clusters_tech_contextual_info"
+  decision_tree_buildings_dataset: "buildings_most_suitable_tech"
+  # Repo paths counted as each stage's module when scoping the commit log
+  # between two versions' recorded commits: the stage entrypoint plus the
+  # pipeline modules it directly drives. Cross-cutting code (getters/, utils/,
+  # config/) is excluded to keep the log scoped to candidate causes.
+  stage_module_paths:
+    uprns:
+      - "asf_heat_pump_suitability/pipeline/transform/uprns.py"
+      - "asf_heat_pump_suitability/schemas/uprns_schema.py"
+    add_features:
+      - "asf_heat_pump_suitability/pipeline/run/add_features.py"
+      - "asf_heat_pump_suitability/pipeline/transform/"
+      - "asf_heat_pump_suitability/pipeline/impute/"
+      - "asf_heat_pump_suitability/pipeline/model/"
+    decision_tree:
+      - "asf_heat_pump_suitability/pipeline/transform/decision_tree.py"
+      - "asf_heat_pump_suitability/pipeline/transform/local_authority.py"
+      - "asf_heat_pump_suitability/pipeline/transform/uprns.py"
+    cluster:
+      - "asf_heat_pump_suitability/pipeline/cluster/"
+      - "asf_heat_pump_suitability/pipeline/transform/local_authority.py"
+    compute_contextual_features:
+      - "asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py"
+      - "asf_heat_pump_suitability/pipeline/cluster/"
+  # Tolerances applied by pipeline/validate/compare_versions.py, keyed by the
+  # trigger rubric the comparison is read against. Shares are fractions of the
+  # old version's UPRNs.
+  tolerances:
+    methodology_change:
+      max_removed_uprn_share: 0.05
+      max_added_uprn_share: 0.05
+    input_release:
+      max_removed_uprn_share: 0.05
+      # New releases legitimately add properties; tune upward once real
+      # release-to-release growth rates are known.
+      max_added_uprn_share: 0.05
