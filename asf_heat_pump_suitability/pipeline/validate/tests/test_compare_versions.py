@@ -1043,7 +1043,7 @@ class TestLoadTupleDfBuildings:
         None) with a warning, not an aborted comparison."""
         mocker.patch.object(
             compare_versions,
-            "get_str_buildings_output_path",
+            "_get_str_output_path",
             side_effect=FileNotFoundError("No file found at s3://bucket/x.parquet"),
         )
         assert compare_versions.load_tuple_df_buildings(
@@ -1057,7 +1057,7 @@ class TestLoadTupleDfBuildings:
 
         mocker.patch.object(
             compare_versions,
-            "get_str_buildings_output_path",
+            "_get_str_output_path",
             return_value="s3://bucket/x.parquet",
         )
         mocker.patch.object(
@@ -1074,7 +1074,7 @@ class TestLoadTupleDfBuildings:
         missing new version can't waste a full download of the old one."""
         mocker.patch.object(
             compare_versions,
-            "get_str_buildings_output_path",
+            "_get_str_output_path",
             side_effect=[
                 "s3://bucket/old.parquet",
                 FileNotFoundError("No file found at s3://bucket/new.parquet"),

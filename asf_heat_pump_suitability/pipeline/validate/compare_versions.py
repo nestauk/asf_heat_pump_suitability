@@ -457,30 +457,6 @@ def get_str_stage_output_path(
         return path
 
 
-def get_str_buildings_output_path(
-    local_authority: str,
-    release_date: str,
-    check_exists: bool = False,
-) -> str:
-    """
-    Build the S3 path of the building-level decision-tree output.
-
-    Read only for per-tech marginal counts; the decision-tree comparison's
-    other checks read the UPRN-level output (see `STAGE_OUTPUT_DATASETS`).
-
-    Args:
-        local_authority: local authority slug used in output paths
-        release_date: dated version folder in YYYYMMDD format
-        check_exists: if True, raise when no file exists at the path
-
-    Returns:
-        str: S3 path of the building-level output for that version
-    """
-    return _get_str_output_path(
-        BUILDINGS_DATASET, local_authority, release_date, check_exists
-    )
-
-
 def generate_list_release_dates(stage: str, local_authority: str) -> list[str]:
     """
     List the dated versions of a stage's output available on S3.
@@ -614,11 +590,19 @@ def load_tuple_df_buildings(
         tuple: (older, newer) building-level tech columns, or (None, None)
     """
     try:
-        path_old = get_str_buildings_output_path(
-            local_authority, release_date_old, check_exists=True
+        # The building-level output is read only for the per-tech counts;
+        # every other decision-tree check uses the UPRN-level output.
+        path_old = _get_str_output_path(
+            dataset=BUILDINGS_DATASET,
+            local_authority=local_authority,
+            release_date=release_date_old,
+            check_exists=True,
         )
-        path_new = get_str_buildings_output_path(
-            local_authority, release_date_new, check_exists=True
+        path_new = _get_str_output_path(
+            dataset=BUILDINGS_DATASET,
+            local_authority=local_authority,
+            release_date=release_date_new,
+            check_exists=True,
         )
         return load_df_buildings_tech(path_old), load_df_buildings_tech(path_new)
     except (OSError, ValueError) as error:
