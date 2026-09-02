@@ -157,46 +157,55 @@ def generate_dict_uprn_churn(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict
         df_new: newer version of the stage output
 
     Returns:
-        dict: added/removed/retained counts, the removed share of old
-            UPRNs, and per-version null-UPRN counts, or None when either
-            version has no UPRN column
+        dict: added/removed/retained counts, the removed and added shares
+            (each as a fraction of the old version's UPRN count), and
+            per-version null-UPRN counts, or None when either version has
+            no UPRN column
     """
     if UPRN_COL not in df_old.columns or UPRN_COL not in df_new.columns:
         return None
+    # Null UPRNs are counted separately below; drop them here so they cannot
+    # hide in the sets (any number of nulls would collapse to one element).
     uprns_old = set(
         df_old.drop_nulls(UPRN_COL).select(_expr_uprn_canonical()).to_series().to_list()
     )
     uprns_new = set(
         df_new.drop_nulls(UPRN_COL).select(_expr_uprn_canonical()).to_series().to_list()
     )
+    n_added = len(uprns_new - uprns_old)
     n_removed = len(uprns_old - uprns_new)
+    n_old = len(uprns_old)
     return {
-        "n_added": len(uprns_new - uprns_old),
+        "n_added": n_added,
         "n_removed": n_removed,
         "n_retained": len(uprns_old & uprns_new),
-        "removed_share": n_removed / len(uprns_old) if uprns_old else 0.0,
+        "removed_share": n_removed / n_old if n_old else 0.0,
+        "added_share": n_added / n_old if n_old else 0.0,
         "n_null_old": df_old[UPRN_COL].null_count(),
         "n_null_new": df_new[UPRN_COL].null_count(),
     }
 
 
-def generate_str_churn_note(churn: dict, max_removed_share: float) -> str | None:
+def generate_str_churn_note(
+    share: float, max_share: float, description: str
+) -> str | None:
     """
-    Flag UPRN loss above the rubric's tolerance.
+    Warn when a churn share is above its tolerance.
 
     Args:
-        churn: churn counts, as returned by `generate_dict_uprn_churn`
-        max_removed_share: rubric tolerance for the removed share of old UPRNs
+        share: observed share, as a fraction of the old version's UPRN count
+        max_share: the tolerance for this share, from the trigger's settings
+        description: what the share measures, e.g. "of old UPRNs were removed"
 
     Returns:
-        str: warning naming the observed share and the tolerance, or None
-            when the churn is within tolerance
+        str: warning naming the share and the tolerance, or None when the
+            share is within tolerance
     """
-    if churn["removed_share"] <= max_removed_share:
+    if share <= max_share:
         return None
     return (
-        f"WARNING: {churn['removed_share']:.1%} of old UPRNs were removed, above "
-        f"the {max_removed_share:.1%} tolerance for this rubric."
+        f"WARNING: {share:.1%} {description}, above the "
+        f"{max_share:.1%} tolerance for this trigger."
     )
 
 
@@ -660,26 +669,38 @@ def _generate_str_schema_section(schema_diff: dict) -> str:
     return _render_section("Schema diff", *lines)
 
 
-def _generate_str_churn_section(
-    churn: dict | None, max_removed_share: float | None
-) -> str:
-    """Render UPRN churn, checked against the rubric tolerance when one is
-    supplied (i.e. the comparison was run with a trigger)."""
+def _generate_str_churn_section(churn: dict | None, tolerances: dict | None) -> str:
+    """
+    Render UPRN churn as a markdown section.
+
+    Args:
+        churn: churn counts and shares, as returned by
+            `generate_dict_uprn_churn`, or None when the stage has no UPRN column
+        tolerances: the trigger's tolerance settings, or None when the
+            comparison was run without a trigger (shares are then shown
+            without warnings)
+    """
     if churn is None:
         return _render_section(
             "UPRN churn", "Skipped: no UPRN column in this stage's output."
         )
-    share_suffix = (
-        f"(rubric tolerance: {max_removed_share:.1%})."
-        if max_removed_share is not None
-        else "(no trigger supplied; not checked against a tolerance)."
-    )
+    if tolerances is not None:
+        removed_suffix = f"(tolerance: {tolerances['max_removed_uprn_share']:.1%})."
+        added_suffix = f"(tolerance: {tolerances['max_added_uprn_share']:.1%})."
+    else:
+        removed_suffix = added_suffix = (
+            "(no trigger supplied; not checked against a tolerance)."
+        )
     lines = [
         "| Added | Removed | Retained |",
         "| --- | --- | --- |",
         f"| {churn['n_added']} | {churn['n_removed']} | {churn['n_retained']} |",
         "",
-        f"{churn['removed_share']:.1%} of old UPRNs were removed {share_suffix}",
+        f"{churn['removed_share']:.1%} of old UPRNs were removed {removed_suffix}",
+        (
+            f"New UPRNs equal to {churn['added_share']:.1%} of the old version "
+            f"were added {added_suffix}"
+        ),
     ]
     if churn["n_null_old"] or churn["n_null_new"]:
         lines.extend(
@@ -691,11 +712,27 @@ def _generate_str_churn_section(
                 ),
             ]
         )
-    if max_removed_share is not None:
-        churn_note = generate_str_churn_note(churn, max_removed_share)
-        if churn_note:
-            lines.extend(["", churn_note])
+    if tolerances is not None:
+        for note in _generate_list_churn_notes(churn=churn, tolerances=tolerances):
+            lines.extend(["", note])
     return _render_section("UPRN churn", *lines)
+
+
+def _generate_list_churn_notes(churn: dict, tolerances: dict) -> list[str]:
+    """Collect the above-tolerance warnings for removed and added UPRN shares."""
+    notes = [
+        generate_str_churn_note(
+            share=churn["removed_share"],
+            max_share=tolerances["max_removed_uprn_share"],
+            description="of old UPRNs were removed",
+        ),
+        generate_str_churn_note(
+            share=churn["added_share"],
+            max_share=tolerances["max_added_uprn_share"],
+            description="of the old UPRN count was added as new UPRNs",
+        ),
+    ]
+    return [note for note in notes if note is not None]
 
 
 def _generate_str_tech_counts_section(
@@ -860,8 +897,8 @@ def generate_str_report(
         _generate_str_counts_section(generate_dict_count_delta(df_old, df_new)),
         _generate_str_schema_section(generate_dict_schema_diff(df_old, df_new)),
         _generate_str_churn_section(
-            generate_dict_uprn_churn(df_old, df_new),
-            tolerances["max_removed_uprn_share"] if tolerances is not None else None,
+            churn=generate_dict_uprn_churn(df_old=df_old, df_new=df_new),
+            tolerances=tolerances,
         ),
     ]
     if stage == "decision_tree":
@@ -993,12 +1030,12 @@ if __name__ == "__main__":
 
     counts = generate_dict_count_delta(df_old, df_new)
     logging.info(
-        "Rows: %s -> %s (%+d)",
+        "Rows: %s -> %s (diff: %+d)",
         counts["rows_old"],
         counts["rows_new"],
         counts["rows_delta"],
     )
-    churn = generate_dict_uprn_churn(df_old, df_new)
+    churn = generate_dict_uprn_churn(df_old=df_old, df_new=df_new)
     if churn:
         logging.info(
             "UPRN churn: %d added, %d removed, %d retained",
@@ -1007,9 +1044,8 @@ if __name__ == "__main__":
             churn["n_retained"],
         )
         if args.trigger is not None:
-            churn_note = generate_str_churn_note(
-                churn, get_dict_tolerances(args.trigger)["max_removed_uprn_share"]
-            )
-            if churn_note:
+            for churn_note in _generate_list_churn_notes(
+                churn=churn, tolerances=get_dict_tolerances(trigger=args.trigger)
+            ):
                 logging.warning(churn_note)
     logging.info("Report written to %s", report_path)

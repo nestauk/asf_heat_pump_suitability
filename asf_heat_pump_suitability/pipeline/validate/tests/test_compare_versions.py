@@ -134,6 +134,7 @@ class TestGenerateDictUprnChurn:
             "n_removed": 0,
             "n_retained": 4,
             "removed_share": 0.0,
+            "added_share": 0.0,
             "n_null_old": 0,
             "n_null_new": 0,
         }, "identical versions must show full retention and zero churn"
@@ -146,6 +147,7 @@ class TestGenerateDictUprnChurn:
             "n_removed": 1,
             "n_retained": 3,
             "removed_share": 0.25,
+            "added_share": 0.5,
             "n_null_old": 0,
             "n_null_new": 0,
         }, "churn must be the set differences on the UPRN key"
@@ -194,21 +196,24 @@ class TestGenerateDictUprnChurn:
 class TestGenerateStrChurnNote:
     """Tests for `generate_str_churn_note`."""
 
-    def test_expected_churn_within_tolerance_gets_no_note(self):
-        """Churn at or below the rubric's tolerance is expected: no warning."""
-        churn = {"n_added": 2, "n_removed": 1, "n_retained": 3, "removed_share": 0.25}
+    def test_share_within_tolerance_gets_no_note(self):
+        """A share at or below its tolerance is expected: no warning."""
         assert (
-            compare_versions.generate_str_churn_note(churn, max_removed_share=0.25)
+            compare_versions.generate_str_churn_note(
+                share=0.25, max_share=0.25, description="of old UPRNs were removed"
+            )
             is None
-        ), "churn within tolerance is expected and must not warn"
+        ), "a share within tolerance is expected and must not warn"
 
-    def test_unexpected_uprn_loss_above_tolerance_gets_warning(self):
-        """UPRN loss above the rubric's tolerance produces a warning naming
-        the observed share and the tolerance."""
-        churn = {"n_added": 0, "n_removed": 3, "n_retained": 1, "removed_share": 0.75}
-        note = compare_versions.generate_str_churn_note(churn, max_removed_share=0.05)
-        assert "75.0%" in note, "the warning must name the observed removed share"
+    def test_share_above_tolerance_gets_warning(self):
+        """A share above its tolerance produces a warning naming the observed
+        share, the tolerance, and what the share measures."""
+        note = compare_versions.generate_str_churn_note(
+            share=0.75, max_share=0.05, description="of old UPRNs were removed"
+        )
+        assert "75.0%" in note, "the warning must name the observed share"
         assert "5.0%" in note, "the warning must name the tolerance it breached"
+        assert "removed" in note, "the warning must say what the share measures"
 
 
 class TestGetDictTolerances:
@@ -852,13 +857,39 @@ class TestGenerateStrReport:
         assert "assigned_tech_old" in report, "a colliding label must still render"
 
     def test_unexpected_uprn_loss_warning_appears(self, df_old, manifests, mocker):
-        """UPRN loss above the rubric tolerance surfaces as a warning line."""
+        """UPRN loss above the tolerance surfaces as a warning line naming
+        the loss specifically. The tolerance is mocked so the test does not
+        depend on the value configured in base.yaml."""
         mocker.patch.object(
             compare_versions, "generate_list_commit_log", return_value=[]
         )
-        df_new = df_old.head(1)
+        mocker.patch.dict(
+            compare_versions.TOLERANCES["methodology_change"],
+            {"max_removed_uprn_share": 0.05, "max_added_uprn_share": 1.0},
+        )
+        df_new = df_old.head(1)  # 75% of old UPRNs removed, none added
         report = generate_report(df_old, df_new, *manifests)
-        assert "WARNING" in report, "above-tolerance UPRN loss must surface a warning"
+        assert (
+            "of old UPRNs were removed, above" in report
+        ), "the warning must name the UPRN loss, not just say WARNING"
+
+    def test_unexpected_uprn_gain_warning_appears(self, df_old, manifests, mocker):
+        """UPRN additions above the tolerance also warn, e.g. a change that
+        made the residential filtering far too permissive."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        mocker.patch.dict(
+            compare_versions.TOLERANCES["methodology_change"],
+            {"max_removed_uprn_share": 1.0, "max_added_uprn_share": 0.05},
+        )
+        df_new = pl.concat(
+            [df_old, df_old.with_columns((pl.col("UPRN") + 100).alias("UPRN"))]
+        )  # doubles the UPRNs: added share 100%, nothing removed
+        report = generate_report(df_old, df_new, *manifests)
+        assert (
+            "was added as new UPRNs, above" in report
+        ), "the warning must name the UPRN gain specifically"
 
     def test_omitted_trigger_reports_raw_numbers_without_rubric(
         self, df_old, manifests, mocker
