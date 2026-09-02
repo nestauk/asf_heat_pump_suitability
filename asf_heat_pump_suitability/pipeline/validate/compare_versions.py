@@ -524,6 +524,8 @@ def generate_list_release_dates(stage: str, local_authority: str) -> list[str]:
     pattern = _generate_str_output_glob(
         dataset=STAGE_OUTPUT_DATASETS[stage], local_authority=local_authority
     )
+    # Collect into a set to deduplicate, then sort into a list at the end:
+    # callers rely on the order (the latest two versions are [-2] and [-1]).
     release_dates = set()
     for path in s3fs.S3FileSystem().glob(pattern):
         # The release date is the file's parent directory, e.g. "20260810"
@@ -637,7 +639,7 @@ def load_df_buildings_tech(path: str) -> pl.DataFrame:
 
 def load_tuple_df_buildings(
     local_authority: str, release_date_old: str, release_date_new: str
-) -> tuple[pl.DataFrame | None, pl.DataFrame | None]:
+) -> tuple[pl.DataFrame, pl.DataFrame] | tuple[None, None]:
     """
     Load the tech column of both building-level decision-tree outputs.
 
@@ -1080,9 +1082,6 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    # Orchestration lives in this block, not a main() function, matching the
-    # other pipeline entrypoints: intermediates stay in module globals so
-    # `python -i -m ...compare_versions ...` leaves them inspectable.
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
     # Output paths use lowercase LA slugs; lowercase like the sibling
