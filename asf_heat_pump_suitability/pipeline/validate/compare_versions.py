@@ -35,7 +35,7 @@ import s3fs
 
 from asf_heat_pump_suitability import PROJECT_DIR, config
 from asf_heat_pump_suitability.getters import base_getters
-from asf_heat_pump_suitability.utils import manifest_utils, save_utils
+from asf_heat_pump_suitability.utils import geo_utils, manifest_utils, save_utils
 
 UPRN_COL = "UPRN"
 TECH_COL = "assigned_tech"
@@ -563,6 +563,10 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
     if path.endswith(".geojson"):
         try:
             gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
+            # Not every geojson is saved in EPSG:4326, so check rather than
+            # assume. The comparison only reads the non-geometry columns, so
+            # this is protection for future geometry checks, not this report.
+            gdf = geo_utils.verify_gdf_crs(gdf, target_crs="EPSG:4326")
         except ValueError:
             logging.warning("No features in geojson at %s; comparing as empty.", path)
             return pl.DataFrame()
