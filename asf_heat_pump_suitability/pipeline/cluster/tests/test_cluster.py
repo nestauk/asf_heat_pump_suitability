@@ -13,6 +13,7 @@ from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.cluster.cluster import (
     extend_edges_gdf,
     generate_gdf_clusters,
+    generate_series_anchor_ids,
     overlay_gdf_physical_barriers,
     reassign_gdf_near_anchor_properties,
 )
@@ -930,3 +931,47 @@ class TestReassignGdfAnchorProperties:
             assert pd.isna(
                 results[building]
             ), f"building {building} not reassigned to 'communal' must keep a null communal_origin"
+
+
+class TestGenerateSeriesAnchorIds:
+    """Tests for `generate_series_anchor_ids`."""
+
+    @pytest.fixture(scope="class")
+    def square(self):
+        """A 10m square footprint."""
+        return Polygon(
+            [(400000, 400000), (400010, 400000), (400010, 400010), (400000, 400010)]
+        )
+
+    def test_id_is_stable_across_vertex_order(self, square):
+        """The same footprint gets the same ID whatever its start vertex or ring direction."""
+        rotated_start = Polygon(
+            [(400010, 400010), (400000, 400010), (400000, 400000), (400010, 400000)]
+        )
+        reversed_ring = Polygon(list(square.exterior.coords)[::-1])
+        ids = generate_series_anchor_ids(
+            gpd.GeoSeries([square, rotated_start, reversed_ring], crs="EPSG:27700")
+        )
+        assert (
+            ids.nunique() == 1
+        ), "one footprint must hash to one ID regardless of how its ring is written"
+
+    def test_distinct_footprints_get_distinct_ids(self, square):
+        """Different footprints get different IDs."""
+        shifted = shapely.affinity.translate(square, xoff=1)
+        ids = generate_series_anchor_ids(
+            gpd.GeoSeries([square, shifted], crs="EPSG:27700")
+        )
+        assert ids.nunique() == 2, "different footprints must not share an ID"
+
+    def test_id_is_short_hex_string(self, square):
+        """IDs are short lowercase hex strings."""
+        anchor_id = generate_series_anchor_ids(
+            gpd.GeoSeries([square], crs="EPSG:27700")
+        ).iloc[0]
+        assert (
+            len(anchor_id) == 12
+        ), "anchor IDs must be 12 hex characters so they stay short in the geojson"
+        assert set(anchor_id) <= set(
+            "0123456789abcdef"
+        ), "anchor IDs must be lowercase hex"

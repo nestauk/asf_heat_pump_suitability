@@ -17,6 +17,7 @@ should pass the same --release_date to every stage.
 
 from typing import Optional, List
 import argparse
+import hashlib
 import geopandas as gpd
 import pandas as pd
 import numpy as np
@@ -31,6 +32,9 @@ from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
 ANCHOR_RADIUS = config["constant"]["anchor_radius"]
+
+# 6 bytes = 12 hex characters: short enough for the geojson, far beyond GB anchor counts
+ANCHOR_ID_DIGEST_BYTES = 6
 
 ANCHOR_CATEGORIES = [
     "Primary Education",
@@ -710,6 +714,9 @@ def load_transform_anchor_property_gdfs(
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
         Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
         anchor_categories (Optional[List[str]]): list of anchor properties to filter important buildings list by. Defaults to ANCHOR_CATEGORIES
+
+    Returns:
+        gpd.GeoDataFrame: deduplicated anchor footprints with a geometry-derived `anchor_id` column.
     """
     # select anchors out of important building gdf using anchor_categories list
     # anchor categories list is defined at start of script
@@ -737,7 +744,34 @@ def load_transform_anchor_property_gdfs(
     )
     combined_anchor_gdf["geometry"] = combined_anchor_gdf.geometry.normalize()
     combined_anchor_gdf = combined_anchor_gdf.drop_duplicates(["geometry"])
+    combined_anchor_gdf["anchor_id"] = generate_series_anchor_ids(
+        combined_anchor_gdf["geometry"]
+    )
     return combined_anchor_gdf
+
+
+def generate_series_anchor_ids(geometry: gpd.GeoSeries) -> pd.Series:
+    """
+    Generate a short hex ID for each anchor footprint from its normalised WKB.
+
+    The ID is stable across runs, releases and local authorities for as long as the
+    footprint geometry is unchanged.
+
+    Args:
+        geometry (gpd.GeoSeries): anchor footprint geometries.
+
+    Returns:
+        pd.Series: anchor IDs, aligned to `geometry`.
+    """
+    return (
+        geometry.normalize()
+        .to_wkb()
+        .map(
+            lambda wkb: hashlib.blake2b(
+                wkb, digest_size=ANCHOR_ID_DIGEST_BYTES
+            ).hexdigest()
+        )
+    )
 
 
 def reassign_gdf_near_anchor_properties(
