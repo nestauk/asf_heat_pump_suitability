@@ -84,6 +84,7 @@ data:
     manually_labelled_block_of_flats: "s3://asf-local-heat-planning-tool/inputs/processed/manually_labelled_block_of_flats.parquet"
     # Valid local authority names, taken from the 'LAD23NM' column of the UK_ons_lad_bound file
     valid_la_names: "s3://asf-local-heat-planning-tool/inputs/processed/valid_la_names.csv"
+    uprn_to_building_id_mapping: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{local_authorities}_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
 
 constant:
   id:
