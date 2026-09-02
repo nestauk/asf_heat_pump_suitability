@@ -11,8 +11,8 @@ def impute_set_flat_properties(
     Identify domestic UPRNs which are flats from their geometries or coordinates.
 
     Args:
-        uprns_gdf (gpd.GeoDataFrame | pl.DataFrame): all domestic UPRNs. If passing a geodataframe, must contain
-        UPRN point geometries in area of interest. If passing a polars dataframe, must contain X and Y coordinate columns.
+        uprns_gdf (gpd.GeoDataFrame | pl.DataFrame): all domestic UPRNs. UPRNs must be unique. If passing a geodataframe,
+        must contain UPRN point geometries in area of interest. If passing a polars dataframe, must contain X and Y coordinate columns.
         x_col (str): name of column containing X coordinate. Ignored if `uprns_gdf` is a geodataframe.
         y_col (str): name of column containing Y coordinate. Ignored if `uprns_gdf` is a geodataframe.
 
