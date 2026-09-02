@@ -147,6 +147,21 @@ Implementation decisions within the spec's frame:
 - The report is written to `outputs/comparisons/` (gitignored) by default;
   `--report_dir` overrides.
 
+Reviewer-response pass (2026-08-14, crispy-wonton's PR review, 66 comments):
+
+- **Added-UPRN warning**: the churn check now reports `added_share` and warns
+  above a new `max_added_uprn_share` tolerance per trigger, mirroring the
+  removed-share check — catches changes that make residential filtering too
+  permissive. Both start at 0.05; input_release is expected to be tuned up.
+- **Geojson CRS verified, not assumed** (`geo_utils.verify_gdf_crs`).
+- **Buildings path wrapper deleted**; its one caller passes
+  `dataset=BUILDINGS_DATASET` directly.
+- **Named arguments** at every intra-module multi-argument call site.
+- **Plain-English pass**: "rubric" and "canonical" removed from all prose,
+  expression helpers renamed (`_expr_uprn_standardised`,
+  `_expr_tech_labelled`), missing Args/Returns filled, flagged comments
+  rewritten as full sentences, test mocks annotated.
+
 Review pass on the 2026-08-10 additions (2026-08-12, ten findings applied):
 
 - **Contextual-features paths resolve across clustering-tolerance
