@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import fsspec
+import geopandas as gpd
 import polars as pl
 import pyarrow.parquet as pq
 import s3fs
@@ -42,10 +43,16 @@ from asf_heat_pump_suitability.utils import geo_utils, manifest_utils, save_util
 UPRN_COL = "UPRN"
 TECH_COL = "assigned_tech"
 NULL_TECH_LABEL = "(null)"
+CLUSTER_ID_COL = "cluster_id"
+AREA_COL = "area_m2"
+# Stages whose outputs carry cluster geometry, and so get the cluster
+# count, area and distribution sections.
+GEOMETRY_STAGES = ("cluster", "compute_contextual_features")
 
 STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
 BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"]
+DISTRIBUTION_COLUMNS = config["compare_versions"]["distribution_columns"]
 TOLERANCES = config["compare_versions"]["tolerances"]
 
 
@@ -99,6 +106,115 @@ def generate_dict_count_delta(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dic
         counts["uprns_new"] = df_new[UPRN_COL].n_unique()
         counts["uprns_delta"] = counts["uprns_new"] - counts["uprns_old"]
     return counts
+
+
+def generate_dict_cluster_count_delta(
+    df_old: pl.DataFrame, df_new: pl.DataFrame
+) -> dict | None:
+    """
+    Compare distinct-cluster counts between two versions of an output.
+
+    Args:
+        df_old: older version of a cluster-bearing stage output
+        df_new: newer version of a cluster-bearing stage output
+
+    Returns:
+        dict: old/new/delta distinct-cluster counts, or None when either
+            version has no cluster-id column
+    """
+    if CLUSTER_ID_COL not in df_old.columns or CLUSTER_ID_COL not in df_new.columns:
+        return None
+    n_old = df_old[CLUSTER_ID_COL].n_unique()
+    n_new = df_new[CLUSTER_ID_COL].n_unique()
+    return {
+        "clusters_old": n_old,
+        "clusters_new": n_new,
+        "clusters_delta": n_new - n_old,
+    }
+
+
+def generate_dict_total_area_delta(
+    df_areas_old: pl.DataFrame, df_areas_new: pl.DataFrame
+) -> dict:
+    """
+    Compare total cluster area between two versions, in m² (EPSG:27700).
+
+    Args:
+        df_areas_old: older version's per-cluster areas
+        df_areas_new: newer version's per-cluster areas
+
+    Returns:
+        dict: old/new/delta total areas; a version with no clusters totals 0
+    """
+    total_old = df_areas_old[AREA_COL].sum()
+    total_new = df_areas_new[AREA_COL].sum()
+    return {
+        "area_m2_old": total_old,
+        "area_m2_new": total_new,
+        "area_m2_delta": total_new - total_old,
+    }
+
+
+def generate_dict_distribution_stats(df: pl.DataFrame, column: str) -> dict | None:
+    """
+    Summarise one column's distribution: both quartiles, min, max and mean.
+
+    Q1 and Q3 are reported separately (linear interpolation) so a shifted
+    distribution and a widened one stay distinguishable. Nulls are excluded.
+
+    Args:
+        df: one version of a stage output
+        column: column to summarise
+
+    Returns:
+        dict: min/q1/mean/q3/max, or None when the column is missing or has
+            no non-null values
+    """
+    if column not in df.columns:
+        return None
+    values = df[column].drop_nulls()
+    if values.is_empty():
+        return None
+    return {
+        "min": values.min(),
+        "q1": values.quantile(0.25, "linear"),
+        "mean": values.mean(),
+        "q3": values.quantile(0.75, "linear"),
+        "max": values.max(),
+    }
+
+
+def get_dict_distribution_frames(
+    stage: str,
+    df_old: pl.DataFrame,
+    df_new: pl.DataFrame,
+    df_areas_old: pl.DataFrame | None,
+    df_areas_new: pl.DataFrame | None,
+) -> dict[str, tuple[pl.DataFrame, pl.DataFrame]]:
+    """
+    Map each of a stage's distribution columns to the (old, new) frames
+    that carry it.
+
+    The derived cluster area reads the geometry-derived frames (when
+    loaded); the stage's configured `DISTRIBUTION_COLUMNS` read the tabular
+    outputs.
+
+    Args:
+        stage: pipeline stage the outputs belong to
+        df_old: older version of the tabular stage output
+        df_new: newer version of the tabular stage output
+        df_areas_old: older version's per-cluster areas, or None
+        df_areas_new: newer version's per-cluster areas, or None
+
+    Returns:
+        dict: column name to (old, new) frame pair, plot/report order
+    """
+    frames = {}
+    if df_areas_old is not None and df_areas_new is not None:
+        frames[AREA_COL] = (df_areas_old, df_areas_new)
+    for column in DISTRIBUTION_COLUMNS.get(stage, []):
+        frames[column] = (df_old, df_new)
+    return frames
 
 
 def generate_dict_schema_diff(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict:
@@ -613,6 +729,38 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
             return pl.DataFrame()
         return pl.from_pandas(gdf.drop(columns="geometry"))
     raise ValueError(f"Cannot compare file type of {path}; expected parquet/geojson.")
+
+
+def load_df_cluster_areas(path: str) -> pl.DataFrame:
+    """
+    Load a geometry-bearing stage output as per-cluster areas in m².
+
+    Areas are measured in EPSG:27700 (metres); an output saved in another
+    CRS — the contextual-features geojson is EPSG:4326, with simplified
+    geometry — is reprojected first. A zero-feature geojson degrades to an
+    empty frame.
+
+    Args:
+        path: S3 path of the stage output (.parquet or .geojson)
+
+    Returns:
+        pl.DataFrame: one `area_m2` row per cluster
+
+    Raises:
+        ValueError: for file types the comparison cannot read geometry from
+    """
+    if path.endswith(".parquet"):
+        gdf = gpd.read_parquet(path, columns=["geometry"])
+    elif path.endswith(".geojson"):
+        try:
+            gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
+        except ValueError:
+            logging.warning("No features in geojson at %s; no areas to load.", path)
+            return pl.DataFrame(schema={AREA_COL: pl.Float64})
+    else:
+        raise ValueError(f"Cannot read geometry of {path}; expected parquet/geojson.")
+    gdf = geo_utils.verify_gdf_crs(gdf)
+    return pl.DataFrame({AREA_COL: gdf.area.to_numpy()})
 
 
 def load_df_buildings_tech(path: str) -> pl.DataFrame:

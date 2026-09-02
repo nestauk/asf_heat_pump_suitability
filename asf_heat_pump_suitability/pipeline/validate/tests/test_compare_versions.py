@@ -1115,6 +1115,318 @@ class TestLoadTupleDfBuildings:
         load.assert_not_called()
 
 
+@pytest.fixture(scope="module")
+def df_clusters_old():
+    """Old-version cluster-level output: three clusters across two techs."""
+    return pl.DataFrame(
+        {
+            "cluster_id": ["HP_1", "HP_2", "DHN_1"],
+            "assigned_tech": [
+                "Networked heat pump",
+                "Networked heat pump",
+                "District heat network",
+            ],
+        }
+    )
+
+
+@pytest.fixture(scope="module")
+def df_clusters_merged(df_clusters_old):
+    """New-version cluster-level output with genuine geometry drift: the two
+    heat-pump clusters merged into one."""
+    return pl.DataFrame(
+        {
+            "cluster_id": ["HP_1", "DHN_1"],
+            "assigned_tech": ["Networked heat pump", "District heat network"],
+        }
+    )
+
+
+@pytest.fixture(scope="module")
+def df_areas_old():
+    """Old-version per-cluster areas: three 100 m² clusters."""
+    return pl.DataFrame({"area_m2": [100.0, 100.0, 100.0]})
+
+
+@pytest.fixture(scope="module")
+def df_areas_merged():
+    """New-version per-cluster areas after the merge: the merged cluster
+    absorbed the 10 m² gap between its parents (100 + 100 + 10)."""
+    return pl.DataFrame({"area_m2": [210.0, 100.0]})
+
+
+class TestGenerateDictClusterCountDelta:
+    """Tests for `generate_dict_cluster_count_delta`."""
+
+    def test_identical_versions_have_zero_delta(self, df_clusters_old):
+        """No drift means no change in the distinct-cluster count."""
+        counts = compare_versions.generate_dict_cluster_count_delta(
+            df_clusters_old, df_clusters_old.clone()
+        )
+        assert counts == {
+            "clusters_old": 3,
+            "clusters_new": 3,
+            "clusters_delta": 0,
+        }, "identical versions must show no cluster count change"
+
+    def test_merged_clusters_show_a_negative_delta(
+        self, df_clusters_old, df_clusters_merged
+    ):
+        """Two clusters merging into one is genuine geometry drift the
+        tabular checks cannot see; the count delta must surface it."""
+        counts = compare_versions.generate_dict_cluster_count_delta(
+            df_clusters_old, df_clusters_merged
+        )
+        assert counts == {
+            "clusters_old": 3,
+            "clusters_new": 2,
+            "clusters_delta": -1,
+        }, "a cluster merge must appear as a negative cluster count delta"
+
+    def test_counts_distinct_cluster_ids_not_rows(self, df_clusters_old):
+        """A cluster-id column with repeated values (e.g. a UPRN-level frame)
+        must count distinct clusters, not rows."""
+        repeated = pl.concat([df_clusters_old, df_clusters_old])
+        counts = compare_versions.generate_dict_cluster_count_delta(
+            repeated, df_clusters_old
+        )
+        assert (
+            counts["clusters_old"] == 3
+        ), "repeated cluster ids must count as one cluster each"
+
+    def test_returns_none_without_cluster_id_column(self, df_old):
+        """Outputs without a cluster_id column (e.g. UPRN-stage outputs)
+        cannot be cluster-counted."""
+        assert (
+            compare_versions.generate_dict_cluster_count_delta(df_old, df_old) is None
+        ), "no cluster_id column means no cluster count, so None is expected"
+
+
+class TestGenerateDictTotalAreaDelta:
+    """Tests for `generate_dict_total_area_delta`."""
+
+    def test_identical_versions_have_zero_delta(self, df_areas_old):
+        """No drift means no total-area change."""
+        totals = compare_versions.generate_dict_total_area_delta(
+            df_areas_old, df_areas_old.clone()
+        )
+        assert totals == {
+            "area_m2_old": 300.0,
+            "area_m2_new": 300.0,
+            "area_m2_delta": 0.0,
+        }, "identical versions must show no total-area change"
+
+    def test_reports_the_total_area_delta_in_m2(self, df_areas_old, df_areas_merged):
+        """The cluster merge grew the total area by the 10 m² gap it
+        absorbed; the delta must surface it in m²."""
+        totals = compare_versions.generate_dict_total_area_delta(
+            df_areas_old, df_areas_merged
+        )
+        assert totals == {
+            "area_m2_old": 300.0,
+            "area_m2_new": 310.0,
+            "area_m2_delta": 10.0,
+        }, "the total-area delta must be new minus old, in m²"
+
+    def test_a_version_with_no_clusters_totals_zero(self, df_areas_old):
+        """An empty areas frame (zero-feature geojson) totals 0 m² rather
+        than crashing the delta."""
+        empty = pl.DataFrame(schema={"area_m2": pl.Float64})
+        totals = compare_versions.generate_dict_total_area_delta(df_areas_old, empty)
+        assert (
+            totals["area_m2_new"] == 0.0 and totals["area_m2_delta"] == -300.0
+        ), "a version with no clusters must total zero area, not crash"
+
+
+class TestLoadDfClusterAreas:
+    """Tests for `load_df_cluster_areas`."""
+
+    @staticmethod
+    def gdf_two_squares(crs: str):
+        """Two axis-aligned squares of 100 and 400 m², built in EPSG:27700
+        near Plymouth and converted to the requested CRS."""
+        import geopandas as gpd
+        from shapely.geometry import box
+
+        gdf = gpd.GeoDataFrame(
+            {"cluster_id": ["HP_1", "HP_2"]},
+            geometry=[
+                box(250000, 55000, 250010, 55010),
+                box(250100, 55100, 250120, 55120),
+            ],
+            crs="EPSG:27700",
+        )
+        return gdf.to_crs(crs)
+
+    def test_geoparquet_areas_measured_in_m2(self, tmp_path):
+        """The cluster stage's geoparquet carries exact EPSG:27700 geometry;
+        areas come back in m², one row per cluster."""
+        path = tmp_path / "clusters.parquet"
+        self.gdf_two_squares("EPSG:27700").to_parquet(path)
+        df = compare_versions.load_df_cluster_areas(str(path))
+        assert df.columns == ["area_m2"], "only the derived area column is returned"
+        assert df["area_m2"].to_list() == [
+            100.0,
+            400.0,
+        ], "areas must be measured in m² on the saved EPSG:27700 geometry"
+
+    def test_geoparquet_in_another_crs_is_reprojected_before_measuring(self, tmp_path):
+        """A geoparquet not in the target CRS must be reprojected to
+        EPSG:27700 first — measuring in EPSG:4326 would return degrees²."""
+        path = tmp_path / "clusters.parquet"
+        self.gdf_two_squares("EPSG:4326").to_parquet(path)
+        df = compare_versions.load_df_cluster_areas(str(path))
+        assert df["area_m2"].to_list() == pytest.approx(
+            [100.0, 400.0], rel=1e-3
+        ), "areas must be measured in metres after reprojection, not degrees"
+
+    def test_geojson_is_reprojected_to_the_target_crs_before_measuring(self, mocker):
+        """The contextual-features geojson is saved in EPSG:4326; its areas
+        must be measured after reprojecting back to EPSG:27700."""
+        load = mocker.patch(
+            "asf_heat_pump_suitability.getters.base_getters.load_gdf_from_s3_geojson",
+            return_value=self.gdf_two_squares("EPSG:4326"),
+        )
+        df = compare_versions.load_df_cluster_areas("s3://bucket/dir/output.geojson")
+        assert load.call_args.kwargs.get("crs") == "EPSG:4326" or (
+            "EPSG:4326" in load.call_args.args
+        ), "the geojson must be loaded as the EPSG:4326 it is saved in"
+        assert df["area_m2"].to_list() == pytest.approx(
+            [100.0, 400.0], rel=1e-3
+        ), "geojson areas must be measured in m² after reprojection"
+
+    def test_zero_feature_geojson_degrades_to_an_empty_frame(self, mocker):
+        """A geojson with every feature filtered out must degrade to an
+        empty areas frame, matching the tabular loader's behaviour."""
+        mocker.patch(
+            "asf_heat_pump_suitability.getters.base_getters.load_gdf_from_s3_geojson",
+            side_effect=ValueError(
+                "Assigning CRS to a GeoDataFrame without a geometry column "
+                "is not supported"
+            ),
+        )
+        df = compare_versions.load_df_cluster_areas("s3://bucket/dir/output.geojson")
+        assert df.is_empty(), "a zero-feature geojson must degrade to an empty frame"
+        assert df.columns == [
+            "area_m2"
+        ], "the empty frame must still carry the area column for downstream sums"
+
+    def test_unreadable_file_type_raises(self):
+        """File types the comparison cannot read geometry from fail loudly."""
+        with pytest.raises(ValueError, match="csv"):
+            compare_versions.load_df_cluster_areas("s3://bucket/dir/output.csv")
+
+
+class TestGenerateDictDistributionStats:
+    """Tests for `generate_dict_distribution_stats`."""
+
+    def test_reports_quartiles_min_max_and_mean(self):
+        """The shared helper reports Q1 and Q3 (both quartiles, so a shift
+        and a widening stay distinguishable) plus min, max and mean."""
+        df = pl.DataFrame({"n_UPRNs": [1, 2, 3, 4, 5]})
+        stats = compare_versions.generate_dict_distribution_stats(df, "n_UPRNs")
+        assert stats == {
+            "min": 1,
+            "q1": 2.0,
+            "mean": 3.0,
+            "q3": 4.0,
+            "max": 5,
+        }, "the helper must report Q1, Q3, min, max and mean for the column"
+
+    def test_nulls_are_excluded_from_the_statistics(self):
+        """Null values must not drag the statistics; they are dropped."""
+        df = pl.DataFrame({"n_UPRNs": [1, 2, 3, 4, 5, None]})
+        stats = compare_versions.generate_dict_distribution_stats(df, "n_UPRNs")
+        assert stats["mean"] == 3.0, "nulls must be excluded, not counted as zeros"
+
+    def test_missing_column_returns_none(self, df_clusters_old):
+        """A version without the target column cannot be summarised."""
+        assert (
+            compare_versions.generate_dict_distribution_stats(
+                df_clusters_old, "n_UPRNs"
+            )
+            is None
+        ), "a missing column must degrade to None, not raise"
+
+    def test_all_null_column_returns_none(self):
+        """A column with no values has no distribution to report."""
+        df = pl.DataFrame({"n_UPRNs": [None, None]}, schema={"n_UPRNs": pl.Int64})
+        assert (
+            compare_versions.generate_dict_distribution_stats(df, "n_UPRNs") is None
+        ), "an all-null column must degrade to None, not report null statistics"
+
+
+class TestDistributionColumns:
+    """Tests for the configured `DISTRIBUTION_COLUMNS` per-stage lists."""
+
+    def test_every_configured_stage_is_a_known_stage(self):
+        """Distribution columns are keyed by real pipeline stages."""
+        assert set(compare_versions.DISTRIBUTION_COLUMNS) <= set(
+            compare_versions.STAGE_OUTPUT_DATASETS
+        ), "distribution columns must be configured under known stage names"
+
+    def test_uprns_per_cluster_is_configured_at_the_contextual_stage(self):
+        """n_UPRNs is computed at the contextual-features stage, so its
+        distribution is configured there — config lists real columns only."""
+        assert (
+            "n_UPRNs"
+            in compare_versions.DISTRIBUTION_COLUMNS["compute_contextual_features"]
+        ), "the UPRNs-per-cluster distribution must target the real n_UPRNs column"
+
+
+class TestGetDictDistributionFrames:
+    """Tests for `get_dict_distribution_frames`."""
+
+    def test_cluster_stage_gets_the_derived_area_distribution_only(
+        self, df_clusters_old, df_areas_old, df_areas_merged
+    ):
+        """The cluster stage output has no configured distribution columns;
+        its only distribution is the geometry-derived area."""
+        frames = compare_versions.get_dict_distribution_frames(
+            "cluster",
+            df_clusters_old,
+            df_clusters_old,
+            df_areas_old,
+            df_areas_merged,
+        )
+        assert list(frames) == [
+            "area_m2"
+        ], "the cluster stage must get exactly the derived area distribution"
+        assert frames["area_m2"] == (
+            df_areas_old,
+            df_areas_merged,
+        ), "the area distribution must read the geometry-derived frames"
+
+    def test_contextual_stage_adds_the_configured_columns(
+        self, df_clusters_old, df_areas_old
+    ):
+        """The contextual-features stage gets the derived area plus its
+        configured columns (n_UPRNs), read from the tabular output."""
+        frames = compare_versions.get_dict_distribution_frames(
+            "compute_contextual_features",
+            df_clusters_old,
+            df_clusters_old,
+            df_areas_old,
+            df_areas_old,
+        )
+        assert set(frames) == {
+            "area_m2",
+            "n_UPRNs",
+        }, "the contextual stage must get the area and n_UPRNs distributions"
+        assert frames["n_UPRNs"] == (
+            df_clusters_old,
+            df_clusters_old,
+        ), "configured columns must read the tabular stage output"
+
+    def test_stage_without_geometry_gets_no_distributions(self, df_old):
+        """Non-geometry stages have no areas and no configured columns yet,
+        so no distribution sections are added."""
+        frames = compare_versions.get_dict_distribution_frames(
+            "decision_tree", df_old, df_old, None, None
+        )
+        assert frames == {}, "a stage without geometry or configured columns gets none"
+
+
 class TestParseArguments:
     """Tests for `parse_arguments`."""
 
