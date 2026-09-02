@@ -3,11 +3,13 @@ Unit tests for functions in compute_contextual_features.py
 """
 
 import geopandas as gpd
+import numpy as np
 import pytest
 from shapely.geometry import Point
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.run.compute_contextual_features import (
+    create_json_contextual_features_metadata,
     extend_gdf_logic_trace,
 )
 
@@ -112,3 +114,77 @@ class TestExtendGdfLogicTrace:
             assert (
                 "potential" not in traces[cluster]
             ), f"cluster {cluster} outside DHN-potential areas must not mention it"
+
+
+class TestCreateJsonContextualFeaturesMetadata:
+    """Tests for `create_json_contextual_features_metadata`."""
+
+    @pytest.fixture(scope="class")
+    def geojson(self):
+        """Run the function once on two clusters and one anchor load, in EPSG:4326.
+
+        `anchor_ids` cells are numpy arrays, as geoparquet returns list columns."""
+        clusters_gdf = gpd.GeoDataFrame(
+            {
+                "cluster_id": ["C01", "C02"],
+                "assigned_tech": [TECH_TYPES["communal"], TECH_TYPES["individual"]],
+                "communal_origin": [COMMUNAL_ORIGIN["anchor_proximity"], None],
+                "anchor_ids": [np.array(["A1", "A2"], dtype=object), None],
+            },
+            geometry=[Point(-4.14, 50.37), Point(-4.13, 50.37)],
+            crs="EPSG:4326",
+        )
+        anchors_gdf = gpd.GeoDataFrame(
+            {"anchor_id": ["A1"]}, geometry=[Point(-4.15, 50.37)], crs="EPSG:4326"
+        )
+        return create_json_contextual_features_metadata(
+            clusters_with_contextual_features_gdf=clusters_gdf,
+            local_authorities="Plymouth",
+            release_date="20260901",
+            optional_data_layers={"anchor_loads": anchors_gdf},
+        )
+
+    @pytest.fixture(scope="class")
+    def features_by_layer(self, geojson):
+        """Group feature properties by layer."""
+        grouped = {}
+        for feature in geojson["features"]:
+            grouped.setdefault(feature["properties"]["layer"], []).append(
+                feature["properties"]
+            )
+        return grouped
+
+    def test_cluster_features_carry_anchor_id_list(self, features_by_layer):
+        """Anchor-origin clusters carry a JSON array of anchor IDs; other clusters carry null."""
+        clusters = {
+            props["cluster_id"]: props
+            for props in features_by_layer["clusters_with_contextual_features"]
+        }
+        assert clusters["C01"]["anchor_ids"] == [
+            "A1",
+            "A2",
+        ], "an anchor-origin cluster must serialise its anchor IDs as a JSON array"
+        assert (
+            clusters["C02"]["anchor_ids"] is None
+        ), "a cluster with no linked anchors must serialise a null anchor_ids"
+        assert set(clusters["C01"]) == {
+            "cluster_id",
+            "assigned_tech",
+            "communal_origin",
+            "anchor_ids",
+            "layer",
+        }, "existing cluster properties must pass through unchanged"
+
+    def test_anchor_features_carry_anchor_id(self, features_by_layer):
+        """Anchor-load features keep their anchor_id and are tagged with the layer name."""
+        assert features_by_layer["anchor_loads"] == [
+            {"anchor_id": "A1", "layer": "anchor_loads"}
+        ], "each anchor-load feature must carry its anchor_id and layer tag"
+
+    def test_metadata_describes_anchor_properties(self, geojson):
+        """The output metadata describes both new properties."""
+        descriptions = geojson["metadata"]["Variable names and descriptions"]
+        for name in ["anchor_id", "anchor_ids"]:
+            assert (
+                name in descriptions
+            ), f"metadata must describe the new `{name}` property"
