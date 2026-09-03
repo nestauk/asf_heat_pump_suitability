@@ -203,6 +203,9 @@ output:
     clusters_tech_contextual_info: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_clusters_contextual_features_{tolerance_m}m.geojson"
   model:
     block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_building_classifier.pkl"
+    garden_size_model:
+      random_forest_regressor: "s3://asf-local-heat-planning-tool/outputs/models/garden_size_random_forest.pkl"
+      boosted_decision_tree: "s3://asf-local-heat-planning-tool/outputs/models/garden_size_bdt.pkl"
 
 # Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of proprerties and contextual information about properties within the clusters and surrounding neighbourhood
 metadata:
