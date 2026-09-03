@@ -287,6 +287,7 @@ def create_gdf_contextual_features(
     Returns:
         gpd.GeoDataFrame: geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
     """
+    target_crs = "EPSG:27700"
 
     clusters_with_contextual_features_df = extend_df_contextual_features(
         clusters_df=pl.from_pandas(
@@ -308,11 +309,11 @@ def create_gdf_contextual_features(
             on="cluster_id",
         ),
         geometry="geometry",
-        crs="EPSG:27700",
+        crs=target_crs,
     )
 
-    geo_utils.verify_gdf_crs(hn_zones_gdf, target_crs="EPSG:27700")
-    geo_utils.verify_gdf_crs(spatial_signatures_gdf, target_crs="EPSG:27700")
+    geo_utils.verify_gdf_crs(hn_zones_gdf, target_crs=target_crs)
+    geo_utils.verify_gdf_crs(spatial_signatures_gdf, target_crs=target_crs)
 
     # Add in_hn_zone and in_city_centre flags to clusters_gdf
     clusters_with_contextual_features_gdf["in_hn_zone"] = (
