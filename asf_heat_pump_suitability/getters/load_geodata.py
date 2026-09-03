@@ -8,7 +8,8 @@ import s3fs
 import shapely
 import logging
 import warnings
-
+from pathlib import Path
+from urllib.parse import urlparse
 from tenacity import retry, stop_after_attempt
 from osbng import grids
 from pyogrio.errors import DataSourceError
@@ -17,9 +18,12 @@ from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import geo_utils
 from asf_heat_pump_suitability.getters import base_getters, load_boundaries
 from asf_heat_pump_suitability.pipeline.transform import local_authority as la
+from asf_heat_pump_suitability.utils import s3_utils
 
 # Instantiate variable to fill with list from iterator in `load_gdf_bng_grid_squares`
 _BNG_GRID_100KM_FEATURES = None
+
+s3_client = boto3.client("s3")
 
 
 def load_df_osopen_uprn(**kwargs) -> pl.DataFrame:
@@ -63,6 +67,69 @@ def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame.from_features(_BNG_GRID_100KM_FEATURES, crs=27700)
 
 
+def load_gdf_country_heat_network_zones(country: str) -> gpd.GeoDataFrame:
+    """
+    Load heat network zones geodataframe for a specific country (England, Scotland, or Wales).
+
+    Args:
+        country (str): The country for which to load heat network zones. Options: "England", "Scotland", "Wales".
+
+    Returns:
+        gpd.GeoDataFrame: Heat network zones polygons for the specified country.
+    """
+    country_clean = country.strip().lower()
+
+    if country_clean not in ["england", "scotland", "wales"]:
+        raise ValueError(
+            f"Invalid country: '{country}'. Must be 'England', 'Scotland', or 'Wales'."
+        )
+
+    if country_clean == "england":
+        print("Loading DESNZ heat network zones for England...")
+        gdf = gpd.read_parquet(
+            path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
+        ).drop(columns="index_right")
+
+        gdf = _extend_gdf_hn_zone_id(gdf)
+
+        return geo_utils.verify_gdf_crs(gdf=gdf)
+
+    config_keys = {
+        "scotland": ("LHEES heat network zones for Scotland", "lhees_files"),
+        "wales": ("Wales heat network priority areas", "wales_files"),
+    }
+
+    message, folder_key = config_keys[country_clean]
+    print(f"Loading {message}...")
+
+    s3_uri = config["data"]["geodata"]["heat_network_zones"][folder_key]
+    parsed_s3 = urlparse(s3_uri)
+    s3_bucket = parsed_s3.netloc
+    folder_path = Path(parsed_s3.path.lstrip("/"))
+
+    s3_client = boto3.client("s3")
+
+    file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
+        s3_client=s3_client,
+        s3_bucket=s3_bucket,
+        path_folder=str(folder_path),
+        file_type=[".geojson", ".gpkg"],
+    )
+
+    if not file_paths:
+        raise FileNotFoundError(
+            f"No valid files (.geojson, .gpkg) found in s3://{s3_bucket}/{folder_path}"
+        )
+
+    # Load and standardize CRS for each dataset
+    gdfs = [
+        geo_utils.verify_gdf_crs(gpd.read_file(os.path.join(f"s3://{s3_bucket}", path)))
+        for path in file_paths
+    ]
+
+    return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+
+
 def load_gdf_heat_network_zones(
     boundary: Optional[
         shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame
@@ -84,16 +151,27 @@ def load_gdf_heat_network_zones(
         gpd.GeoDataFrame: polygons of heat network zones in given Local Authority or boundary.
     """
     # Load all DESNZ heat network zones in England
-    hn_gdf = gpd.read_parquet(
-        path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
-    ).drop(columns="index_right")
+    desnz_hn_gdf = load_gdf_country_heat_network_zones("England")[["geometry"]]
+    desnz_hn_gdf["source_annotation"] = "DESNZ advanced heat network zoning in England"
 
-    # Assume first column with `ID` substring is the zone ID column
-    # Note original ID column retained in case of erroneous ID assignment
-    hn_gdf = _extend_gdf_hn_zone_id(hn_gdf)
-    hn_gdf = geo_utils.verify_gdf_crs(gdf=hn_gdf)
+    # Load LHEES heat network zones in Scotland
+    lhees_hn_gdf = load_gdf_country_heat_network_zones("Scotland")[["geometry"]]
+    lhees_hn_gdf["source_annotation"] = "LHEES heat network zoning in Scotland"
 
-    hn_gdf["source_annotation"] = "DESNZ advanced heat network zoning"
+    # Load priority areas for district heat networks in Wales
+    # wales_hn_gdf = load_gdf_country_heat_network_zones("Wales")[["geometry"]]
+    # wales_hn_gdf["source_annotation"] = (
+    #     "Priority areas for district heat networks in Wales"
+    # )
+
+    hn_gdf = pd.concat(
+        [
+            desnz_hn_gdf,
+            lhees_hn_gdf,
+            # wales_hn_gdf
+        ],
+        ignore_index=True,
+    )
 
     if boundary is not None:
         if local_authority is not None:

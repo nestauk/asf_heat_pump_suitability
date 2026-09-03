@@ -31,6 +31,8 @@ data:
     heat_network_zones:
       desnz_files: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_network_desnz_data/"
       desnz_polygons: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_network_desnz_data/heat_network_zones_all.parquet"
+      lhees_files: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_networks_lhees/" # scotland
+      wales_files: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_networks_wales/" # wales
 
     gb_spatial_signatures:
       # UrbanGrammarAI Spatial Signatures GB simplified
