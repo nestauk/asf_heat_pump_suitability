@@ -72,7 +72,7 @@ data:
     wales: "s3://asf-local-heat-planning-tool/inputs/lookup/welsh-index-of-multiple-deprivation-wimd-2025-index-and-domain-ranks-and-groups-for-lower-layer-super-output-areas-lsoa-v7-en-gb.csv"
   lookups:
     # Scotland source: https://www.nrscotland.gov.uk/publications/scottish-statistics-postcode-lookup/
-    scotland: "s3://asf-local-heat-planning-tool/inputs/lookup/Scotland_postcode_lookup.csv"
+    scotland: "s3://asf-local-heat-planning-tool/inputs/lookup/Scotland_postcode_to_higher_geography_lookup.csv"
 
   # Preprocessed data
   processed:
