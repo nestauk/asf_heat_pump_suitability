@@ -39,19 +39,20 @@ def load_df_osopen_uprn(
     """
     print("Loading OSOpen UPRNs...")
     if parquet:
-        if grid_squares:
+        # If all GB grid squares requested, load single GB-wide file instead of multiple partitions
+        if not grid_squares or set(grid_squares) == set(
+            config["constant"]["land_grid_squares"]
+        ):
+            paths = config["data"]["geodata"]["uk_osopen_uprn_parquet"]
+        else:
             paths = [
                 config["data"]["geodata"]["uk_osopen_uprn_partitioned"].format(
                     grid_square=sq
                 )
                 for sq in grid_squares
             ]
-            return pl.read_parquet(paths, **kwargs)
-        if not grid_squares or set(grid_squares) == set(
-            config["constant"]["land_grid_squares"]
-        ):
-            path = config["data"]["geodata"]["uk_osopen_uprn_parquet"]
-            return pl.read_parquet(path, **kwargs)
+        return pl.read_parquet(paths, **kwargs)
+
     else:
         path = config["data"]["geodata"]["uk_osopen_uprn_raw"]
         filename = os.path.basename(path).split("_csv")[0]
