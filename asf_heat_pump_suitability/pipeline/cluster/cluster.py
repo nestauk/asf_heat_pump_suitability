@@ -584,10 +584,9 @@ def load_transform_gdf_polygon_barriers(
     - Tidal boundaries
     - Woodland
 
-    Additionally, load physical barriers with (Multi)LineString geometries - major roads and railways - for the
-    specified grid squares. A buffer is added around each geometry to cover the width of the road / railway.
-
-    # TODO add road types to docstring
+    Additionally, load physical barriers with (Multi)LineString geometries - railways, and roads of the following types:
+    "A Road", "B Road", "Motorway", "Minor Road"- for the specified grid squares. A buffer is added around each
+    geometry to cover the width of the road / railway.
 
     Args:
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
