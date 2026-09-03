@@ -138,7 +138,7 @@ def get_dict_la_data(la_names: str | list[str]) -> dict:
     resolved_las = resolve_list_la_names(la_names)
     # whole of GB
     if resolved_las is None:
-        slug = "gb"
+        slug = "GB"
         grid_squares = load_geodata.load_gdf_bng_grid_squares()
         grid_squares_set = set(grid_squares["bng_ref"])
     else:
