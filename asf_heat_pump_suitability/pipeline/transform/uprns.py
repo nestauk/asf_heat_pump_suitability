@@ -195,9 +195,9 @@ def filter_gdf_domestic_uprns(
 
     # TODO this could be updated to a classification model and scaled
     # This triggers for Plymouth only as the threshold density was calculated from Plymouth data only
-    if [la.lower() for la in local_authority_dict["valid_local_authorities"]] == [
-        "plymouth"
-    ]:
+    if not local_authority_dict["valid_local_authorities"] or [
+        la.lower() for la in local_authority_dict["valid_local_authorities"]
+    ] == ["plymouth"]:
         # Identify large buildings with low UPRN density which will be labelled non-domestic
         non_domestic_buildings_gdf = _generate_gdf_non_domestic_buildings_by_density(
             domestic_uprns_gdf=domestic_uprn_gdf,
@@ -332,19 +332,20 @@ def map_dict_uprns_to_building_id(
     return uprns_building_dict
 
 
-def get_dict_census_uprn_range(local_authorities: list[str]) -> dict:
+def get_dict_census_uprn_range(local_authorities: list[str] = None) -> dict:
     """
     Finds the number of households in a Local Authority from the 2021 (England and Wales) and 2022 (Scotland) census, and returns a min and max expected number of UPRNs at 0.95 and 1.4 times the sum of census counts.
 
     Args:
-        local_authorities (list[str]): list of Local Authorities to find census counts for.
+        local_authorities (list[str]): list of Local Authorities to find census counts for. Default None for all of GB.
 
     Returns:
         dict: dictionary with minimum and maximum expected UPRNs based on total census counts. Format: {"min": min_uprns, "max": max_uprns}.
 
     """
-    # rough expected UPRN range for whole of GB. ONS estimates https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/families/bulletins/familiesandhouseholds/2024 ~29 million households in UK.
-    if local_authorities == "gb":
+    # rough expected UPRN range for whole of GB.
+    # ONS estimates https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/families/bulletins/familiesandhouseholds/2024 ~29 million households in UK.
+    if not local_authorities or local_authorities == ["gb"]:
         min_uprns = 27000000
         max_uprns = 40000000
 
@@ -473,30 +474,22 @@ if __name__ == "__main__":
 
     release_date = save_utils.get_str_release_date(args.release_date)
 
-    if local_authorities == "gb":  # All of GB
-        # TODO this may not work due to scaling and may require chunking of datasets.
-        # TODO Adding here as placeholder to assist scaling later
-        print("Creating residential UPRN dataset for all of GB...")
-        uprns_df = load_geodata.load_df_osopen_uprn()
-        uprns_gdf = generate_gdf_uprn_coords(uprns_df)
-        del uprns_df
-    else:  # Specific local authorities (any number of LAs can be specified in config file)
-        print(f"Creating residential UPRN dataset for {local_authorities}...")
-        la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-            select_las=local_authority_dict["valid_local_authorities"]
-        )
-        uprns_df = load_geodata.load_df_osopen_uprn(
-            grid_squares=local_authority_dict["grid_squares"]
-        )
-        uprns_gdf = generate_gdf_uprn_coords(uprns_df)
-        del uprns_df
+    print(f"Creating residential UPRN dataset for {local_authorities}...")
+    la_boundaries_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+        select_las=local_authority_dict["valid_local_authorities"]
+    )
+    uprns_df = load_geodata.load_df_osopen_uprn(
+        grid_squares=local_authority_dict["grid_squares"]
+    )
+    uprns_gdf = generate_gdf_uprn_coords(uprns_df)
+    del uprns_df
 
-        # Reduce UPRNs to only those within the LA boundaries and join LA code and name for later use
-        uprns_gdf = uprns_gdf.sjoin(
-            la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
-            how="inner",
-            predicate="intersects",
-        ).drop(columns="index_right")
+    # Reduce UPRNs to only those within the LA boundaries and join LA code and name for later use
+    uprns_gdf = uprns_gdf.sjoin(
+        la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
+        how="inner",
+        predicate="intersects",
+    ).drop(columns="index_right")
 
     poi_df = load_geodata.load_gdf_poi(
         grid_squares=local_authority_dict["grid_squares"]
@@ -562,7 +555,9 @@ if __name__ == "__main__":
     # --- PANDERA VALIDATION ---
 
     # find acceptable UPRN range
-    uprn_bounds = get_dict_census_uprn_range(local_authorities)
+    uprn_bounds = get_dict_census_uprn_range(
+        local_authority_dict["valid_local_authorities"]
+    )
     # perform validation checks on df
     schema = uprns_schema.create_domestic_uprn_schema(
         min_expected_rows=uprn_bounds["min"], max_expected_rows=uprn_bounds["max"]

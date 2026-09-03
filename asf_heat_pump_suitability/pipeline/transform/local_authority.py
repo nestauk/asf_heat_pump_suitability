@@ -93,9 +93,9 @@ def make_str_slug(name: str | list[str]) -> str:
     return "-".join(slug_parts)
 
 
-def get_list_la_grid_squares(
+def get_set_la_grid_squares(
     local_authorities: list = None, buffer_m: float = 1000
-) -> list:
+) -> set:
     """
     Return grid squares corresponding to a local authority or list of local authorities. The buffer (m) ensures that geographical features (e.g. buildings) straddling the LA boundary are captured if they fall into neighbouring grid squares.
 
@@ -104,7 +104,7 @@ def get_list_la_grid_squares(
         buffer_m (float): buffer distance around local authority boundary (default = 1000m).
 
     Returns:
-        list: list of OS BNG grid squares corresponding to the input local authorities.
+        set: OS BNG grid squares corresponding to the input local authorities.
     """
     # Get all BNG grid squares
     grid_gdf = load_geodata.load_gdf_bng_grid_squares()
@@ -138,14 +138,13 @@ def get_dict_la_data(la_names: str | list[str]) -> dict:
     resolved_las = resolve_list_la_names(la_names)
     # whole of GB
     if resolved_las is None:
-        slug = "gb"
-        grid_squares = load_geodata.load_gdf_bng_grid_squares()
-        grid_squares_set = set(grid_squares["bng_ref"])
+        slug = "GB"
+        grid_squares_set = set(config["constant"]["land_grid_squares"])
     else:
         # Generate the URL slug from the official resolved names
         slug = make_str_slug(resolved_las)
         # Fetch the combined grid squares
-        grid_squares_set = get_list_la_grid_squares(resolved_las)
+        grid_squares_set = get_set_la_grid_squares(resolved_las)
 
     # Construct the output dictionary
     return {
