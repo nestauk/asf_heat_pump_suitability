@@ -284,7 +284,6 @@ class TestGenerateGdfClusters:
             buildings_gdf=gdf_mixed_buildings,
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=tech_gdf,
-            line_overlay_gdf=empty_gdf,
             polygon_overlay_gdf=empty_gdf,
             combined_anchor_gdf=empty_gdf,
             radius=50,
@@ -325,7 +324,6 @@ class TestGenerateGdfClusters:
             buildings_gdf=gdf_mixed_buildings,
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=domestic_tech_gdf,
-            line_overlay_gdf=empty_gdf,
             polygon_overlay_gdf=empty_gdf,
             combined_anchor_gdf=empty_gdf,
             radius=50,
@@ -372,7 +370,6 @@ class TestGenerateGdfClusters:
             buildings_gdf=gdf_mixed_buildings,
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=tech_gdf,
-            line_overlay_gdf=empty_gdf,
             polygon_overlay_gdf=empty_gdf,
             combined_anchor_gdf=empty_gdf,
             radius=50,
@@ -397,7 +394,6 @@ class TestGenerateGdfClusters:
             buildings_gdf=gdf_mixed_buildings,
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=tech_gdf,
-            line_overlay_gdf=empty_gdf,
             polygon_overlay_gdf=empty_gdf,
             combined_anchor_gdf=empty_gdf,
             radius=50,
@@ -621,15 +617,18 @@ class TestOverlayGdfPhysicalBarriers:
         return gpd.read_parquet(fpath).set_crs(epsg=27700)
 
     @pytest.fixture(scope="class")
-    def gdf_line_overlay_mixed_buildings(self):
+    def gdf_polygon_overlay_mixed_buildings(self):
         """
-        Create a geodataframe of line polygons (linestrings converted to polygons) that meet the following criteria:
+        Create a geodataframe of polygons (incl. linestrings converted to polygons) that meet the following criteria:
         1. One road separates the corner of a building off from the rest of the footprint.
         2. One road bisects a building.
         3. The other roads go around and between buildings to separate clusters.
-        The buildings affected are separate from those affected by the overlay polygons.
+        4. Overlaps with the corner of a building.
+        5. Completely overlaps a building.
+        6. Bisects a building.
+        Different buildings are affected by the different polygons.
         """
-        line_dict = {
+        polygon_dict = {
             "geometry": [
                 Polygon(
                     [
@@ -675,23 +674,6 @@ class TestOverlayGdfPhysicalBarriers:
                         (400025.89, 400012.87),
                     ]
                 ),
-            ]
-        }
-
-        # Dissolve overlapping polygons and explode back to one line per polygon
-        return gpd.GeoDataFrame(line_dict, crs="EPSG:27700").dissolve().explode()
-
-    @pytest.fixture(scope="class")
-    def gdf_polygon_overlay_mixed_buildings(self):
-        """
-        Create a geodataframe of overlay polygons that meet the following criteria:
-        1. Overlaps with the corner of a building.
-        2. Completely overlaps a building.
-        3. Bisects a building.
-        The buildings affected are separate from those affected by the line polygons.
-        """
-        polygon_dict = {
-            "geometry": [
                 Polygon(
                     [
                         (400015.8, 400046.4),
@@ -766,7 +748,6 @@ class TestOverlayGdfPhysicalBarriers:
         self,
         gdf_mixed_buildings_voronoi,
         tech_gdf,
-        gdf_line_overlay_mixed_buildings,
         gdf_polygon_overlay_mixed_buildings,
     ):
         """Test Voronoi cells entirely contain buildings after overlaying barriers. This tests the function can handle
@@ -777,7 +758,6 @@ class TestOverlayGdfPhysicalBarriers:
         cells_gdf = overlay_gdf_physical_barriers(
             voronoi_gdf=gdf_mixed_buildings_voronoi,
             tech_gdf=domestic_tech_gdf,
-            line_overlay_gdf=gdf_line_overlay_mixed_buildings,
             polygon_overlay_gdf=gdf_polygon_overlay_mixed_buildings,
             id_col="building_id",
         )
