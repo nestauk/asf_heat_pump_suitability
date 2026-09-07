@@ -42,6 +42,9 @@ Examples:
 
 import argparse
 import polars as pl
+from scipy.optimize import minimize
+
+import numpy as np
 
 from asf_heat_pump_suitability import config, PROJECT_DIR
 from asf_heat_pump_suitability.getters import base_getters
@@ -123,6 +126,67 @@ def load_df_lsoa_imd_decile(nation: str = None) -> pl.DataFrame:
         )
 
     return pl.concat(dfs)
+
+
+def sample_objective(x, primary_group_ids, target_per_primary):
+    # Sum sample size x for each of the 24 primary groups
+    primary_totals = np.bincount(primary_group_ids, weights=x)
+    # Minimize sum of squared deviations from equal allocation
+    return np.sum((primary_totals - target_per_primary) ** 2)
+
+
+def sample_function(grouped_df, total_sample, primary_col):
+    n_cells = grouped_df.height
+    # Get the target number of samples per group
+    n_primary_groups = grouped_df[primary_col].n_unique()
+    target_per_primary = total_sample / n_primary_groups
+    # Sample size per cell must be between 0 and real population count
+    bounds_per_group = [(0, i) for i in grouped_df["n_buildings"]]
+    # Initial guess: evenly distribute sample across all cells
+    x0 = np.full(n_cells, total_sample / n_cells)
+    objective_args = {
+        "primary_group_ids": grouped_df["combination"],
+        "target_per_primary": target_per_primary,
+    }
+
+    # Cast boolean to int explicitly for use in constraints
+    urban_groups = grouped_df["is_urban"].cast(pl.Int8)
+    high_deprivation_groups = grouped_df["high_deprivation"].cast(pl.Int8)
+
+    sampling_constraints = [
+        # Constraint 1: overall total must equal total_sample requested
+        {"type": "eq", "fun": lambda x: np.sum(x) - total_sample},
+        # Constraint 2: half of samples should be urban (and half rural)
+        {
+            "type": "eq",
+            "fun": lambda x: np.sum(x * urban_groups) - (0.5 * total_sample),
+        },
+        # Constraint 3: half of sample should be high deprivation (and half not)
+        {
+            "type": "eq",
+            "fun": lambda x: np.sum(x * high_deprivation_groups) - (0.5 * total_sample),
+        },
+    ]
+
+    # Run optimiser to calculate the optimal number of samples from each group
+    result = minimize(
+        fun=lambda x: sample_objective(x, **objective_args),
+        x0=x0,
+        method="SLSQP",
+        bounds=bounds_per_group,
+        constraints=sampling_constraints,
+    )
+
+    # Extract results and round them (they are floats originally)
+    sample_allocations = np.round(result.x).astype(int)
+    print("Optimized sub-cell sample sizes:", sample_allocations)
+    print("Total sampled:", np.sum(sample_allocations))
+    print("Urban total:", np.sum(sample_allocations * urban_groups))
+    print(
+        "High Deprivation total:", np.sum(sample_allocations * high_deprivation_groups)
+    )
+
+    return sample_allocations
 
 
 def parse_arguments() -> argparse.Namespace:
