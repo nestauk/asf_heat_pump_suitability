@@ -579,24 +579,28 @@ if __name__ == "__main__":
             .alias("grouped_construction_age_band"),
             # Group IMD deciles
             pl.when(pl.col("IMD_decile").is_in([1, 2, 3]))
-            .then(pl.lit("high_deprivation"))
-            .when(pl.col("IMD_decile").is_in([4, 5, 6, 7]))
-            .then(pl.lit("middle_deprivation"))
-            .when(pl.col("IMD_decile").is_in([8, 9, 10]))
-            .then(pl.lit("low_deprivation"))
+            .then(True)
+            .when(pl.col("IMD_decile").is_in([4, 5, 6, 7, 8, 9, 10]))
+            .then(False)
             .otherwise(None)
-            .alias("deprivation_group"),
+            .alias("high_deprivation"),
             # Group rurality
             pl.when(pl.col("rurality").is_in(["UN1", "UF1", "1", "2"]))
-            .then(pl.lit("urban"))
-            .when(pl.col("rurality").is_in(["RLN1", "RLF1", "3", "4"]))
-            .then(pl.lit("large_rural"))
-            .when(pl.col("rurality").is_in(["RSN1", "RSF1", "5", "6"]))
-            .then(pl.lit("small_rural"))
+            .then(True)
+            .when(
+                pl.col("rurality").is_in(
+                    ["RLN1", "RLF1", "3", "4", "RSN1", "RSF1", "5", "6"]
+                )
+            )
+            .then(False)
             .otherwise(None)
-            .alias("rurality"),
+            .alias("is_urban"),
         )
-        .with_columns((pl.col("proportion_flats") > 0.8).alias("over_80_pc_flats"))
+        .with_columns(
+            (pl.col("proportion_flats") > 0.8)
+            .cast(pl.Float64)
+            .alias("over_80_pc_flats")
+        )
     )
 
     del uprns_df
@@ -616,20 +620,18 @@ if __name__ == "__main__":
     primary_strata = [
         "area",
         "n_flats_grouped",
-        "deprivation_group",
+        "high_deprivation",
     ]
 
     secondary_constraints = [
-        "rurality",
+        "is_urban",
         "over_80_pc_flats",
     ]
 
     attributes = primary_strata + secondary_constraints
 
     buildings_df = buildings_df.with_columns(
-        pl.col("deprivation_group").cast(pl.String).fill_null("unknown"),
-        (pl.col("rurality") == "urban").cast(pl.Float64).alias("is_urban"),
-        pl.col("over_80_pc_flats").cast(pl.Float64),
+        pl.col("high_deprivation").cast(pl.String).fill_null("unknown"),
     )
 
     secondary_constraints = ["is_urban", "over_80_pc_flats"]
