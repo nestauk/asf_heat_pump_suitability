@@ -46,6 +46,7 @@ import polars as pl
 from scipy.optimize import minimize
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 from asf_heat_pump_suitability import config, PROJECT_DIR
 from asf_heat_pump_suitability.getters import base_getters
@@ -129,10 +130,27 @@ def load_df_lsoa_imd_decile(nation: str = None) -> pl.DataFrame:
     return pl.concat(dfs)
 
 
-def sample_objective(x, primary_group_ids, target_per_primary):
-    # Sum sample size x for each of the 24 primary groups
-    primary_totals = np.bincount(primary_group_ids, weights=x)
-    # Minimize sum of squared deviations from equal allocation
+def calculate_int_ssd(
+    sample_allocations: np.array,
+    primary_group_ids: ArrayLike,
+    target_per_primary: float,
+) -> float:
+    """
+    Calculate the sum of squared deviations from the target sample size per primary strata.
+
+    Args:
+        sample_allocations (np.array): proposed count of samples to take from each cell
+        primary_group_ids (ArrayLike): unique IDs of the primary strata combinations to group by
+        target_per_primary (int): target sample number per primary stratum
+
+    Returns:
+        int: sum of squared deviations
+    """
+    # Sum sample allocations for each of the primary strata.
+    # This is effectively a vectorised 'groupby' - we group the full combination of sampling cells into their primary
+    # strata
+    primary_totals = np.bincount(primary_group_ids, weights=sample_allocations)
+    # Minimize sum of squared deviations from the target sample size
     return np.sum((primary_totals - target_per_primary) ** 2)
 
 
@@ -193,7 +211,9 @@ def calculate_array_sample_allocations(
 
     # Run optimiser to calculate the optimal number of samples from each group
     result = minimize(
-        fun=lambda x: sample_objective(x, **objective_args),
+        # Objective function to be minimised (i.e. here we are minimising the sum of squared deviations to
+        # penalise large deviations from the desired sample size for each group)
+        fun=lambda x: calculate_int_ssd(x, **objective_args),
         x0=x0,
         method="SLSQP",
         bounds=bounds_per_group,
