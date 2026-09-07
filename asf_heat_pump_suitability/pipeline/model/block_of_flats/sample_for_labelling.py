@@ -40,6 +40,7 @@ Examples:
     python sample_for_labelling.py --map_uprns_to_building --save
 """
 
+from typing import List
 import argparse
 import polars as pl
 from scipy.optimize import minimize
@@ -190,13 +191,30 @@ def sample_function(
     return sample_allocations
 
 
-def create_sampling_df(
-    buildings_df,
-    primary_attributes,
-    secondary_attributes,
-    group_id_col="group_id",
-    primary_col="primary_strata",
-):
+def generate_df_sampling_cells(
+    buildings_df: pl.DataFrame,
+    primary_attributes: List[str],
+    secondary_attributes: List[str],
+    group_id_col: str = "group_id",
+    primary_col: str = "primary_strata",
+) -> pl.DataFrame:
+    """
+    Generate a DataFrame of cells to sample from based on primary strata and secondary constraints. The resulting
+    dataframe will have N rows, where N is equal to the number of categories in each attribute (primary or secondary)
+    multiplied together. The cells will contain the counts of buildings in each unique group combination.
+
+    Args:
+        buildings_df (pl.DataFrame): buildings where each row represents a unique building, and each row is enriched with
+        the specified primary and secondary attributes.
+        primary_attributes (List[str]): list of primary attributes to stratify sample by
+        secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling
+        group_id_col (str): name of unique ID column to be created containing sample cell IDs (i.e. unique combinations of primary and
+        secondary attributes). Default `group_id`.
+        primary_col (str): name of column to be created containing unique IDs for the primary strata combinations. Default `primary_strata`.
+
+    Returns:
+        pl.DataFrame: sampling cells containing building counts for each unique combination of primary and secondary attributes
+    """
     all_attributes = primary_attributes + secondary_attributes
 
     return (
@@ -205,8 +223,8 @@ def create_sampling_df(
             pl.count("building_id").alias("n_buildings"),
         )
         .with_columns(
-            pl.concat_list(all_attributes).alias("group_id"),
-            pl.concat_list(primary_attributes).alias("primary_strata"),
+            pl.concat_list(all_attributes).alias(group_id_col),
+            pl.concat_list(primary_attributes).alias(primary_col),
         )
     )
 
