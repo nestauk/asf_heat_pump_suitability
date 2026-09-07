@@ -205,7 +205,8 @@ def calculate_array_sample_allocations(
         sampling_constraints.append(
             {
                 "type": "eq",
-                "fun": lambda x: np.sum(x * attr) - (0.5 * total_sample),
+                "fun": lambda x, _vals=grouped_df[attr].to_numpy(): np.sum(x * _vals)
+                - (0.5 * total_sample),
             }
         )
 
@@ -225,7 +226,7 @@ def calculate_array_sample_allocations(
     print("Optimized sub-cell sample sizes:", sample_allocations)
     print("Total sampled:", np.sum(sample_allocations))
     for attr in secondary_attributes:
-        print(f"{attr} total:", np.sum(sample_allocations * grouped_df[attr]))
+        print(f"{attr} total sampled:", sum(sample_allocations * grouped_df[attr]))
 
     return sample_allocations
 
@@ -263,7 +264,12 @@ def generate_df_sampling_cells(
         )
         .with_columns(
             pl.concat_list(all_attributes).alias(group_id_col),
-            pl.concat_list(primary_attributes).alias(primary_col),
+            # Create unique ID from primary attributes
+            pl.concat_list(primary_attributes)
+            .list.join("_")
+            .cast(pl.Categorical)
+            .to_physical()  # required to cast categorical strings to numbers
+            .alias(primary_col),
         )
     )
 
@@ -603,6 +609,9 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # TAKE SAMPLE
     # ------------------------------------ #
+    buildings_df = pl.read_parquet(
+        "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_enriched_buildings_with_flats.parquet"
+    )
     print("Take sample of buildings...")
     primary_strata = [
         "area",
@@ -612,15 +621,18 @@ if __name__ == "__main__":
 
     secondary_constraints = [
         "rurality",
-        "grouped_construction_age_band",
         "over_80_pc_flats",
     ]
 
     attributes = primary_strata + secondary_constraints
 
     buildings_df = buildings_df.with_columns(
-        pl.col(attributes).cast(pl.String).fill_null("unknown")
+        pl.col("deprivation_group").cast(pl.String).fill_null("unknown"),
+        (pl.col("rurality") == "urban").cast(pl.Float64).alias("is_urban"),
+        pl.col("over_80_pc_flats").cast(pl.Float64),
     )
+
+    secondary_constraints = ["is_urban", "over_80_pc_flats"]
 
     # Create dataframe of cells to calculate sample sizes from
     group_counts_df = generate_df_sampling_cells(
