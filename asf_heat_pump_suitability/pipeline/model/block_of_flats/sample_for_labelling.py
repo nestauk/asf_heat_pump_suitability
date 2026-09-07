@@ -135,38 +135,41 @@ def sample_objective(x, primary_group_ids, target_per_primary):
     return np.sum((primary_totals - target_per_primary) ** 2)
 
 
-def sample_function(grouped_df, total_sample, primary_col):
+def sample_function(
+    grouped_df, total_sample, secondary_attributes, primary_col="primary_strata"
+):
+    # Total number of cells to optimise sample count from.
+    # This is the number of combinations multiplied by the number of groups in each secondary constraint.
     n_cells = grouped_df.height
+
     # Get the target number of samples per group
     n_primary_groups = grouped_df[primary_col].n_unique()
     target_per_primary = total_sample / n_primary_groups
+
     # Sample size per cell must be between 0 and real population count
     bounds_per_group = [(0, i) for i in grouped_df["n_buildings"]]
-    # Initial guess: evenly distribute sample across all cells
+
+    # Seed the optimiser with an initial guess: evenly distribute sample across all cells
     x0 = np.full(n_cells, total_sample / n_cells)
     objective_args = {
-        "primary_group_ids": grouped_df["combination"],
+        "primary_group_ids": grouped_df[primary_col],
         "target_per_primary": target_per_primary,
     }
 
-    # Cast boolean to int explicitly for use in constraints
-    urban_groups = grouped_df["is_urban"].cast(pl.Int8)
-    high_deprivation_groups = grouped_df["high_deprivation"].cast(pl.Int8)
-
+    # Set secondary sampling constraints
     sampling_constraints = [
         # Constraint 1: overall total must equal total_sample requested
         {"type": "eq", "fun": lambda x: np.sum(x) - total_sample},
-        # Constraint 2: half of samples should be urban (and half rural)
-        {
-            "type": "eq",
-            "fun": lambda x: np.sum(x * urban_groups) - (0.5 * total_sample),
-        },
-        # Constraint 3: half of sample should be high deprivation (and half not)
-        {
-            "type": "eq",
-            "fun": lambda x: np.sum(x * high_deprivation_groups) - (0.5 * total_sample),
-        },
     ]
+
+    for attr in secondary_attributes:
+        # Additional constraints: binary constraints should be distributed 50/50
+        sampling_constraints.append(
+            {
+                "type": "eq",
+                "fun": lambda x: np.sum(x * attr) - (0.5 * total_sample),
+            }
+        )
 
     # Run optimiser to calculate the optimal number of samples from each group
     result = minimize(
@@ -181,12 +184,31 @@ def sample_function(grouped_df, total_sample, primary_col):
     sample_allocations = np.round(result.x).astype(int)
     print("Optimized sub-cell sample sizes:", sample_allocations)
     print("Total sampled:", np.sum(sample_allocations))
-    print("Urban total:", np.sum(sample_allocations * urban_groups))
-    print(
-        "High Deprivation total:", np.sum(sample_allocations * high_deprivation_groups)
-    )
+    for attr in secondary_attributes:
+        print(f"{attr} total:", np.sum(sample_allocations * grouped_df[attr]))
 
     return sample_allocations
+
+
+def create_sampling_df(
+    buildings_df,
+    primary_attributes,
+    secondary_attributes,
+    group_id_col="group_id",
+    primary_col="primary_strata",
+):
+    all_attributes = primary_attributes + secondary_attributes
+
+    return (
+        buildings_df.group_by(all_attributes)
+        .agg(
+            pl.count("building_id").alias("n_buildings"),
+        )
+        .with_columns(
+            pl.concat_list(all_attributes).alias("group_id"),
+            pl.concat_list(primary_attributes).alias("primary_strata"),
+        )
+    )
 
 
 def parse_arguments() -> argparse.Namespace:
