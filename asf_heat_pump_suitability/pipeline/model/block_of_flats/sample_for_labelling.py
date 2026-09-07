@@ -636,6 +636,8 @@ if __name__ == "__main__":
 
     secondary_constraints = ["is_urban", "over_80_pc_flats"]
 
+    training_n = round(target_n * 0.75)
+
     # Create dataframe of cells to calculate sample sizes from
     group_counts_df = generate_df_sampling_cells(
         buildings_df=buildings_df,
@@ -644,7 +646,7 @@ if __name__ == "__main__":
     )
     n_samples_per_group = calculate_array_sample_allocations(
         grouped_df=group_counts_df,
-        total_sample=target_n,
+        total_sample=training_n,
         secondary_attributes=secondary_constraints,
     )
     group_counts_df = group_counts_df.with_columns(
