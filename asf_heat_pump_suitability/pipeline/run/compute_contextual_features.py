@@ -347,8 +347,10 @@ def create_json_contextual_features_metadata(
        json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
 
     """
+    target_crs = "EPSG:4326"
+
     geo_utils.verify_gdf_crs(
-        clusters_with_contextual_features_gdf, target_crs="EPSG:4326"
+        clusters_with_contextual_features_gdf, target_crs=target_crs
     )
     print("Adding metadata and converting to geojson format...")
     # Convert to geojson format and add metadata
@@ -360,7 +362,7 @@ def create_json_contextual_features_metadata(
 
     if optional_data_layers:
         for layer_name, layer_gdf in optional_data_layers.items():
-            geo_utils.verify_gdf_crs(layer_gdf, target_crs="EPSG:4326")
+            geo_utils.verify_gdf_crs(layer_gdf, target_crs=target_crs)
             layer_json = json.loads(layer_gdf.to_json(drop_id=True))
             for feature in layer_json["features"]:
                 feature["properties"]["layer"] = layer_name
