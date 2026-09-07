@@ -158,6 +158,7 @@ def load_gdf_heat_network_zones(
     lhees_hn_gdf = load_gdf_country_heat_network_zones("Scotland")[["geometry"]]
     lhees_hn_gdf["source_annotation"] = "LHEES heat network zoning in Scotland"
 
+    # Note: Wales heat network zones are not currently loaded because they are point locations rather than polygons. If needed, uncomment the following lines to load them as points.
     # Load priority areas for district heat networks in Wales
     # wales_hn_gdf = load_gdf_country_heat_network_zones("Wales")[["geometry"]]
     # wales_hn_gdf["source_annotation"] = (
