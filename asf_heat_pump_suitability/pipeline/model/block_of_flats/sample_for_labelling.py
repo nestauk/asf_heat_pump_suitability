@@ -136,9 +136,28 @@ def sample_objective(x, primary_group_ids, target_per_primary):
     return np.sum((primary_totals - target_per_primary) ** 2)
 
 
-def sample_function(
-    grouped_df, total_sample, secondary_attributes, primary_col="primary_strata"
-):
+def calculate_array_sample_allocations(
+    grouped_df: pl.DataFrame,
+    total_sample: int,
+    secondary_attributes: List[str],
+    primary_col: str = "primary_strata",
+) -> np.array:
+    """
+    Calculate optimal count of samples per group to fulfil primary stratification (proportional or even) and secondary
+    constraints.
+
+    Args:
+        grouped_df (pl.DataFrame): sampling cells containing building counts for each unique combination of primary and
+        secondary attributes.
+        total_sample (int): desired sample size for whole sample.
+        secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling. Must
+        be boolean attributes.
+        primary_col (str): name of column to be created containing unique IDs for the primary strata combinations.
+        Default `primary_strata`.
+
+    Returns:
+        np.array: count of samples per group in `grouped_df` required to meet constraints.
+    """
     # Total number of cells to optimise sample count from.
     # This is the number of combinations multiplied by the number of groups in each secondary constraint.
     n_cells = grouped_df.height
