@@ -113,3 +113,8 @@ source = [
 # Don't pester about parameters for a one-line docstring
 strictness = "short"
 docstring_style = "google"
+
+[dependency-groups]
+dev = [
+    "scalene>=2.3.0",
+]

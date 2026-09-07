@@ -180,11 +180,6 @@ def identify_df_building_most_suitable_tech(
             median_contiguous_outdoor_space_area_m2=pl.col(
                 "max_contiguous_outdoor_space_area_m2"
             ).median(),
-            n_properties_available_outdoor_space_data=pl.col(
-                "max_contiguous_outdoor_space_area_m2"
-            )
-            .drop_nulls()
-            .count(),
             n_properties=pl.col("UPRN").count(),
             n_solutions=pl.col("assigned_tech").n_unique(),
         )
@@ -194,15 +189,7 @@ def identify_df_building_most_suitable_tech(
     buildings_with_multiple_solutions_df = (
         solutions_per_footprint_df
         # Filter for footprints with more than 1 solution
-        .filter(pl.col("n_solutions") > 1)
-        # Calculate the percentage of properties with available outdoor space data for each building footprint
-        .with_columns(
-            perc_properties_available_outdoor_space_data=(
-                pl.col("n_properties_available_outdoor_space_data")
-                / pl.col("n_properties")
-                * 100
-            )
-        ).drop(["n_solutions"])
+        .filter(pl.col("n_solutions") > 1).drop(["n_solutions"])
     )
 
     buildings_with_multiple_solutions_df = assign_df_unique_solution(
@@ -243,7 +230,7 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
     - Else, assign "Unexpected combination of solutions in building footprint"
 
     Args:
-        solutions_per_footprint_df (pl.DataFrame): DataFrame with the set of most suitable tech for each building footprint, median outdoor space, and percentage of properties with outdoor space data.
+        solutions_per_footprint_df (pl.DataFrame): DataFrame with the set of most suitable tech for each building footprint and median outdoor space
 
     Returns:
         pl.DataFrame: DataFrame with assigned unique solution for each building footprint.
