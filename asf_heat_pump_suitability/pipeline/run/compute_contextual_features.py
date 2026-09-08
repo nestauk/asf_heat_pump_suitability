@@ -524,6 +524,7 @@ if __name__ == "__main__":
     geojson_file = create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf=clusters_with_contextual_features_gdf,
         optional_data_layers=optional_data_layers,
+
         local_authorities=local_authorities,
         release_date=release_date,
     )
