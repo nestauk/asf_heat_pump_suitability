@@ -79,6 +79,14 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--prod",
+        help="Set to push changes to production (i.e. staging area). This should only be used when running from `dev`. "
+        "If `save` is not set, `prod` will automatically be rendered False.",
+        action="store_true",
+        default=False,
+    )
+
+    parser.add_argument(
         "--release_date",
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
     )
@@ -404,6 +412,7 @@ def create_json_contextual_features_metadata(
 
 
 if __name__ == "__main__":
+    import warnings
     from asf_heat_pump_suitability.getters import load_geodata
     from asf_heat_pump_suitability.pipeline.transform import local_authority
     from asf_heat_pump_suitability import config
@@ -412,6 +421,12 @@ if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
     detail_level = args.detail
+
+    if args.prod and not args.save:
+        warnings.warn(
+            "`save` not set. `prod` rendered as False. Please set `save` and `prod` to push outputs to production."
+        )
+        args.prod = False
 
     tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
@@ -524,7 +539,6 @@ if __name__ == "__main__":
     geojson_file = create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf=clusters_with_contextual_features_gdf,
         optional_data_layers=optional_data_layers,
-
         local_authorities=local_authorities,
         release_date=release_date,
     )
@@ -545,6 +559,7 @@ if __name__ == "__main__":
             s3_file_path,
         )
 
+    if args.prod:
         # Save to front-end S3 bucket for use in the tool
         front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
         front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
@@ -559,6 +574,8 @@ if __name__ == "__main__":
         # Only the dated data-science copy gets a run manifest; the undated
         # front-end copy above is overwritten every run, so there is no
         # version history to attach lineage to.
+        # This is only created when `prod` is True because we only need traceable lineage for outputs pushed to
+        # production.
         manifest_utils.generate_and_save_run_manifest_to_s3(
             s3_file_path,
             stage="compute_contextual_features",
