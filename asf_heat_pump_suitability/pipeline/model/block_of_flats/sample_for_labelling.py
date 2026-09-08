@@ -638,7 +638,7 @@ if __name__ == "__main__":
         buildings_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
     )
     save_utils.save_to_s3(
-        df=buildings_df,
+        df=buildings_gdf,
         path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats_and_geometries.parquet",
     )
     del _save_buildings_gdf
