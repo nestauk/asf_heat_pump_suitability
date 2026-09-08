@@ -286,9 +286,11 @@ def extend_gdf_logic_trace(
 
     assigned_tech = clusters_with_contextual_features_gdf["assigned_tech"]
     tech_types = config["constant"]["tech_types"]
+
     dhn_potential = (clusters_with_contextual_features_gdf["in_hn_zone"] == "Yes") | (
         clusters_with_contextual_features_gdf["in_city_centre"] == "Yes"
     )
+
     near_anchor_load = (
         clusters_with_contextual_features_gdf[
             f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
@@ -296,59 +298,62 @@ def extend_gdf_logic_trace(
         == "Yes"
     )
 
+    is_communal = assigned_tech == tech_types["communal"]
+    is_networked = assigned_tech == tech_types["networked"]
+    is_ind_or_net = assigned_tech == tech_types["individual_or_networked"]
+    is_individual = assigned_tech == tech_types["individual"]
+
     logic_trace = [
         # 1) Communal solution + near anchor load + DHN potential
         # TODO: remove sentence about blocks of flats once we separate clusters that are communal due to blocks of flats from those that are communal due to anchor load proximity
         (
-            (assigned_tech == tech_types["communal"])
-            & near_anchor_load
-            & dhn_potential,
+            is_communal & near_anchor_load & dhn_potential,
             f"This cluster:\n- is in an area of 'district heat network' potential,\n- contains homes that have no or little outdoor space (up to 30m2),\n and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school),\n so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed. \n A 'communal solution' could be considered as an alternative solution because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school). This 'communal solution' could be integrated into a 'district heat newtork' in the future.\n There might also be one or multiple blocks of flats in the cluster.\n",
         ),
         # 2) Communal solution + near anchor load
         # TODO: remove sentence about blocks of flats once we separate clusters that are communal due to blocks of flats from those that are communal due to anchor load proximity
         (
-            (assigned_tech == tech_types["communal"]) & near_anchor_load,
+            is_communal & near_anchor_load,
             f"This cluster is assigned 'communal solution' because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school).\n There might also be one or multiple blocks of flats in the cluster.",
         ),
         # 3) Communal solution (blocks of flats)+ DHN potential
         (
-            (assigned_tech == tech_types["communal"] & dhn_potential),
+            is_communal & dhn_potential,
             "This cluster is in an area of 'district heat network' potential and it contains one or multiple blocks of flats, so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed.\n A ‘communal solution’ could also be considered as an alternative solution, because it contains one or multiple blocks of flats. This 'communal solution' could be integrated into a 'district heat network' in the future.",
         ),
         # 4) Communal solution (blocks of flats)
         (
-            (assigned_tech == tech_types["communal"]),
+            is_communal,
             "This cluster is assigned 'communal solution' because it contains one or multiple blocks of flats.",
         ),
         # 5) Networked heat pump + DHN potential
         (
-            (assigned_tech == tech_types["networked"]) & dhn_potential,
+            is_networked & dhn_potential,
             "This cluster is in an area of 'district heat network' potential and homes have no or little outdoor space (up to 30m2), so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed.\n A 'networked heat pump' could be considered as an alternative solution because multiple properties within these buildings have no or little outdoor space (up to 30m2).\n",
         ),
         # 6) Networked heat pump
         (
-            (assigned_tech == tech_types["networked"]),
+            is_networked,
             "This cluster is assigned 'networked heat pump' because multiple properties within these buildings have no or little outdoor space (up to 30m2)",
         ),
         # 7) Individual solution or networked HP (lack of outdoor space info) + DHN potential
         (
-            (assigned_tech == tech_types["individual_or_networked"]) & dhn_potential,
+            is_ind_or_net & dhn_potential,
             "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space:\n -This cluster is in an area of 'district heat network' potential and if homes have no or little outdoor space (up to 30m2), then homes would be most suitable for a district heat network connection when/if a 'district heat network' is constructed.\n A 'networked heat pump' could also be considered as an alternative solution, because multiple properties within these buildings have no or little outdoor space (up to 30m2).\n\nIf there is sufficient outdoor space for each property (above 30m2):\n - 'Individual solutions' will be the most suitable option for properties in this cluster because outdoor space is above 30m2 for all properties.\n - The cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
         ),
         # 8) Individual solution or networked HP (lack of outdoor space info)
         (
-            (assigned_tech == tech_types["individual_or_networked"]),
+            is_ind_or_net,
             "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space, a 'networked heat pump' solution is most suitable. If there is sufficient outdoor space for each property (above 30m2) an 'individual solution' will be most suitable.",
         ),
         # 9) Individual solution + DHN potential
         (
-            (assigned_tech == tech_types["individual"]) & dhn_potential,
+            is_individual & dhn_potential,
             "This cluster is assigned 'individual solution' because outdoor space is above 30m2 for all properties in this cluster.\nThe cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
         ),
         # 10) Individual solution
         (
-            (assigned_tech == tech_types["individual"]),
+            is_individual,
             "This cluster is assigned 'individual solution' because outdoor space is above 30m2 for all properties in this cluster.",
         ),
     ]
