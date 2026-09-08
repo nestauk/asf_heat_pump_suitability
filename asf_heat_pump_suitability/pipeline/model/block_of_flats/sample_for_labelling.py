@@ -552,8 +552,6 @@ if __name__ == "__main__":
             pl.col("ruc21ind").first().alias("rurality"),
             pl.col("IMD_decile").first().alias("IMD_decile"),
             pl.col("in_london").first().alias("in_london"),
-            pl.col("has_epc").max().alias("has_epc"),
-            pl.col("IMD_LSOA_or_DZ").first().alias("IMD_LSOA_or_DZ"),
         )
         .with_columns(
             # Add proportion of flats
@@ -660,8 +658,12 @@ if __name__ == "__main__":
 
     attributes = primary_strata + secondary_constraints
 
-    buildings_df = buildings_df.with_columns(
-        pl.col("high_deprivation").cast(pl.String).fill_null("unknown"),
+    null_count = buildings_df.filter(
+        pl.any_horizontal(pl.col(attributes).is_null())
+    ).height
+    print(f"Dropping {null_count} rows from population dataset due to nulls...")
+    buildings_df = buildings_df.filter(
+        pl.any_horizontal(pl.col(attributes).is_not_null()),
     )
 
     secondary_constraints = ["is_urban", "over_80_pc_flats"]
