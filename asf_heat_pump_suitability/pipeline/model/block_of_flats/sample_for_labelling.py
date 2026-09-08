@@ -741,14 +741,12 @@ if __name__ == "__main__":
         pol.style.polystyle.color = "9939FF14"
         pol.style.polystyle.outline = 1
     l = len(sample_gdf)
-    fpath = os.path.join(
-        PROJECT_DIR,
-        "outputs",
-        "data",
-        f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml",
+    fname = (
+        f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
     )
+    fpath = os.path.join(PROJECT_DIR, "outputs", "data", fname)
     kml.save(fpath)
     s3.Bucket(BUCKET).upload_file(
         os.path.join(os.getcwd(), fpath),
-        os.path.join("outputs", "models", "block_of_flats_classifier", fpath),
+        os.path.join("outputs", "models", "block_of_flats_classifier", fname),
     )
