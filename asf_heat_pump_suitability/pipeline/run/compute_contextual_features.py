@@ -383,6 +383,7 @@ def create_gdf_contextual_features(
     Returns:
         gpd.GeoDataFrame: geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
     """
+    target_crs = "EPSG:27700"
 
     clusters_with_contextual_features_df = extend_df_contextual_features(
         clusters_df=pl.from_pandas(
@@ -404,11 +405,11 @@ def create_gdf_contextual_features(
             on="cluster_id",
         ),
         geometry="geometry",
-        crs="EPSG:27700",
+        crs=target_crs,
     )
 
-    geo_utils.verify_gdf_crs(hn_zones_gdf, target_crs="EPSG:27700")
-    geo_utils.verify_gdf_crs(spatial_signatures_gdf, target_crs="EPSG:27700")
+    geo_utils.verify_gdf_crs(hn_zones_gdf, target_crs=target_crs)
+    geo_utils.verify_gdf_crs(spatial_signatures_gdf, target_crs=target_crs)
 
     # Add in_hn_zone and in_city_centre flags to clusters_gdf
     clusters_with_contextual_features_gdf["in_hn_zone"] = (
@@ -442,8 +443,10 @@ def create_json_contextual_features_metadata(
        json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
 
     """
+    target_crs = "EPSG:4326"
+
     geo_utils.verify_gdf_crs(
-        clusters_with_contextual_features_gdf, target_crs="EPSG:4326"
+        clusters_with_contextual_features_gdf, target_crs=target_crs
     )
     print("Adding metadata and converting to geojson format...")
     # Convert to geojson format and add metadata
@@ -455,7 +458,7 @@ def create_json_contextual_features_metadata(
 
     if optional_data_layers:
         for layer_name, layer_gdf in optional_data_layers.items():
-            geo_utils.verify_gdf_crs(layer_gdf, target_crs="EPSG:4326")
+            geo_utils.verify_gdf_crs(layer_gdf, target_crs=target_crs)
             layer_json = json.loads(layer_gdf.to_json(drop_id=True))
             for feature in layer_json["features"]:
                 feature["properties"]["layer"] = layer_name
