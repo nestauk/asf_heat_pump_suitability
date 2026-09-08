@@ -133,7 +133,7 @@ def load_df_lsoa_imd_decile(nation: str = None) -> pl.DataFrame:
 def calculate_int_ssd(
     sample_allocations: np.array,
     primary_group_ids: ArrayLike,
-    target_per_primary: float,
+    target_per_primary: float | ArrayLike,
 ) -> float:
     """
     Calculate the sum of squared deviations from the target sample size per primary strata.
@@ -141,7 +141,7 @@ def calculate_int_ssd(
     Args:
         sample_allocations (np.array): proposed count of samples to take from each cell
         primary_group_ids (ArrayLike): unique IDs of the primary strata combinations to group by
-        target_per_primary (int): target sample number per primary stratum
+        target_per_primary (float | ArrayLike): target sample number per primary stratum
 
     Returns:
         int: sum of squared deviations
@@ -158,6 +158,7 @@ def calculate_array_sample_allocations(
     grouped_df: pl.DataFrame,
     total_sample: int,
     secondary_attributes: List[str],
+    even: bool = True,
     primary_col: str = "primary_strata",
 ) -> np.array:
     """
@@ -170,6 +171,8 @@ def calculate_array_sample_allocations(
         total_sample (int): desired sample size for whole sample.
         secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling. Must
         be boolean attributes.
+        even (bool): Set to True to evenly sample across primary groups. Set to False to sample groups proportionally to
+        their representation across the whole population.
         primary_col (str): name of column to be created containing unique IDs for the primary strata combinations.
         Default `primary_strata`.
 
@@ -182,7 +185,17 @@ def calculate_array_sample_allocations(
 
     # Get the target number of samples per group
     n_primary_groups = grouped_df[primary_col].n_unique()
-    target_per_primary = total_sample / n_primary_groups
+    if even:
+        print("Sampling evenly across primary groups.")
+        target_per_primary = total_sample / n_primary_groups
+    else:
+        print("Proportional stratified sampling across primary groups.")
+        # Get the count of buildings per primary group. The line below is a vectorised groupby.
+        count_per_primary = np.bincount(
+            grouped_df[primary_col], weights=grouped_df["n_buildings"]
+        )
+        n_population = grouped_df["n_buildings"].sum()
+        target_per_primary = total_sample * (count_per_primary / n_population)
 
     # Sample size per cell must be between 0 and real population count
     bounds_per_group = [(0, i) for i in grouped_df["n_buildings"]]
@@ -196,18 +209,21 @@ def calculate_array_sample_allocations(
 
     # Set secondary sampling constraints
     sampling_constraints = [
-        # Constraint 1: overall total must equal total_sample requested
+        # Constraint 1: overall total must equal total_sample requested.
+        # The constraint checks equality of the RHS to zero.
         {"type": "eq", "fun": lambda x: np.sum(x) - total_sample},
     ]
 
     for attr in secondary_attributes:
+        # Create array of 0 and 1 values for each boolean secondary attribute
+        binary_array = grouped_df[attr].to_numpy().astype(int)
         # Additional constraints: binary constraints should be distributed 50/50
         sampling_constraints.append(
             {
                 "type": "eq",
-                "fun": lambda x, _vals=grouped_df[attr].to_numpy().astype(int): np.sum(
-                    x * _vals
-                )
+                # Here we multiply the proposed sample by a boolean value to get the proposed count of the positive class.
+                # The result must be equal to 50% of the total sample.
+                "fun": lambda x, _vals=binary_array: np.sum(x * _vals)
                 - (0.5 * total_sample),
             }
         )
