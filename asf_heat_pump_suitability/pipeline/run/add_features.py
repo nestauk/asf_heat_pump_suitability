@@ -1,14 +1,12 @@
 """
 Script to add features to UPRNs:
 - flat / apartment property type boolean flag
-- boolean flags to indicate whether UPRN is in a block of flats; in a heat network zone; and in a city centre; in a listed building; off-gas; near the coast; and in a protected area
+- boolean flags to indicate whether UPRN is in a block of flats; in a listed building; off-gas; near the coast; and in a protected area
 - estimated max contiguous and total outdoor space (m2)
 - EPC-derived features of tenure; attachment type of property; and current energy rating, solar PV info, estimated current energy consumption.
 
 Run:
 python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES
-
-Set -- `--detail "simplified"` to use simplified spatial signature polygons to label city centres. The default is "full" which uses the fully detailed spatial signatures framework.
 
 To save outputs to S3, add --save flag.
 
@@ -38,14 +36,6 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--detail",
-        help="Level of detail for spatial signatures dataset to label city centres. Takes values 'simplified' or 'full'. Defaults to 'full'.",
-        required=False,
-        default="full",
-        type=str,
-    )
-
-    parser.add_argument(
         "--save",
         help="If --save is set, it saves outputs to S3.",
         required=False,
@@ -66,11 +56,11 @@ if __name__ == "__main__":
     import pandas as pd
 
     from asf_heat_pump_suitability import config
+
     from asf_heat_pump_suitability.utils import geo_utils, manifest_utils, save_utils
     from asf_heat_pump_suitability.getters import (
         base_getters,
         load_geodata,
-        load_boundaries,
     )
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
@@ -81,8 +71,6 @@ if __name__ == "__main__":
         uprns,
         outdoor_space,
         epc,
-        heat_network_zones,
-        city_centres,
         local_authority,
         listed_buildings,
         off_gas,
@@ -95,7 +83,6 @@ if __name__ == "__main__":
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
-    detail_level = args.detail
     release_date = save_utils.get_str_release_date(args.release_date)
     uprns_path = save_utils.get_str_output_path(
         "domestic_uprns",
@@ -162,36 +149,6 @@ if __name__ == "__main__":
     )
 
     del uprn_building_id_dict, building_features_df, labelled_df, clf
-
-    # ------------------------ #
-    # ADD CITY CENTRE AND HEAT NETWORK ZONE BOOLEAN FLAGS
-
-    geo_utils.concat_gdfs(
-        dir_path=config["data"]["geodata"]["heat_network_zones"]["desnz_files"],
-        save_as=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"],
-    )
-
-    boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        select_las=local_authority_dict["valid_local_authorities"]
-    )
-    # Add heat network zones to clusters_gdf, if they exist
-    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(boundary=boundary_gdf)
-
-    if hn_zones_gdf is not None:
-        features_df = heat_network_zones.extend_df_heat_network_zone_bool(
-            uprns_df=features_df, uprns_gdf=uprns_gdf, hn_zone_gdf=hn_zones_gdf
-        )
-
-    # Load spatial signature polygons and label UPRNs in city centres
-    spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
-        detail_level=detail_level
-    )
-    features_df = city_centres.extend_df_city_centre_labels(
-        uprns_df=features_df,
-        uprns_gdf=uprns_gdf,
-        spatial_signatures_gdf=spatial_signatures_gdf,
-    )
-    del hn_zones_gdf, spatial_signatures_gdf
 
     # ------------------------ #
     # ESTIMATE OUTDOOR SPACE
