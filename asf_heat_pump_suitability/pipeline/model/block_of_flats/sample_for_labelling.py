@@ -519,7 +519,8 @@ if __name__ == "__main__":
             pl.col("CONSTRUCTION_AGE_BAND")
             .str.to_lowercase()
             .replace(BUILDING_CONSTRUCTION_AGE_MAPPING)
-            .alias("construction_age_band")
+            .alias("construction_age_band"),
+            pl.lit(True).alias("has_epc"),
         )
         # This is required to replace empty string with None which we need to do so that the agg max() below works
         # i.e. this prevents 'unknown' from being the max value and ensures consistency in treatment of Null values.
@@ -551,6 +552,8 @@ if __name__ == "__main__":
             pl.col("ruc21ind").first().alias("rurality"),
             pl.col("IMD_decile").first().alias("IMD_decile"),
             pl.col("in_london").first().alias("in_london"),
+            pl.col("has_epc").max().alias("has_epc"),
+            pl.col("IMD_LSOA_or_DZ").first().alias("IMD_LSOA_or_DZ"),
         )
         .with_columns(
             # Add proportion of flats
@@ -628,14 +631,23 @@ if __name__ == "__main__":
 
     save_utils.save_to_s3(
         df=buildings_df,
-        path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_enriched_buildings_with_flats.parquet",
+        path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats.parquet",
     )
+
+    _save_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
+        buildings_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
+    )
+    save_utils.save_to_s3(
+        df=buildings_df,
+        path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats_and_geometries.parquet",
+    )
+    del _save_buildings_gdf
 
     # ------------------------------------ #
     # TAKE SAMPLE
     # ------------------------------------ #
     buildings_df = pl.read_parquet(
-        "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_enriched_buildings_with_flats.parquet"
+        "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats.parquet"
     )
     print("Take sample of buildings...")
     primary_strata = [
