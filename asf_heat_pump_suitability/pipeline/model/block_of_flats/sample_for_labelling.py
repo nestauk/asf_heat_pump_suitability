@@ -646,10 +646,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # TAKE SAMPLE
     # ------------------------------------ #
-    buildings_df = pl.read_parquet(
-        "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats.parquet"
-    )
-    print("Take sample of buildings...")
+    print("Taking sample of buildings...")
     primary_strata = [
         "area",
         "n_flats_grouped",
