@@ -205,7 +205,9 @@ def calculate_array_sample_allocations(
         sampling_constraints.append(
             {
                 "type": "eq",
-                "fun": lambda x, _vals=grouped_df[attr].to_numpy(): np.sum(x * _vals)
+                "fun": lambda x, _vals=grouped_df[attr].to_numpy().astype(int): np.sum(
+                    x * _vals
+                )
                 - (0.5 * total_sample),
             }
         )
@@ -226,7 +228,10 @@ def calculate_array_sample_allocations(
     print("Optimized sub-cell sample sizes:", sample_allocations)
     print("Total sampled:", np.sum(sample_allocations))
     for attr in secondary_attributes:
-        print(f"{attr} total sampled:", sum(sample_allocations * grouped_df[attr]))
+        print(
+            f"{attr} total sampled:",
+            sum(sample_allocations * grouped_df[attr].to_numpy().astype(int)),
+        )
 
     return sample_allocations
 
@@ -561,7 +566,7 @@ if __name__ == "__main__":
             .then(pl.lit("Before 1929"))
             .when(pl.col("construction_age_band") == "4_1930-1949")
             .then(pl.lit("1930-1949"))
-            .when(pl.col("construction_age_band").is_in(["5_1950-1966", "6_1966-1975"]))
+            .when(pl.col("construction_age_band").is_in(["5_1950-1966", "6_1965-1975"]))
             .then(pl.lit("1950-1975"))
             .when(
                 pl.col("construction_age_band").is_in(
@@ -709,7 +714,7 @@ if __name__ == "__main__":
     for url, n_flats, n_total, geom in zip(
         sample_gdf["url"],
         sample_gdf["n_flats"],
-        sample_gdf["n_total"],
+        sample_gdf["n_uprns"],
         sample_gdf["geometry"],
     ):
         pol = kml.newpolygon(
