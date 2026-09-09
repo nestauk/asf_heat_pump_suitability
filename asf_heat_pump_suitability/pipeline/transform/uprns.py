@@ -143,7 +143,6 @@ def filter_gdf_domestic_uprns(
     buildings_gdf: gpd.GeoDataFrame,
     non_residential_buildings_gdf: gpd.GeoDataFrame,
     domestic_epc_uprns: np.array,
-    local_authority_dict: dict,
     id_col: str = config["constant"]["id"]["building"],
 ) -> gpd.GeoDataFrame:
     """
@@ -161,7 +160,6 @@ def filter_gdf_domestic_uprns(
         non_residential_buildings_gdf (gpd.GeoDataFrame): polygons of buildings which are unlikely to contain residential
         properties.
         domestic_epc_uprns (np.array): UPRNs in domestic EPC register for area of interest.
-        local_authority_dict (dict): name of local authority the domestic UPRNs are being identified for.
         id_col (str): name of ID column in `buildings_gdf`. Defaults to ID column defined in config.
 
     Returns:
