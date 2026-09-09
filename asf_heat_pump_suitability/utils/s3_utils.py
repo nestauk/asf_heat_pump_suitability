@@ -11,6 +11,7 @@ def fetch_list_file_paths_from_s3_folder(
     s3_client: boto3.client,
     s3_bucket: str,
     path_folder: str,
+    full: bool = True,
     file_type: str | List[str] = None,
 ) -> List[str]:
     """
@@ -20,6 +21,7 @@ def fetch_list_file_paths_from_s3_folder(
         s3_client (boto3.client): An initialized boto3 S3 client.
         s3_bucket (str): The name of the S3 bucket.
         path_folder (str): The path to the folder in S3.
+        full (bool): default `True` to return list of full S3 paths, else set to `False` to return list of keys only.
         file_type (str | List[str]): The type of files to fetch (e.g., ".parquet", ".csv", ".geojson"). If None, fetches all files.
 
     Returns:
@@ -31,11 +33,11 @@ def fetch_list_file_paths_from_s3_folder(
 
     # Normalize file_type to a tuple for str.endswith()
     if isinstance(file_type, str):
-        file_types = (file_type.lower(),)
+        file_type = (file_type.lower(),)
     elif isinstance(file_type, list):
-        file_types = tuple(ext.lower() for ext in file_type)
+        file_type = tuple(ext.lower() for ext in file_type)
     else:
-        file_types = None
+        file_type = None
 
     # Set a paginator to handle large number of files (otherwise only first 1000 files are returned)
     paginator = s3_client.get_paginator("list_objects_v2")
@@ -54,8 +56,10 @@ def fetch_list_file_paths_from_s3_folder(
 
             # Filter to include only files of the specified type (if file_type is provided)
             if file_type is None or key.lower().endswith(file_type):
-                file_paths.append(f"s3://{s3_bucket}/{key}")
-
+                if full:
+                    file_paths.append(f"s3://{s3_bucket}/{key}")
+                else:
+                    file_paths.append(key)
     return file_paths
 
 

@@ -136,10 +136,7 @@ def load_gdf_country_heat_network_zones(country: str) -> gpd.GeoDataFrame:
         )
 
     # Load and standardize CRS for each dataset
-    gdfs = [
-        geo_utils.verify_gdf_crs(gpd.read_file(os.path.join(f"s3://{s3_bucket}", path)))
-        for path in file_paths
-    ]
+    gdfs = [geo_utils.verify_gdf_crs(gpd.read_file(path)) for path in file_paths]
 
     return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
 
