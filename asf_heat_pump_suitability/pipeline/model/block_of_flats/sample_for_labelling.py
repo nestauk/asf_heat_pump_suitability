@@ -651,10 +651,7 @@ if __name__ == "__main__":
         "high_deprivation",
     ]
 
-    secondary_constraints = [
-        "is_urban",
-        "over_80_pc_flats",
-    ]
+    secondary_constraints = ["is_urban", "over_80_pc_flats"]
 
     attributes = primary_strata + secondary_constraints
 
@@ -665,8 +662,6 @@ if __name__ == "__main__":
     buildings_df = buildings_df.filter(
         pl.any_horizontal(pl.col(attributes).is_not_null()),
     )
-
-    secondary_constraints = ["is_urban", "over_80_pc_flats"]
 
     training_n = round(target_n * 0.75)
 
