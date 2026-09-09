@@ -37,6 +37,7 @@ if __name__ == "__main__":
         s3_client=s3_client,
         s3_bucket=front_end_s3_bucket,
         path_folder=front_end_staging_s3_path,
+        full=False,
         file_type=".geojson",
     )
 

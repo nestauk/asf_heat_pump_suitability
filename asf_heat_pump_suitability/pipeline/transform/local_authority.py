@@ -1,11 +1,7 @@
-import geopandas as gpd
-import logging
 import pandas as pd
-import polars as pl
 import difflib
 import regex as re
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
-from asf_heat_pump_suitability.utils import geo_utils
 from asf_heat_pump_suitability import config
 
 

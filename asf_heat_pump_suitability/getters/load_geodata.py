@@ -20,7 +20,6 @@ from asf_heat_pump_suitability.getters import base_getters, load_boundaries
 from asf_heat_pump_suitability.pipeline.transform import local_authority as la
 from asf_heat_pump_suitability.utils import s3_utils
 
-
 s3_client = boto3.client("s3")
 
 
@@ -137,10 +136,7 @@ def load_gdf_country_heat_network_zones(country: str) -> gpd.GeoDataFrame:
         )
 
     # Load and standardize CRS for each dataset
-    gdfs = [
-        geo_utils.verify_gdf_crs(gpd.read_file(os.path.join(f"s3://{s3_bucket}", path)))
-        for path in file_paths
-    ]
+    gdfs = [geo_utils.verify_gdf_crs(gpd.read_file(path)) for path in file_paths]
 
     return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
 
@@ -587,17 +583,23 @@ def load_gdf_code_points() -> gpd.GeoDataFrame:
     return code_point_gdf
 
 
-def load_gdf_gb_coast_boundaries():
+def load_gdf_gb_coast_boundaries(
+    clip: shapely.Polygon | shapely.MultiPolygon = None, **kwargs
+):
     """
     Load GB coastline boundaries geodataframe and dissolve into a single geometry.
     (CRS: EPSG:27700)
+
+    Args:
+        clip (shapely.Polygon | shapely.MultiPolygon): boundary to clip coastline to. Default None for unclipped coastline for all of GB.
+        **kwargs for geopandas.read_parquet
 
     Returns:
         gpd.GeoDataFrame: geodataframe with single geometry of GB coastline boundaries.
     """
 
-    coast_gdf = gpd.read_file(
-        config["data"]["geodata"]["gb_coast_boundaries"],
+    coast_gdf = gpd.read_parquet(
+        config["data"]["geodata"]["gb_coast_boundaries_parquet"], **kwargs
     )
 
     # Dissolve coastline boundaries into a single geometry
@@ -608,53 +610,12 @@ def load_gdf_gb_coast_boundaries():
     print(
         f"GB coastline boundaries geodataframe successfully loaded with CRS {coast_gdf.crs}."
     )
-    return coast_gdf
 
-
-def load_transform_dict_uprn_to_country_mapping() -> dict:
-    """
-    Load and transform the UPRN to country mapping data from S3.
-
-    Returns:
-        dict: A dictionary mapping UPRN to corresponding country information.
-    """
-
-    print("Loading UPRN to country mapping...")
-    s3_client = boto3.client("s3")
-
-    path = config["data"]["geodata"]["gb_uprn_country_mapping"]
-    bucket_name = path.split("s3://")[1].split("/")[0]
-    prefix = path.split(f"s3://{bucket_name}/")[1]
-
-    response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-    files = [
-        f"s3://{bucket_name}/{obj['Key']}"
-        for obj in response.get("Contents", [])
-        if obj["Key"].endswith(".csv")
-    ]
-
-    uprn_to_country_df = pd.concat(
-        [pd.read_csv(file, usecols=["UPRN", "PCDS", "ctry25cd"]) for file in files],
-        ignore_index=True,
-    )
-
-    uprn_to_country_df["COUNTRY"] = (
-        uprn_to_country_df["ctry25cd"]
-        .str[0]
-        .map(
-            {
-                "E": "England",
-                "W": "Wales",
-                "S": "Scotland",
-            }
-        )
-    )
-
-    uprn_to_country_dict = dict(
-        zip(uprn_to_country_df["UPRN"], uprn_to_country_df["COUNTRY"])
-    )
-
-    return uprn_to_country_dict
+    if clip:
+        print("Clipping coastline to boundaries...")
+        return coast_gdf.clip(clip)
+    else:
+        return coast_gdf
 
 
 def load_gdf_listed_buildings(nation: str = "GB", **kwargs) -> gpd.GeoDataFrame:

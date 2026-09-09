@@ -27,8 +27,10 @@ data:
     gb_code_points: "s3://asf-local-heat-planning-tool/inputs/geodata/codepo_gb.gpkg"
     # GB coastline boundaries
     gb_coast_boundaries: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.shp"
-    # Path to folder with UPRN to country mapping files for GB
-    gb_uprn_country_mapping: "s3://asf-local-heat-planning-tool/inputs/lookup/NSUL_DEC_2025/"
+    gb_coast_boundaries_parquet: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/Countries_December_2024_Boundaries_UK_BFC_6983126662299524946/CTRY_DEC_2024_UK_BFC.parquet"
+    # Path to folders with UPRN national statistics lookup files for GB
+    gb_uprn_lookup: "s3://asf-local-heat-planning-tool/inputs/lookup/NSUL_DEC_2025/"
+    gb_uprn_lookup_partitioned: "s3://asf-local-heat-planning-tool/inputs/lookup/NSUL_DEC_2025_partitioned/{grid_square}_NSUL.parquet"
 
     boundaries:
       # UK LA boundaries
@@ -64,16 +66,28 @@ data:
       EW_parquet: "s3://asf-local-heat-planning-tool/inputs/epc/v092025_EPC_NonDomestic_EW.parquet"
       S_parquet: "s3://asf-local-heat-planning-tool/inputs/epc/v122025_EPC_NonDomestic_S.parquet"
 
+  imd_deciles:
+    # England source: https://www.gov.uk/government/statistics/english-indices-of-deprivation-2025
+    england: "s3://asf-local-heat-planning-tool/inputs/lookup/IMD2025_All_Ranks_Scores_Deciles_Population_Denominators_England.csv"
+    # Scotland source: https://www.gov.scot/publications/scottish-index-of-multiple-deprivation-2020v2-data-zone-look-up/
+    scotland: "s3://asf-local-heat-planning-tool/inputs/lookup/SIMD_2020v2_datazone_lookup_updated_2025.xlsx"
+    # Wales source: https://stats.gov.wales/en-GB/9706edd9-73ad-4902-bb12-7ccd7038626e#data
+    wales: "s3://asf-local-heat-planning-tool/inputs/lookup/welsh-index-of-multiple-deprivation-wimd-2025-index-and-domain-ranks-and-groups-for-lower-layer-super-output-areas-lsoa-v7-en-gb.csv"
+  lookups:
+    # Scotland source: https://www.nrscotland.gov.uk/publications/scottish-statistics-postcode-lookup/
+    scotland: "s3://asf-local-heat-planning-tool/inputs/lookup/Scotland_postcode_to_higher_geography_lookup.csv"
+
   # Preprocessed data
   processed:
     non_domestic_poi_categories: "s3://asf-local-heat-planning-tool/inputs/processed/non_residential_poi_categories.csv"
     poi_anchor_properties: "s3://asf-local-heat-planning-tool/inputs/processed/poi_anchor_properties_gb.geojson"
     # Names of inspire file bounds for England, Wales and Scotland
-    inspire_file_names: "s3://asf-local-heat-planning-tool/inputs/processed/inspire/inspire_file_bounds_EWS.geojson"
+    inspire_file_names: "s3://asf-local-heat-planning-tool/inputs/processed/inspire/inspire_file_bounds_EWS.parquet"
     # Manually labelled blocks of flats
     manually_labelled_block_of_flats: "s3://asf-local-heat-planning-tool/inputs/processed/manually_labelled_block_of_flats.parquet"
     # Valid local authority names, taken from the 'LAD23NM' column of the UK_ons_lad_bound file
     valid_la_names: "s3://asf-local-heat-planning-tool/inputs/processed/valid_la_names.csv"
+    uprn_to_building_id_mapping: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{local_authorities}_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
 
 constant:
   id:
@@ -448,7 +462,7 @@ run_manifest:
       - "epc.domestic"
       - "geodata.gb_code_points"
       - "geodata.gb_coast_boundaries"
-      - "geodata.gb_uprn_country_mapping"
+      - "geodata.gb_uprn_lookup_partitioned"
     decision_tree:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"

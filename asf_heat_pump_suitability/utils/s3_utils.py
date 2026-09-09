@@ -4,12 +4,14 @@ This file contains utility functions for interacting with Amazon S3.
 
 import boto3
 from typing import List
+from urllib.parse import urlparse
 
 
 def fetch_list_file_paths_from_s3_folder(
     s3_client: boto3.client,
     s3_bucket: str,
     path_folder: str,
+    full: bool = True,
     file_type: str | List[str] = None,
 ) -> List[str]:
     """
@@ -19,10 +21,11 @@ def fetch_list_file_paths_from_s3_folder(
         s3_client (boto3.client): An initialized boto3 S3 client.
         s3_bucket (str): The name of the S3 bucket.
         path_folder (str): The path to the folder in S3.
+        full (bool): default `True` to return list of full S3 paths, else set to `False` to return list of keys only.
         file_type (str | List[str]): The type of files to fetch (e.g., ".parquet", ".csv", ".geojson"). If None, fetches all files.
 
     Returns:
-        List[str]: list of strings with the file paths.
+        List[str]: list of full S3 URIs.
     """
     # Normalize prefix: ensuring it ends with '/'
     if not path_folder.endswith("/"):
@@ -30,11 +33,11 @@ def fetch_list_file_paths_from_s3_folder(
 
     # Normalize file_type to a tuple for str.endswith()
     if isinstance(file_type, str):
-        file_types = (file_type.lower(),)
+        file_type = (file_type.lower(),)
     elif isinstance(file_type, list):
-        file_types = tuple(ext.lower() for ext in file_type)
+        file_type = tuple(ext.lower() for ext in file_type)
     else:
-        file_types = None
+        file_type = None
 
     # Set a paginator to handle large number of files (otherwise only first 1000 files are returned)
     paginator = s3_client.get_paginator("list_objects_v2")
@@ -52,10 +55,31 @@ def fetch_list_file_paths_from_s3_folder(
                 continue
 
             # Filter to include only files of the specified type (if file_type is provided)
-            if file_types is None or key.lower().endswith(file_types):
-                file_paths.append(key)
-
+            if file_type is None or key.lower().endswith(file_type):
+                if full:
+                    file_paths.append(f"s3://{s3_bucket}/{key}")
+                else:
+                    file_paths.append(key)
     return file_paths
+
+
+def extract_tuple_bucket_prefix(s3_uri: str) -> tuple:
+    """
+    Extract bucket name and prefix (folder key) from an S3 URI.
+
+    Args:
+        s3_uri (str): S3 URI
+
+    Returns:
+        tuple: bucket name, folder prefix
+    """
+    parsed = urlparse(s3_uri)
+    if parsed.scheme != "s3":
+        raise ValueError(f"Expected an S3 URI starting with 's3://', got: {s3_uri!r}")
+    bucket_name = parsed.netloc
+    path = parsed.path.lstrip("/")
+    prefix = path.rsplit("/", 1)[0] if "/" in path else ""
+    return bucket_name, prefix
 
 
 def get_bool_s3_path_exists(s3_client: boto3.client, s3_bucket: str, path: str) -> bool:

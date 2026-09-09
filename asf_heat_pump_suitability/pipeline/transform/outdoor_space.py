@@ -137,12 +137,31 @@ def generate_gdf_outdoor_space(
     Returns:
         gpd.GeoDataFrame: original land parcel polygons with calculated total and max contiguous outdoor space area (m2)
     """
-    # Get land minus buildings - MultiPolygons will be created for land parcels which get split into multi-parts
-    land_minus_buildings = gpd.overlay(
-        land_parcels_gdf,
-        building_intersections_gdf,
-        how="difference",
-        keep_geom_type=False,
+    # Aggregate all building intersections per land parcel
+    # reset_index so NATIONALCADASTRALREFERENCE stays a column
+    aggregated_intersections_gdf = (
+        building_intersections_gdf.dissolve(by="NATIONALCADASTRALREFERENCE")
+        .reset_index()[["NATIONALCADASTRALREFERENCE", "geometry"]]
+        .rename(columns={"geometry": "building_geometry"})
+    )
+
+    # Merge buildings back to land parcels
+    land_and_buildings_gdf = land_parcels_gdf.merge(
+        aggregated_intersections_gdf, how="left", on="NATIONALCADASTRALREFERENCE"
+    )
+
+    # Use a row-wise difference. This is quicker than using overlay with difference due to not needing to create a spatial index.
+    # Difference geometry - equivalent to land minus buildings - MultiPolygons will be created for land parcels which get split into multi-parts.
+    # Note: land parcels which do not match with any buildings will end up with null geometries and later be dropped.
+    # This is intentional, as a UPRN in a parcel with no buildings indicates an underlying data issue. In any case,
+    # this will only happen in rare cases where a UPRN has no associated building footprint.
+    diff_geom = land_and_buildings_gdf["geometry"].difference(
+        land_and_buildings_gdf["building_geometry"]
+    )
+    land_minus_buildings = gpd.GeoDataFrame(
+        land_and_buildings_gdf[["NATIONALCADASTRALREFERENCE"]],
+        geometry=diff_geom,
+        crs=land_parcels_gdf.crs,
     )
 
     # Explode multi-part geometries into single part geometries to get largest piece
