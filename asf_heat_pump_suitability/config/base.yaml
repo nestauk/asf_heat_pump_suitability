@@ -35,10 +35,13 @@ data:
     boundaries:
       # UK LA boundaries
       UK_ons_lad_bounds: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/Local_Authority_Districts_December_2023_Boundaries_UK_BFE_-2600600853110041429/LAD_DEC_2023_UK_BFE.shp"
+      UK_ons_ward_boundaries: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/wards/20260817_ons_ward_boundaries_uk.gpkg"
 
     heat_network_zones:
       desnz_files: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_network_desnz_data/"
       desnz_polygons: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_network_desnz_data/heat_network_zones_all.parquet"
+      lhees_files: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_networks_lhees/" # scotland
+      wales_files: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_networks_wales/" # wales
 
     gb_spatial_signatures:
       # UrbanGrammarAI Spatial Signatures GB simplified
@@ -91,9 +94,7 @@ constant:
     building: "ID"
   threshold:
     m2_per_predicted_UPRN: 261.608136 # Identified by analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py
-    outdoor_space_threshold_m2:
-      within_hn_zone: 70
-      outside_hn_zone: 30
+    outdoor_space_threshold_m2: 30
   os_data_absent_grid_squares: # 100km squares specific OS products publish no data for (remote islets and NI-overlap squares on the BNG, the tool is GB-only). Keyed by the product folder name in the S3 path. The input preflight check skips these square/product combinations. Verified 2026-08-18 against the GB wide gpkg copies (opmplc_gb/opgrsp_gb/oproad_gb.gpkg).
     opmplc_essh_gb: ["NQ", "NV", "SA", "SB"]
     opgrsp_essh_gb: ["HW", "HX", "NQ", "NV", "OV", "SA", "SB"]
