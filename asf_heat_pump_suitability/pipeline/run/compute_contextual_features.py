@@ -420,14 +420,21 @@ def create_gdf_contextual_features(
     geo_utils.verify_gdf_crs(spatial_signatures_gdf, target_crs=target_crs)
 
     # Add in_hn_zone and in_city_centre flags to clusters_gdf
-    clusters_with_contextual_features_gdf["in_hn_zone"] = (
-        clusters_with_contextual_features_gdf.intersects(hn_zones_gdf.union_all())
-    ).map({True: "Yes", False: "No"})
-    clusters_with_contextual_features_gdf["in_city_centre"] = (
-        clusters_with_contextual_features_gdf.intersects(
-            spatial_signatures_gdf.union_all()
-        )
-    ).map({True: "Yes", False: "No"})
+    if hn_zones_gdf is not None and not hn_zones_gdf.empty:
+        clusters_with_contextual_features_gdf["in_hn_zone"] = (
+            clusters_with_contextual_features_gdf.intersects(hn_zones_gdf.union_all())
+        ).map({True: "Yes", False: "No"})
+    else:
+        clusters_with_contextual_features_gdf["in_hn_zone"] = "No"
+
+    if spatial_signatures_gdf is not None and not spatial_signatures_gdf.empty:
+        clusters_with_contextual_features_gdf["in_city_centre"] = (
+            clusters_with_contextual_features_gdf.intersects(
+                spatial_signatures_gdf.union_all()
+            )
+        ).map({True: "Yes", False: "No"})
+    else:
+        clusters_with_contextual_features_gdf["in_city_centre"] = "No"
 
     return clusters_with_contextual_features_gdf
 
@@ -602,21 +609,28 @@ if __name__ == "__main__":
     )
 
     print("Creating layer with district HN potential and converting to EPSG:4326...")
-    hn_potential = pd.concat(
-        [
-            hn_zones_gdf[["geometry", "source_annotation"]],
-            # Create a single polygon for all spatial signatures to represent city centres
-            gpd.GeoDataFrame(
-                {
-                    "source_annotation": [
-                        spatial_signatures_gdf["source_annotation"].iloc[0]
-                    ],
-                    "geometry": [spatial_signatures_gdf.geometry.union_all()],
-                },
-                crs=spatial_signatures_gdf.crs,
-            ),
-        ]
-    ).to_crs(epsg=4326)
+    if len(spatial_signatures_gdf) > 0:
+        hn_potential = pd.concat(
+            [
+                hn_zones_gdf[["geometry", "source_annotation"]],
+                # Create a single polygon for all spatial signatures to represent city centres
+                gpd.GeoDataFrame(
+                    {
+                        "source_annotation": [
+                            spatial_signatures_gdf["source_annotation"].iloc[0]
+                        ],
+                        "geometry": [spatial_signatures_gdf.geometry.union_all()],
+                    },
+                    crs=spatial_signatures_gdf.crs,
+                ),
+            ]
+        ).to_crs(epsg=4326)
+    elif len(hn_zones_gdf) > 0:
+        hn_potential = hn_zones_gdf[["geometry", "source_annotation"]].to_crs(epsg=4326)
+    else:
+        hn_potential = gpd.GeoDataFrame(
+            {"source_annotation": [], "geometry": []}, crs="EPSG:4326"
+        )
 
     print("Loading anchor property geodataframes and transforming to EPSG:4326...")
     combined_anchor_gdf = cluster.load_transform_anchor_property_gdfs(
