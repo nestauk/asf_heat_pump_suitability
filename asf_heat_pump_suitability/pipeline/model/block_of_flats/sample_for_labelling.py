@@ -323,6 +323,32 @@ def _calculate_float_constraint_proportions(
         )
 
 
+def sample_gdf_by_quota(
+    population_df, quota_col, population_gdf, id_col, attributes, seed
+):
+    # Sample IDs randomly from each combination of attributes
+    sampled_ids = (
+        population_df.with_columns(
+            # Generates a sequential integer index for all rows in the dataframe from 0 to N-1
+            pl.int_range(pl.len())
+            # Randomly shuffles the row indices independently within each combination of attributes
+            .shuffle(seed=seed).over(attributes)
+            # Assigns the randomised integer index to a temporary '_rank' column
+            .alias("_rank")
+        )
+        # Keep rows where '_rank' is less than 'n_to_sample' - this is the method to identify the sample rows
+        .filter(pl.col("_rank") < pl.col(quota_col)).select(id_col)
+    )
+
+    # Filter population dataset to sample IDs
+    sample_df = population_df.filter(
+        pl.col(id_col).is_in(sampled_ids[id_col].to_list())
+    )
+    return population_gdf[["ID", "geometry"]].merge(
+        sample_df.to_pandas(), how="inner", left_on="ID", right_on=id_col
+    )
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
@@ -707,7 +733,6 @@ if __name__ == "__main__":
     sampling_strategy = [(padding_n, True), (remaining_n, False)]
 
     n_samples_per_group = np.zeros(group_counts_df.height)
-    # TODO remove sampled buildings from second round
     for n, even in sampling_strategy:
         n_samples_per_group += calculate_array_sample_allocations(
             population_df=buildings_df,
@@ -718,38 +743,50 @@ if __name__ == "__main__":
         )
 
     group_counts_df = group_counts_df.with_columns(
-        pl.Series(name="n_to_sample", values=n_samples_per_group)
+        pl.Series(name="n_to_sample_train", values=n_samples_per_group)
+    )
+
+    test_n = target_n - training_n
+    n_samples_per_group = calculate_array_sample_allocations(
+        population_df=buildings_df,
+        grouped_df=group_counts_df,
+        total_sample=test_n,
+        secondary_attributes=secondary_constraints,
+        even=False,
+    )
+    group_counts_df = group_counts_df.with_columns(
+        pl.Series(name="n_to_sample_test", values=n_samples_per_group)
     )
 
     # Sample per group using per-group sampling quota
-    buildings_with_quota = buildings_df.join(
-        group_counts_df.select(attributes + ["n_to_sample"]),
+    buildings_df = buildings_df.join(
+        group_counts_df.select(attributes + ["n_to_sample_train", "n_to_sample_train"]),
         on=attributes,
         how="left",
     )
 
     # Sample IDs randomly from each combination of attributes
-    sampled_ids = (
-        buildings_with_quota.with_columns(
-            # Generates a sequential integer index for all rows in the dataframe from 0 to N-1
-            pl.int_range(pl.len())
-            # Randomly shuffles the row indices independently within each combination of attributes
-            .shuffle(seed=seed).over(attributes)
-            # Assigns the randomised integer index to a temporary '_rank' column
-            .alias("_rank")
-        )
-        # Keep rows where '_rank' is less than 'n_to_sample' - this is the method to identify the sample rows
-        .filter(pl.col("_rank") < pl.col("n_to_sample")).select("building_id")
+    train_sample_gdf = sample_gdf_by_quota(
+        population_df=buildings_df,
+        quota_col="n_to_sample_train",
+        population_gdf=buildings_gdf,
+        id_col="building_id",
+        attributes=attributes,
+        seed=seed,
     )
 
-    # Filter population dataset to sample IDs
-    sample_df = buildings_df.filter(
-        pl.col("building_id").is_in(sampled_ids["building_id"].to_list())
+    # Sample IDs randomly from each combination of attributes
+    test_sample_gdf = sample_gdf_by_quota(
+        population_df=buildings_df.filter(
+            ~pl.col("building_id").is_in(train_sample_gdf["ID"].unique())
+        ),
+        quota_col="n_to_sample_test",
+        population_gdf=buildings_gdf,
+        id_col="building_id",
+        attributes=attributes,
+        seed=seed,
     )
-    del buildings_df
-    sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
-        sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
-    )
+
     del buildings_gdf
 
     # ------------------------------------ #
