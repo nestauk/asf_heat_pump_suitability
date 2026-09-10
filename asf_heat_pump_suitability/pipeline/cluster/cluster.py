@@ -796,11 +796,12 @@ def map_df_uprns_to_clusters(
         "cluster_id"
     ].to_dict()
     uprns_df = uprns_df.with_columns(
-        pl.col(building_id).replace_strict(building_cluster_mapping).alias("cluster_id")
+        pl.col(building_id)
+        .replace_strict(building_cluster_mapping, default=None)
+        .alias("cluster_id")
     )
 
     return uprns_df
-
 
 
 def parse_arguments() -> argparse.Namespace:
