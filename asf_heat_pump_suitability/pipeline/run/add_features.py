@@ -350,6 +350,5 @@ if __name__ == "__main__":
             params={
                 "local_authorities": args.local_authorities,
                 "release_date": release_date,
-                "detail": args.detail,
             },
         )
