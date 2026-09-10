@@ -323,9 +323,7 @@ def _calculate_float_constraint_proportions(
         )
 
 
-def sample_gdf_by_quota(
-    population_df, quota_col, population_gdf, id_col, attributes, seed
-):
+def sample_df_by_quota(population_df, quota_col, id_col, attributes, seed):
     # Sample IDs randomly from each combination of attributes
     sampled_ids = (
         population_df.with_columns(
@@ -341,11 +339,47 @@ def sample_gdf_by_quota(
     )
 
     # Filter population dataset to sample IDs
-    sample_df = population_df.filter(
-        pl.col(id_col).is_in(sampled_ids[id_col].to_list())
+    return population_df.filter(pl.col(id_col).is_in(sampled_ids[id_col].to_list()))
+
+
+def _enrich_gdf_google_maps_url(gdf):
+    print("Enrich with Google Maps URL...")
+    # Convert to 4326 projection and create google maps URL
+    gdf = gdf.to_crs(epsg=4326)
+    gdf[["x", "y"]] = gdf.centroid.get_coordinates()
+    gdf["url"] = (
+        "https://www.google.com/maps/search/?api=1&query="
+        + gdf["y"].astype(str)
+        + ","
+        + gdf["x"].astype(str)
     )
-    return population_gdf[["ID", "geometry"]].merge(
-        sample_df.to_pandas(), how="inner", left_on="ID", right_on=id_col
+    return gdf
+
+
+def save_building_sample_to_kml(gdf, s3_client, bucket, fname):
+    print("Save to KML file...")
+    gdf["url"] = _enrich_gdf_google_maps_url(gdf)
+    kml = simplekml.Kml()
+    for url, building_id, n_flats, n_total, geom in zip(
+        gdf["url"],
+        gdf["ID"],
+        gdf["n_flats"],
+        gdf["n_uprns"],
+        gdf["geometry"],
+    ):
+        pol = kml.newpolygon(
+            name="unlabelled",
+            description=f"Location: {url} -------- building_id: {building_id} -------- N flats: {n_flats} -------- N total: {n_total}",
+            outerboundaryis=list(geom.exterior.coords),
+        )
+        pol.style.polystyle.color = "9939FF14"
+        pol.style.polystyle.outline = 1
+    l = len(gdf)
+    fpath = os.path.join(PROJECT_DIR, "outputs", "data", fname)
+    kml.save(fpath)
+    s3_client.Bucket(bucket).upload_file(
+        os.path.join(os.getcwd(), fpath),
+        os.path.join("outputs", "models", "block_of_flats_classifier", fname),
     )
 
 
@@ -410,6 +444,7 @@ if __name__ == "__main__":
     import simplekml
     import boto3
     import os
+    import pandas as pd
     from asf_heat_pump_suitability.getters import load_data, load_geodata
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
@@ -766,71 +801,40 @@ if __name__ == "__main__":
     )
 
     # Sample IDs randomly from each combination of attributes
-    train_sample_gdf = sample_gdf_by_quota(
+    train_sample_df = sample_df_by_quota(
         population_df=buildings_df,
         quota_col="n_to_sample_train",
-        population_gdf=buildings_gdf,
         id_col="building_id",
         attributes=attributes,
         seed=seed,
-    )
+    ).with_columns(pl.lit("train").alias("split"))
 
-    # Sample IDs randomly from each combination of attributes
-    test_sample_gdf = sample_gdf_by_quota(
+    test_sample_df = sample_df_by_quota(
         population_df=buildings_df.filter(
-            ~pl.col("building_id").is_in(train_sample_gdf["ID"].unique())
+            ~pl.col("building_id").is_in(train_sample_df["ID"].unique())
         ),
         quota_col="n_to_sample_test",
-        population_gdf=buildings_gdf,
         id_col="building_id",
         attributes=attributes,
         seed=seed,
-    )
+    ).with_columns(pl.lit("test").alias("split"))
 
+    sample_df = pl.concat([train_sample_df, test_sample_df])
+    sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
+        sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
+    )
     del buildings_gdf
-
-    # ------------------------------------ #
-    # ADD GOOGLE MAPS URL TO EACH SAMPLE
-    # ------------------------------------ #
-    print("Enrich with Google Maps URL...")
-    # Convert to 4326 projection and create google maps URL
-    sample_gdf = sample_gdf.to_crs(epsg=4326)
-    sample_gdf[["x", "y"]] = sample_gdf.centroid.get_coordinates()
-    sample_gdf["url"] = (
-        "https://www.google.com/maps/search/?api=1&query="
-        + sample_gdf["y"].astype(str)
-        + ","
-        + sample_gdf["x"].astype(str)
-    )
 
     # ------------------------------------ #
     # SAVE TO KML FILE
     # ------------------------------------ #
-    print("Save to KML file...")
-    today = date.today().strftime("%Y%m%d")
+    fname = f"{release_date}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}"
+    save_utils.save_to_s3(
+        sample_df,
+        path=f"s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{fname}.parquet",
+    )
     s3 = boto3.resource("s3")
     BUCKET = "asf-local-heat-planning-tool"
-    kml = simplekml.Kml()
-    for url, n_flats, n_total, geom in zip(
-        sample_gdf["url"],
-        sample_gdf["n_flats"],
-        sample_gdf["n_uprns"],
-        sample_gdf["geometry"],
-    ):
-        pol = kml.newpolygon(
-            name="unlabelled",
-            description=f"Location: {url} -------- N flats: {n_flats} -------- N total: {n_total}",
-            outerboundaryis=list(geom.exterior.coords),
-        )
-        pol.style.polystyle.color = "9939FF14"
-        pol.style.polystyle.outline = 1
-    l = len(sample_gdf)
-    fname = (
-        f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
-    )
-    fpath = os.path.join(PROJECT_DIR, "outputs", "data", fname)
-    kml.save(fpath)
-    s3.Bucket(BUCKET).upload_file(
-        os.path.join(os.getcwd(), fpath),
-        os.path.join("outputs", "models", "block_of_flats_classifier", fname),
+    save_building_sample_to_kml(
+        gdf=sample_gdf, s3_client=s3, bucket=BUCKET, fname=f"{fname}.kml"
     )
