@@ -155,6 +155,7 @@ def calculate_int_ssd(
 
 
 def calculate_array_sample_allocations(
+    population_df: pl.DataFrame,
     grouped_df: pl.DataFrame,
     total_sample: int,
     secondary_attributes: List[str],
@@ -166,7 +167,8 @@ def calculate_array_sample_allocations(
     constraints.
 
     Args:
-        grouped_df (pl.DataFrame): sampling cells containing building counts for each unique combination of primary and
+        population_df (pl.DataFrame): whole population dataframe to sample from. Must contain secondary attribute columns.
+        grouped_df (pl.DataFrame): sampling cells containing counts for each unique combination of primary and
         secondary attributes.
         total_sample (int): desired sample size for whole sample.
         secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling. Must
@@ -217,14 +219,17 @@ def calculate_array_sample_allocations(
     for attr in secondary_attributes:
         # Create array of 0 and 1 values for each boolean secondary attribute
         binary_array = grouped_df[attr].to_numpy().astype(int)
-        # Additional constraints: binary constraints should be distributed 50/50
+        # Additional constraints: binary constraints should be distributed evenly or according to whole population proportions
+        proportion = _calculate_float_constraint_proportions(
+            population_df=population_df, attribute=attr, even=even
+        )
         sampling_constraints.append(
             {
                 "type": "eq",
                 # Here we multiply the proposed sample by a boolean value to get the proposed count of the positive class.
                 # The result must be equal to 50% of the total sample.
                 "fun": lambda x, _vals=binary_array: np.sum(x * _vals)
-                - (0.5 * total_sample),
+                - (proportion * total_sample),
             }
         )
 
@@ -293,6 +298,29 @@ def generate_df_sampling_cells(
             .alias(primary_col),
         )
     )
+
+
+def _calculate_float_constraint_proportions(
+    population_df: pl.DataFrame, attribute: str, even: bool
+) -> float:
+    """
+    Calculate the proportions of the positive binary class for even (50%) or proportional sampling (i.e. according to
+    whole population proportions).
+
+    Args:
+        population_df (pl.DataFrame): whole population dataframe with binary attribute column
+        attribute (str): binary attribute to calculate proportions for
+        even (bool): set to `True` for even proportions (0.5) or `False` for whole-population proportions
+
+    Returns:
+        float: proportions of positive class
+    """
+    if even:
+        return 0.5
+    else:
+        return round(
+            population_df.filter(pl.col(attribute)).height / population_df.height, 2
+        )
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -671,11 +699,24 @@ if __name__ == "__main__":
         primary_attributes=primary_strata,
         secondary_attributes=secondary_constraints,
     )
-    n_samples_per_group = calculate_array_sample_allocations(
-        grouped_df=group_counts_df,
-        total_sample=training_n,
-        secondary_attributes=secondary_constraints,
-    )
+
+    # Split the training set into a padding portion (~50 samples per primary stratum) and a proportional group of the remainder
+    padding_n = 50 * group_counts_df["primary_strata"].n_unique()
+    remaining_n = training_n - padding_n
+    # Padding sample is even, remaining sample is proportional (True/False)
+    sampling_strategy = [(padding_n, True), (remaining_n, False)]
+
+    n_samples_per_group = np.zeros(group_counts_df.height)
+    # TODO remove sampled buildings from second round
+    for n, even in sampling_strategy:
+        n_samples_per_group += calculate_array_sample_allocations(
+            population_df=buildings_df,
+            grouped_df=group_counts_df,
+            total_sample=n,
+            secondary_attributes=secondary_constraints,
+            even=even,
+        )
+
     group_counts_df = group_counts_df.with_columns(
         pl.Series(name="n_to_sample", values=n_samples_per_group)
     )
