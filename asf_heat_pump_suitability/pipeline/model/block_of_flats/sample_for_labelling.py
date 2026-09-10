@@ -40,6 +40,12 @@ Examples:
     python sample_for_labelling.py --map_uprns_to_building --save
 """
 
+import simplekml
+import os
+import boto3
+
+import geopandas as gpd
+
 from typing import List
 import argparse
 import polars as pl
@@ -323,7 +329,26 @@ def _calculate_float_constraint_proportions(
         )
 
 
-def sample_df_by_quota(population_df, quota_col, id_col, attributes, seed):
+def sample_df_by_quota(
+    population_df: pl.DataFrame,
+    quota_col: str,
+    id_col: str,
+    attributes: List[str],
+    seed: float | int,
+) -> pl.DataFrame:
+    """
+    Sample population dataset by given quota per attribute combination.
+
+    Args:
+        population_df (pl.DataFrame): whole population dataset to sample from.
+        quota_col (str): name of column containing quotas per attribute combination.
+        id_col (str): name of column containing sample IDs.
+        attributes (List[str]): attributes to sample on.
+        seed (float | int): random seed.
+
+    Returns:
+        pl.DataFrame: selected samples from whole population according to given quotas.
+    """
     # Sample IDs randomly from each combination of attributes
     sampled_ids = (
         population_df.with_columns(
@@ -342,7 +367,16 @@ def sample_df_by_quota(population_df, quota_col, id_col, attributes, seed):
     return population_df.filter(pl.col(id_col).is_in(sampled_ids[id_col].to_list()))
 
 
-def _enrich_gdf_google_maps_url(gdf):
+def _enrich_gdf_google_maps_url(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Enrich a geodataframe with a Google Maps URL per row representing the centroid of each geometry.
+
+    Args:
+        gdf (gpd.GeoDataFrame): geometries of interest
+
+    Return:
+        gpd.GeoDataFrame: enriched with `url` column
+    """
     print("Enrich with Google Maps URL...")
     # Convert to 4326 projection and create google maps URL
     gdf = gdf.to_crs(epsg=4326)
@@ -356,8 +390,22 @@ def _enrich_gdf_google_maps_url(gdf):
     return gdf
 
 
-def save_building_sample_to_kml(gdf, s3_client, bucket, fname):
-    print("Save to KML file...")
+def save_building_sample_to_kml(
+    gdf: gpd.GeoDataFrame, s3_client: boto3.client, bucket: str, fname: str
+) -> None:
+    """
+    Save sample to KML file, locally and to S3.
+
+    Args:
+        gdf (gpd.GeoDataFrame): geometries of building sample
+        s3_client (boto3.client): intialised S3 client.
+        bucket (str): S3 bucket name.
+        fname (str): filename for sample.
+
+    Returns:
+        None
+    """
+    print("Saving to KML file...")
     gdf["url"] = _enrich_gdf_google_maps_url(gdf)
     kml = simplekml.Kml()
     for url, building_id, n_flats, n_total, geom in zip(
@@ -374,7 +422,6 @@ def save_building_sample_to_kml(gdf, s3_client, bucket, fname):
         )
         pol.style.polystyle.color = "9939FF14"
         pol.style.polystyle.outline = 1
-    l = len(gdf)
     fpath = os.path.join(PROJECT_DIR, "outputs", "data", fname)
     kml.save(fpath)
     s3_client.Bucket(bucket).upload_file(
@@ -440,11 +487,6 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    from datetime import date
-    import simplekml
-    import boto3
-    import os
-    import pandas as pd
     from asf_heat_pump_suitability.getters import load_data, load_geodata
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
@@ -828,7 +870,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # SAVE FILES
     # ------------------------------------ #
-    fname = f"{release_date}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}"
+    fname = f"{release_date}_UNLABELLED_GB_buildings_containing_flats_sample_n{len(sample_gdf)}_seed{seed}"
     save_utils.save_to_s3(
         sample_df,
         path=f"s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{fname}.parquet",
