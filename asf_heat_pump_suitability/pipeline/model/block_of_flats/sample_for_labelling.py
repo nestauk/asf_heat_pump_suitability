@@ -749,11 +749,7 @@ if __name__ == "__main__":
             .otherwise(None)
             .alias("is_urban"),
         )
-        .with_columns(
-            (pl.col("proportion_flats") > 0.8)
-            .cast(pl.Float64)
-            .alias("over_80_pc_flats")
-        )
+        .with_columns((pl.col("proportion_flats") > 0.8).alias("over_80_pc_flats"))
     )
 
     del uprns_df
@@ -776,6 +772,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # TAKE SAMPLE
     # ------------------------------------ #
+
     print("Taking sample of buildings...")
     primary_strata = [
         "area",
@@ -842,6 +839,12 @@ if __name__ == "__main__":
         on=attributes,
         how="left",
     )
+
+    # Load previously labelled buildings and remove from population
+    already_labelled = pl.read_parquet(
+        "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet"
+    )["ID"]
+    buildings_df = buildings_df.filter(~pl.col("building_id").is_in(already_labelled))
 
     # Sample IDs randomly from each combination of attributes
     train_sample_df = sample_df_by_quota(
