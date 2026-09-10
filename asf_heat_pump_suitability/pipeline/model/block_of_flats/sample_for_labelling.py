@@ -758,19 +758,20 @@ if __name__ == "__main__":
 
     del uprns_df
 
-    save_utils.save_to_s3(
-        df=buildings_df,
-        path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats.parquet",
-    )
+    if args.save:
+        save_utils.save_to_s3(
+            df=buildings_df,
+            path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats.parquet",
+        )
 
-    _save_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
-        buildings_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
-    )
-    save_utils.save_to_s3(
-        df=buildings_gdf,
-        path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats_and_geometries.parquet",
-    )
-    del _save_buildings_gdf
+        _save_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
+            buildings_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
+        )
+        save_utils.save_to_s3(
+            df=buildings_gdf,
+            path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats_and_geometries.parquet",
+        )
+        del _save_buildings_gdf
 
     # ------------------------------------ #
     # TAKE SAMPLE
@@ -870,13 +871,14 @@ if __name__ == "__main__":
     # ------------------------------------ #
     # SAVE FILES
     # ------------------------------------ #
-    fname = f"{release_date}_UNLABELLED_GB_buildings_containing_flats_sample_n{len(sample_gdf)}_seed{seed}"
-    save_utils.save_to_s3(
-        sample_df,
-        path=f"s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{fname}.parquet",
-    )
-    s3 = boto3.resource("s3")
-    BUCKET = "asf-local-heat-planning-tool"
-    save_building_sample_to_kml(
-        gdf=sample_gdf, s3_client=s3, bucket=BUCKET, fname=f"{fname}.kml"
-    )
+    if args.save:
+        fname = f"{release_date}_UNLABELLED_GB_buildings_containing_flats_sample_n{len(sample_gdf)}_seed{seed}"
+        save_utils.save_to_s3(
+            sample_df,
+            path=f"s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{fname}.parquet",
+        )
+        s3 = boto3.resource("s3")
+        BUCKET = "asf-local-heat-planning-tool"
+        save_building_sample_to_kml(
+            gdf=sample_gdf, s3_client=s3, bucket=BUCKET, fname=f"{fname}.kml"
+        )
