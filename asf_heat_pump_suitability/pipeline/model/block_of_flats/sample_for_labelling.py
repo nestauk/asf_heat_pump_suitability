@@ -826,7 +826,7 @@ if __name__ == "__main__":
     del buildings_gdf
 
     # ------------------------------------ #
-    # SAVE TO KML FILE
+    # SAVE FILES
     # ------------------------------------ #
     fname = f"{release_date}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}"
     save_utils.save_to_s3(
