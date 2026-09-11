@@ -40,6 +40,12 @@ Examples:
     python sample_for_labelling.py --map_uprns_to_building --save
 """
 
+import simplekml
+import os
+import boto3
+
+import geopandas as gpd
+
 from typing import List
 import argparse
 import polars as pl
@@ -155,6 +161,7 @@ def calculate_int_ssd(
 
 
 def calculate_array_sample_allocations(
+    population_df: pl.DataFrame,
     grouped_df: pl.DataFrame,
     total_sample: int,
     secondary_attributes: List[str],
@@ -166,7 +173,8 @@ def calculate_array_sample_allocations(
     constraints.
 
     Args:
-        grouped_df (pl.DataFrame): sampling cells containing building counts for each unique combination of primary and
+        population_df (pl.DataFrame): whole population dataframe to sample from. Must contain secondary attribute columns.
+        grouped_df (pl.DataFrame): sampling cells containing counts for each unique combination of primary and
         secondary attributes.
         total_sample (int): desired sample size for whole sample.
         secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling. Must
@@ -217,14 +225,17 @@ def calculate_array_sample_allocations(
     for attr in secondary_attributes:
         # Create array of 0 and 1 values for each boolean secondary attribute
         binary_array = grouped_df[attr].to_numpy().astype(int)
-        # Additional constraints: binary constraints should be distributed 50/50
+        # Additional constraints: binary constraints should be distributed evenly or according to whole population proportions
+        proportion = _calculate_float_constraint_proportions(
+            population_df=population_df, attribute=attr, even=even
+        )
         sampling_constraints.append(
             {
                 "type": "eq",
                 # Here we multiply the proposed sample by a boolean value to get the proposed count of the positive class.
                 # The result must be equal to 50% of the total sample.
                 "fun": lambda x, _vals=binary_array: np.sum(x * _vals)
-                - (0.5 * total_sample),
+                - (proportion * total_sample),
             }
         )
 
@@ -295,6 +306,133 @@ def generate_df_sampling_cells(
     )
 
 
+def _calculate_float_constraint_proportions(
+    population_df: pl.DataFrame, attribute: str, even: bool
+) -> float:
+    """
+    Calculate the proportions of the positive binary class for even (50%) or proportional sampling (i.e. according to
+    whole population proportions).
+
+    Args:
+        population_df (pl.DataFrame): whole population dataframe with binary attribute column
+        attribute (str): binary attribute to calculate proportions for
+        even (bool): set to `True` for even proportions (0.5) or `False` for whole-population proportions
+
+    Returns:
+        float: proportions of positive class
+    """
+    if even:
+        return 0.5
+    else:
+        return round(
+            population_df.filter(pl.col(attribute)).height / population_df.height, 2
+        )
+
+
+def sample_df_by_quota(
+    population_df: pl.DataFrame,
+    quota_col: str,
+    id_col: str,
+    attributes: List[str],
+    seed: float | int,
+) -> pl.DataFrame:
+    """
+    Sample population dataset by given quota per attribute combination.
+
+    Args:
+        population_df (pl.DataFrame): whole population dataset to sample from.
+        quota_col (str): name of column containing quotas per attribute combination.
+        id_col (str): name of column containing sample IDs.
+        attributes (List[str]): attributes to sample on.
+        seed (float | int): random seed.
+
+    Returns:
+        pl.DataFrame: selected samples from whole population according to given quotas.
+    """
+    # Sample IDs randomly from each combination of attributes
+    sampled_ids = (
+        population_df.with_columns(
+            # Generates a sequential integer index for all rows in the dataframe from 0 to N-1
+            pl.int_range(pl.len())
+            # Randomly shuffles the row indices independently within each combination of attributes
+            .shuffle(seed=seed).over(attributes)
+            # Assigns the randomised integer index to a temporary '_rank' column
+            .alias("_rank")
+        )
+        # Keep rows where '_rank' is less than 'n_to_sample' - this is the method to identify the sample rows
+        .filter(pl.col("_rank") < pl.col(quota_col)).select(id_col)
+    )
+
+    # Filter population dataset to sample IDs
+    return population_df.filter(pl.col(id_col).is_in(sampled_ids[id_col].to_list()))
+
+
+def _enrich_gdf_google_maps_url(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Enrich a geodataframe with a Google Maps URL per row representing the centroid of each geometry.
+
+    Args:
+        gdf (gpd.GeoDataFrame): geometries of interest
+
+    Return:
+        gpd.GeoDataFrame: enriched with `url` column
+    """
+    print("Enrich with Google Maps URL...")
+    # Convert to 4326 projection and create google maps URL
+    gdf = gdf.to_crs(epsg=4326)
+    gdf[["x", "y"]] = gdf.centroid.get_coordinates()
+    gdf["url"] = (
+        "https://www.google.com/maps/search/?api=1&query="
+        + gdf["y"].astype(str)
+        + ","
+        + gdf["x"].astype(str)
+    )
+    return gdf
+
+
+def save_building_sample_to_kml(
+    gdf: gpd.GeoDataFrame, s3_client: boto3.client, bucket: str, fname: str
+) -> None:
+    """
+    Save sample to KML file, locally and to S3.
+
+    Args:
+        gdf (gpd.GeoDataFrame): geometries of building sample
+        s3_client (boto3.client): intialised S3 client.
+        bucket (str): S3 bucket name.
+        fname (str): filename for sample.
+
+    Returns:
+        None
+    """
+    print("Saving to KML file...")
+    gdf = _enrich_gdf_google_maps_url(gdf)
+    kml = simplekml.Kml()
+    for url, label, building_id, n_flats, n_total, geom in zip(
+        gdf["url"],
+        gdf["label"],
+        gdf["ID"],
+        gdf["n_flats"],
+        gdf["n_uprns"],
+        gdf["geometry"],
+    ):
+        if not label:
+            label = "unlabelled"
+        pol = kml.newpolygon(
+            name=label,
+            description=f"Location: {url} -------- building_id: {building_id} -------- N flats: {n_flats} -------- N total: {n_total}",
+            outerboundaryis=list(geom.exterior.coords),
+        )
+        pol.style.polystyle.color = "9939FF14"
+        pol.style.polystyle.outline = 1
+    fpath = os.path.join(PROJECT_DIR, "outputs", "data", fname)
+    kml.save(fpath)
+    s3_client.Bucket(bucket).upload_file(
+        os.path.join(os.getcwd(), fpath),
+        os.path.join("outputs", "models", "block_of_flats_classifier", fname),
+    )
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Create ArgumentParser and parse.
@@ -352,10 +490,6 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    from datetime import date
-    import simplekml
-    import boto3
-    import os
     from asf_heat_pump_suitability.getters import load_data, load_geodata
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
@@ -618,32 +752,30 @@ if __name__ == "__main__":
             .otherwise(None)
             .alias("is_urban"),
         )
-        .with_columns(
-            (pl.col("proportion_flats") > 0.8)
-            .cast(pl.Float64)
-            .alias("over_80_pc_flats")
-        )
+        .with_columns((pl.col("proportion_flats") > 0.8).alias("over_80_pc_flats"))
     )
 
     del uprns_df
 
-    save_utils.save_to_s3(
-        df=buildings_df,
-        path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats.parquet",
-    )
+    if args.save:
+        save_utils.save_to_s3(
+            df=buildings_df,
+            path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats.parquet",
+        )
 
-    _save_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
-        buildings_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
-    )
-    save_utils.save_to_s3(
-        df=buildings_gdf,
-        path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats_and_geometries.parquet",
-    )
-    del _save_buildings_gdf
+        _save_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
+            buildings_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
+        )
+        save_utils.save_to_s3(
+            df=buildings_gdf,
+            path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats_and_geometries.parquet",
+        )
+        del _save_buildings_gdf
 
     # ------------------------------------ #
     # TAKE SAMPLE
     # ------------------------------------ #
+
     print("Taking sample of buildings...")
     primary_strata = [
         "area",
@@ -671,88 +803,92 @@ if __name__ == "__main__":
         primary_attributes=primary_strata,
         secondary_attributes=secondary_constraints,
     )
+
+    # Split the training set into a padding portion (~50 samples per primary stratum) and a proportional group of the remainder
+    padding_n = 50 * group_counts_df["primary_strata"].n_unique()
+    remaining_n = training_n - padding_n
+    # Padding sample is even, remaining sample is proportional (True/False)
+    sampling_strategy = [(padding_n, True), (remaining_n, False)]
+
+    n_samples_per_group = np.zeros(group_counts_df.height)
+    for n, even in sampling_strategy:
+        n_samples_per_group += calculate_array_sample_allocations(
+            population_df=buildings_df,
+            grouped_df=group_counts_df,
+            total_sample=n,
+            secondary_attributes=secondary_constraints,
+            even=even,
+        )
+
+    group_counts_df = group_counts_df.with_columns(
+        pl.Series(name="n_to_sample_train", values=n_samples_per_group)
+    )
+
+    test_n = target_n - training_n
     n_samples_per_group = calculate_array_sample_allocations(
+        population_df=buildings_df,
         grouped_df=group_counts_df,
-        total_sample=training_n,
+        total_sample=test_n,
         secondary_attributes=secondary_constraints,
+        even=False,
     )
     group_counts_df = group_counts_df.with_columns(
-        pl.Series(name="n_to_sample", values=n_samples_per_group)
+        pl.Series(name="n_to_sample_test", values=n_samples_per_group)
     )
 
     # Sample per group using per-group sampling quota
-    buildings_with_quota = buildings_df.join(
-        group_counts_df.select(attributes + ["n_to_sample"]),
+    buildings_df = buildings_df.join(
+        group_counts_df.select(attributes + ["n_to_sample_train", "n_to_sample_test"]),
         on=attributes,
         how="left",
     )
 
     # Sample IDs randomly from each combination of attributes
-    sampled_ids = (
-        buildings_with_quota.with_columns(
-            # Generates a sequential integer index for all rows in the dataframe from 0 to N-1
-            pl.int_range(pl.len())
-            # Randomly shuffles the row indices independently within each combination of attributes
-            .shuffle(seed=seed).over(attributes)
-            # Assigns the randomised integer index to a temporary '_rank' column
-            .alias("_rank")
-        )
-        # Keep rows where '_rank' is less than 'n_to_sample' - this is the method to identify the sample rows
-        .filter(pl.col("_rank") < pl.col("n_to_sample")).select("building_id")
+    train_sample_df = sample_df_by_quota(
+        population_df=buildings_df,
+        quota_col="n_to_sample_train",
+        id_col="building_id",
+        attributes=attributes,
+        seed=seed,
+    ).with_columns(pl.lit("train").alias("split"))
+
+    test_sample_df = sample_df_by_quota(
+        population_df=buildings_df.filter(
+            ~pl.col("building_id").is_in(train_sample_df["building_id"].to_list())
+        ),
+        quota_col="n_to_sample_test",
+        id_col="building_id",
+        attributes=attributes,
+        seed=seed,
+    ).with_columns(pl.lit("test").alias("split"))
+
+    # Join labels from first labelling round where label is confident
+    already_labelled = pl.read_parquet(
+        "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/first_round_confident_LABELLED_buildings_containing_flats_sample_n959.parquet"
+    )
+    sample_df = pl.concat([train_sample_df, test_sample_df]).join(
+        already_labelled.select(["oct_building_id", "label"]),
+        how="left",
+        left_on="building_id",
+        right_on="oct_building_id",
     )
 
-    # Filter population dataset to sample IDs
-    sample_df = buildings_df.filter(
-        pl.col("building_id").is_in(sampled_ids["building_id"].to_list())
-    )
-    del buildings_df
     sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
         sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
     )
     del buildings_gdf
 
     # ------------------------------------ #
-    # ADD GOOGLE MAPS URL TO EACH SAMPLE
+    # SAVE FILES
     # ------------------------------------ #
-    print("Enrich with Google Maps URL...")
-    # Convert to 4326 projection and create google maps URL
-    sample_gdf = sample_gdf.to_crs(epsg=4326)
-    sample_gdf[["x", "y"]] = sample_gdf.centroid.get_coordinates()
-    sample_gdf["url"] = (
-        "https://www.google.com/maps/search/?api=1&query="
-        + sample_gdf["y"].astype(str)
-        + ","
-        + sample_gdf["x"].astype(str)
-    )
-
-    # ------------------------------------ #
-    # SAVE TO KML FILE
-    # ------------------------------------ #
-    print("Save to KML file...")
-    today = date.today().strftime("%Y%m%d")
-    s3 = boto3.resource("s3")
-    BUCKET = "asf-local-heat-planning-tool"
-    kml = simplekml.Kml()
-    for url, n_flats, n_total, geom in zip(
-        sample_gdf["url"],
-        sample_gdf["n_flats"],
-        sample_gdf["n_uprns"],
-        sample_gdf["geometry"],
-    ):
-        pol = kml.newpolygon(
-            name="unlabelled",
-            description=f"Location: {url} -------- N flats: {n_flats} -------- N total: {n_total}",
-            outerboundaryis=list(geom.exterior.coords),
+    if args.save:
+        fname = f"{release_date}_UNLABELLED_GB_buildings_containing_flats_sample_n{len(sample_gdf)}_seed{seed}"
+        save_utils.save_to_s3(
+            sample_df,
+            path=f"s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{fname}.parquet",
         )
-        pol.style.polystyle.color = "9939FF14"
-        pol.style.polystyle.outline = 1
-    l = len(sample_gdf)
-    fname = (
-        f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
-    )
-    fpath = os.path.join(PROJECT_DIR, "outputs", "data", fname)
-    kml.save(fpath)
-    s3.Bucket(BUCKET).upload_file(
-        os.path.join(os.getcwd(), fpath),
-        os.path.join("outputs", "models", "block_of_flats_classifier", fname),
-    )
+        s3 = boto3.resource("s3")
+        BUCKET = "asf-local-heat-planning-tool"
+        save_building_sample_to_kml(
+            gdf=sample_gdf, s3_client=s3, bucket=BUCKET, fname=f"{fname}.kml"
+        )
