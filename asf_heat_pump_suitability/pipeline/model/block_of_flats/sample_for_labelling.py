@@ -406,7 +406,7 @@ def save_building_sample_to_kml(
         None
     """
     print("Saving to KML file...")
-    gdf["url"] = _enrich_gdf_google_maps_url(gdf)
+    gdf = _enrich_gdf_google_maps_url(gdf)
     kml = simplekml.Kml()
     for url, building_id, n_flats, n_total, geom in zip(
         gdf["url"],
@@ -857,7 +857,7 @@ if __name__ == "__main__":
 
     test_sample_df = sample_df_by_quota(
         population_df=buildings_df.filter(
-            ~pl.col("building_id").is_in(train_sample_df["ID"].unique())
+            ~pl.col("building_id").is_in(train_sample_df["building_id"].to_list())
         ),
         quota_col="n_to_sample_test",
         id_col="building_id",
