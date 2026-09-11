@@ -40,8 +40,13 @@ Examples:
     python sample_for_labelling.py --map_uprns_to_building --save
 """
 
+from typing import List
 import argparse
 import polars as pl
+from scipy.optimize import minimize
+
+import numpy as np
+from numpy.typing import ArrayLike
 
 from asf_heat_pump_suitability import config, PROJECT_DIR
 from asf_heat_pump_suitability.getters import base_getters
@@ -123,6 +128,171 @@ def load_df_lsoa_imd_decile(nation: str = None) -> pl.DataFrame:
         )
 
     return pl.concat(dfs)
+
+
+def calculate_int_ssd(
+    sample_allocations: np.array,
+    primary_group_ids: ArrayLike,
+    target_per_primary: float | ArrayLike,
+) -> float:
+    """
+    Calculate the sum of squared deviations from the target sample size per primary strata.
+
+    Args:
+        sample_allocations (np.array): proposed count of samples to take from each cell
+        primary_group_ids (ArrayLike): unique IDs of the primary strata combinations to group by
+        target_per_primary (float | ArrayLike): target sample number per primary stratum
+
+    Returns:
+        int: sum of squared deviations
+    """
+    # Sum sample allocations for each of the primary strata.
+    # This is effectively a vectorised 'groupby' - we group the full combination of sampling cells into their primary
+    # strata
+    primary_totals = np.bincount(primary_group_ids, weights=sample_allocations)
+    # Minimize sum of squared deviations from the target sample size
+    return np.sum((primary_totals - target_per_primary) ** 2)
+
+
+def calculate_array_sample_allocations(
+    grouped_df: pl.DataFrame,
+    total_sample: int,
+    secondary_attributes: List[str],
+    even: bool = True,
+    primary_col: str = "primary_strata",
+) -> np.array:
+    """
+    Calculate optimal count of samples per group to fulfil primary stratification (proportional or even) and secondary
+    constraints.
+
+    Args:
+        grouped_df (pl.DataFrame): sampling cells containing building counts for each unique combination of primary and
+        secondary attributes.
+        total_sample (int): desired sample size for whole sample.
+        secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling. Must
+        be boolean attributes.
+        even (bool): Set to True to evenly sample across primary groups. Set to False to sample groups proportionally to
+        their representation across the whole population.
+        primary_col (str): name of column to be created containing unique IDs for the primary strata combinations.
+        Default `primary_strata`.
+
+    Returns:
+        np.array: count of samples per group in `grouped_df` required to meet constraints.
+    """
+    # Total number of cells to optimise sample count from.
+    # This is the number of combinations multiplied by the number of groups in each secondary constraint.
+    n_cells = grouped_df.height
+
+    # Get the target number of samples per group
+    n_primary_groups = grouped_df[primary_col].n_unique()
+    if even:
+        print("Sampling evenly across primary groups.")
+        target_per_primary = total_sample / n_primary_groups
+    else:
+        print("Proportional stratified sampling across primary groups.")
+        # Get the count of buildings per primary group. The line below is a vectorised groupby.
+        count_per_primary = np.bincount(
+            grouped_df[primary_col], weights=grouped_df["n_buildings"]
+        )
+        n_population = grouped_df["n_buildings"].sum()
+        target_per_primary = total_sample * (count_per_primary / n_population)
+
+    # Sample size per cell must be between 0 and real population count
+    bounds_per_group = [(0, i) for i in grouped_df["n_buildings"]]
+
+    # Seed the optimiser with an initial guess: evenly distribute sample across all cells
+    x0 = np.full(n_cells, total_sample / n_cells)
+    objective_args = {
+        "primary_group_ids": grouped_df[primary_col],
+        "target_per_primary": target_per_primary,
+    }
+
+    # Set secondary sampling constraints
+    sampling_constraints = [
+        # Constraint 1: overall total must equal total_sample requested.
+        # The constraint checks equality of the RHS to zero.
+        {"type": "eq", "fun": lambda x: np.sum(x) - total_sample},
+    ]
+
+    for attr in secondary_attributes:
+        # Create array of 0 and 1 values for each boolean secondary attribute
+        binary_array = grouped_df[attr].to_numpy().astype(int)
+        # Additional constraints: binary constraints should be distributed 50/50
+        sampling_constraints.append(
+            {
+                "type": "eq",
+                # Here we multiply the proposed sample by a boolean value to get the proposed count of the positive class.
+                # The result must be equal to 50% of the total sample.
+                "fun": lambda x, _vals=binary_array: np.sum(x * _vals)
+                - (0.5 * total_sample),
+            }
+        )
+
+    # Run optimiser to calculate the optimal number of samples from each group
+    result = minimize(
+        # Objective function to be minimised (i.e. here we are minimising the sum of squared deviations to
+        # penalise large deviations from the desired sample size for each group)
+        fun=lambda x: calculate_int_ssd(x, **objective_args),
+        x0=x0,
+        method="SLSQP",
+        bounds=bounds_per_group,
+        constraints=sampling_constraints,
+    )
+
+    # Extract results and round them (they are floats originally)
+    sample_allocations = np.round(result.x).astype(int)
+    print("Optimized sub-cell sample sizes:", sample_allocations)
+    print("Total sampled:", np.sum(sample_allocations))
+    for attr in secondary_attributes:
+        print(
+            f"{attr} total sampled:",
+            sum(sample_allocations * grouped_df[attr].to_numpy().astype(int)),
+        )
+
+    return sample_allocations
+
+
+def generate_df_sampling_cells(
+    buildings_df: pl.DataFrame,
+    primary_attributes: List[str],
+    secondary_attributes: List[str],
+    group_id_col: str = "group_id",
+    primary_col: str = "primary_strata",
+) -> pl.DataFrame:
+    """
+    Generate a DataFrame of cells to sample from based on primary strata and secondary constraints. The resulting
+    dataframe will have N rows, where N is equal to the number of categories in each attribute (primary or secondary)
+    multiplied together. The cells will contain the counts of buildings in each unique group combination.
+
+    Args:
+        buildings_df (pl.DataFrame): buildings where each row represents a unique building, and each row is enriched with
+        the specified primary and secondary attributes.
+        primary_attributes (List[str]): list of primary attributes to stratify sample by
+        secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling
+        group_id_col (str): name of unique ID column to be created containing sample cell IDs (i.e. unique combinations of primary and
+        secondary attributes). Default `group_id`.
+        primary_col (str): name of column to be created containing unique IDs for the primary strata combinations. Default `primary_strata`.
+
+    Returns:
+        pl.DataFrame: sampling cells containing building counts for each unique combination of primary and secondary attributes
+    """
+    all_attributes = primary_attributes + secondary_attributes
+
+    return (
+        buildings_df.group_by(all_attributes)
+        .agg(
+            pl.count("building_id").alias("n_buildings"),
+        )
+        .with_columns(
+            pl.concat_list(all_attributes).alias(group_id_col),
+            # Create unique ID from primary attributes
+            pl.concat_list(primary_attributes)
+            .list.join("_")
+            .cast(pl.Categorical)
+            .to_physical()  # required to cast categorical strings to numbers
+            .alias(primary_col),
+        )
+    )
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -349,7 +519,8 @@ if __name__ == "__main__":
             pl.col("CONSTRUCTION_AGE_BAND")
             .str.to_lowercase()
             .replace(BUILDING_CONSTRUCTION_AGE_MAPPING)
-            .alias("construction_age_band")
+            .alias("construction_age_band"),
+            pl.lit(True).alias("has_epc"),
         )
         # This is required to replace empty string with None which we need to do so that the agg max() below works
         # i.e. this prevents 'unknown' from being the max value and ensures consistency in treatment of Null values.
@@ -412,7 +583,7 @@ if __name__ == "__main__":
             .then(pl.lit("Before 1929"))
             .when(pl.col("construction_age_band") == "4_1930-1949")
             .then(pl.lit("1930-1949"))
-            .when(pl.col("construction_age_band").is_in(["5_1950-1966", "6_1966-1975"]))
+            .when(pl.col("construction_age_band").is_in(["5_1950-1966", "6_1965-1975"]))
             .then(pl.lit("1950-1975"))
             .when(
                 pl.col("construction_age_band").is_in(
@@ -430,117 +601,88 @@ if __name__ == "__main__":
             .alias("grouped_construction_age_band"),
             # Group IMD deciles
             pl.when(pl.col("IMD_decile").is_in([1, 2, 3]))
-            .then(pl.lit("high_deprivation"))
-            .when(pl.col("IMD_decile").is_in([4, 5, 6, 7]))
-            .then(pl.lit("middle_deprivation"))
-            .when(pl.col("IMD_decile").is_in([8, 9, 10]))
-            .then(pl.lit("low_deprivation"))
+            .then(True)
+            .when(pl.col("IMD_decile").is_in([4, 5, 6, 7, 8, 9, 10]))
+            .then(False)
             .otherwise(None)
-            .alias("deprivation_group"),
+            .alias("high_deprivation"),
             # Group rurality
             pl.when(pl.col("rurality").is_in(["UN1", "UF1", "1", "2"]))
-            .then(pl.lit("urban"))
-            .when(pl.col("rurality").is_in(["RLN1", "RLF1", "3", "4"]))
-            .then(pl.lit("large_rural"))
-            .when(pl.col("rurality").is_in(["RSN1", "RSF1", "5", "6"]))
-            .then(pl.lit("small_rural"))
+            .then(True)
+            .when(
+                pl.col("rurality").is_in(
+                    ["RLN1", "RLF1", "3", "4", "RSN1", "RSF1", "5", "6"]
+                )
+            )
+            .then(False)
             .otherwise(None)
-            .alias("rurality"),
+            .alias("is_urban"),
         )
-        .with_columns((pl.col("proportion_flats") > 0.8).alias("over_80_pc_flats"))
+        .with_columns(
+            (pl.col("proportion_flats") > 0.8)
+            .cast(pl.Float64)
+            .alias("over_80_pc_flats")
+        )
     )
 
     del uprns_df
 
     save_utils.save_to_s3(
         df=buildings_df,
-        path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_enriched_buildings_with_flats.parquet",
+        path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats.parquet",
     )
+
+    _save_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
+        buildings_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
+    )
+    save_utils.save_to_s3(
+        df=buildings_gdf,
+        path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats_and_geometries.parquet",
+    )
+    del _save_buildings_gdf
 
     # ------------------------------------ #
     # TAKE SAMPLE
     # ------------------------------------ #
-    print("Take sample of buildings...")
-    attributes = [
+    print("Taking sample of buildings...")
+    primary_strata = [
         "area",
-        "rurality",
-        "grouped_construction_age_band",
         "n_flats_grouped",
-        "deprivation_group",
-        "over_80_pc_flats",
+        "high_deprivation",
     ]
 
-    buildings_df = buildings_df.with_columns(
-        pl.col(attributes).cast(pl.String).fill_null("unknown")
-    )
-    # Compute group sizes and initial per-group quota (capped at sample_n)
-    n_combinations = buildings_df.group_by(attributes).agg(pl.len()).height
-    sample_n = target_n // n_combinations
-    print(
-        f"There are {n_combinations} groups to sample from. Target of {sample_n} samples per group."
-    )
+    secondary_constraints = ["is_urban", "over_80_pc_flats"]
 
-    group_counts = (
-        # Calculates the target sample count (n_to_sample) for each attribute combination.
-        # This will be capped at sample_n (defined above) or the group's total size, whichever is smaller.
-        buildings_df.group_by(attributes)
-        .agg(pl.len().alias("group_size"))
-        .with_columns(
-            pl.min_horizontal(pl.col("group_size"), pl.lit(sample_n)).alias(
-                "n_to_sample"
-            )
-        )
+    attributes = primary_strata + secondary_constraints
+
+    null_count = buildings_df.filter(
+        pl.any_horizontal(pl.col(attributes).is_null())
+    ).height
+    print(f"Dropping {null_count} rows from population dataset due to nulls...")
+    buildings_df = buildings_df.filter(
+        pl.any_horizontal(pl.col(attributes).is_not_null()),
     )
 
-    # Distribute shortfall (from underpopulated groups) evenly across groups with remaining capacity
-    shortfall = target_n - int(group_counts["n_to_sample"].sum())
-    if shortfall > 0:
-        eligible = group_counts.filter(pl.col("group_size") > pl.col("n_to_sample"))
-        n_eligible = len(eligible)
-        print(
-            f"Shortfall of {shortfall} samples. Redistributing evenly across {n_eligible} eligible groups..."
-        )
-        base_extra = shortfall // n_eligible
-        remainder = shortfall % n_eligible
-        # First `remainder` groups (sorted by size descending for tiebreaking) get one extra
-        eligible = (
-            eligible.sort("group_size", descending=True)
-            .with_columns(
-                pl.Series(
-                    "allocated_extra",
-                    [
-                        base_extra + (1 if i < remainder else 0)
-                        for i in range(n_eligible)
-                    ],
-                )
-            )
-            .with_columns(
-                # Cap at each group's remaining capacity
-                pl.min_horizontal(
-                    pl.col("allocated_extra"),
-                    pl.col("group_size") - pl.col("n_to_sample"),
-                ).alias("actual_extra")
-            )
-        )
-        group_counts = (
-            group_counts.join(
-                eligible.select(attributes + ["actual_extra"]),
-                on=attributes,
-                how="left",
-            )
-            .with_columns(
-                (pl.col("n_to_sample") + pl.col("actual_extra").fill_null(0)).alias(
-                    "n_to_sample"
-                )
-            )
-            .drop("actual_extra")
-        )
+    training_n = round(target_n * 0.75)
 
-    print(f"Total samples to be taken: {int(group_counts['n_to_sample'].sum())}")
+    # Create dataframe of cells to calculate sample sizes from
+    group_counts_df = generate_df_sampling_cells(
+        buildings_df=buildings_df,
+        primary_attributes=primary_strata,
+        secondary_attributes=secondary_constraints,
+    )
+    n_samples_per_group = calculate_array_sample_allocations(
+        grouped_df=group_counts_df,
+        total_sample=training_n,
+        secondary_attributes=secondary_constraints,
+    )
+    group_counts_df = group_counts_df.with_columns(
+        pl.Series(name="n_to_sample", values=n_samples_per_group)
+    )
 
-    # Sample per group using per-group quota
+    # Sample per group using per-group sampling quota
     buildings_with_quota = buildings_df.join(
-        group_counts.select(attributes + ["n_to_sample"]),
+        group_counts_df.select(attributes + ["n_to_sample"]),
         on=attributes,
         how="left",
     )
@@ -594,7 +736,7 @@ if __name__ == "__main__":
     for url, n_flats, n_total, geom in zip(
         sample_gdf["url"],
         sample_gdf["n_flats"],
-        sample_gdf["n_total"],
+        sample_gdf["n_uprns"],
         sample_gdf["geometry"],
     ):
         pol = kml.newpolygon(
@@ -605,14 +747,12 @@ if __name__ == "__main__":
         pol.style.polystyle.color = "9939FF14"
         pol.style.polystyle.outline = 1
     l = len(sample_gdf)
-    fpath = os.path.join(
-        PROJECT_DIR,
-        "outputs",
-        "data",
-        f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml",
+    fname = (
+        f"{today}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
     )
+    fpath = os.path.join(PROJECT_DIR, "outputs", "data", fname)
     kml.save(fpath)
     s3.Bucket(BUCKET).upload_file(
         os.path.join(os.getcwd(), fpath),
-        os.path.join("outputs", "models", "block_of_flats_classifier", fpath),
+        os.path.join("outputs", "models", "block_of_flats_classifier", fname),
     )
