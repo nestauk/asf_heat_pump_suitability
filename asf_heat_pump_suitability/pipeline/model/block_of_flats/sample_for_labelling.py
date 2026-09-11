@@ -840,12 +840,6 @@ if __name__ == "__main__":
         how="left",
     )
 
-    # Load previously labelled buildings and remove from population
-    already_labelled = pl.read_parquet(
-        "s3://asf-heat-pump-suitability/local_heat_planning/inputs/processed/manually_labelled_block_of_flats.parquet"
-    )["ID"]
-    buildings_df = buildings_df.filter(~pl.col("building_id").is_in(already_labelled))
-
     # Sample IDs randomly from each combination of attributes
     train_sample_df = sample_df_by_quota(
         population_df=buildings_df,
