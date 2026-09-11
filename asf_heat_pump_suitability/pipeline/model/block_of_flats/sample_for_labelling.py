@@ -408,15 +408,18 @@ def save_building_sample_to_kml(
     print("Saving to KML file...")
     gdf = _enrich_gdf_google_maps_url(gdf)
     kml = simplekml.Kml()
-    for url, building_id, n_flats, n_total, geom in zip(
+    for url, label, building_id, n_flats, n_total, geom in zip(
         gdf["url"],
+        gdf["label"],
         gdf["ID"],
         gdf["n_flats"],
         gdf["n_uprns"],
         gdf["geometry"],
     ):
+        if not label:
+            label = "unlabelled"
         pol = kml.newpolygon(
-            name="unlabelled",
+            name=label,
             description=f"Location: {url} -------- building_id: {building_id} -------- N flats: {n_flats} -------- N total: {n_total}",
             outerboundaryis=list(geom.exterior.coords),
         )
@@ -859,7 +862,17 @@ if __name__ == "__main__":
         seed=seed,
     ).with_columns(pl.lit("test").alias("split"))
 
-    sample_df = pl.concat([train_sample_df, test_sample_df])
+    # Join labels from first labelling round where label is confident
+    already_labelled = pl.read_parquet(
+        "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/first_round_confident_LABELLED_buildings_containing_flats_sample_n959.parquet"
+    )
+    sample_df = pl.concat([train_sample_df, test_sample_df]).join(
+        already_labelled.select(["oct_building_id", "label"]),
+        how="left",
+        left_on="building_id",
+        right_on="oct_building_id",
+    )
+
     sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
         sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
     )
