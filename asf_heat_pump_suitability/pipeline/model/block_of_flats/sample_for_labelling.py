@@ -835,7 +835,7 @@ if __name__ == "__main__":
 
     # Sample per group using per-group sampling quota
     buildings_df = buildings_df.join(
-        group_counts_df.select(attributes + ["n_to_sample_train", "n_to_sample_train"]),
+        group_counts_df.select(attributes + ["n_to_sample_train", "n_to_sample_test"]),
         on=attributes,
         how="left",
     )
