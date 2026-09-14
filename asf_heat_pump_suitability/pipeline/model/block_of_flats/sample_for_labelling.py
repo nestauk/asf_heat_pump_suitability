@@ -64,13 +64,14 @@ import boto3
 
 import geopandas as gpd
 
-from typing import List
+from typing import List, Dict
 import argparse
 import polars as pl
 from scipy.optimize import minimize
 
 import numpy as np
 from numpy.typing import ArrayLike
+from random import shuffle
 
 from asf_heat_pump_suitability import config, PROJECT_DIR
 from asf_heat_pump_suitability.getters import base_getters
@@ -381,6 +382,25 @@ def sample_df_by_quota(
 
     # Filter population dataset to sample IDs
     return population_df.filter(pl.col(id_col).is_in(sampled_ids[id_col].to_list()))
+
+
+def assign_df_labellers(
+    sample_df: pl.DataFrame, labellers: list | Dict[str:int]
+) -> pl.DataFrame:
+    if isinstance(labellers, dict):
+        total = sum(labellers.values())
+        assert (
+            total == sample_df.height
+        ), "Labeller counts must sum to `sample_df` total."
+    else:
+        sample_each, remainder = divmod(sample_df.height, len(labellers))
+        labellers = {labeller: sample_each for labeller in labellers}
+        # Add remainder to first labeller
+        labellers[list(labellers.keys())[0]] += remainder
+    labeller_col = []
+    [labeller_col.extend([labeller] * count) for labeller, count in labellers.items()]
+    shuffle(labeller_col)
+    sample_df = sample_df.with_columns(labeller=pl.Series(labeller_col))
 
 
 def _enrich_gdf_google_maps_url(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
