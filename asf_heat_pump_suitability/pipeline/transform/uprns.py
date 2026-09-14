@@ -526,7 +526,6 @@ if __name__ == "__main__":
         buildings_gdf=layers["building_gdf"],
         domestic_epc_uprns=domestic_epc_uprns,
         non_residential_buildings_gdf=non_residential_buildings_gdf,
-        local_authority_dict=local_authority_dict,
     )
 
     # Save residential UPRNs to S3
