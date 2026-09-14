@@ -108,6 +108,8 @@ def load_df_uprn_lookup(
     if grid_squares:
         dfs = [
             pl.read_parquet(uri.format(grid_square=grid_square), **kwargs)
+            # Clean postcode column of leading and trailing whitespace
+            .with_columns(pl.col("PCDS").str.strip_chars().name.keep())
             for grid_square in grid_squares
         ]
         if uprn_filter:
@@ -134,6 +136,8 @@ def load_df_uprn_lookup(
                 df = df.with_columns(pl.col("ruc21ind").cast(pl.String))
             if uprn_filter is not None:
                 df = df.join(uprn_filter, how="semi", on="UPRN")
+            # Clean postcode column of leading and trailing whitespace
+            df = df.with_columns(pl.col("PCDS").str.strip_chars().name.keep())
             result.append(df)
         return pl.concat(result)
 
