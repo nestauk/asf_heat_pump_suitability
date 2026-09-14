@@ -210,7 +210,7 @@ def calculate_array_sample_allocations(
     # Set secondary sampling constraints
     sampling_constraints = [
         # Constraint 1: overall total must equal total_sample requested.
-        # The constraint checks equality of the RHS to zero.
+        # The constraint checks equality of the LHS to zero.
         {"type": "eq", "fun": lambda x: np.sum(x) - total_sample},
     ]
 
