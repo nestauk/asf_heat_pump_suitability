@@ -903,7 +903,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     if args.save:
         path = config["output"]["dataset"]["sample_for_block_of_flats_model"].format(
-            release_date=release_date, l=len(sample_gdf), seed=seed
+            release_date=release_date, l=len(sample_df), seed=seed
         )
         save_utils.save_to_s3(
             sample_df,
