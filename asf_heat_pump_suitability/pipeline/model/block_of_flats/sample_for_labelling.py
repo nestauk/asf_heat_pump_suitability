@@ -385,7 +385,7 @@ def sample_df_by_quota(
 
 
 def assign_df_labellers(
-    sample_df: pl.DataFrame, labellers: list | Dict[str:int]
+    sample_df: pl.DataFrame, labellers: list | Dict[str:int], n_cross: int = 30
 ) -> pl.DataFrame:
     if isinstance(labellers, dict):
         total = sum(labellers.values())
@@ -398,12 +398,19 @@ def assign_df_labellers(
         # Add remainder to first labeller
         labellers[list(labellers.keys())[0]] += remainder
 
-    return sample_df.with_columns(labeller=pl.Series(_random_list_labellers(labellers)))
+    sample_df = sample_df.with_columns(
+        labeller=pl.Series(_random_list_labellers(labellers))
+    )
+    return _assign_df_secondary_labellers(
+        sample_df=sample_df, labellers=list(labellers.keys()), n_cross=n_cross
+    )
 
 
 def _assign_df_secondary_labellers(
     sample_df: pl.DataFrame, labellers: list, n_cross: int
 ) -> pl.DataFrame:
+    if len(labellers) == 1:
+        return sample_df.with_columns(pl.lit(None).alias("secondary_labeller"))
     sample_df = sample_df.sort(by="labeller")
     labellers.sort()
     secondary_labeller_assignment = []
@@ -506,6 +513,14 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
+        "--labellers",
+        help="List of labeller names.",
+        type=list,
+        required=True,
+        nargs="+",
+    )
+
+    parser.add_argument(
         "--local_authorities",
         help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
@@ -565,6 +580,7 @@ if __name__ == "__main__":
     release_date = save_utils.get_str_release_date(args.release_date)
     seed = args.seed
     target_n = args.target_n
+    labellers = args.labellers
 
     # ------------------------------------ #
     # LOAD GRID SQUARES
@@ -940,6 +956,7 @@ if __name__ == "__main__":
         right_on="oct_building_id",
     )
 
+    sample_df = assign_df_labellers(sample_df=sample_df, labellers=labellers)
     sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
         sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
     )
@@ -950,14 +967,29 @@ if __name__ == "__main__":
     # ------------------------------------ #
     if args.save:
         path = config["output"]["dataset"]["sample_for_block_of_flats_model"]
-        save_utils.save_to_s3(
-            sample_df,
-            path=path.format(release_date=release_date, l=len(sample_gdf), seed=seed),
-        )
-        s3 = boto3.resource("s3")
-        BUCKET = config["constant"]["s3"]["bucket"]
-        # Extract file name from full path to save kml
-        fname = path.split("/")[-1].split(".parquet")[0]
-        save_building_sample_to_kml(
-            gdf=sample_gdf, s3_client=s3, bucket=BUCKET, fname=f"{fname}.kml"
-        )
+        for labeller in labellers:
+            save_utils.save_to_s3(
+                sample_df.filter(
+                    (pl.col("labeller") == labeller)
+                    | (pl.col("secondary_labeller") == labeller)
+                ),
+                path=path.format(
+                    release_date=release_date,
+                    labeller=labeller,
+                    l=len(sample_gdf),
+                    seed=seed,
+                ),
+            )
+            s3 = boto3.resource("s3")
+            BUCKET = config["constant"]["s3"]["bucket"]
+            # Extract file name from full path to save kml
+            fname = path.split("/")[-1].split(".parquet")[0]
+            save_building_sample_to_kml(
+                gdf=sample_gdf[
+                    (sample_gdf["labeller"] == labeller)
+                    | (sample_gdf["secondary_labeller"] == labeller)
+                ],
+                s3_client=s3,
+                bucket=BUCKET,
+                fname=f"{fname}.kml",
+            )
