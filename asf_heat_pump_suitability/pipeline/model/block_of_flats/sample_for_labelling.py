@@ -218,7 +218,7 @@ def calculate_array_sample_allocations(
     # Set secondary sampling constraints
     sampling_constraints = [
         # Constraint 1: overall total must equal total_sample requested.
-        # The constraint checks equality of the RHS to zero.
+        # The constraint checks equality of the LHS to zero.
         {"type": "eq", "fun": lambda x: np.sum(x) - total_sample},
     ]
 
@@ -245,6 +245,8 @@ def calculate_array_sample_allocations(
         # penalise large deviations from the desired sample size for each group)
         fun=lambda x: calculate_int_ssd(x, **objective_args),
         x0=x0,
+        # SLSQP was chosen as it is able to handle all requirements of the sampling:
+        # secondary constraints, bounds of each cell, and even / proportional sampling across strata
         method="SLSQP",
         bounds=bounds_per_group,
         constraints=sampling_constraints,
@@ -267,21 +269,18 @@ def generate_df_sampling_cells(
     buildings_df: pl.DataFrame,
     primary_attributes: List[str],
     secondary_attributes: List[str],
-    group_id_col: str = "group_id",
     primary_col: str = "primary_strata",
 ) -> pl.DataFrame:
     """
     Generate a DataFrame of cells to sample from based on primary strata and secondary constraints. The resulting
-    dataframe will have N rows, where N is equal to the number of categories in each attribute (primary or secondary)
-    multiplied together. The cells will contain the counts of buildings in each unique group combination.
+    dataframe will have N rows, where N is equal to the number of combinations of primary and secondary attributes. One
+    row represents one combination. The cells will contain the counts of buildings in each unique group combination.
 
     Args:
         buildings_df (pl.DataFrame): buildings where each row represents a unique building, and each row is enriched with
         the specified primary and secondary attributes.
         primary_attributes (List[str]): list of primary attributes to stratify sample by
         secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling
-        group_id_col (str): name of unique ID column to be created containing sample cell IDs (i.e. unique combinations of primary and
-        secondary attributes). Default `group_id`.
         primary_col (str): name of column to be created containing unique IDs for the primary strata combinations. Default `primary_strata`.
 
     Returns:
@@ -295,7 +294,6 @@ def generate_df_sampling_cells(
             pl.count("building_id").alias("n_buildings"),
         )
         .with_columns(
-            pl.concat_list(all_attributes).alias(group_id_col),
             # Create unique ID from primary attributes
             pl.concat_list(primary_attributes)
             .list.join("_")
