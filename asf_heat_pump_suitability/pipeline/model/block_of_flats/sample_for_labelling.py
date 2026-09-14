@@ -758,7 +758,9 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             df=buildings_df,
-            path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats.parquet",
+            path=config["output"]["dataset"]["labelled_buildings"].format(
+                local_authorities=local_authorities
+            ),
         )
 
         _save_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
@@ -766,7 +768,9 @@ if __name__ == "__main__":
         )
         save_utils.save_to_s3(
             df=buildings_gdf,
-            path="s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/GB_enriched_buildings_with_flats_and_geometries.parquet",
+            path=config["output"]["dataset"]["labelled_buildings_with_geoms"].format(
+                local_authorities=local_authorities
+            ),
         )
         del _save_buildings_gdf
 
@@ -862,7 +866,7 @@ if __name__ == "__main__":
 
     # Join labels from first labelling round where label is confident
     already_labelled = pl.read_parquet(
-        "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/first_round_confident_LABELLED_buildings_containing_flats_sample_n959.parquet"
+        "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/first_round_confident_LABELLED_buildings_containing_flats_sample_n806.parquet"
     )
     sample_df = pl.concat([train_sample_df, test_sample_df]).join(
         already_labelled.select(["oct_building_id", "label"]),
@@ -880,13 +884,15 @@ if __name__ == "__main__":
     # SAVE FILES
     # ------------------------------------ #
     if args.save:
-        fname = f"{release_date}_UNLABELLED_GB_buildings_containing_flats_sample_n{len(sample_gdf)}_seed{seed}"
+        path = config["output"]["dataset"]["sample_for_block_of_flats_model"]
         save_utils.save_to_s3(
             sample_df,
-            path=f"s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{fname}.parquet",
+            path=path.format(release_date=release_date, l=len(sample_gdf), seed=seed),
         )
         s3 = boto3.resource("s3")
-        BUCKET = "asf-local-heat-planning-tool"
+        BUCKET = config["constant"]["s3"]["bucket"]
+        # Extract file name from full path to save kml
+        fname = path.split("/")[-1].split(".parquet")[0]
         save_building_sample_to_kml(
             gdf=sample_gdf, s3_client=s3, bucket=BUCKET, fname=f"{fname}.kml"
         )
