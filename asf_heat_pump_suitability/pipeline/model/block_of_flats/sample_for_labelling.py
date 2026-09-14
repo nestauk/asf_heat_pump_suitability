@@ -1,28 +1,29 @@
 """
-Create a sample of buildings containing flats for manual labelling to use in block of flats
-classifier model training.
+Create a sample of buildings containing flats, for manual labelling to train the block of flats classifier
+model.
 
-Buildings are grouped into primary strata according to: area, number of flats, deprivation group. There are additional
-binary attributes to which secondary constraints are applied: rurality, and whether the building contains predominantly
-flats (>80%) or not.
+Buildings are grouped into primary strata by area, number of flats, and deprivation group. Two further binary
+attributes are applied as secondary constraints: rurality, and whether the building is predominantly flats
+(>80%) or not.
 
-The total sample then fulfils the following conditions:
-- Total sample size equal to `target_n` (or as close as possible) - see args below
-- 75% of total sample for train and validation, 25% for test (each sample is indicated accordingly)
-- Constraints on training & validation sample:
-    - First take ~50 samples from each primary stratum. Secondary constraints are applied so that this sample has 50%
-    representation across each binary attribute.
-    - Conduct proportional stratified sampling on the remainder, with secondary constraints reflecting real-world proportions
-    across the whole sample.
-    - The result is a training & validation sample that is close to real-world proportions but with enough padding on smaller
-    groups that they are represented in model training.
-- The test sample is then taken separately with proportional stratified sampling across primary strata, representing
-real-world proportions, with secondary constraints across the whole test sample representing real-world proportions.
+The sample is built to meet the following conditions:
+- Total sample size is `target_n` (or as close as possible) - see args below.
+- The sample is split 75% train & validation, 25% test (each building is labelled with its split).
+- Train & validation sample:
+    - ~50 buildings are taken from each primary stratum first, with secondary constraints applied evenly (a
+    50/50 split across each binary attribute). This "padding" ensures smaller groups are still represented in
+    model training.
+    - The remaining buildings are then sampled proportionally across primary strata, with secondary constraints
+    reflecting real-world proportions.
+    - The result is a sample that's close to real-world proportions, but with extra representation for smaller
+    groups.
+- Test sample:
+    - Sampled separately, entirely proportionally - both primary strata and secondary constraints reflect
+    real-world proportions.
 
-The final sample dataset contains the total sample (containing both train & validation and test samples). Labels
-assigned during the previous manual labelling exercise are applied to any samples which have been previously labelled -
-these are to be checked and confirmed or reassigned during labelling. These were not removed here because the sampling
-strategy has changed.
+The final dataset contains the full sample (train & validation and test combined). Where a building was
+labelled in a previous manual labelling round, that label is carried over. These should be checked and
+confirmed or reassigned during labelling, since the sampling strategy has changed since that round.
 
 The sample is enriched with Google Maps URLs and saved as a KML file to S3 for labelling.
 
