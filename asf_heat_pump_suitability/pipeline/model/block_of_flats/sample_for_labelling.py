@@ -397,10 +397,37 @@ def assign_df_labellers(
         labellers = {labeller: sample_each for labeller in labellers}
         # Add remainder to first labeller
         labellers[list(labellers.keys())[0]] += remainder
+
+    return sample_df.with_columns(labeller=pl.Series(_random_list_labellers(labellers)))
+
+
+def _assign_df_secondary_labellers(
+    sample_df: pl.DataFrame, labellers: list, n_cross: int
+) -> pl.DataFrame:
+    sample_df = sample_df.sort(by="labeller")
+    labellers.sort()
+    secondary_labeller_assignment = []
+
+    for labeller in labellers:
+        labeller_df = sample_df.filter(pl.col("labeller") == labeller)
+        n_per_secondary = n_cross // (len(labellers) - 1)
+        n_remaining = labeller_df.height - n_cross
+        secondary_labellers = {l: n_per_secondary for l in labellers if l != labeller}
+        secondary_labellers[None] = n_remaining
+        secondary_labeller_assignment.append(
+            _random_list_labellers(secondary_labellers)
+        )
+
+    return sample_df.with_columns(
+        secondary_labeller=pl.Series(secondary_labeller_assignment)
+    )
+
+
+def _random_list_labellers(labellers: dict) -> list:
     labeller_col = []
     [labeller_col.extend([labeller] * count) for labeller, count in labellers.items()]
     shuffle(labeller_col)
-    sample_df = sample_df.with_columns(labeller=pl.Series(labeller_col))
+    return labeller_col
 
 
 def _enrich_gdf_google_maps_url(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
