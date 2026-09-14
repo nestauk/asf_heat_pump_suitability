@@ -902,10 +902,12 @@ if __name__ == "__main__":
     # SAVE FILES
     # ------------------------------------ #
     if args.save:
-        path = config["output"]["dataset"]["sample_for_block_of_flats_model"]
+        path = config["output"]["dataset"]["sample_for_block_of_flats_model"].format(
+            release_date=release_date, l=len(sample_gdf), seed=seed
+        )
         save_utils.save_to_s3(
             sample_df,
-            path=path.format(release_date=release_date, l=len(sample_gdf), seed=seed),
+            path=path,
         )
         s3 = boto3.resource("s3")
         BUCKET = config["constant"]["s3"]["bucket"]
