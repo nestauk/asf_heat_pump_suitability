@@ -1,13 +1,30 @@
 """
-Create a disproportional stratified sample of buildings containing flats for manual labelling to use in block of flats
+Create a sample of buildings containing flats for manual labelling to use in block of flats
 classifier model training.
 
-Buildings are grouped by area, rurality, construction age band, number of flats, deprivation
-group, and whether the building is predominantly flats (>80%). A target number of samples is
-distributed as evenly as possible across these groups. Where a group has fewer buildings than
-the per-group target, the remainder is redistributed evenly across groups with remaining
-capacity. The sample is enriched with Google Maps URLs and saved as a KML file to S3
-for labelling.
+Buildings are grouped into primary strata according to: area, number of flats, deprivation group. There are additional
+binary attributes to which secondary constraints are applied: rurality, and whether the building contains predominantly
+flats (>80%) or not.
+
+The total sample then fulfils the following conditions:
+- Total sample size equal to `target_n` (or as close as possible) - see args below
+- 75% of total sample for train and validation, 25% for test (each sample is indicated accordingly)
+- Constraints on training & validation sample:
+    - First take ~50 samples from each primary stratum. Secondary constraints are applied so that this sample has 50%
+    representation across each binary attribute.
+    - Conduct proportional stratified sampling on the remainder, with secondary constraints reflecting real-world proportions
+    across the whole sample.
+    - The result is a training & validation sample that is close to real-world proportions but with enough padding on smaller
+    groups that they are represented in model training.
+- The test sample is then taken separately with proportional stratified sampling across primary strata, representing
+real-world proportions, with secondary constraints across the whole test sample representing real-world proportions.
+
+The final sample dataset contains the total sample (containing both train & validation and test samples). Labels
+assigned during the previous manual labelling exercise are applied to any samples which have been previously labelled -
+these are to be checked and confirmed or reassigned during labelling. These were not removed here because the sampling
+strategy has changed.
+
+The sample is enriched with Google Maps URLs and saved as a KML file to S3 for labelling.
 
 Usage:
     python sample_for_labelling.py [options]
