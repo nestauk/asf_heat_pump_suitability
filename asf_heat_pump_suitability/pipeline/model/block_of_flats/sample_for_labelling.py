@@ -966,23 +966,28 @@ if __name__ == "__main__":
         path = config["output"]["dataset"]["sample_for_block_of_flats_model"].format(
             release_date=release_date, l=len(sample_df), seed=seed
         )
+        save_utils.save_to_s3(
+            sample_df,
+            path=path.format(
+                release_date=release_date,
+                l=len(sample_gdf),
+                seed=seed,
+            ),
+        )
+
         for labeller in labellers:
-            save_utils.save_to_s3(
-                sample_df.filter(
-                    (pl.col("labeller") == labeller)
-                    | (pl.col("secondary_labeller") == labeller)
-                ),
-                path=path.format(
-                    release_date=release_date,
-                    labeller=labeller,
-                    l=len(sample_gdf),
-                    seed=seed,
-                ),
-            )
             s3 = boto3.resource("s3")
             BUCKET = config["constant"]["s3"]["bucket"]
-            # Extract file name from full path to save kml
-            fname = path.split("/")[-1].split(".parquet")[0]
+            # Save per labeller
+            path = config["output"]["dataset"][
+                "per_labeller_sample_for_block_of_flats_model"
+            ].format(
+                labeller=labeller,
+                release_date=release_date,
+                l=len(sample_df),
+                seed=seed,
+            )
+            fname = path.split("/")[-1]
             save_building_sample_to_kml(
                 gdf=sample_gdf[
                     (sample_gdf["labeller"] == labeller)
@@ -990,5 +995,5 @@ if __name__ == "__main__":
                 ],
                 s3_client=s3,
                 bucket=BUCKET,
-                fname=f"{fname}.kml",
+                fname=fname,
             )
