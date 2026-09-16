@@ -196,7 +196,8 @@ def calculate_array_sample_allocations(
         secondary attributes.
         total_sample (int): desired sample size for whole sample.
         secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling. Must
-        be boolean attributes.
+        be boolean attributes. Across the whole sample, these are sampled either evenly or proportionally depending on
+        if `even` is set to `True` or `False`, respectively.
         even (bool): Set to True to evenly sample across primary groups. Set to False to sample groups proportionally to
         their representation across the whole population.
         primary_col (str): name of column to be created containing unique IDs for the primary strata combinations.
