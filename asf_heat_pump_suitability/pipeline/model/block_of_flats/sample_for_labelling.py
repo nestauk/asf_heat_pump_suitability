@@ -757,9 +757,9 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             df=buildings_df,
-            path=config["output"]["dataset"]["enriched_buildings"].format(
-                local_authorities=local_authorities
-            ),
+            path=config["output"]["model"]["training_data"][
+                "enriched_buildings"
+            ].format(local_authorities=local_authorities),
         )
 
         _save_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
@@ -767,9 +767,9 @@ if __name__ == "__main__":
         )
         save_utils.save_to_s3(
             df=_save_buildings_gdf,
-            path=config["output"]["dataset"]["enriched_buildings_with_geoms"].format(
-                local_authorities=local_authorities
-            ),
+            path=config["output"]["model"]["training_data"][
+                "enriched_buildings_with_geoms"
+            ].format(local_authorities=local_authorities),
         )
         del _save_buildings_gdf
 
@@ -864,7 +864,9 @@ if __name__ == "__main__":
     ).with_columns(pl.lit("test").alias("split"))
 
     # Join labels from first labelling round where label is confident
-    already_labelled = pl.read_parquet(config["output"]["dataset"]["first_labelling"])
+    already_labelled = pl.read_parquet(
+        config["output"]["model"]["training_data"]["first_labelling"]
+    )
     sample_df = pl.concat([train_sample_df, test_sample_df]).join(
         already_labelled.select(["oct_building_id", "label"]),
         how="left",
@@ -881,9 +883,9 @@ if __name__ == "__main__":
     # SAVE FILES
     # ------------------------------------ #
     if args.save:
-        path = config["output"]["dataset"]["sample_for_block_of_flats_model"].format(
-            release_date=release_date, l=len(sample_df), seed=seed
-        )
+        path = config["output"]["model"]["training_data"][
+            "sample_for_block_of_flats_model"
+        ].format(release_date=release_date, l=len(sample_df), seed=seed)
         save_utils.save_to_s3(
             sample_df,
             path=path,
