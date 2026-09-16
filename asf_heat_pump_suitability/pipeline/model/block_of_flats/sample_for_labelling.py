@@ -197,7 +197,8 @@ def calculate_array_sample_allocations(
         secondary attributes.
         total_sample (int): desired sample size for whole sample.
         secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling. Must
-        be boolean attributes.
+        be boolean attributes. Across the whole sample, these are sampled either evenly or proportionally depending on
+        if `even` is set to `True` or `False`, respectively.
         even (bool): Set to True to evenly sample across primary groups. Set to False to sample groups proportionally to
         their representation across the whole population.
         primary_col (str): name of column to be created containing unique IDs for the primary strata combinations.
@@ -245,9 +246,12 @@ def calculate_array_sample_allocations(
         # Create array of 0 and 1 values for each boolean secondary attribute
         binary_array = grouped_df[attr].to_numpy().astype(int)
         # Additional constraints: binary constraints should be distributed evenly or according to whole population proportions
-        proportion = _calculate_float_constraint_proportions(
-            population_df=population_df, attribute=attr, even=even
-        )
+        if even:
+            proportion = 0.5
+        else:
+            proportion = round(
+                population_df.filter(pl.col(attr)).height / population_df.height, 2
+            )
         sampling_constraints.append(
             {
                 "type": "eq",
@@ -321,29 +325,6 @@ def generate_df_sampling_cells(
             .alias(primary_col),
         )
     )
-
-
-def _calculate_float_constraint_proportions(
-    population_df: pl.DataFrame, attribute: str, even: bool
-) -> float:
-    """
-    Calculate the proportions of the positive binary class for even (50%) or proportional sampling (i.e. according to
-    whole population proportions).
-
-    Args:
-        population_df (pl.DataFrame): whole population dataframe with binary attribute column
-        attribute (str): binary attribute to calculate proportions for
-        even (bool): set to `True` for even proportions (0.5) or `False` for whole-population proportions
-
-    Returns:
-        float: proportions of positive class
-    """
-    if even:
-        return 0.5
-    else:
-        return round(
-            population_df.filter(pl.col(attribute)).height / population_df.height, 2
-        )
 
 
 def sample_df_by_quota(
@@ -853,8 +834,8 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             df=buildings_df,
-            path=config["output"]["dataset"]["labelled_buildings"].format(
-                local_authorities=slug
+            path=config["output"]["dataset"]["enriched_buildings"].format(
+                local_authorities=slug, release_date=release_date
             ),
         )
 
@@ -862,9 +843,9 @@ if __name__ == "__main__":
             buildings_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
         )
         save_utils.save_to_s3(
-            df=buildings_gdf,
-            path=config["output"]["dataset"]["labelled_buildings_with_geoms"].format(
-                local_authorities=slug
+            df=_save_buildings_gdf,
+            path=config["output"]["dataset"]["enriched_buildings_with_geoms"].format(
+                local_authorities=slug, release_date=release_date
             ),
         )
         del _save_buildings_gdf
@@ -960,9 +941,7 @@ if __name__ == "__main__":
     ).with_columns(pl.lit("test").alias("split"))
 
     # Join labels from first labelling round where label is confident
-    already_labelled = pl.read_parquet(
-        "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/first_round_confident_LABELLED_buildings_containing_flats_sample_n806.parquet"
-    )
+    already_labelled = pl.read_parquet(config["output"]["dataset"]["first_labelling"])
     sample_df = pl.concat([train_sample_df, test_sample_df]).join(
         already_labelled.select(["oct_building_id", "label"]),
         how="left",
