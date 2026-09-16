@@ -218,16 +218,15 @@ output:
     tech_clusters: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_clustered_tech_polygons.parquet"
     # Opportunity areas with most suitable tech, cluster ID, contextual data
     clusters_tech_contextual_info: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_clusters_contextual_features_{tolerance_m}m.geojson"
-
   model:
     block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_building_classifier.pkl"
     training_data:
-    # Sample for modelling
-    sample_for_block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.parquet"
-    per_labeller_sample_for_block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{labeller}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
-    enriched_buildings: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{local_authorities}_enriched_buildings_with_flats.parquet"
-    enriched_buildings_with_geoms: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{local_authorities}_enriched_buildings_with_flats_and_geometries.parquet"
-    first_labelling: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/first_round_confident_LABELLED_buildings_containing_flats_sample_n806.parquet"
+      # Sample for modelling
+      sample_for_block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.parquet"
+      per_labeller_sample_for_block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{labeller}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
+      enriched_buildings: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{local_authorities}_enriched_buildings_with_flats.parquet"
+      enriched_buildings_with_geoms: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{local_authorities}_enriched_buildings_with_flats_and_geometries.parquet"
+      first_labelling: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/first_round_confident_LABELLED_buildings_containing_flats_sample_n806.parquet"
 
 # Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of proprerties and contextual information about properties within the clusters and surrounding neighbourhood
 metadata:
