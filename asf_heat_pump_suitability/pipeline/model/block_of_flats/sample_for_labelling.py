@@ -245,9 +245,12 @@ def calculate_array_sample_allocations(
         # Create array of 0 and 1 values for each boolean secondary attribute
         binary_array = grouped_df[attr].to_numpy().astype(int)
         # Additional constraints: binary constraints should be distributed evenly or according to whole population proportions
-        proportion = _calculate_float_constraint_proportions(
-            population_df=population_df, attribute=attr, even=even
-        )
+        if even:
+            proportion = 0.5
+        else:
+            proportion = round(
+                population_df.filter(pl.col(attr)).height / population_df.height, 2
+            )
         sampling_constraints.append(
             {
                 "type": "eq",
@@ -321,29 +324,6 @@ def generate_df_sampling_cells(
             .alias(primary_col),
         )
     )
-
-
-def _calculate_float_constraint_proportions(
-    population_df: pl.DataFrame, attribute: str, even: bool
-) -> float:
-    """
-    Calculate the proportions of the positive binary class for even (50%) or proportional sampling (i.e. according to
-    whole population proportions).
-
-    Args:
-        population_df (pl.DataFrame): whole population dataframe with binary attribute column
-        attribute (str): binary attribute to calculate proportions for
-        even (bool): set to `True` for even proportions (0.5) or `False` for whole-population proportions
-
-    Returns:
-        float: proportions of positive class
-    """
-    if even:
-        return 0.5
-    else:
-        return round(
-            population_df.filter(pl.col(attribute)).height / population_df.height, 2
-        )
 
 
 def sample_df_by_quota(
