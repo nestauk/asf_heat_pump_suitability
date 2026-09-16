@@ -385,18 +385,21 @@ def sample_df_by_quota(
 
 
 def assign_df_labellers(
-    sample_df: pl.DataFrame, labellers: list | Dict[str:int], n_cross: int = 30
+    sample_df: pl.DataFrame, labellers: list | Dict[str, int], n_cross: int = 30
 ) -> pl.DataFrame:
     if isinstance(labellers, dict):
         total = sum(labellers.values())
-        assert (
-            total == sample_df.height
-        ), "Labeller counts must sum to `sample_df` total."
+        remainder = sample_df.height - total
+        if remainder != 0:
+            print(
+                f"Sample counts passed != sample_df length. Adding remainder {remainder} to first labeller."
+            )
     else:
         sample_each, remainder = divmod(sample_df.height, len(labellers))
         labellers = {labeller: sample_each for labeller in labellers}
-        # Add remainder to first labeller
-        labellers[list(labellers.keys())[0]] += remainder
+
+    # Add remainder to first labeller
+    labellers[list(labellers.keys())[0]] += remainder
 
     sample_df = sample_df.with_columns(
         labeller=pl.Series(_random_list_labellers(labellers))
@@ -473,6 +476,7 @@ def save_building_sample_to_kml(
         fname (str): filename for sample.
 
     Returns:
+    Returns:
         None
     """
     print("Saving to KML file...")
@@ -515,9 +519,17 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--labellers",
         help="List of labeller names.",
-        type=list,
+        type=str,
         required=True,
         nargs="+",
+    )
+
+    parser.add_argument(
+        "--labeller_counts",
+        help="Number of samples each labeller should label. Len of input must match len of `labellers` argument.",
+        type=str,
+        nargs="+",
+        required=False,
     )
 
     parser.add_argument(
@@ -587,6 +599,7 @@ if __name__ == "__main__":
     # ------------------------------------ #
     local_authorities = [la.lower() for la in args.local_authorities]
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
+    slug = local_authority_dict["url_slug"]
     grid_squares = local_authority_dict["grid_squares"]
 
     print("Map UPRNs to building footprints...")
@@ -609,7 +622,7 @@ if __name__ == "__main__":
         del all_uprns_gdf, all_uprns_df
         # Save mapping
         fpath = config["data"]["processed"]["uprn_to_building_id_mapping"].format(
-            local_authorities=local_authorities
+            release_date=release_date, local_authorities=slug
         )
         pl.DataFrame(
             {
@@ -699,9 +712,10 @@ if __name__ == "__main__":
     # ------------------------------------ #
     if not args.map_uprns_to_building:
         print("Loading UPRN to building ID mapping...")
-        uprn_building_mapping = pl.read_parquet(
-            "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
+        fpath = config["data"]["processed"]["uprn_to_building_id_mapping"].format(
+            release_date=release_date, local_authorities=slug
         )
+        uprn_building_mapping = pl.read_parquet(fpath)
         uprn_building_mapping = dict(
             zip(uprn_building_mapping["UPRN"], uprn_building_mapping["building_ID"])
         )
@@ -840,7 +854,7 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             df=buildings_df,
             path=config["output"]["dataset"]["labelled_buildings"].format(
-                local_authorities=local_authorities
+                local_authorities=slug
             ),
         )
 
@@ -850,7 +864,7 @@ if __name__ == "__main__":
         save_utils.save_to_s3(
             df=buildings_gdf,
             path=config["output"]["dataset"]["labelled_buildings_with_geoms"].format(
-                local_authorities=local_authorities
+                local_authorities=slug
             ),
         )
         del _save_buildings_gdf
@@ -956,6 +970,10 @@ if __name__ == "__main__":
         right_on="oct_building_id",
     )
 
+    if args.labeller_counts:
+        print("Applying custom labeller counts...")
+        _labellers = dict(zip(labellers, args.labeller_counts))
+        sample_df = assign_df_labellers(sample_df=sample_df, labellers=_labellers)
     sample_df = assign_df_labellers(sample_df=sample_df, labellers=labellers)
     sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
         sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
