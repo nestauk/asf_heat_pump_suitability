@@ -766,7 +766,7 @@ if __name__ == "__main__":
             buildings_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
         )
         save_utils.save_to_s3(
-            df=buildings_gdf,
+            df=_save_buildings_gdf,
             path=config["output"]["dataset"]["labelled_buildings_with_geoms"].format(
                 local_authorities=local_authorities
             ),
