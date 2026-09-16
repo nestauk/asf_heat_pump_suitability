@@ -757,7 +757,7 @@ if __name__ == "__main__":
     if args.save:
         save_utils.save_to_s3(
             df=buildings_df,
-            path=config["output"]["dataset"]["labelled_buildings"].format(
+            path=config["output"]["dataset"]["enriched_buildings"].format(
                 local_authorities=local_authorities
             ),
         )
@@ -767,7 +767,7 @@ if __name__ == "__main__":
         )
         save_utils.save_to_s3(
             df=_save_buildings_gdf,
-            path=config["output"]["dataset"]["labelled_buildings_with_geoms"].format(
+            path=config["output"]["dataset"]["enriched_buildings_with_geoms"].format(
                 local_authorities=local_authorities
             ),
         )
@@ -864,9 +864,7 @@ if __name__ == "__main__":
     ).with_columns(pl.lit("test").alias("split"))
 
     # Join labels from first labelling round where label is confident
-    already_labelled = pl.read_parquet(
-        "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/first_round_confident_LABELLED_buildings_containing_flats_sample_n806.parquet"
-    )
+    already_labelled = pl.read_parquet(config["output"]["dataset"]["first_labelling"])
     sample_df = pl.concat([train_sample_df, test_sample_df]).join(
         already_labelled.select(["oct_building_id", "label"]),
         how="left",
