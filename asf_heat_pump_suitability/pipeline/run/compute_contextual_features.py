@@ -2,11 +2,17 @@
 Script to compute contextual information for clusters including:
 - Proportion of attachment types, tenure types, EPC ratings of properties within clusters
 - Median outdoor space of properties within clusters
-- Whether any properties within clusters are in HN zones, city centres, protected areas, off-gas, within 1500m of coastline
+- Whether any properties within clusters are in protected areas, off-gas, within {COASTLINE_DISTANCE_THRESHOLD_M}m of coastline
 - Number of properties, number of properties in listed buildings and number of properties with solar PV
 
-Run:
+After computing contextual features, the script creates a geojson with:
+- clusters and contextual features per cluster
+- layers with district heat network potential areas (heat network zones and city centres)
+- metadata information including release date, local authority and variable descriptions
+
 python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities LOCAL_AUTHORITIES
+
+Set `--detail "simplified"` to use simplified spatial signature polygons to label city centres. The default is "full" which uses the fully detailed spatial signatures framework.
 
 Add --save to save the output to S3 as a geojson with geometry and contextual features per cluster.
 
@@ -18,12 +24,19 @@ should pass the same --release_date to every stage.
 import argparse
 import polars as pl
 import geopandas as gpd
+import numpy as np
+import pandas as pd
 import json
 import os
 from dotenv import load_dotenv
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.cluster import cluster
+from asf_heat_pump_suitability.getters import (
+    load_boundaries,
+)
+from asf_heat_pump_suitability.pipeline.transform import city_centres
+from asf_heat_pump_suitability.utils import geo_utils
 
 # Load environment variables from .env file
 load_dotenv()
@@ -52,8 +65,24 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--detail",
+        help="Level of detail for spatial signatures dataset to label city centres. Takes values 'simplified' or 'full'. Defaults to 'full'.",
+        required=False,
+        default="full",
+        type=str,
+    )
+
+    parser.add_argument(
         "--save",
         help="Whether to save the output to S3.",
+        action="store_true",
+        default=False,
+    )
+
+    parser.add_argument(
+        "--prod",
+        help="Set to push changes to production (i.e. staging area). This should only be used when running from `dev`. "
+        "If `save` is not set, `prod` will automatically be rendered False.",
         action="store_true",
         default=False,
     )
@@ -77,13 +106,12 @@ def extend_df_contextual_features(
     - tenure type proportions
     - EPC rating proportions
     - Median outdoor space
-    - HN zone flag
-    - City centre flag
     - number of properties in listed buildings
     - number of off-gas properties
-    - proximity to coastline flag (within 1500m)
+    - proximity to coastline flag (within {COASTLINE_DISTANCE_THRESHOLD_M}m of coastline)
     - protected area flag
     - within anchor load radius flag
+    - Logic trace for each cluster explaining why the assigned technology was chosen
 
     Args:
         clusters_df (pl.DataFrame): dataframe of clusters with cluster_id and `within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load` feature
@@ -170,20 +198,6 @@ def extend_df_contextual_features(
             pl.col("max_contiguous_outdoor_space_area_m2")
             .median()
             .alias("median_outdoor_space_m2"),
-            # in_hn_zone flag
-            pl.when(pl.col("in_hn_zone").is_null().all())
-            .then(pl.lit("Unknown"))
-            .when(pl.col("in_hn_zone").any())
-            .then(pl.lit("Yes"))
-            .otherwise(pl.lit("No"))
-            .alias("in_hn_zone"),
-            # in_city_centre flag
-            pl.when(pl.col("in_city_centre").is_null().all())
-            .then(pl.lit("Unknown"))
-            .when(pl.col("in_city_centre").any())
-            .then(pl.lit("Yes"))
-            .otherwise(pl.lit("No"))
-            .alias("in_city_centre"),
             # near_coastline flag
             pl.when(
                 pl.col(f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline")
@@ -202,9 +216,7 @@ def extend_df_contextual_features(
             .then(pl.lit("Yes"))
             .otherwise(pl.lit("No"))
             .alias("in_protected_area"),
-            # Counts of UPRNs in HN zone, city centre, near salt water, and in protected areas
-            pl.col("in_hn_zone").sum().alias("n_uprns_in_hn_zone"),
-            pl.col("in_city_centre").sum().alias("n_uprns_in_city_centre"),
+            # Counts of UPRNs near salt water, and in protected areas
             pl.col("within_1500m_coastline")
             .sum()
             .alias("n_uprns_within_1500m_of_coastline"),
@@ -222,12 +234,8 @@ def extend_df_contextual_features(
                 "n_uprns_missing_off_gas_flag",
                 "median_estimated_energy_consumption_12_months_kwh_per_m2",
                 "median_outdoor_space_m2",
-                "in_hn_zone",
-                "in_city_centre",
                 f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline",
                 "in_protected_area",
-                "n_uprns_in_hn_zone",
-                "n_uprns_in_city_centre",
                 "n_uprns_within_1500m_of_coastline",
                 "n_uprns_in_protected_area",
             ]
@@ -272,8 +280,105 @@ def extend_df_contextual_features(
     return clusters_df
 
 
+def extend_gdf_logic_trace(
+    clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """
+    Add logic trace for each cluster explaining why the assigned technology was chosen.
+
+    Args:
+        clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, in_hn_zone, in_city_centre, within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load, and assigned_tech features for each cluster
+    Returns:
+        gpd.GeoDataFrame: geodataframe with logic_trace feature added for each cluster
+    """
+
+    assigned_tech = clusters_with_contextual_features_gdf["assigned_tech"]
+    tech_types = config["constant"]["tech_types"]
+
+    dhn_potential = (clusters_with_contextual_features_gdf["in_hn_zone"] == "Yes") | (
+        clusters_with_contextual_features_gdf["in_city_centre"] == "Yes"
+    )
+
+    near_anchor_load = (
+        clusters_with_contextual_features_gdf[
+            f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
+        ]
+        == "Yes"
+    )
+
+    is_communal = assigned_tech == tech_types["communal"]
+    is_networked = assigned_tech == tech_types["networked"]
+    is_ind_or_net = assigned_tech == tech_types["individual_or_networked"]
+    is_individual = assigned_tech == tech_types["individual"]
+
+    logic_trace = [
+        # 1) Communal solution + near anchor load + DHN potential
+        # TODO: remove sentence about blocks of flats once we separate clusters that are communal due to blocks of flats from those that are communal due to anchor load proximity
+        (
+            is_communal & near_anchor_load & dhn_potential,
+            f"This cluster:\n- is in an area of 'district heat network' potential,\n- contains homes that have no or little outdoor space (up to 30m2),\n and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school),\n so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed. \n A 'communal solution' could be considered as an alternative solution because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school). This 'communal solution' could be integrated into a 'district heat newtork' in the future.\n There might also be one or multiple blocks of flats in the cluster.\n",
+        ),
+        # 2) Communal solution + near anchor load
+        # TODO: remove sentence about blocks of flats once we separate clusters that are communal due to blocks of flats from those that are communal due to anchor load proximity
+        (
+            is_communal & near_anchor_load,
+            f"This cluster is assigned 'communal solution' because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school).\n There might also be one or multiple blocks of flats in the cluster.",
+        ),
+        # 3) Communal solution (blocks of flats)+ DHN potential
+        (
+            is_communal & dhn_potential,
+            "This cluster is in an area of 'district heat network' potential and it contains one or multiple blocks of flats, so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed.\n A ‘communal solution’ could also be considered as an alternative solution, because it contains one or multiple blocks of flats. This 'communal solution' could be integrated into a 'district heat network' in the future.",
+        ),
+        # 4) Communal solution (blocks of flats)
+        (
+            is_communal,
+            "This cluster is assigned 'communal solution' because it contains one or multiple blocks of flats.",
+        ),
+        # 5) Networked heat pump + DHN potential
+        (
+            is_networked & dhn_potential,
+            "This cluster is in an area of 'district heat network' potential and homes have no or little outdoor space (up to 30m2), so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed.\n A 'networked heat pump' could be considered as an alternative solution because multiple properties within these buildings have no or little outdoor space (up to 30m2).\n",
+        ),
+        # 6) Networked heat pump
+        (
+            is_networked,
+            "This cluster is assigned 'networked heat pump' because multiple properties within these buildings have no or little outdoor space (up to 30m2)",
+        ),
+        # 7) Individual solution or networked HP (lack of outdoor space info) + DHN potential
+        (
+            is_ind_or_net & dhn_potential,
+            "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space:\n -This cluster is in an area of 'district heat network' potential and if homes have no or little outdoor space (up to 30m2), then homes would be most suitable for a district heat network connection when/if a 'district heat network' is constructed.\n A 'networked heat pump' could also be considered as an alternative solution, because multiple properties within these buildings have no or little outdoor space (up to 30m2).\n\nIf there is sufficient outdoor space for each property (above 30m2):\n - 'Individual solutions' will be the most suitable option for properties in this cluster because outdoor space is above 30m2 for all properties.\n - The cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
+        ),
+        # 8) Individual solution or networked HP (lack of outdoor space info)
+        (
+            is_ind_or_net,
+            "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space, a 'networked heat pump' solution is most suitable. If there is sufficient outdoor space for each property (above 30m2) an 'individual solution' will be most suitable.",
+        ),
+        # 9) Individual solution + DHN potential
+        (
+            is_individual & dhn_potential,
+            "This cluster is assigned 'individual solution' because outdoor space is above 30m2 for all properties in this cluster.\nThe cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
+        ),
+        # 10) Individual solution
+        (
+            is_individual,
+            "This cluster is assigned 'individual solution' because outdoor space is above 30m2 for all properties in this cluster.",
+        ),
+    ]
+
+    conditions, logic = zip(*logic_trace)
+    clusters_with_contextual_features_gdf["logic_trace"] = np.select(
+        conditions, logic, default="Not accounted for in logic trace."
+    )
+
+    return clusters_with_contextual_features_gdf
+
+
 def create_gdf_contextual_features(
-    uprns_df: pl.DataFrame, clusters_gdf: gpd.GeoDataFrame
+    uprns_df: pl.DataFrame,
+    clusters_gdf: gpd.GeoDataFrame,
+    hn_zones_gdf: gpd.GeoDataFrame,
+    spatial_signatures_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     """
     Create geodataframe with cluster_id, geometry and contextual features for each cluster
@@ -281,9 +386,12 @@ def create_gdf_contextual_features(
     Args:
         uprns_df (pl.DataFrame): dataframe of UPRNs and UPRN-level features
         clusters_gdf (gpd.GeoDataFrame): geodataframe of clusters with geometry and cluster_id
+        hn_zones_gdf (gpd.GeoDataFrame): geodataframe of heat network zones with geometry and source annotation
+        city_centre_signatures_gdf (gpd.GeoDataFrame): geodataframe of spatial signatures representing city centre areas with geometry and source annotation
     Returns:
         gpd.GeoDataFrame: geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
     """
+    target_crs = "EPSG:27700"
 
     clusters_with_contextual_features_df = extend_df_contextual_features(
         clusters_df=pl.from_pandas(
@@ -298,23 +406,37 @@ def create_gdf_contextual_features(
     )
 
     # Adding the geometry back to the clusters dataframe
-    clusters_with_contextual_features_gdf = (
+    clusters_with_contextual_features_gdf = gpd.GeoDataFrame(
         clusters_with_contextual_features_df.to_pandas().merge(
             clusters_gdf[["cluster_id", "geometry"]],
             how="left",
             on="cluster_id",
-        )
+        ),
+        geometry="geometry",
+        crs=target_crs,
     )
 
-    return gpd.GeoDataFrame(
-        clusters_with_contextual_features_gdf, geometry="geometry", crs="EPSG:27700"
-    )
+    geo_utils.verify_gdf_crs(hn_zones_gdf, target_crs=target_crs)
+    geo_utils.verify_gdf_crs(spatial_signatures_gdf, target_crs=target_crs)
+
+    # Add in_hn_zone and in_city_centre flags to clusters_gdf
+    clusters_with_contextual_features_gdf["in_hn_zone"] = (
+        clusters_with_contextual_features_gdf.intersects(hn_zones_gdf.union_all())
+    ).map({True: "Yes", False: "No"})
+    clusters_with_contextual_features_gdf["in_city_centre"] = (
+        clusters_with_contextual_features_gdf.intersects(
+            spatial_signatures_gdf.union_all()
+        )
+    ).map({True: "Yes", False: "No"})
+
+    return clusters_with_contextual_features_gdf
 
 
 def create_json_contextual_features_metadata(
     clusters_with_contextual_features_gdf: gpd.GeoDataFrame,
     local_authorities: str,
     release_date: str,
+    optional_data_layers: dict = None,
 ) -> json:
     """
     Create json with cluster level data and associated metadata.
@@ -323,17 +445,33 @@ def create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
         local_authorities (str): local authority or authorities for which the data was generated
         release_date (str): release date in YYYYMMDD format of the dated release directory the data belongs to
+        optional_data_layers (dict): dictionary of optional data layers with layer name as key and geodataframe as value
 
     Returns:
        json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
 
     """
+    target_crs = "EPSG:4326"
 
+    geo_utils.verify_gdf_crs(
+        clusters_with_contextual_features_gdf, target_crs=target_crs
+    )
     print("Adding metadata and converting to geojson format...")
     # Convert to geojson format and add metadata
-    geojson_file = json.loads(
+    clusters_json = json.loads(
         clusters_with_contextual_features_gdf.to_json(drop_id=True)
     )
+    for feature in clusters_json["features"]:
+        feature["properties"]["layer"] = "clusters_with_contextual_features"
+
+    if optional_data_layers:
+        for layer_name, layer_gdf in optional_data_layers.items():
+            geo_utils.verify_gdf_crs(layer_gdf, target_crs=target_crs)
+            layer_json = json.loads(layer_gdf.to_json(drop_id=True))
+            for feature in layer_json["features"]:
+                feature["properties"]["layer"] = layer_name
+            clusters_json["features"].extend(layer_json["features"])
+
     metadata = {
         "Release date": release_date,
         "Local authority": local_authorities,
@@ -359,12 +497,18 @@ def create_json_contextual_features_metadata(
             ANCHOR_LOAD_RADIUS=ANCHOR_LOAD_RADIUS
         )
     )
-    geojson_file["metadata"] = metadata
+
+    geojson_file = {
+        "type": "FeatureCollection",
+        "metadata": metadata,
+        "features": clusters_json["features"],
+    }
 
     return geojson_file
 
 
 if __name__ == "__main__":
+    import warnings
     from asf_heat_pump_suitability.getters import load_geodata
     from asf_heat_pump_suitability.pipeline.transform import local_authority
     from asf_heat_pump_suitability import config
@@ -372,6 +516,14 @@ if __name__ == "__main__":
 
     args = parse_arguments()
     local_authorities = args.local_authorities
+    detail_level = args.detail
+
+    if args.prod and not args.save:
+        warnings.warn(
+            "`save` not set. `prod` rendered as False. Please set `save` and `prod` to push outputs to production."
+        )
+        args.prod = False
+
     tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
@@ -406,9 +558,35 @@ if __name__ == "__main__":
         uprns_df=uprns_df, buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
     )
 
+    print(
+        "Loading local authority boundaries, heat network zones and spatial signatures..."
+    )
+    boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+        select_las=local_authority_dict["valid_local_authorities"]
+    )
+    # HN zones
+    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(boundary=boundary_gdf)
+
+    # Spatial signatures for city centres
+    spatial_signatures_gdf = load_geodata.load_gdf_spatial_signatures_gb(
+        detail_level=detail_level,
+        boundary=boundary_gdf,
+        signature_types=city_centres.CITY_CENTRE_TYPES,
+    )
+
     print("Computing contextual features for clusters...")
     clusters_with_contextual_features_gdf = create_gdf_contextual_features(
-        uprns_df=uprns_df, clusters_gdf=clusters_gdf
+        uprns_df=uprns_df,
+        clusters_gdf=clusters_gdf,
+        hn_zones_gdf=hn_zones_gdf,
+        spatial_signatures_gdf=spatial_signatures_gdf,
+    )
+
+    print(
+        "Add logic trace for each cluster explaining why the assigned technology was chosen..."
+    )
+    clusters_with_contextual_features_gdf = extend_gdf_logic_trace(
+        clusters_with_contextual_features_gdf=clusters_with_contextual_features_gdf
     )
 
     print("Simplifying geometries using tolerance_m...")
@@ -423,9 +601,49 @@ if __name__ == "__main__":
         clusters_with_contextual_features_gdf.to_crs(epsg=4326)
     )
 
+    print("Creating layer with district HN potential and converting to EPSG:4326...")
+    hn_potential = pd.concat(
+        [
+            hn_zones_gdf[["geometry", "source_annotation"]],
+            # Create a single polygon for all spatial signatures to represent city centres
+            gpd.GeoDataFrame(
+                {
+                    "source_annotation": [
+                        spatial_signatures_gdf["source_annotation"].iloc[0]
+                    ],
+                    "geometry": [spatial_signatures_gdf.geometry.union_all()],
+                },
+                crs=spatial_signatures_gdf.crs,
+            ),
+        ]
+    ).to_crs(epsg=4326)
+
+    print("Loading anchor property geodataframes and transforming to EPSG:4326...")
+    combined_anchor_gdf = cluster.load_transform_anchor_property_gdfs(
+        buildings_gdf=buildings_gdf, grid_squares=local_authority_dict["grid_squares"]
+    )[["geometry"]]
+
+    combined_anchor_gdf = combined_anchor_gdf[
+        combined_anchor_gdf["geometry"].intersects(boundary_gdf.union_all())
+    ].to_crs(epsg=4326)
+
+    print("Loading ward boundaries and transforming to EPSG:4326...")
+    ward_boundaries_gdf = load_boundaries.load_gdf_ward_boundaries(
+        la_boundaries_gdf=boundary_gdf,
+    )[["geometry"]].to_crs(epsg=4326)
+
+    optional_data_layers = {
+        "ward_boundaries": ward_boundaries_gdf,
+        "anchor_loads": combined_anchor_gdf,
+        "areas_of_district_heat_network_potential": hn_potential,
+    }
+
     print("Creating json with contextual features for each cluster and metadata...")
     geojson_file = create_json_contextual_features_metadata(
-        clusters_with_contextual_features_gdf, local_authorities, release_date
+        clusters_with_contextual_features_gdf=clusters_with_contextual_features_gdf,
+        optional_data_layers=optional_data_layers,
+        local_authorities=local_authorities,
+        release_date=release_date,
     )
 
     if args.save:
@@ -444,6 +662,7 @@ if __name__ == "__main__":
             s3_file_path,
         )
 
+    if args.prod:
         # Save to front-end S3 bucket for use in the tool
         front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
         front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
@@ -458,6 +677,8 @@ if __name__ == "__main__":
         # Only the dated data-science copy gets a run manifest; the undated
         # front-end copy above is overwritten every run, so there is no
         # version history to attach lineage to.
+        # This is only created when `prod` is True because we only need traceable lineage for outputs pushed to
+        # production.
         manifest_utils.generate_and_save_run_manifest_to_s3(
             s3_file_path,
             stage="compute_contextual_features",
