@@ -86,7 +86,7 @@ def clip_gdf_land_parcels(
     )
 
     # Dissolve land parcel fragments and their buildings intersections together to generate a clean land parcel fragment
-    cols = [land_parcel_id, intersection_id, "geometry"]
+    cols = [land_parcel_id, "geometry"]
     return pd.concat(
         [pure_fragments_gdf[cols], intersection_gdf[cols]], ignore_index=True
     ).dissolve(by=land_parcel_id)
