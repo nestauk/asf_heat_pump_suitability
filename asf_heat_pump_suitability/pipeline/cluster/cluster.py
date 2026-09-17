@@ -412,10 +412,8 @@ def overlay_gdf_physical_barriers(
     Returns:
         gpd.GeoDataFrame: domestic building cells with overlapping physical barriers removed
     """
-    # # Filter to domestic building Voronois only
     # Add a temporary ID for each Voronoi cell
     cell_id_col = "_internal_cell_fragment_id"
-
     voronoi_gdf = voronoi_gdf.assign(**{cell_id_col: np.arange(len(voronoi_gdf))})
 
     # Get the largest intersecting Voronoi cell for each domestic building.
