@@ -64,13 +64,14 @@ import boto3
 
 import geopandas as gpd
 
-from typing import List
+from typing import List, Dict
 import argparse
 import polars as pl
 from scipy.optimize import minimize
 
 import numpy as np
 from numpy.typing import ArrayLike
+from random import shuffle
 
 from asf_heat_pump_suitability import config, PROJECT_DIR
 from asf_heat_pump_suitability.getters import base_getters
@@ -364,6 +365,95 @@ def sample_df_by_quota(
     return population_df.filter(pl.col(id_col).is_in(sampled_ids[id_col].to_list()))
 
 
+def assign_df_labellers(
+    sample_df: pl.DataFrame, labellers: list | Dict[str, int], n_cross: int = 30
+) -> pl.DataFrame:
+    """
+    Assign labellers and secondary cross-labellers to sample for manual labelling.
+
+    Args:
+        sample_df (pl.DataFrame): dataframe with samples
+        labellers (list | Dict[str, int]): list of labeller names or dict where keys are labeller names and values are
+        the sample counts for each labeller to label. If a list is passed, labellers will be assign approximately the same
+        number of samples to label each.
+        n_cross (int): number of samples to cross-label per labeller. Default 30.
+
+    Returns:
+        pl.DataFrame: sample with `labeller` and `secondary_labeller` columns.
+    """
+    if isinstance(labellers, dict):
+        total = sum(labellers.values())
+        remainder = sample_df.height - total
+        if remainder != 0:
+            print(
+                f"Sample counts passed != sample_df length. Adding remainder {remainder} to first labeller."
+            )
+    else:
+        sample_each, remainder = divmod(sample_df.height, len(labellers))
+        labellers = {labeller: sample_each for labeller in labellers}
+
+    # Add remainder to first labeller
+    labellers[list(labellers.keys())[0]] += remainder
+
+    sample_df = sample_df.with_columns(
+        labeller=pl.Series(_random_list_labellers(labellers))
+    )
+    return _assign_df_secondary_labellers(
+        sample_df=sample_df, labellers=list(labellers.keys()), n_cross=n_cross
+    )
+
+
+def _assign_df_secondary_labellers(
+    sample_df: pl.DataFrame, labellers: list, n_cross: int
+) -> pl.DataFrame:
+    """
+    Assign secondary cross-labeller to sample.
+
+    Args:
+        sample_df (pl.DataFrame): dataframe with samples and `labeller` column with primary labeller assigned to each row.
+        labellers (list): list of labeller names.
+        n_cross (int): number of samples to cross-label per labeller.
+
+    Returns:
+        pl.DataFrame: sample with `secondary_labeller` assigned to each row.
+    """
+    if len(labellers) == 1:
+        return sample_df.with_columns(pl.lit(None).alias("secondary_labeller"))
+    sample_df = sample_df.sort(by="labeller")
+    labellers.sort()
+    secondary_labeller_assignment = []
+
+    for labeller in labellers:
+        labeller_df = sample_df.filter(pl.col("labeller") == labeller)
+        n_per_secondary = n_cross // (len(labellers) - 1)
+        n_remaining = labeller_df.height - n_cross
+        secondary_labellers = {l: n_per_secondary for l in labellers if l != labeller}
+        secondary_labellers[None] = n_remaining
+        secondary_labeller_assignment.extend(
+            _random_list_labellers(secondary_labellers)
+        )
+
+    return sample_df.with_columns(
+        secondary_labeller=pl.Series(secondary_labeller_assignment)
+    )
+
+
+def _random_list_labellers(labellers: Dict[str, int]) -> list:
+    """
+    Create a randomly shuffled list of labellers with length equal to the sum of the values in the `labellers` dict.
+
+    Args:
+        labellers (Dict[str, int]): keys are labeller names and values are the counts of sample rows per labeller.
+
+    Returns:
+        list: randomly shuffled labeller names
+    """
+    labeller_col = []
+    [labeller_col.extend([labeller] * count) for labeller, count in labellers.items()]
+    shuffle(labeller_col)
+    return labeller_col
+
+
 def _enrich_gdf_google_maps_url(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
     Enrich a geodataframe with a Google Maps URL per row representing the centroid of each geometry.
@@ -399,6 +489,7 @@ def save_building_sample_to_kml(
         bucket (str): S3 bucket name.
         fname (str): filename for sample.
 
+    Returns:
     Returns:
         None
     """
@@ -438,6 +529,22 @@ def parse_arguments() -> argparse.Namespace:
         argparse.Namespace: populated `Namespace`
     """
     parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--labellers",
+        help="List of labeller names.",
+        type=str,
+        required=True,
+        nargs="+",
+    )
+
+    parser.add_argument(
+        "--labeller_counts",
+        help="Number of samples each labeller should label. Len of input must match len of `labellers` argument.",
+        type=int,
+        nargs="+",
+        required=False,
+    )
 
     parser.add_argument(
         "--local_authorities",
@@ -499,12 +606,14 @@ if __name__ == "__main__":
     release_date = save_utils.get_str_release_date(args.release_date)
     seed = args.seed
     target_n = args.target_n
+    labellers = args.labellers
 
     # ------------------------------------ #
     # LOAD GRID SQUARES
     # ------------------------------------ #
     local_authorities = [la.lower() for la in args.local_authorities]
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
+    slug = local_authority_dict["url_slug"]
     grid_squares = local_authority_dict["grid_squares"]
 
     print("Map UPRNs to building footprints...")
@@ -527,7 +636,7 @@ if __name__ == "__main__":
         del all_uprns_gdf, all_uprns_df
         # Save mapping
         fpath = config["data"]["processed"]["uprn_to_building_id_mapping"].format(
-            local_authorities=local_authorities
+            release_date=release_date, local_authorities=slug
         )
         pl.DataFrame(
             {
@@ -617,9 +726,10 @@ if __name__ == "__main__":
     # ------------------------------------ #
     if not args.map_uprns_to_building:
         print("Loading UPRN to building ID mapping...")
-        uprn_building_mapping = pl.read_parquet(
-            "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
+        fpath = config["data"]["processed"]["uprn_to_building_id_mapping"].format(
+            release_date=release_date, local_authorities=slug
         )
+        uprn_building_mapping = pl.read_parquet(fpath)
         uprn_building_mapping = dict(
             zip(uprn_building_mapping["UPRN"], uprn_building_mapping["building_ID"])
         )
@@ -759,7 +869,7 @@ if __name__ == "__main__":
             df=buildings_df,
             path=config["output"]["model"]["training_data"][
                 "enriched_buildings"
-            ].format(local_authorities=local_authorities),
+            ].format(local_authorities=slug, release_date=release_date),
         )
 
         _save_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
@@ -769,7 +879,7 @@ if __name__ == "__main__":
             df=_save_buildings_gdf,
             path=config["output"]["model"]["training_data"][
                 "enriched_buildings_with_geoms"
-            ].format(local_authorities=local_authorities),
+            ].format(local_authorities=slug, release_date=release_date),
         )
         del _save_buildings_gdf
 
@@ -793,7 +903,7 @@ if __name__ == "__main__":
     ).height
     print(f"Dropping {null_count} rows from population dataset due to nulls...")
     buildings_df = buildings_df.filter(
-        pl.any_horizontal(pl.col(attributes).is_not_null()),
+        pl.all_horizontal(pl.col(attributes).is_not_null()),
     )
 
     training_n = round(target_n * 0.75)
@@ -868,12 +978,16 @@ if __name__ == "__main__":
         config["output"]["model"]["training_data"]["first_labelling"]
     )
     sample_df = pl.concat([train_sample_df, test_sample_df]).join(
-        already_labelled.select(["oct_building_id", "label"]),
+        already_labelled.select(["oct25_building_id", "label"]),
         how="left",
         left_on="building_id",
-        right_on="oct_building_id",
+        right_on="oct25_building_id",
     )
 
+    if args.labeller_counts:
+        print("Applying custom labeller counts...")
+        _labellers = dict(zip(labellers, args.labeller_counts))
+        sample_df = assign_df_labellers(sample_df=sample_df, labellers=_labellers)
     sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
         sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
     )
@@ -888,12 +1002,32 @@ if __name__ == "__main__":
         ].format(release_date=release_date, l=len(sample_df), seed=seed)
         save_utils.save_to_s3(
             sample_df,
-            path=path,
+            path=path.format(
+                release_date=release_date,
+                l=len(sample_gdf),
+                seed=seed,
+            ),
         )
-        s3 = boto3.resource("s3")
-        BUCKET = config["constant"]["s3"]["bucket"]
-        # Extract file name from full path to save kml
-        fname = path.split("/")[-1].split(".parquet")[0]
-        save_building_sample_to_kml(
-            gdf=sample_gdf, s3_client=s3, bucket=BUCKET, fname=f"{fname}.kml"
-        )
+
+        for labeller in labellers:
+            s3 = boto3.resource("s3")
+            BUCKET = config["constant"]["s3"]["bucket"]
+            # Save per labeller
+            path = config["output"]["model"]["training_data"][
+                "per_labeller_sample_for_block_of_flats_model"
+            ].format(
+                labeller=labeller,
+                release_date=release_date,
+                l=len(sample_df),
+                seed=seed,
+            )
+            fname = path.split("/")[-1]
+            save_building_sample_to_kml(
+                gdf=sample_gdf[
+                    (sample_gdf["labeller"] == labeller)
+                    | (sample_gdf["secondary_labeller"] == labeller)
+                ],
+                s3_client=s3,
+                bucket=BUCKET,
+                fname=fname,
+            )
