@@ -405,7 +405,7 @@ def _assign_df_secondary_labellers(
         n_remaining = labeller_df.height - n_cross
         secondary_labellers = {l: n_per_secondary for l in labellers if l != labeller}
         secondary_labellers[None] = n_remaining
-        secondary_labeller_assignment.append(
+        secondary_labeller_assignment.extend(
             _random_list_labellers(secondary_labellers)
         )
 
@@ -508,7 +508,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--labeller_counts",
         help="Number of samples each labeller should label. Len of input must match len of `labellers` argument.",
-        type=str,
+        type=int,
         nargs="+",
         required=False,
     )
@@ -870,7 +870,7 @@ if __name__ == "__main__":
     ).height
     print(f"Dropping {null_count} rows from population dataset due to nulls...")
     buildings_df = buildings_df.filter(
-        pl.any_horizontal(pl.col(attributes).is_not_null()),
+        pl.all_horizontal(pl.col(attributes).is_not_null()),
     )
 
     training_n = round(target_n * 0.75)
@@ -945,17 +945,16 @@ if __name__ == "__main__":
         config["output"]["model"]["training_data"]["first_labelling"]
     )
     sample_df = pl.concat([train_sample_df, test_sample_df]).join(
-        already_labelled.select(["oct_building_id", "label"]),
+        already_labelled.select(["oct25_building_id", "label"]),
         how="left",
         left_on="building_id",
-        right_on="oct_building_id",
+        right_on="oct25_building_id",
     )
 
     if args.labeller_counts:
         print("Applying custom labeller counts...")
         _labellers = dict(zip(labellers, args.labeller_counts))
         sample_df = assign_df_labellers(sample_df=sample_df, labellers=_labellers)
-    sample_df = assign_df_labellers(sample_df=sample_df, labellers=labellers)
     sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
         sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
     )
