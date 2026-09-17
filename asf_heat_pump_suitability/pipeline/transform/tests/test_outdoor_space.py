@@ -57,7 +57,7 @@ class TestClipGdfLandParcels:
         on the other side of the barrier (with no building) is discarded."""
         results = clip_gdf_land_parcels(
             land_parcels_gdf, intersection_gdf, polygon_overlay_gdf
-        )
+        ).set_index("NATIONALCADASTRALREFERENCE")
 
         # P1 should be clipped down to just the north fragment (10m x 4.5m), not the full 10m x 10m parcel
         expected_p1_area = 10 * 4.5
@@ -71,17 +71,16 @@ class TestClipGdfLandParcels:
             expected_p2_area
         ), "P2 area changed despite having no barrier running through it"
 
-    def test_result_indexed_by_land_parcel_id(
+    def test_one_row_per_land_parcel(
         self, land_parcels_gdf, intersection_gdf, polygon_overlay_gdf
     ):
-        """Test the returned GeoDataFrame is dissolved by, and indexed on, the land parcel ID with one row per
+        """Test the returned GeoDataFrame is dissolved by the land parcel ID with one row per
         parcel."""
         results = clip_gdf_land_parcels(
             land_parcels_gdf, intersection_gdf, polygon_overlay_gdf
         )
 
-        assert results.index.name == "NATIONALCADASTRALREFERENCE"
-        assert sorted(results.index) == [
+        assert sorted(results["NATIONALCADASTRALREFERENCE"]) == [
             "P1",
             "P2",
-        ], "Expected one row per land parcel, indexed by land parcel ID"
+        ], "Expected one row per land parcel"
