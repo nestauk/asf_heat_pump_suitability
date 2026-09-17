@@ -368,6 +368,19 @@ def sample_df_by_quota(
 def assign_df_labellers(
     sample_df: pl.DataFrame, labellers: list | Dict[str, int], n_cross: int = 30
 ) -> pl.DataFrame:
+    """
+    Assign labellers and secondary cross-labellers to sample for manual labelling.
+
+    Args:
+        sample_df (pl.DataFrame): dataframe with samples
+        labellers (list | Dict[str, int]): list of labeller names or dict where keys are labeller names and values are
+        the sample counts for each labeller to label. If a list is passed, labellers will be assign approximately the same
+        number of samples to label each.
+        n_cross (int): number of samples to cross-label per labeller. Default 30.
+
+    Returns:
+        pl.DataFrame: sample with `labeller` and `secondary_labeller` columns.
+    """
     if isinstance(labellers, dict):
         total = sum(labellers.values())
         remainder = sample_df.height - total
@@ -393,6 +406,17 @@ def assign_df_labellers(
 def _assign_df_secondary_labellers(
     sample_df: pl.DataFrame, labellers: list, n_cross: int
 ) -> pl.DataFrame:
+    """
+    Assign secondary cross-labeller to sample.
+
+    Args:
+        sample_df (pl.DataFrame): dataframe with samples and `labeller` column with primary labeller assigned to each row.
+        labellers (list): list of labeller names.
+        n_cross (int): number of samples to cross-label per labeller.
+
+    Returns:
+        pl.DataFrame: sample with `secondary_labeller` assigned to each row.
+    """
     if len(labellers) == 1:
         return sample_df.with_columns(pl.lit(None).alias("secondary_labeller"))
     sample_df = sample_df.sort(by="labeller")
@@ -414,7 +438,16 @@ def _assign_df_secondary_labellers(
     )
 
 
-def _random_list_labellers(labellers: dict) -> list:
+def _random_list_labellers(labellers: Dict[str, int]) -> list:
+    """
+    Create a randomly shuffled list of labellers with length equal to the sum of the values in the `labellers` dict.
+
+    Args:
+        labellers (Dict[str, int]): keys are labeller names and values are the counts of sample rows per labeller.
+
+    Returns:
+        list: randomly shuffled labeller names
+    """
     labeller_col = []
     [labeller_col.extend([labeller] * count) for labeller, count in labellers.items()]
     shuffle(labeller_col)
