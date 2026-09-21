@@ -257,8 +257,8 @@ def calculate_array_sample_allocations(
                 "type": "eq",
                 # Here we multiply the proposed sample by a boolean value to get the proposed count of the positive class.
                 # The result must be equal to 50% of the total sample.
-                "fun": lambda x, _vals=binary_array: np.sum(x * _vals)
-                - (proportion * total_sample),
+                "fun": lambda x, _vals=binary_array, _prop=proportion: np.sum(x * _vals)
+                - (_prop * total_sample),
             }
         )
 
