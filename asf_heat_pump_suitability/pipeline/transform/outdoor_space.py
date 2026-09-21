@@ -6,7 +6,6 @@ import geopandas as gpd
 import logging
 import pandas as pd
 import polars as pl
-import numpy as np
 from asf_heat_pump_suitability.getters import load_geodata
 from asf_heat_pump_suitability.utils import geo_utils
 
@@ -54,9 +53,6 @@ def clip_gdf_land_parcels(
     Returns:
          gpd.GeoDataFrame: land parcels clipped to barriers
     """
-    intersection_id = "_internal_intersection_id"
-    intersection_gdf[intersection_id] = np.arange(len(intersection_gdf))
-
     # Remove barrier polygons from land parcels
     cut_out_gdf = land_parcels_gdf.overlay(
         polygon_overlay_gdf, how="difference"
@@ -64,17 +60,9 @@ def clip_gdf_land_parcels(
 
     # Retain only land parcel fragments which touch a building intersection
     cut_out_gdf = cut_out_gdf.sjoin(
-        intersection_gdf[[intersection_id, "geometry"]],
+        intersection_gdf[["geometry"]],
         how="inner",
         predicate="intersects",
-    )
-
-    # Map land parcel ID to each building intersection
-    intersection_to_land_mapping = dict(
-        zip(cut_out_gdf[intersection_id], cut_out_gdf[land_parcel_id])
-    )
-    intersection_gdf[land_parcel_id] = intersection_gdf[intersection_id].map(
-        intersection_to_land_mapping
     )
 
     # Clean fragments to avoid bleeding geometries creating neighbour 'swallowing' effects during dissolve.
