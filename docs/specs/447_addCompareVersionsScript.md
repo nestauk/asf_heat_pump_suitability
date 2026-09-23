@@ -20,6 +20,9 @@ implemented on the branch this one stacks on) records `git_commit` and
 `input_versions` per output, which this script reads from day one. The
 follow-on issues (cluster geometry checks, distribution checks, thresholding)
 each extend the report this issue creates.
+Updated 2026-09-23: #440 merged to `dev` on 2026-08-18 (PR #449), but PR #451
+still targets the `440_addRunManifest` branch, which is still on `origin`.
+Retarget the PR to `dev` so reviewers see only this issue's diff.
 
 ## Proposal
 
@@ -54,6 +57,10 @@ Decisions settled during kickoff interview (2026-07-23):
   off `dev` that hasn't merged; this branch creates it independently (the
   only overlap at merge is a trivial `__init__.py`), so validation tooling
   converges in the home the initiative planned for it.
+  Updated 2026-09-23: #434 closed 2026-08-26. `dev` now has
+  `pipeline/validate/` with `check_inputs.py` and its tests, so the
+  `__init__.py` overlap is a real, trivial merge point rather than a
+  future one.
 - **Report is a local markdown file plus a console summary**, not an S3
   upload. A comparison is run ad-hoc by a human deciding whether drift is
   expected; a read-only diagnostic shouldn't need bucket write access.
