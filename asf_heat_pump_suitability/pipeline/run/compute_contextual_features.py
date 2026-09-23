@@ -609,7 +609,7 @@ if __name__ == "__main__":
     )
 
     print("Creating layer with district HN potential and converting to EPSG:4326...")
-    if len(spatial_signatures_gdf) > 0:
+    if (len(spatial_signatures_gdf) > 0) and (len(hn_zones_gdf) > 0):
         hn_potential = pd.concat(
             [
                 hn_zones_gdf[["geometry", "source_annotation"]],
@@ -624,6 +624,16 @@ if __name__ == "__main__":
                     crs=spatial_signatures_gdf.crs,
                 ),
             ]
+        ).to_crs(epsg=4326)
+    elif len(spatial_signatures_gdf) > 0:
+        hn_potential = gpd.GeoDataFrame(
+            {
+                "source_annotation": [
+                    spatial_signatures_gdf["source_annotation"].iloc[0]
+                ],
+                "geometry": [spatial_signatures_gdf.geometry.union_all()],
+            },
+            crs=spatial_signatures_gdf.crs,
         ).to_crs(epsg=4326)
     elif len(hn_zones_gdf) > 0:
         hn_potential = hn_zones_gdf[["geometry", "source_annotation"]].to_crs(epsg=4326)
