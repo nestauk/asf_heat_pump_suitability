@@ -1062,9 +1062,10 @@ class TestLoadTransformDfStageOutput:
         assert df.height == 2, "plain parquet rows must load unchanged"
 
     def test_zero_feature_geojson_degrades_to_an_empty_dataframe(self, mocker):
-        """The final stage currently drops clusters with no UPRNs, so a
-        small area can produce a geojson with zero features. That must not
-        crash the comparison; it degrades to an empty output instead."""
+        """The final stage currently drops clusters with no UPRNs, so an
+        output could in principle have zero features (no real output has
+        yet). That must not crash the comparison; it degrades to an empty
+        output instead."""
         # geopandas raises this ValueError when a geojson has no features;
         # the mock reproduces that exact failure.
         mocker.patch(

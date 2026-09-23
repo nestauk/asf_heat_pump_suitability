@@ -620,9 +620,9 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
             gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
             gdf = geo_utils.verify_gdf_crs(gdf, target_crs="EPSG:4326")
         except ValueError:
-            # The final stage currently drops clusters with no UPRNs, so a
-            # small local authority can produce a geojson with zero features,
-            # which geopandas refuses to read.
+            # The final stage currently drops clusters with no UPRNs, so an
+            # output could in principle have zero features (none has so far);
+            # the getter's from_features() raises on an empty list.
             logging.warning("No features in geojson at %s; comparing as empty.", path)
             return pl.DataFrame()
         return pl.from_pandas(gdf.drop(columns="geometry"))
