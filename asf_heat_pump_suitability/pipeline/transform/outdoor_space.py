@@ -33,6 +33,55 @@ def match_series_files_land_building(
     return file_matches
 
 
+def clip_gdf_land_parcels(
+    land_parcels_gdf: gpd.GeoDataFrame,
+    intersection_gdf: gpd.GeoDataFrame,
+    polygon_overlay_gdf: gpd.GeoDataFrame,
+    land_parcel_id: str = "NATIONALCADASTRALREFERENCE",
+) -> gpd.GeoDataFrame:
+    """
+    Clip land parcels to physical barriers so that only the portion of the parcel that touches the building
+    intersection is retained. For example, if a building is contained within a land parcel that extends south over a
+    road, the north part of the parcel can be retained, while discarding the portion that is south of the road.
+
+    Args:
+        land_parcels_gdf (gpd.GeoDataFrame): full land parcels for area of interest with `land_parcel_id` column.
+        intersection_gdf (gpd.GeoDataFrame): polygon intersections of land parcel polygons and building footprint polygons.
+        polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to clip the land parcels to.
+        land_parcel_id (str): name of column containing unique land parcel ID. Default "NATIONALCADASTRALREFERENCE".
+
+    Returns:
+         gpd.GeoDataFrame: land parcels clipped to barriers
+    """
+    # Remove barrier polygons from land parcels
+    cut_out_gdf = land_parcels_gdf.overlay(
+        polygon_overlay_gdf, how="difference"
+    ).explode()
+
+    # Retain only land parcel fragments which touch a building intersection
+    cut_out_gdf = cut_out_gdf.sjoin(
+        intersection_gdf[["geometry"]],
+        how="inner",
+        predicate="intersects",
+    )
+
+    # Clean fragments to avoid bleeding geometries creating neighbour 'swallowing' effects during dissolve.
+    # e.g. building A swallows building B's cell due to microscopic overlaps in a cell fragment.
+    pure_fragments_gdf = gpd.overlay(
+        cut_out_gdf[[land_parcel_id, "geometry"]],
+        intersection_gdf[["geometry"]],
+        how="difference",
+    )
+
+    # Dissolve land parcel fragments and their buildings intersections together to generate a clean land parcel fragment
+    cols = [land_parcel_id, "geometry"]
+    return (
+        pd.concat([pure_fragments_gdf[cols], intersection_gdf[cols]], ignore_index=True)
+        .dissolve(by=land_parcel_id)
+        .reset_index()
+    )
+
+
 def generate_gdf_building_intersections(
     land_parcels_gdf: gpd.GeoDataFrame,
     buildings_gdf: gpd.GeoDataFrame,
