@@ -376,8 +376,10 @@ def generate_list_commit_log(
     Args:
         commit_old: git commit recorded in the older version's manifest
         commit_new: git commit recorded in the newer version's manifest
-        stage: pipeline stage. Its entry in `STAGE_MODULE_PATHS` decides
-            which files the log covers.
+        stage: pipeline stage name, a key of `STAGE_MODULE_PATHS` (e.g.
+            "cluster"). The log keeps only commits that changed a file under
+            that stage's listed paths; commits elsewhere in the repo are
+            dropped.
 
     Returns:
         list[str]: one line per commit ("short-hash subject"). An empty list
