@@ -6,7 +6,7 @@ counts and the tech transition matrix (decision tree stage), and the commits
 that touched the stage's code between the two versions.
 
 Pass --trigger methodology_change or --trigger input_release to check the
-numbers against that situation's tolerances. Leave it out to get the numbers
+numbers against that trigger's tolerances. Leave it out to get the numbers
 with no judgement applied. Writes a local markdown report and logs a console
 summary.
 
