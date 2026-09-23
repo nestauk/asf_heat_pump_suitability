@@ -797,8 +797,8 @@ def map_df_uprns_to_clusters(
     ].to_dict()
     uprns_df = uprns_df.with_columns(
         pl.col(building_id)
-        .replace_strict(building_cluster_mapping, default=None)
-        .alias("cluster_id")
+        # TODO: investigate why some building IDs are not mapping to clusters.
+        .replace_strict(building_cluster_mapping, default=None).alias("cluster_id")
     )
 
     return uprns_df
