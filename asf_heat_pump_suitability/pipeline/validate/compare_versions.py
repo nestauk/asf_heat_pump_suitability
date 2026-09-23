@@ -178,12 +178,11 @@ def generate_dict_uprn_churn(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict
         .to_series()
         .to_list()
     )
-    uprns_old = set(
-    # Get valid UPRNs 
-        df_old.drop_nulls(UPRN_COL).select(_expr_uprn_canonical()).to_series().to_list()
-    )
     uprns_new = set(
-        df_new.drop_nulls(UPRN_COL).select(_expr_uprn_canonical()).to_series().to_list()
+        df_new.drop_nulls(UPRN_COL)
+        .select(_expr_uprn_standardised())
+        .to_series()
+        .to_list()
     )
     n_added = len(uprns_new - uprns_old)
     n_removed = len(uprns_old - uprns_new)
