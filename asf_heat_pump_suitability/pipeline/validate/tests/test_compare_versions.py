@@ -1061,25 +1061,6 @@ class TestLoadTransformDfStageOutput:
         assert df.columns == ["UPRN", "in_hn_zone"], "plain parquet columns load as-is"
         assert df.height == 2, "plain parquet rows must load unchanged"
 
-    def test_zero_feature_geojson_degrades_to_an_empty_dataframe(self, mocker):
-        """The final stage currently drops clusters with no UPRNs, so an
-        output could in principle have zero features (no real output has
-        yet). That must not crash the comparison; it degrades to an empty
-        output instead."""
-        # geopandas raises this ValueError when a geojson has no features;
-        # the mock reproduces that exact failure.
-        mocker.patch(
-            "asf_heat_pump_suitability.getters.base_getters.load_gdf_from_s3_geojson",
-            side_effect=ValueError(
-                "Assigning CRS to a GeoDataFrame without a geometry column "
-                "is not supported"
-            ),
-        )
-        df = compare_versions.load_transform_df_stage_output(
-            "s3://bucket/dir/output.geojson"
-        )
-        assert df.is_empty(), "a zero-feature geojson must degrade to an empty frame"
-
 
 class TestLoadDfBuildingsTech:
     """Tests for `load_df_buildings_tech`."""

@@ -590,8 +590,6 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
     Geometry columns are dropped: the base checks are tabular, and polars
     cannot read the geoarrow extension columns geopandas-written outputs
     carry. Geojson outputs are loaded with geopandas (EPSG:4326, as saved).
-    A geojson with zero features (e.g. every cluster filtered out for a
-    local authority) degrades to an empty DataFrame instead of raising.
 
     Args:
         path: S3 path of the stage output (.parquet or .geojson)
@@ -616,15 +614,8 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
         ]
         return pl.from_arrow(pq.read_table(path, columns=tabular))
     if path.endswith(".geojson"):
-        try:
-            gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
-            gdf = geo_utils.verify_gdf_crs(gdf, target_crs="EPSG:4326")
-        except ValueError:
-            # The final stage currently drops clusters with no UPRNs, so an
-            # output could in principle have zero features (none has so far);
-            # the getter's from_features() raises on an empty list.
-            logging.warning("No features in geojson at %s; comparing as empty.", path)
-            return pl.DataFrame()
+        gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
+        gdf = geo_utils.verify_gdf_crs(gdf, target_crs="EPSG:4326")
         return pl.from_pandas(gdf.drop(columns="geometry"))
     raise ValueError(f"Cannot compare file type of {path}; expected parquet/geojson.")
 
