@@ -29,7 +29,7 @@ def _get_gdf_5nn_spatial_features(gdf, unique_id_col):
     all_centroids = np.column_stack((gdf.geometry.x, gdf.geometry.y))
     all_ids = gdf[unique_id_col].values
 
-    # get just the known garden sizes and the centroids of them
+    # get just UPRNs with known outdoor space size
     known_gardens = gdf.dropna(subset=["max_contiguous_outdoor_space_area_m2"])
 
     known_gardens["coord_round"] = (
