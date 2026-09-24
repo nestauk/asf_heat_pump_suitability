@@ -317,7 +317,7 @@ def engineer_gdf_features(local_authorities):
     uprns_df = uprns_df.dropna(subset=["ID"])
 
     # add column of UPRNs per building footprint
-    uprn_counts = uprns_df.groupby("ID").size().reset_index(name="n_uprns_in_building")
+    uprn_counts = uprns_df.groupby(id_col).size().reset_index(name="n_uprns_in_building")
     uprns_df = uprns_df.merge(uprn_counts, on="ID", how="left")
 
     # merge building level features onto UPRN data
