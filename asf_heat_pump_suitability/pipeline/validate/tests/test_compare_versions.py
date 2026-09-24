@@ -625,6 +625,7 @@ class TestGetStrStageOutputPath:
         mocker.patch.object(
             compare_versions.save_utils,
             "get_str_output_path",
+            # fake to throw an error instead of returning a value
             side_effect=FileNotFoundError("No file found"),
         )
         # Pretend the folder holds one file saved under a different tolerance.
