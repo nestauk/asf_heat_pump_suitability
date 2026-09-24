@@ -488,9 +488,8 @@ class TestGenerateListCommitLog:
     def test_scopes_git_log_to_the_stages_module_paths(self, mocker):
         """git log runs over old..new restricted to the stage's curated
         paths, after confirming old is an ancestor of new."""
-        # The function makes two git calls. The side_effect list answers
-        # them in order: the ancestor check passes, then git log returns two
-        # canned commit lines.
+        # Fake git answers the two calls in order: the ancestor check
+        # passes, then git log returns two made-up commit lines.
         run = mocker.patch(
             "subprocess.run",
             side_effect=[
@@ -564,7 +563,8 @@ class TestGenerateListCommitLog:
         ancestor check, e.g. a shallow clone missing older history, degrades
         to None. This pins the second run_git_or_none call in
         generate_list_commit_log."""
-        # side_effect in call order: ancestor check passes, git log raises.
+        # Fake git answers the two calls in order: the ancestor check
+        # passes, then git log fails.
         run = mocker.patch(
             "subprocess.run",
             side_effect=[
