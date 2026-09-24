@@ -616,15 +616,18 @@ class TestGetStrStageOutputPath:
         ), "output resolution must cover exactly the manifest's curated stages"
 
     def test_resolves_a_version_saved_under_a_previous_tolerance(self, mocker):
-        """A contextual-features version saved before a tolerance_m config
-        change must still resolve (via glob) so past releases stay
-        comparable across the very methodology changes the tool exists for."""
+        """The final stage's filename includes the clustering tolerance, e.g.
+        "_10m". If that setting changes, older files still carry the old
+        value, so the exact path built from today's setting does not exist.
+        The function must then search the folder for the file saved under
+        the other tolerance, so old versions can still be compared."""
+        # Pretend the exact path (built from today's tolerance) is not on S3.
         mocker.patch.object(
             compare_versions.save_utils,
             "get_str_output_path",
             side_effect=FileNotFoundError("No file found"),
         )
-        # Replace the S3 client so .glob returns a canned listing; no AWS calls.
+        # Pretend the folder holds one file saved under a different tolerance.
         fs = mocker.patch("s3fs.S3FileSystem").return_value
         fs.glob.return_value = [
             "bucket/outputs/data/plymouth/20260601/"
@@ -639,19 +642,20 @@ class TestGetStrStageOutputPath:
         assert path == (
             "s3://bucket/outputs/data/plymouth/20260601/"
             "plymouth_clusters_contextual_features_10m.geojson"
-        ), "a single glob match under another tolerance must be resolved and returned"
+        ), "the one file found under the other tolerance must be returned"
 
     def test_missing_version_still_raises_when_no_tolerance_variant_exists(
         self, mocker
     ):
-        """The tolerance-glob fallback must not mask a genuinely missing
-        version: zero (or ambiguous) matches re-raise the original error."""
+        """Searching the folder for other tolerances must not hide a version
+        that is truly missing. If no file is found under any tolerance, the
+        original file-not-found error must still be raised."""
+        # Pretend the exact path is not on S3, and the folder search finds nothing.
         mocker.patch.object(
             compare_versions.save_utils,
             "get_str_output_path",
             side_effect=FileNotFoundError("No file found"),
         )
-        # Replace the S3 client so .glob returns a canned listing; no AWS calls.
         fs = mocker.patch("s3fs.S3FileSystem").return_value
         fs.glob.return_value = []
         with pytest.raises(FileNotFoundError):
