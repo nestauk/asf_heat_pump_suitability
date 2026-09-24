@@ -394,16 +394,15 @@ def generate_list_commit_log(
     if commit_old == commit_new:
         return []
     ancestor_check = manifest_utils.run_git_or_none(
-        ["git", "merge-base", "--is-ancestor", commit_old, commit_new],
-        "%s is not an ancestor of %s (or a commit is unfetched); "
+        args=["git", "merge-base", "--is-ancestor", commit_old, commit_new],
+        warning="%s is not an ancestor of %s (or a commit is unfetched); "
         "old..new would silently omit commits, so the log is skipped.",
-        commit_old,
-        commit_new,
+        warning_args=(commit_old, commit_new),
     )
     if ancestor_check is None:
         return None
     result = manifest_utils.run_git_or_none(
-        [
+        args=[
             "git",
             "log",
             "--oneline",
@@ -411,9 +410,8 @@ def generate_list_commit_log(
             "--",
             *STAGE_MODULE_PATHS[stage],
         ],
-        "git log %s..%s failed; are both commits fetched locally?",
-        commit_old,
-        commit_new,
+        warning="git log %s..%s failed; are both commits fetched locally?",
+        warning_args=(commit_old, commit_new),
     )
     if result is None:
         return None
