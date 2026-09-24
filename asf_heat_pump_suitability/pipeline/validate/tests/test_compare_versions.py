@@ -546,8 +546,7 @@ class TestGenerateListCommitLog:
         new (e.g. old came from a since-rebased branch); this must degrade
         to None rather than return an incomplete log, and must not run
         `git log` at all once the ancestor check has failed."""
-        # A single raising side_effect: the very first git call (the
-        # ancestor check) fails.
+        # Make the fake git fail on its first call, the ancestor check.
         run = mocker.patch(
             "subprocess.run",
             side_effect=subprocess.CalledProcessError(1, "git merge-base"),
