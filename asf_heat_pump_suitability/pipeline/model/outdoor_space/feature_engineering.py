@@ -32,7 +32,7 @@ def _get_gdf_5nn_spatial_features(
     all_centroids = np.column_stack((gdf.geometry.x, gdf.geometry.y))
     all_ids = gdf[unique_id_col].values
 
-    # get just the known garden sizes and the centroids of them
+    # get just UPRNs with known outdoor space size
     known_gardens = gdf.dropna(subset=["max_contiguous_outdoor_space_area_m2"])
 
     known_gardens["coord_round"] = (
@@ -328,7 +328,7 @@ def engineer_gdf_features(local_authorities: str | list[str]) -> gpd.GeoDataFram
     uprns_df = uprns_df.dropna(subset=["ID"])
 
     # add column of UPRNs per building footprint
-    uprn_counts = uprns_df.groupby("ID").size().reset_index(name="n_uprns_in_building")
+    uprn_counts = uprns_df.groupby(id_col).size().reset_index(name="n_uprns_in_building")
     uprns_df = uprns_df.merge(uprn_counts, on="ID", how="left")
 
     # merge building level features onto UPRN data
