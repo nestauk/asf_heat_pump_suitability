@@ -12,6 +12,7 @@ from sklearn.neighbors import NearestNeighbors
 from asf_heat_pump_suitability.pipeline.cluster import cluster
 from asf_heat_pump_suitability.pipeline.transform import local_authority
 from asf_heat_pump_suitability.getters import load_boundaries, load_geodata
+from asf_heat_pump_suitability import config
 
 
 def _get_gdf_5nn_spatial_features(
@@ -275,11 +276,15 @@ def _compute_voronoi_area(
     return final_gdf
 
 
-def engineer_gdf_features(local_authorities: str | list[str]) -> gpd.GeoDataFrame:
+def engineer_gdf_features(
+    local_authorities: str | list[str],
+    id_col: str = config["constant"]["id"]["building"],
+) -> gpd.GeoDataFrame:
     """
     Engineer set of features for model training at the UPRN level
     Args:
         local_authorities (str | list[str]): Local Authority or Authorities to engineer features for
+        id_col (str): name of ID column to use for merging UPRN data with building footprint data. Defaults to config["constant"]["id"]["building"]
 
     Returns:
         gpd.GeoDataFrame: features for model training
@@ -328,7 +333,9 @@ def engineer_gdf_features(local_authorities: str | list[str]) -> gpd.GeoDataFram
     uprns_df = uprns_df.dropna(subset=["ID"])
 
     # add column of UPRNs per building footprint
-    uprn_counts = uprns_df.groupby(id_col).size().reset_index(name="n_uprns_in_building")
+    uprn_counts = (
+        uprns_df.groupby(id_col).size().reset_index(name="n_uprns_in_building")
+    )
     uprns_df = uprns_df.merge(uprn_counts, on="ID", how="left")
 
     # merge building level features onto UPRN data
