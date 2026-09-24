@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import geopandas as gpd
 
+import shapely
 from sklearn.neighbors import NearestNeighbors
 
 from asf_heat_pump_suitability.pipeline.cluster import cluster
@@ -13,7 +14,9 @@ from asf_heat_pump_suitability.pipeline.transform import local_authority
 from asf_heat_pump_suitability.getters import load_boundaries, load_geodata
 
 
-def _get_gdf_5nn_spatial_features(gdf, unique_id_col):
+def _get_gdf_5nn_spatial_features(
+    gdf: gpd.GeoDataFrame, unique_id_col: str
+) -> gpd.GeoDataFrame:
     """
     Takes a GeoDataFrame of UPRNs, finds the 5 nearest neighbors that have
     known garden sizes, and extracts their individual sizes and distances.
@@ -114,12 +117,14 @@ def _get_gdf_5nn_spatial_features(gdf, unique_id_col):
     return gdf
 
 
-def _get_gdf_number_uprns_within_radius(gdf, radius_m=100):
+def _get_gdf_number_uprns_within_radius(
+    gdf: gpd.GeoDataFrame, radius_m: int = 100
+) -> gpd.GeoDataFrame:
     """
     Find the number of UPRNs within a given radius of UPRN point coordinates.
     Args:
         gdf (gpd.GeoDataFrame): GeoDataFrame containing UPRN point coordinates. Must contain a 'UPRN' column
-        radium_m (float): distance (m) to buffer around each point (default 100m)
+        radius_m (int): distance (m) to buffer around each point (default 100m)
     Returns:
         gpd.GeoDataFrame: number of UPRNs within buffer radius of each UPRN point coordinate
 
@@ -144,7 +149,9 @@ def _get_gdf_number_uprns_within_radius(gdf, radius_m=100):
     return uprn_counts
 
 
-def _calculate_gdf_plot_ratio_proxy(buildings_gdf, buffer_radius=100):
+def _calculate_gdf_plot_ratio_proxy(
+    buildings_gdf: gpd.GeoDataFrame, buffer_radius: int = 100
+) -> gpd.GeoDataFrame:
     """
     Calculate the ratio of building footprint area contained within a buffer radius to the area of the buffer radius. E.g. a ratio of 1 means the building footprint takes up the whole buffer circle area, and a low area means the building footprint takes up little of the buffer radius
     Args:
@@ -191,7 +198,7 @@ def _calculate_gdf_plot_ratio_proxy(buildings_gdf, buffer_radius=100):
     return buildings_gdf
 
 
-def _get_int_count_vertices(geom):
+def _get_int_count_vertices(geom: shapely.Polygon | shapely.MultiPolygon) -> int:
     """
     Counts the number of vertices in a polygon or mutipolygon
     Args:
@@ -209,12 +216,16 @@ def _get_int_count_vertices(geom):
     return 0
 
 
-def _compute_voronoi_area(gdf, grid_squares, boundary):
+def _compute_voronoi_area(
+    gdf: gpd.GeoDataFrame,
+    grid_squares: list[str] | str,
+    boundary: shapely.Polygon | shapely.MultiPolygon,
+) -> gpd.GeoDataFrame:
     """
     Calculates the area within voronoi polygons formed for each UPRN coordinate, with barrier features removed
     Args:
         gdf (gpd.GeoDataFrame): UPRN point coordinates
-        grid_squares (str): grid squares to get the barrier features for
+        grid_squares (list[str] | str): grid squares to get the barrier features for
         boundary (shapely.Polygon | shapely.MultiPolygon): boundary area to clip the voronoi polygons to
 
     Returns:
@@ -264,7 +275,7 @@ def _compute_voronoi_area(gdf, grid_squares, boundary):
     return final_gdf
 
 
-def engineer_gdf_features(local_authorities):
+def engineer_gdf_features(local_authorities: str | list[str]) -> gpd.GeoDataFrame:
     """
     Engineer set of features for model training at the UPRN level
     Args:
