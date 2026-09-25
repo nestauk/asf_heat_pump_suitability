@@ -201,11 +201,13 @@ def get_dict_distribution_frames(
     outputs.
 
     Args:
-        stage: pipeline stage the outputs belong to
-        df_old: older version of the tabular stage output
-        df_new: newer version of the tabular stage output
-        df_areas_old: older version's per-cluster areas, or None
-        df_areas_new: newer version's per-cluster areas, or None
+        stage (str): pipeline stage the outputs belong to
+        df_old (pl.DataFrame): older version of the tabular stage output
+        df_new (pl.DataFrame): newer version of the tabular stage output
+        df_areas_old (pl.DataFrame | None): older version's per-cluster areas,
+            or None
+        df_areas_new (pl.DataFrame | None): newer version's per-cluster areas,
+            or None
 
     Returns:
         dict: column name to (old, new) frame pair, plot/report order
