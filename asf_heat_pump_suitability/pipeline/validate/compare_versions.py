@@ -739,11 +739,12 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
 
 def load_df_cluster_areas(path: str) -> pl.DataFrame:
     """
-    Load a geometry-bearing stage output as per-cluster areas in m².
+    Load one stage output and measure the area of each cluster, in m².
 
-    Areas are measured in EPSG:27700 (metres); an output saved in another
-    CRS — the contextual-features geojson is EPSG:4326, with simplified
-    geometry — is reprojected first.
+    Reads a .parquet or .geojson output; any other file type raises an
+    error. Shapes not already in EPSG:27700 (metres) are converted to it
+    before measuring, so areas come out in square metres. The result is a
+    table with one area per row; the shapes themselves are not kept.
 
     Args:
         path: S3 path of the stage output (.parquet or .geojson)
