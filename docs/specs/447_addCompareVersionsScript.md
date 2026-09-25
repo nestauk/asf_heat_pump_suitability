@@ -20,6 +20,9 @@ implemented on the branch this one stacks on) records `git_commit` and
 `input_versions` per output, which this script reads from day one. The
 follow-on issues (cluster geometry checks, distribution checks, thresholding)
 each extend the report this issue creates.
+Updated 2026-09-23: #440 merged to `dev` on 2026-08-18 (PR #449). PR #451
+was retargeted from `440_addRunManifest` to `dev` the same day; the diff
+against `dev` is this issue's six files only.
 
 ## Proposal
 
@@ -54,6 +57,10 @@ Decisions settled during kickoff interview (2026-07-23):
   off `dev` that hasn't merged; this branch creates it independently (the
   only overlap at merge is a trivial `__init__.py`), so validation tooling
   converges in the home the initiative planned for it.
+  Updated 2026-09-23: #434 closed 2026-08-26. `dev` now has
+  `pipeline/validate/` with `check_inputs.py` and its tests, so the
+  `__init__.py` overlap is a real, trivial merge point rather than a
+  future one.
 - **Report is a local markdown file plus a console summary**, not an S3
   upload. A comparison is run ad-hoc by a human deciding whether drift is
   expected; a read-only diagnostic shouldn't need bucket write access.
@@ -146,6 +153,21 @@ Implementation decisions within the spec's frame:
   one, per the Problem section).
 - The report is written to `outputs/comparisons/` (gitignored) by default;
   `--report_dir` overrides.
+
+Reviewer-response pass (2026-08-14, crispy-wonton's PR review, 66 comments):
+
+- **Added-UPRN warning**: the churn check now reports `added_share` and warns
+  above a new `max_added_uprn_share` tolerance per trigger, mirroring the
+  removed-share check — catches changes that make residential filtering too
+  permissive. Both start at 0.05; input_release is expected to be tuned up.
+- **Geojson CRS verified, not assumed** (`geo_utils.verify_gdf_crs`).
+- **Buildings path wrapper deleted**; its one caller passes
+  `dataset=BUILDINGS_DATASET` directly.
+- **Named arguments** at every intra-module multi-argument call site.
+- **Plain-English pass**: "rubric" and "canonical" removed from all prose,
+  expression helpers renamed (`_expr_uprn_standardised`,
+  `_expr_tech_labelled`), missing Args/Returns filled, flagged comments
+  rewritten as full sentences, test mocks annotated.
 
 Review pass on the 2026-08-10 additions (2026-08-12, ten findings applied):
 
