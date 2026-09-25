@@ -1284,8 +1284,9 @@ class TestLoadDfClusterAreas:
 
     @staticmethod
     def gdf_two_squares(crs: str):
-        """Two axis-aligned squares of 100 and 400 m², built in EPSG:27700
-        near Plymouth and converted to the requested CRS."""
+        """Two square clusters near Plymouth, 10 m and 20 m wide, so their
+        areas are exactly 100 m² and 400 m². Built in EPSG:27700 (metres),
+        then converted to the requested CRS."""
         import geopandas as gpd
         from shapely.geometry import box
 
