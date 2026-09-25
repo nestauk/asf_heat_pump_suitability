@@ -759,6 +759,14 @@ def load_df_cluster_areas(path: str) -> pl.DataFrame:
         gdf = gpd.read_parquet(path, columns=["geometry"])
     elif path.endswith(".geojson"):
         gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
+        # The getter labels the file EPSG:4326 without reading it, so check
+        # the coordinates really are latitude/longitude values.
+        min_x, min_y, max_x, max_y = gdf.total_bounds
+        if not (-180 <= min_x <= max_x <= 180 and -90 <= min_y <= max_y <= 90):
+            raise ValueError(
+                f"Coordinates in {path} are outside the latitude/longitude range, "
+                "so the file is not in EPSG:4326 as expected."
+            )
     else:
         raise ValueError(f"Cannot read geometry of {path}; expected parquet/geojson.")
     gdf = geo_utils.verify_gdf_crs(gdf)

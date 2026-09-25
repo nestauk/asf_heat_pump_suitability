@@ -1336,6 +1336,20 @@ class TestLoadDfClusterAreas:
             [100.0, 400.0], rel=1e-3
         ), "geojson areas must be measured in m² after reprojection"
 
+    def test_geojson_not_really_in_lat_lon_raises(self, mocker):
+        """The getter labels the geojson EPSG:4326 without reading the file,
+        so a file actually saved in metres must be caught by its coordinates
+        falling outside the latitude/longitude range."""
+        mislabelled = self.gdf_two_squares("EPSG:27700").set_crs(
+            "EPSG:4326", allow_override=True
+        )
+        mocker.patch(
+            "asf_heat_pump_suitability.getters.base_getters.load_gdf_from_s3_geojson",
+            return_value=mislabelled,
+        )
+        with pytest.raises(ValueError, match="latitude/longitude"):
+            compare_versions.load_df_cluster_areas("s3://bucket/dir/output.geojson")
+
     def test_unreadable_file_type_raises(self):
         """Raise error for file types that don't allow reading geometry for
         comparisons."""
