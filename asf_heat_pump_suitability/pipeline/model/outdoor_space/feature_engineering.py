@@ -166,39 +166,30 @@ def _calculate_gdf_plot_ratio_proxy(
 
     buildings_gdf = buildings_gdf.copy()  # Avoid modifying the original GeoDataFrame
 
+    # Preserve original index explicitly in a column before buffering
+    buildings_gdf["_orig_idx"] = buildings_gdf.index
+
     # Create the buffers
     buffers_gdf = gpd.GeoDataFrame(
+        buildings_gdf[["_orig_idx"]],
         geometry=buildings_gdf.geometry.centroid.buffer(buffer_radius),
-        index=buildings_gdf.index,
+        crs=buildings_gdf.crs,
     )
 
-    # find buildings within buffer circles and keep the buffer geometry
-    joined = gpd.sjoin(buffers_gdf, buildings_gdf, how="inner", predicate="intersects")
+    # Perform a spatial overlay intersection: Intersects buffer geometries with building geometries
+    intersections = gpd.overlay(buffers_gdf, buildings_gdf, how="intersection")
 
-    # left_geoms = Buffer circle geometries
-    left_geoms = joined.geometry
+    # Calculate area of clipped intersection geometries
+    intersections["clipped_area"] = intersections.geometry.area
 
-    # right_geoms = Building geometries that intersect with the buffer circles
-    # Get building polygons that are within the buffer circles
-    # The geometry will be of the full building (not just the part inside the circle)
-    # explicitly give them the exact same index as the 'joined' dataframe.
-    right_geoms = gpd.GeoSeries(
-        buildings_gdf.loc[joined["index_right"], "geometry"].values, index=joined.index
+    # Group by buffer's original index (_orig_idx_1 is left df, _orig_idx_2 is right df)
+    grouped_area = intersections.groupby("_orig_idx_1")["clipped_area"].sum()
+
+    # Map back to main DataFrame and fill missing values
+    buildings_gdf["plot_ratio_proxy"] = (
+        buildings_gdf["_orig_idx"].map(grouped_area) / buffer_area
     )
-
-    # now clip building geometries to just what is within the buffer circle areas
-    exact_intersections = left_geoms.intersection(right_geoms)
-
-    # Calculate the area of just those clipped pieces
-    joined["clipped_area"] = exact_intersections.area
-
-    # Group by the buffer's index and sum the clipped areas
-    total_exact_area = joined.groupby(joined.index)["clipped_area"].sum()
-
-    # Calculate the ratio and assign it back to the main dataframe
-    buildings_gdf["plot_ratio_proxy"] = total_exact_area / buffer_area
-
-    return buildings_gdf
+    return buildings_gdf.drop(columns=["_orig_idx"])
 
 
 def _compute_voronoi_area(
@@ -258,6 +249,7 @@ def engineer_gdf_features(
     id_col: str = config["constant"]["id"]["building"],
     outdoor_space_col: str = "max_contiguous_outdoor_space_area_m2",
     radius_m: int = 100,
+    nn: int = 5,
 ) -> gpd.GeoDataFrame:
     """
     Engineer features including:
@@ -273,6 +265,7 @@ def engineer_gdf_features(
         id_col (str): name of ID column to use for merging UPRN data with building footprint data. Defaults to config["constant"]["id"]["building"]
         outdoor_space_col (str): name of the column in `uprns_df` that contains the known outdoor space size. Defaults "max_contiguous_outdoor_space_area_m2"
         radius_m (int): distance (m) to buffer around each point to count UPRNs within. Defaults to 100m
+        nn (int): number of nearest neighbors to find for outdoor space features. Defaults to 5
 
     Returns:
         gpd.GeoDataFrame: GeoDataFrame with features for model training
@@ -359,7 +352,7 @@ def engineer_gdf_features(
     # Nearest neighbor outdoor space sizes and distances
     features_gdf = _get_gdf_nn_spatial_features(
         gdf=features_gdf,
-        n=5,
+        n=nn,
         outdoor_space_col=outdoor_space_col,
     )
 
