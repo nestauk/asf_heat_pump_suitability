@@ -173,8 +173,8 @@ def generate_dict_distribution_stats(df: pl.DataFrame, column: str) -> dict | No
     """
     if column not in df.columns:
         return None
-    values = df[column].drop_nulls()
-    if values.is_empty():
+    values = df[column]
+    if values.is_empty() or values.null_count() == len(values):
         return None
     return {
         "min": values.min(),
