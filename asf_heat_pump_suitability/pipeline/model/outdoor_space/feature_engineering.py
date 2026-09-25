@@ -15,105 +15,96 @@ from asf_heat_pump_suitability.getters import load_boundaries, load_geodata
 from asf_heat_pump_suitability import config
 
 
-def _get_gdf_5nn_spatial_features(
-    gdf: gpd.GeoDataFrame, unique_id_col: str
+def _get_gdf_nn_spatial_features(
+    gdf: gpd.GeoDataFrame,
+    n: int = 5,
+    outdoor_space_col: str = "max_contiguous_outdoor_space_area_m2",
 ) -> gpd.GeoDataFrame:
     """
-    Takes a GeoDataFrame of UPRNs, finds the 5 nearest neighbors that have
-    known garden sizes, and extracts their individual sizes and distances.
+    Takes a GeoDataFrame of UPRNs, finds the n nearest neighbors that have
+    known outdoor space, and extracts their individual outdoor space sizes and distances.
 
     Args:
-        gdf (gpd.GeoDataFrame): GeoDataFrame of UPRN point coordinates
-        unique_id_col (str): name of ID column
+        gdf (gpd.GeoDataFrame): GeoDataFrame with UPRN point coordinates and a column for known outdoor space size
+        n (int): number of nearest neighbors to find (default 5)
+        outdoor_space_col (str): name of the column in `gdf` that contains the known outdoor space size (default "max_contiguous_outdoor_space_area_m2")
 
     Returns:
-        gpd.GeoDataFrame: original gdf with columns for 5 nearest neighbour garden sizes and distances
+        gpd.GeoDataFrame: original gdf with columns for n nearest neighbour garden sizes and distances
     """
-    # get centroids and IDs of uprns
-    all_centroids = np.column_stack((gdf.geometry.x, gdf.geometry.y))
-    all_ids = gdf[unique_id_col].values
+    # Create a copy of the GeoDataFrame to avoid modifying the original
+    gdf = gdf.copy()
 
-    # get just UPRNs with known outdoor space size
-    known_gardens = gdf.dropna(subset=["max_contiguous_outdoor_space_area_m2"])
+    # Extract target coordinates and UPRNs from the GeoDataFrame
+    target_coords = np.column_stack((gdf.geometry.x, gdf.geometry.y))
+    target_ids = gdf["UPRN"].to_numpy()
 
-    known_gardens["coord_round"] = (
-        known_gardens.geometry.centroid.x.round(4).astype(str)
-        + "_"
-        + known_gardens.geometry.centroid.y.round(4).astype(str)
-    )
+    # Filter to UPRNs with known outdoor space size
+    known_gdf = gdf.dropna(subset=[outdoor_space_col]).copy()
 
-    known_gardens_unique = known_gardens.drop_duplicates(
-        subset=["coord_round", "max_contiguous_outdoor_space_area_m2"]
-    )
-
-    known_centroids = np.column_stack(
+    # Round coordinates to 4 decimal places (0.1mm in EPSG:27700) to eliminate micro-duplicates
+    coords_round = np.column_stack(
         (
-            known_gardens_unique.geometry.centroid.x,
-            known_gardens_unique.geometry.centroid.y,
+            known_gdf.geometry.centroid.x.round(4),
+            known_gdf.geometry.centroid.y.round(4),
         )
     )
-    known_sizes = known_gardens_unique["max_contiguous_outdoor_space_area_m2"].values
-    known_ids = known_gardens_unique[unique_id_col].values
 
-    # find the 6 nearest garden sizes and the distance to them. We need 6 so that we can drop the self-match later
-    nn = NearestNeighbors(n_neighbors=6, algorithm="kd_tree")
-    nn.fit(known_centroids)
-    distances, indices = nn.kneighbors(all_centroids)
+    # Drop duplicates based on rounded coordinates and outdoor space size to avoid self-matches
+    _, unique_idx = np.unique(
+        coords_round, axis=0, return_index=True
+    )  # or keep Pandas drop_duplicates
+    known_unique = known_gdf.iloc[unique_idx]
 
-    # Initialize storage lists
-    nn1_size, nn2_size, nn3_size, nn4_size, nn5_size = [], [], [], [], []
-    nn1_dist, nn2_dist, nn3_dist, nn4_dist, nn5_dist = [], [], [], [], []
+    known_coords = np.column_stack(
+        (known_unique.geometry.centroid.x, known_unique.geometry.centroid.y)
+    )
+    known_sizes = known_unique[outdoor_space_col].to_numpy()
+    known_ids = known_unique["UPRN"].to_numpy()
 
-    # Loop through the array
-    for i in range(len(all_centroids)):
-        target_id = all_ids[i]
-        row_indices = indices[i]
-        row_distances = distances[i]
+    # Deal with unlikely case: no known outdoor space
+    if len(known_coords) == 0:
+        for j in range(n):
+            gdf[f"nn{j+1}_garden_size"] = np.nan
+            gdf[f"nn{j+1}_distance_m"] = np.nan
+        return gdf
 
-        # drop the self-match
-        neighbor_ids = known_ids[row_indices]
-        valid_mask = neighbor_ids != target_id
+    total_known = len(known_coords)
 
-        valid_sizes = known_sizes[row_indices[valid_mask]]
-        valid_distances = row_distances[valid_mask]
+    # Query up to n + 1 neighbors in case a point matches itself
+    query = min(n + 1, total_known)
+    # Fit NearestNeighbors model
+    nn = NearestNeighbors(n_neighbors=query, algorithm="kd_tree")
+    nn.fit(known_coords)
+    distances, indices = nn.kneighbors(target_coords)
 
-        sizes_to_use = list(valid_sizes[:5])
-        dists_to_use = list(valid_distances[:5])
+    # Map neighbor indices back to their IDs and sizes
+    retrieved_ids = known_ids[indices]
+    retrieved_sizes = known_sizes[indices]
 
-        # Pad with NaNs if there are extremely isolated buildings
-        while len(sizes_to_use) < 5:
-            sizes_to_use.append(np.nan)
-            dists_to_use.append(np.nan)
+    # Create a 2D boolean mask where True represents a valid neighbor, False represents a self-match
+    is_valid_neighbor = retrieved_ids != target_ids[:, None]
 
-        # Unpack sizes
-        nn1_size.append(sizes_to_use[0])
-        nn2_size.append(sizes_to_use[1])
-        nn3_size.append(sizes_to_use[2])
-        nn4_size.append(sizes_to_use[3])
-        nn5_size.append(sizes_to_use[4])
+    # We sort the mask (~is_valid places False/self-matches at the very end of each row)
+    # argsort along axis=1 produces the row indices that shift self-matches out of the top `n` slot
+    sort_order = np.argsort(~is_valid_neighbor, axis=1)
 
-        # Unpack distances
-        nn1_dist.append(dists_to_use[0])
-        nn2_dist.append(dists_to_use[1])
-        nn3_dist.append(dists_to_use[2])
-        nn4_dist.append(dists_to_use[3])
-        nn5_dist.append(dists_to_use[4])
+    # Re-order 2D matrices
+    sorted_sizes = np.take_along_axis(retrieved_sizes, sort_order, axis=1)
+    sorted_distances = np.take_along_axis(distances, sort_order, axis=1)
+    sorted_valid_mask = np.take_along_axis(is_valid_neighbor, sort_order, axis=1)
 
-    # Assign everything back to the dataframe
-    gdf["nn1_garden_size"] = nn1_size
-    gdf["nn2_garden_size"] = nn2_size
-    gdf["nn3_garden_size"] = nn3_size
-    gdf["nn4_garden_size"] = nn4_size
-    gdf["nn5_garden_size"] = nn5_size
+    # Mask out invalid positions (if total available valid neighbors < n)
+    final_sizes = np.where(sorted_valid_mask[:, :n], sorted_sizes[:, :n], np.nan)
+    final_distances = np.where(
+        sorted_valid_mask[:, :n], sorted_distances[:, :n], np.nan
+    )
 
-    gdf["nn1_distance_m"] = nn1_dist
-    gdf["nn2_distance_m"] = nn2_dist
-    gdf["nn3_distance_m"] = nn3_dist
-    gdf["nn4_distance_m"] = nn4_dist
-    gdf["nn5_distance_m"] = nn5_dist
+    # Create columns in original GeoDataFrame
+    size_cols = {f"nn{j+1}_garden_size": final_sizes[:, j] for j in range(n)}
+    dist_cols = {f"nn{j+1}_distance_m": final_distances[:, j] for j in range(n)}
 
-    if "coord_round" in gdf.columns:
-        gdf = gdf.drop(columns=["coord_round"])
+    gdf = gdf.assign(**size_cols, **dist_cols)
 
     return gdf
 
@@ -378,8 +369,10 @@ def engineer_gdf_features(
     gdf_with_features = pd.get_dummies(
         gdf_with_features, columns=["ATTACHMENT"], prefix="ATTACHMENT", dtype=int
     )
-    gdf_with_features = _get_gdf_5nn_spatial_features(
-        gdf=gdf_with_features, unique_id_col="UPRN"
+    gdf_with_features = _get_gdf_nn_spatial_features(
+        gdf=gdf_with_features,
+        n=5,
+        outdoor_space_col="max_contiguous_outdoor_space_area_m2",
     )
 
     uprn_sums = _get_gdf_number_uprns_within_radius(gdf=gdf_with_features)
