@@ -1337,7 +1337,8 @@ class TestLoadDfClusterAreas:
         ), "geojson areas must be measured in m² after reprojection"
 
     def test_unreadable_file_type_raises(self):
-        """File types the comparison cannot read geometry from fail loudly."""
+        """Raise error for file types that don't allow reading geometry for
+        comparisons."""
         with pytest.raises(ValueError, match="csv"):
             compare_versions.load_df_cluster_areas("s3://bucket/dir/output.csv")
 
