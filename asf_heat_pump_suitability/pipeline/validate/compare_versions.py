@@ -747,7 +747,7 @@ def load_df_cluster_areas(path: str) -> pl.DataFrame:
     table with one area per row; the shapes themselves are not kept.
 
     Args:
-        path: S3 path of the stage output (.parquet or .geojson)
+        path (str): S3 path of the stage output (.parquet or .geojson)
 
     Returns:
         pl.DataFrame: one `area_m2` row per cluster
