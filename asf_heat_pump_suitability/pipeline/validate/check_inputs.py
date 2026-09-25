@@ -12,7 +12,7 @@ at-least-one-per-square, since some layers are legitimately absent in a
 square.
 
 Grid squares are derived the same way the pipeline derives them
-(`local_authority.get_list_la_grid_squares`): the BNG grid clipped to the
+(`local_authority.get_set_la_grid_squares`): the BNG grid clipped to the
 named local authorities' boundaries, or to all of GB when no local
 authorities are given, so sea-only squares with no OS data are never checked.
 Square/product combinations listed in
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = parse_arguments()
     resolved_las = local_authority.resolve_list_la_names(args.local_authorities)
-    grid_squares = sorted(local_authority.get_list_la_grid_squares(resolved_las))
+    grid_squares = sorted(local_authority.get_set_la_grid_squares(resolved_las))
     logging.info(
         f"Checking inputs for {'whole of GB' if resolved_las is None else ', '.join(resolved_las)} "
         f"({len(grid_squares)} grid squares)."
