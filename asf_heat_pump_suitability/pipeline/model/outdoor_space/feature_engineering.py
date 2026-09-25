@@ -3,6 +3,7 @@ Functions to engineer features at the UPRN level for outdoor space model trainin
 """
 
 import pandas as pd
+import polars as pl
 import numpy as np
 import geopandas as gpd
 
@@ -10,8 +11,6 @@ import shapely
 from sklearn.neighbors import NearestNeighbors
 
 from asf_heat_pump_suitability.pipeline.cluster import cluster
-from asf_heat_pump_suitability.pipeline.transform import local_authority
-from asf_heat_pump_suitability.getters import load_boundaries, load_geodata
 from asf_heat_pump_suitability import config
 
 
@@ -109,7 +108,7 @@ def _get_gdf_nn_spatial_features(
     return gdf
 
 
-def _get_gdf_number_uprns_within_radius(
+def _get_gdf_uprns_counts_within_radius(
     gdf: gpd.GeoDataFrame, radius_m: int = 100
 ) -> pd.DataFrame:
     """
@@ -122,31 +121,25 @@ def _get_gdf_number_uprns_within_radius(
         pd.DataFrame: DataFrame containing the number of UPRNs within buffer radius of each UPRN point coordinate
 
     """
+    # Create buffered geometries
+    buffers_gdf = gdf[["UPRN", "geometry"]].copy()
+    buffers_gdf["geometry"] = buffers_gdf.geometry.buffer(radius_m)
 
-    # Create buffers around the point coordinates
-    buffers_gdf = gpd.GeoDataFrame(
-        {"UPRN": gdf["UPRN"], "geometry": gdf.geometry.buffer(radius_m)}, crs=gdf.crs
+    # Spatial join using 'intersects' to ensure point-in-buffer matching
+    joined = buffers_gdf.sjoin(
+        gdf[["UPRN", "geometry"]],
+        how="left",
+        predicate="intersects",
     )
 
-    # Create the target points
-    points_gdf = gpd.GeoDataFrame(
-        {"UPRN": gdf["UPRN"], "geometry": gdf.geometry}, crs=gdf.crs
-    )
+    # Group by UPRN_left (the buffer's UPRN) and count matches
+    counts = joined.groupby("UPRN_left")["UPRN_right"].count()
 
-    # find target points inside buffer radius
-    joined_gdf = gpd.sjoin(buffers_gdf, points_gdf, how="left", predicate="contains")
+    # Subtract 1 to exclude the point itself, clamping at 0
+    counts = (counts - 1).clip(lower=0).reset_index()
+    counts.columns = ["UPRN", "count"]
 
-    # Group by the correct unique ID and count UPRNs within buffer radius
-    uprn_counts_df = (
-        joined_gdf.groupby("UPRN").size().reset_index(name=f"uprns_within_{radius_m}m")
-    )
-
-    # Update counts to exclude the UPRN itself (subtract 1)
-    uprn_counts_df[f"uprns_within_{radius_m}m"] = (
-        uprn_counts_df[f"uprns_within_{radius_m}m"] - 1
-    )
-
-    return uprn_counts_df
+    return dict(zip(counts["UPRN"], counts["count"]))
 
 
 def _calculate_gdf_plot_ratio_proxy(
@@ -276,114 +269,120 @@ def _compute_voronoi_area(
 
 
 def engineer_gdf_features(
-    local_authorities: str | list[str],
+    uprns_df: pd.DataFrame,
+    grid_squares: list[str] | str,
+    boundary_gdf: gpd.GeoDataFrame,
+    buildings_gdf: gpd.GeoDataFrame,
     id_col: str = config["constant"]["id"]["building"],
+    outdoor_space_col: str = "max_contiguous_outdoor_space_area_m2",
+    radius_m: int = 100,
 ) -> gpd.GeoDataFrame:
     """
-    Engineer set of features for model training at the UPRN level
+    Engineer features including:
+        - Building level features (area, perimeter, convexity, vertex count, plot ratio proxy)
+        - UPRN level features (number of UPRNs in building, area per UPRN, perimeter to area ratio, voronoi area, nearest neighbor outdoor space sizes and distances)
+        - One-hot encoded features for spatial signature types and attachment types
+
     Args:
-        local_authorities (str | list[str]): Local Authority or Authorities to engineer features for
+        uprns_df (pd.DataFrame): UPRN level data
+        grid_squares (list[str] | str): grid squares to get the barrier features for
+        boundary_gdf (gpd.GeoDataFrame): local authority boundary area
+        buildings_gdf (gpd.GeoDataFrame): building footprint polygons
         id_col (str): name of ID column to use for merging UPRN data with building footprint data. Defaults to config["constant"]["id"]["building"]
+        outdoor_space_col (str): name of the column in `uprns_df` that contains the known outdoor space size. Defaults "max_contiguous_outdoor_space_area_m2"
+        radius_m (int): distance (m) to buffer around each point to count UPRNs within. Defaults to 100m
 
     Returns:
-        gpd.GeoDataFrame: features for model training
+        gpd.GeoDataFrame: GeoDataFrame with features for model training
     """
 
-    grid_squares = list(local_authority.get_list_la_grid_squares(local_authorities))
+    # Drop UPRNs with no building footprint match (i.e. no ID match)
+    uprns_df = uprns_df.dropna(subset=[id_col, "X_COORDINATE", "Y_COORDINATE"])
 
-    # get building footprints for LA boundary
-    boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
-        local_authorities
-    )
-    buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="building", grid_squares=grid_squares
-    )
+    # Clip building footprints to the local authority boundary
     buildings_gdf = buildings_gdf.clip(boundary_gdf)
 
-    # add building level features
+    # Calculate building area, perimeter and plot ratio proxy
     buildings_gdf["building_area_m2"] = buildings_gdf.area
     buildings_gdf["building_perimeter_m"] = buildings_gdf.length
     buildings_gdf = _calculate_gdf_plot_ratio_proxy(buildings_gdf=buildings_gdf)
 
-    # get convex hull and calculate convexity ratio
-    convex_hull_areas = buildings_gdf.geometry.convex_hull.area
+    # Get convex hull and calculate convexity ratio: building area / convex hull area
     buildings_gdf["building_convexity"] = (
-        buildings_gdf.geometry.area / convex_hull_areas
-    )
-    buildings_gdf["building_convexity"] = buildings_gdf["building_convexity"].fillna(
-        1.0
-    )
+        buildings_gdf.geometry.area / (buildings_gdf.geometry.convex_hull.area)
+    ).fillna(1.0)
 
-    # get number of points in a building polygon
-    buildings_gdf["building_vertex_count"] = buildings_gdf.geometry.apply(
-        _get_int_count_vertices
+    # Get number of points in a building polygon
+    buildings_gdf["building_vertex_count"] = shapely.get_num_coordinates(
+        buildings_gdf.geometry.values
     )
 
-    # load UPRNs with features
-    uprns_df_list = []
-    for la in local_authorities:
-        la_slug = local_authority.make_str_slug(la)
-        uprns_la = pd.read_parquet(
-            f"s3://asf-local-heat-planning-tool/outputs/data/{la_slug}/{la_slug}_with_features.parquet"
-        )
-        uprns_df_list.append(uprns_la)
+    # Count of UPRNs per building footprint
+    uprns_df["n_uprns_in_building"] = uprns_df.groupby(id_col)[id_col].transform("size")
 
-    uprns_df = pd.concat(uprns_df_list, ignore_index=True)
-    uprns_df = uprns_df.dropna(subset=["ID"])
-
-    # add column of UPRNs per building footprint
-    uprn_counts = (
-        uprns_df.groupby(id_col).size().reset_index(name="n_uprns_in_building")
+    # Creating features_df: with building footprint features and UPRN level features
+    features_df = uprns_df.merge(
+        buildings_gdf.drop("geometry"),
+        on=id_col,
+        how="left",  # Drop building geometry to prevent conflict when creating point geometries
     )
-    uprns_df = uprns_df.merge(uprn_counts, on="ID", how="left")
 
-    # merge building level features onto UPRN data
-    df_with_features = pd.merge(uprns_df, buildings_gdf, on="ID", how="left")
-
-    gdf_with_features = gpd.GeoDataFrame(
-        df_with_features,
+    # Create a GeoDataFrame with UPRN point geometries
+    features_gdf = gpd.GeoDataFrame(
+        features_df,
         geometry=gpd.points_from_xy(
-            df_with_features["X_COORDINATE"],
-            df_with_features["Y_COORDINATE"],
+            features_df["X_COORDINATE"],
+            features_df["Y_COORDINATE"],
             crs="EPSG:27700",
         ),
     )
 
-    gdf_with_features["area_per_uprn"] = (
-        gdf_with_features["building_area_m2"] / gdf_with_features["n_uprns_in_building"]
+    features_gdf["area_per_uprn"] = (
+        features_gdf["building_area_m2"] / features_gdf["n_uprns_in_building"]
     )
-    gdf_with_features["perimeter_to_area_ratio"] = (
-        gdf_with_features["building_perimeter_m"]
-        / gdf_with_features["building_area_m2"]
-    )
-
-    gdf_with_features = _compute_voronoi_area(
-        gdf=gdf_with_features, grid_squares=grid_squares, boundary=boundary_gdf
+    features_gdf["perimeter_to_area_ratio"] = (
+        features_gdf["building_perimeter_m"] / features_gdf["building_area_m2"]
     )
 
-    # convert spatial signature types to be one column per spatial signature type, with 1 being True and 0 being False
-    gdf_with_features["spatial_signature_types"] = (
-        gdf_with_features["spatial_signature_types"]
-        .astype(str)
-        .str.replace(r"[\[\]\'\"]", "", regex=True)
+    features_gdf = _compute_voronoi_area(
+        gdf=features_gdf, grid_squares=grid_squares, boundary=boundary_gdf
     )
-    gdf_with_features = pd.get_dummies(
-        gdf_with_features,
-        columns=["spatial_signature_types"],
-        prefix="spatial_signature",
-        dtype=int,
-    )
-    # as above, for attachment type
-    gdf_with_features = pd.get_dummies(
-        gdf_with_features, columns=["ATTACHMENT"], prefix="ATTACHMENT", dtype=int
-    )
-    gdf_with_features = _get_gdf_nn_spatial_features(
-        gdf=gdf_with_features,
+
+    # One-hot encoding for spatial signature types
+    if "spatial_signature_types" in features_gdf.columns:
+        features_gdf["spatial_signature_types"] = (
+            features_gdf["spatial_signature_types"]
+            .astype(str)
+            .str.replace(r"[\[\]\'\"]", "", regex=True)
+        )
+        spatial_signature_dummies = (
+            features_gdf["spatial_signature_types"]
+            .str.get_dummies(sep=", ")
+            .add_prefix("spatial_signature_")
+        )
+        features_gdf = pd.concat(
+            [
+                features_gdf.drop(columns=["spatial_signature_types"]),
+                spatial_signature_dummies,
+            ],
+            axis=1,
+        )
+
+    # One-hot encoding for attachment
+    if "ATTACHMENT" in features_gdf.columns:
+        features_gdf = pd.get_dummies(
+            features_gdf, columns=["ATTACHMENT"], prefix="ATTACHMENT", dtype=int
+        )
+
+    # Nearest neighbor outdoor space sizes and distances
+    features_gdf = _get_gdf_nn_spatial_features(
+        gdf=features_gdf,
         n=5,
-        outdoor_space_col="max_contiguous_outdoor_space_area_m2",
+        outdoor_space_col=outdoor_space_col,
     )
 
-    uprn_sums = _get_gdf_number_uprns_within_radius(gdf=gdf_with_features)
-    gdf_with_features = gdf_with_features.merge(uprn_sums, on="UPRN", how="left")
+    features_gdf[f"n_uprns_within_{radius_m}m"] = features_gdf["UPRN"].map(
+        _get_gdf_uprns_counts_within_radius(gdf=features_gdf, radius_m=radius_m)
+    )
 
-    return gdf_with_features
+    return features_gdf
