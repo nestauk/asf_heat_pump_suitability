@@ -146,7 +146,14 @@ def _calculate_gdf_plot_ratio_proxy(
     buildings_gdf: gpd.GeoDataFrame, buffer_radius: int = 100
 ) -> gpd.GeoDataFrame:
     """
-    Calculate the ratio of building footprint area contained within a buffer radius to the area of the buffer radius. E.g. a ratio of 1 means the building footprint takes up the whole buffer circle area, and a low area means the building footprint takes up little of the buffer radius
+    Create a circle centred around the building/UPRN centroid with a given radius (default 100m) and
+    calculate the ratio of building footprint area contained within the circle to the area of the buffer radius.
+
+    This serves as a proxy for plot ratio, which is a measure of how much of the land around a building is occupied by the building itself.
+
+    E.g. a ratio of 1 means the building footprint takes up the whole buffer circle area,
+    and a low ratio means the building footprint takes up little of the circle area, indicating a larger plot of land around the building.
+
     Args:
         buildings_gdf (gpd.GeoDataFrame): building footprint polygons
         buffer_radius (int): distance (m) around building footprint centroid to calculate plot ratio for (default 100m)
@@ -157,17 +164,23 @@ def _calculate_gdf_plot_ratio_proxy(
     # calculate the area of the buffer circle
     buffer_area = np.pi * (buffer_radius**2)
 
+    buildings_gdf = buildings_gdf.copy()  # Avoid modifying the original GeoDataFrame
+
     # Create the buffers
-    buffers = buildings_gdf.geometry.centroid.buffer(buffer_radius)
-    buffers_gdf = gpd.GeoDataFrame(geometry=buffers, index=buildings_gdf.index)
+    buffers_gdf = gpd.GeoDataFrame(
+        geometry=buildings_gdf.geometry.centroid.buffer(buffer_radius),
+        index=buildings_gdf.index,
+    )
 
     # find buildings within buffer circles and keep the buffer geometry
     joined = gpd.sjoin(buffers_gdf, buildings_gdf, how="inner", predicate="intersects")
 
-    left_geoms = joined.geometry  # These are the buffer circles
+    # left_geoms = Buffer circle geometries
+    left_geoms = joined.geometry
 
-    # get building polygons that are within the buffer circles
-    # the geometry will be of the full building (not just the bit inside the circle)
+    # right_geoms = Building geometries that intersect with the buffer circles
+    # Get building polygons that are within the buffer circles
+    # The geometry will be of the full building (not just the part inside the circle)
     # explicitly give them the exact same index as the 'joined' dataframe.
     right_geoms = gpd.GeoSeries(
         buildings_gdf.loc[joined["index_right"], "geometry"].values, index=joined.index
@@ -185,9 +198,6 @@ def _calculate_gdf_plot_ratio_proxy(
     # Calculate the ratio and assign it back to the main dataframe
     buildings_gdf["plot_ratio_proxy"] = total_exact_area / buffer_area
 
-    # Fill NaNs with 0 (in case a point had zero intersecting buildings)
-    buildings_gdf["plot_ratio_proxy"] = buildings_gdf["plot_ratio_proxy"].fillna(0)
-
     return buildings_gdf
 
 
@@ -197,7 +207,8 @@ def _compute_voronoi_area(
     boundary: shapely.Polygon | shapely.MultiPolygon,
 ) -> gpd.GeoDataFrame:
     """
-    Calculates the area within voronoi polygons formed for each UPRN coordinate, with barrier features removed
+    Calculates the area within voronoi polygons formed for each UPRN coordinate, with barriers removed.
+
     Args:
         gdf (gpd.GeoDataFrame): UPRN point coordinates
         grid_squares (list[str] | str): grid squares to get the barrier features for
@@ -208,10 +219,6 @@ def _compute_voronoi_area(
     """
     boundary_geom = boundary.unary_union
 
-    # Add an internal unique ID to each UPRN
-    id_col = "_internal_building_uprn"
-    gdf[id_col] = np.arange(len(gdf))
-
     # Drop UPRNs located at the same coordinates
     voronoi_gdf = gdf.copy().drop_duplicates(subset="geometry")
 
@@ -220,32 +227,25 @@ def _compute_voronoi_area(
     voronoi_gdf = gpd.GeoDataFrame(geometry=voronoi_series, crs=gdf.crs)
 
     # load barriers
-    polygon_barriers = cluster.load_transform_gdf_polygon_barriers(
-        grid_squares=grid_squares
-    )[["geometry"]].reset_index(drop=True)
-    linestring_barriers = cluster.load_tranform_gdf_linestring_barriers(
-        grid_squares=grid_squares
-    )[["geometry"]].reset_index(drop=True)
+    barriers = cluster.load_transform_gdf_polygon_barriers(grid_squares=grid_squares)[
+        ["geometry"]
+    ].reset_index(drop=True)
 
     # overlay barriers
-    voronoi_gdf = (
-        voronoi_gdf.overlay(polygon_barriers, how="difference")
-        .overlay(linestring_barriers, how="difference")
-        .explode()
-    )
+    voronoi_gdf = voronoi_gdf.overlay(barriers, how="difference").explode()
 
-    # join back to UPRNs to get just the fragments that contian a UPRN
+    # join back to UPRNs to get just the fragments that contain a UPRN
     voronoi_gdf = voronoi_gdf.sjoin(
-        gdf[[id_col, "geometry"]], how="inner", predicate="contains"
+        gdf[["UPRN", "geometry"]], how="inner", predicate="contains"
     )
 
     voronoi_gdf["voronoi_area"] = voronoi_gdf.area
 
-    area_summary = voronoi_gdf.groupby(id_col)["voronoi_area"].sum().reset_index()
-    final_gdf = gdf.merge(area_summary, on=id_col, how="left")
+    area_summary = voronoi_gdf.groupby("UPRN")["voronoi_area"].sum().reset_index()
+    final_gdf = gdf.merge(area_summary, on="UPRN", how="left")
     final_gdf["voronoi_area"] = final_gdf["voronoi_area"].fillna(0)
 
-    final_gdf = final_gdf.drop(columns=[id_col])
+    final_gdf = final_gdf.drop(columns=["UPRN"])
 
     return final_gdf
 
