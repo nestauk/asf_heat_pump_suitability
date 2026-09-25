@@ -1177,7 +1177,7 @@ def df_clusters_merged(df_clusters_old):
     heat-pump clusters merged into one."""
     return pl.DataFrame(
         {
-            "cluster_id": ["HP_1", "DHN_1"],
+            "cluster_id": ["NHP_1", "DHN_1"],
             "assigned_tech": ["Networked heat pump", "District heat network"],
         }
     )
