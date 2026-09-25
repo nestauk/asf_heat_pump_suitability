@@ -1161,7 +1161,7 @@ def df_clusters_old():
     """Old-version cluster-level output: three clusters across two techs."""
     return pl.DataFrame(
         {
-            "cluster_id": ["HP_1", "HP_2", "DHN_1"],
+            "cluster_id": ["NHP_1", "NHP_2", "DHN_1"],
             "assigned_tech": [
                 "Networked heat pump",
                 "Networked heat pump",
@@ -1290,7 +1290,7 @@ class TestLoadDfClusterAreas:
         from shapely.geometry import box
 
         gdf = gpd.GeoDataFrame(
-            {"cluster_id": ["HP_1", "HP_2"]},
+            {"cluster_id": ["NHP_1", "NHP_2"]},
             geometry=[
                 box(250000, 55000, 250010, 55010),
                 box(250100, 55100, 250120, 55120),
