@@ -111,34 +111,42 @@ def _get_gdf_nn_spatial_features(
 
 def _get_gdf_number_uprns_within_radius(
     gdf: gpd.GeoDataFrame, radius_m: int = 100
-) -> gpd.GeoDataFrame:
+) -> pd.DataFrame:
     """
     Find the number of UPRNs within a given radius of UPRN point coordinates.
+
     Args:
         gdf (gpd.GeoDataFrame): GeoDataFrame containing UPRN point coordinates. Must contain a 'UPRN' column
         radius_m (int): distance (m) to buffer around each point (default 100m)
     Returns:
-        gpd.GeoDataFrame: number of UPRNs within buffer radius of each UPRN point coordinate
+        pd.DataFrame: DataFrame containing the number of UPRNs within buffer radius of each UPRN point coordinate
 
     """
 
     # Create buffers around the point coordinates
-    buffers = gpd.GeoDataFrame(
+    buffers_gdf = gpd.GeoDataFrame(
         {"UPRN": gdf["UPRN"], "geometry": gdf.geometry.buffer(radius_m)}, crs=gdf.crs
     )
 
     # Create the target points
-    points = gpd.GeoDataFrame(
+    points_gdf = gpd.GeoDataFrame(
         {"UPRN": gdf["UPRN"], "geometry": gdf.geometry}, crs=gdf.crs
     )
 
     # find target points inside buffer radius
-    joined = gpd.sjoin(buffers, points, how="left", predicate="contains")
+    joined_gdf = gpd.sjoin(buffers_gdf, points_gdf, how="left", predicate="contains")
 
     # Group by the correct unique ID and count UPRNs within buffer radius
-    uprn_counts = joined.groupby("UPRN").size().reset_index(name="uprns_within_100m")
+    uprn_counts_df = (
+        joined_gdf.groupby("UPRN").size().reset_index(name=f"uprns_within_{radius_m}m")
+    )
 
-    return uprn_counts
+    # Update counts to exclude the UPRN itself (subtract 1)
+    uprn_counts_df[f"uprns_within_{radius_m}m"] = (
+        uprn_counts_df[f"uprns_within_{radius_m}m"] - 1
+    )
+
+    return uprn_counts_df
 
 
 def _calculate_gdf_plot_ratio_proxy(
