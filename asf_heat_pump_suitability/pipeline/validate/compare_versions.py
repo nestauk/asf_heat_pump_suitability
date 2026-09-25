@@ -140,8 +140,8 @@ def generate_dict_total_area_delta(
     Compare total cluster area between two versions, in m² (EPSG:27700).
 
     Args:
-        df_areas_old: older version's per-cluster areas
-        df_areas_new: newer version's per-cluster areas
+        df_areas_old (pl.DataFrame): older version's per-cluster areas
+        df_areas_new (pl.DataFrame): newer version's per-cluster areas
 
     Returns:
         dict: old/new/delta total areas; a version with no clusters totals 0
