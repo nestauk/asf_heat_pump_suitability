@@ -115,8 +115,8 @@ def generate_dict_cluster_count_delta(
     Compare distinct-cluster counts between two versions of an output.
 
     Args:
-        df_old: older version of a cluster-bearing stage output
-        df_new: newer version of a cluster-bearing stage output
+        df_old (pl.DataFrame): older version of a cluster-bearing stage output
+        df_new (pl.DataFrame): newer version of a cluster-bearing stage output
 
     Returns:
         dict: old/new/delta distinct-cluster counts, or None when either
