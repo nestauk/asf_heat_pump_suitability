@@ -3,7 +3,6 @@ Functions to engineer features at the UPRN level for outdoor space model trainin
 """
 
 import pandas as pd
-import polars as pl
 import numpy as np
 import geopandas as gpd
 
