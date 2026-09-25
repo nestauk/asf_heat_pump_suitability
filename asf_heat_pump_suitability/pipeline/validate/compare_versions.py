@@ -159,8 +159,9 @@ def generate_dict_distribution_stats(df: pl.DataFrame, column: str) -> dict | No
     """
     Summarise one column's distribution: both quartiles, min, max and mean.
 
-    Q1 and Q3 are reported separately (linear interpolation) so a shifted
-    distribution and a widened one stay distinguishable. Nulls are excluded.
+    Q1 and Q3 are reported as two separate numbers, so a distribution that
+    has moved (both go up or down) can be told apart from one that has
+    spread out (they move apart). Nulls are left out.
 
     Args:
         df (pl.DataFrame): one version of a stage output
