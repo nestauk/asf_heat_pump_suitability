@@ -1,5 +1,10 @@
 """
-Functions to engineer features at the UPRN level for outdoor space model training. Features are generated from building footprint geodata and labelled UPRN data.
+Functions to engineer features at the UPRN level for outdoor space model training.
+
+Features are generated from building footprint geodata and UPRN data, including:
+    - Building level features (area, perimeter, convexity, vertex count, plot ratio proxy)
+    - UPRN level features (number of UPRNs in building, area per UPRN, perimeter to area ratio, voronoi area, nearest neighbor outdoor space sizes and distances
+    - One-hot encoded features for spatial signature types and attachment types
 """
 
 import pandas as pd
