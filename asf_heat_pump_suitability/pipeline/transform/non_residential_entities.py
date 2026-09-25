@@ -4,8 +4,7 @@ Functions to transform data related to identifying non-domestic buildings.
 
 import geopandas as gpd
 import pandas as pd
-
-from asf_heat_pump_suitability.pipeline.transform import uprns
+import numpy as np
 
 # TODO these may need refinement for large cities where overlap with residential is possible
 NO_RESIDENTIAL_OVERLAP_BUILDING_TYPES = [
@@ -128,6 +127,7 @@ def generate_gdf_non_residential_buildings(
     poi_gdf: gpd.GeoDataFrame,
     building_gdf: gpd.GeoDataFrame,
     uprns_gdf: gpd.GeoDataFrame,
+    domestic_epc_uprns: np.array,
 ) -> gpd.GeoDataFrame:
     """
     Use important buildings, railway station, and points of interest data to create a dataframe of polygons representing buildings
@@ -141,6 +141,7 @@ def generate_gdf_non_residential_buildings(
         poi_gdf (gpd.GeoDataFrame): All Points of Interest geopoints in area of interest
         building_gdf (gpd.GeoDataFrame): all building footprints in area of interest
         uprns_gdf (gpd.GeoDataFrame): all UPRNs with point geometries in area of interest
+        domestic_epc_uprns (np.array): UPRNs in domestic EPC register
 
     Returns:
         gpd.GeoDataFrame: geometries of buildings which are unlikely to contain residential properties
@@ -208,8 +209,7 @@ def generate_gdf_non_residential_buildings(
     exclude_buildings_gdf = exclude_buildings_gdf.drop_duplicates(subset=["geometry"])
 
     # Get locations of UPRNs in domestic EPC
-    include_uprns = uprns.load_set_valid_epc_uprns(epc_type="domestic")
-    uprns_gdf = uprns_gdf[uprns_gdf["UPRN"].isin(include_uprns)].copy()
+    uprns_gdf = uprns_gdf[uprns_gdf["UPRN"].isin(domestic_epc_uprns)].copy()
 
     # Find buildings that contain a domestic UPRN
     exclude_buildings_gdf = exclude_buildings_gdf.sjoin(

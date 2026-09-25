@@ -4,6 +4,7 @@ from typing import Union, Optional, List
 import s3fs
 
 import pandas as pd
+import polars as pl
 
 import geopandas as gpd
 import shapely
@@ -232,3 +233,17 @@ def concat_gdfs(
         save_utils.save_to_s3(concat_gdf, save_as)
 
     return concat_gdf
+
+
+def convert_gdf_to_df(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
+    """Convert point geometries in geodataframe to X and Y coordinate columns.
+
+    Args:
+        gdf (gpd.GeoDataFrame): geodataframe with point geometries
+
+    Returns:
+        pl.DataFrame: dataframe with X and Y columns
+    """
+    assert gdf.geom_type.unique() == "Point"
+    gdf[["X", "Y"]] = gdf.get_coordinates()
+    return pl.from_pandas(gdf.drop(columns="geometry"))

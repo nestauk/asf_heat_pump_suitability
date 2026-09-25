@@ -434,7 +434,7 @@ def plot_folium_threshold_effect_on_labelling(
         folium.Map
     """
     # Get domestic EPC UPRNs and join to the building footprints to identify buildings containing domestic EPC records
-    epc_uprns = uprns.load_set_valid_epc_uprns(epc_type="domestic")
+    epc_uprns = uprns.load_arr_valid_epc_uprns(epc_type="domestic")
     epc_gdf = uprns_gdf[uprns_gdf["UPRN"].isin(epc_uprns)][["UPRN", "geometry"]]
     labelled_gdf = (
         labelled_gdf.sjoin(epc_gdf, how="left", predicate="contains")

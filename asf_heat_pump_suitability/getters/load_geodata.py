@@ -4,45 +4,69 @@ import os
 import pandas as pd
 from typing import Optional, List
 import boto3
-import pyogrio
 import s3fs
 import shapely
 import logging
 import warnings
-
+from pathlib import Path
+from urllib.parse import urlparse
 from tenacity import retry, stop_after_attempt
 from osbng import grids
+from pyogrio.errors import DataSourceError
 
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import geo_utils
 from asf_heat_pump_suitability.getters import base_getters, load_boundaries
 from asf_heat_pump_suitability.pipeline.transform import local_authority as la
+from asf_heat_pump_suitability.utils import s3_utils
 
-# Instantiate variable to fill with list from iterator in `load_gdf_bng_grid_squares`
-_BNG_GRID_100KM_FEATURES = None
+s3_client = boto3.client("s3")
 
 
-def load_df_osopen_uprn(**kwargs) -> pl.DataFrame:
+def load_df_osopen_uprn(
+    parquet: bool = True,
+    grid_squares: Optional[List[str]] = None,
+    **kwargs,
+) -> pl.DataFrame:
     """
     Get raw OS (Ordnance Survey) Open UPRN dataset containing latitude and longitude and British National Grid X and Y
     coordinates for all UPRNs in Great Britain.
 
     Args:
-        **kwargs for pl.read_csv
+        parquet (bool): set to `True` to load `parquet` file for speed gains, or `False` to load original CSV+ZIP format. Default True.
+        grid_squares (Optional[List[str]]): 100km BNG grid square codes (e.g. ["SX", "SY"]) to load UPRN data for.
+        Ignored when `parquet=False`.
+        **kwargs for pl.read_csv or pl.read_parquet
 
     Returns:
         pl.DataFrame: raw OS Open UPRN dataset with lat/lon and x/y coordinates for every UPRN
     """
     print("Loading OSOpen UPRNs...")
-    path = config["data"]["geodata"]["uk_osopen_uprn"]
-    filename = os.path.basename(path).split("_csv")[0]
-    df = base_getters.get_df_from_zip_csv_s3(
-        path,
-        extract_file=f"{filename}.csv",
-        **kwargs,
-    )
+    if parquet:
+        # If all GB grid squares requested, load single GB-wide file instead of multiple partitions
+        if not grid_squares or set(grid_squares) == set(
+            config["constant"]["land_grid_squares"]
+        ):
+            paths = config["data"]["geodata"]["uk_osopen_uprn_parquet"]
+        else:
+            paths = [
+                config["data"]["geodata"]["uk_osopen_uprn_partitioned"].format(
+                    grid_square=sq
+                )
+                for sq in grid_squares
+            ]
+        return pl.read_parquet(paths, **kwargs)
 
-    return df
+    else:
+        path = config["data"]["geodata"]["uk_osopen_uprn_raw"]
+        filename = os.path.basename(path).split("_csv")[0]
+        df = base_getters.get_df_from_zip_csv_s3(
+            path,
+            extract_file=f"{filename}.csv",
+            **kwargs,
+        )
+
+        return df
 
 
 def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
@@ -52,15 +76,69 @@ def load_gdf_bng_grid_squares() -> gpd.GeoDataFrame:
     Returns:
         gpd.GeoDataFrame: British National Grid square codes and their corresponding polygons
     """
-    global _BNG_GRID_100KM_FEATURES
+    return gpd.GeoDataFrame.from_features(
+        grids.bbox_to_bng_iterfeatures(*grids.BNG_BOUNDS, "100km"), crs=27700
+    )
 
-    # Materialize the iterator into a reusable list only once
-    # This is required to make multiple calls to this function in the same session
-    # Otherwise it will raise errors due to iterator exhaustion
-    if _BNG_GRID_100KM_FEATURES is None:
-        _BNG_GRID_100KM_FEATURES = list(grids.bng_grid_100km)
 
-    return gpd.GeoDataFrame.from_features(_BNG_GRID_100KM_FEATURES, crs=27700)
+def load_gdf_country_heat_network_zones(country: str) -> gpd.GeoDataFrame:
+    """
+    Load heat network zones geodataframe for a specific country (England, Scotland, or Wales).
+
+    Args:
+        country (str): The country for which to load heat network zones. Options: "England", "Scotland", "Wales".
+
+    Returns:
+        gpd.GeoDataFrame: Heat network zones polygons for the specified country.
+    """
+    country_clean = country.strip().lower()
+
+    if country_clean not in ["england", "scotland", "wales"]:
+        raise ValueError(
+            f"Invalid country: '{country}'. Must be 'England', 'Scotland', or 'Wales'."
+        )
+
+    if country_clean == "england":
+        print("Loading DESNZ heat network zones for England...")
+        gdf = gpd.read_parquet(
+            path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
+        ).drop(columns="index_right")
+
+        gdf = _extend_gdf_hn_zone_id(gdf)
+
+        return geo_utils.verify_gdf_crs(gdf=gdf)
+
+    config_keys = {
+        "scotland": ("LHEES heat network zones for Scotland", "lhees_files"),
+        "wales": ("Wales heat network priority areas", "wales_files"),
+    }
+
+    message, folder_key = config_keys[country_clean]
+    print(f"Loading {message}...")
+
+    s3_uri = config["data"]["geodata"]["heat_network_zones"][folder_key]
+    parsed_s3 = urlparse(s3_uri)
+    s3_bucket = parsed_s3.netloc
+    folder_path = Path(parsed_s3.path.lstrip("/"))
+
+    s3_client = boto3.client("s3")
+
+    file_paths = s3_utils.fetch_list_file_paths_from_s3_folder(
+        s3_client=s3_client,
+        s3_bucket=s3_bucket,
+        path_folder=str(folder_path),
+        file_type=[".geojson", ".gpkg"],
+    )
+
+    if not file_paths:
+        raise FileNotFoundError(
+            f"No valid files (.geojson, .gpkg) found in s3://{s3_bucket}/{folder_path}"
+        )
+
+    # Load and standardize CRS for each dataset
+    gdfs = [geo_utils.verify_gdf_crs(gpd.read_file(path)) for path in file_paths]
+
+    return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
 
 
 def load_gdf_heat_network_zones(
@@ -84,14 +162,28 @@ def load_gdf_heat_network_zones(
         gpd.GeoDataFrame: polygons of heat network zones in given Local Authority or boundary.
     """
     # Load all DESNZ heat network zones in England
-    hn_gdf = gpd.read_parquet(
-        path=config["data"]["geodata"]["heat_network_zones"]["desnz_polygons"]
-    ).drop(columns="index_right")
+    desnz_hn_gdf = load_gdf_country_heat_network_zones("England")[["geometry"]]
+    desnz_hn_gdf["source_annotation"] = "DESNZ advanced heat network zoning in England"
 
-    # Assume first column with `ID` substring is the zone ID column
-    # Note original ID column retained in case of erroneous ID assignment
-    hn_gdf = _extend_gdf_hn_zone_id(hn_gdf)
-    hn_gdf = geo_utils.verify_gdf_crs(gdf=hn_gdf)
+    # Load LHEES heat network zones in Scotland
+    lhees_hn_gdf = load_gdf_country_heat_network_zones("Scotland")[["geometry"]]
+    lhees_hn_gdf["source_annotation"] = "LHEES heat network zoning in Scotland"
+
+    # Note: Wales heat network zones are not currently loaded because they are point locations rather than polygons. If needed, uncomment the following lines to load them as points.
+    # Load priority areas for district heat networks in Wales
+    # wales_hn_gdf = load_gdf_country_heat_network_zones("Wales")[["geometry"]]
+    # wales_hn_gdf["source_annotation"] = (
+    #     "Priority areas for district heat networks in Wales"
+    # )
+
+    hn_gdf = pd.concat(
+        [
+            desnz_hn_gdf,
+            lhees_hn_gdf,
+            # wales_hn_gdf
+        ],
+        ignore_index=True,
+    )
 
     if boundary is not None:
         if local_authority is not None:
@@ -149,7 +241,13 @@ def _extend_gdf_hn_zone_id(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 
 def load_gdf_spatial_signatures_gb(
-    detail_level: str = "full", **kwargs
+    detail_level: str = "full",
+    boundary: Optional[
+        shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame
+    ] = None,
+    signature_types: Optional[List[str]] = None,
+    local_authority: Optional[str] = None,
+    **kwargs,
 ) -> gpd.GeoDataFrame:
     """
     Load GeoDataFrame with polygons in GB from the Spatial Signatures Framework  classified by their
@@ -170,9 +268,16 @@ def load_gdf_spatial_signatures_gb(
 
     Both versions contain 96,704 polygons.
 
+    Allows filtering by:
+    - boundary or local authority: if specified, only polygons that intersect the boundary or local authority are returned. Otherwise, GB-wide polygons are returned.
+    - signature_types: if specified, only polygons of the specified spatial signature types are returned. Otherwise, all types are returned.
+
     Args:
         detail_level (str, optional): Which level of descriptive detail to load.
             Must be either "simplified" or "full". Defaults to "simplified".
+        signature_types (List[str], optional): Optional. List of spatial signature types to load. If None, all types are loaded.
+        boundary (shapely.Polygon | shapely.MultiPolygon | gpd.GeoDataFrame, optional): Optional. Boundary to load spatial signature polygons for, or geodataframe of multiple boundary polygons.
+        local_authority (str, optional): Optional. Local Authority to load spatial signature polygons for. This is slower than using the boundary directly. If both `local_authority` and `boundary` arguments are passed, then `boundary` is used and `local_authority` is ignored.
 
     Returns:
         gpd.GeoDataFrame: spatial signature polygons in GB.
@@ -193,6 +298,46 @@ def load_gdf_spatial_signatures_gb(
         f"Spatial signatures {detail_level} geodataframe successfully loaded with CRS {gdf.crs}."
     )
 
+    if signature_types is not None:
+        gdf = gdf[gdf["type"].isin(signature_types)]
+        if gdf.empty:
+            warnings.warn(
+                f"No spatial signatures found for the specified signature types: {signature_types}."
+            )
+
+    if boundary is not None:
+        if local_authority is not None:
+            warnings.warn(
+                "Both `boundary` and `local_authority` arguments have been passed. Using `boundary` only and ignoring `local_authority`."
+            )
+        if isinstance(boundary, gpd.GeoDataFrame):
+            boundary = geo_utils.verify_gdf_crs(gdf=boundary)
+            gdf = gdf.sjoin(
+                boundary[["geometry"]], how="inner", predicate="intersects"
+            ).drop(columns="index_right")
+        else:
+
+            gdf = gdf[gdf["geometry"].intersects(boundary)]
+        if gdf.empty:
+            warnings.warn("No spatial signatures found within given boundary.")
+
+    elif local_authority is not None:
+        local_authority_dict = la.get_dict_la_data(local_authority)
+        local_authorities_list = local_authority_dict["valid_local_authorities"]
+        boundary_gdf = load_boundaries.load_gdf_local_authority_boundaries(
+            select_las=local_authorities_list
+        )
+
+        gdf = gdf.sjoin(
+            boundary_gdf[["geometry"]], how="inner", predicate="intersects"
+        ).drop(columns="index_right")
+        if gdf.empty:
+            warnings.warn(
+                f"No spatial signatures found for Local Authority: {local_authority}."
+            )
+
+    gdf["source_annotation"] = "City centre areas"
+
     return gdf
 
 
@@ -202,6 +347,10 @@ def load_gdf_os_openmap_layer(
     """
     Load specified OS OpenMap Local or Greenspace layer for Great Britain or optionally for a specific grid square.
     CRS British National Grid (27700).
+
+    In grid square mode, files missing from S3 are skipped with a warning (OS only ships a layer file for squares
+    containing that feature, e.g. no tidal water file for inland squares), so the result may cover fewer squares
+    than requested. If all requested squares lack the layer, an empty GeoDataFrame is returned.
 
     Find full list of green space sites here: https://docs.os.uk/os-downloads/products/land-and-terrain-portfolio/os-open-greenspace/os-open-greenspace-technical-specification/code-lists/functionvalue#code-list-functionvalue
 
@@ -274,11 +423,24 @@ def load_gdf_os_openmap_layer(
             print(f"\nLoading OS OpenMap layer - {layer.title()} file: {file}")
             try:
                 gdfs.append(gpd.read_file(file, **kwargs))
-            except (FileNotFoundError, pyogrio.errors.DataSourceError) as e:
+            except FileNotFoundError as e:
                 # dealing with non-existing layers (e.g. no bodies of water in the grid square so no surface water area layer)
                 print(
                     f"Error loading OS OpenMap layer - {layer.title()} file {file}: {e}"
                 )
+            except DataSourceError as e:
+                # pyogrio raises DataSourceError for files missing from S3; skip those only
+                if "does not exist" not in str(e):
+                    raise
+                logging.warning(
+                    f"Skipping missing OS OpenMap layer - {layer.title()} file {file}: {e}"
+                )
+
+        if not gdfs:
+            logging.warning(
+                f"No {layer} files found for grid squares {grid_squares}. Returning empty GeoDataFrame."
+            )
+            return gpd.GeoDataFrame(geometry=[], crs=config["constant"]["target_crs"])
 
         gdf = pd.concat(gdfs)
         id_col = "ID" if "ID" in gdf.columns else "id"
@@ -292,6 +454,10 @@ def load_gdf_os_openroad(
     """
     Load road link data from OS OpenRoad for Great Britain or optionally for a specific grid square (or list of grid squares). CRS British National Grid (27700).
     Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
+
+    In grid square mode, files missing from S3 are skipped with a warning (e.g. sea-only squares have no road data),
+    so the result may cover fewer squares than requested. TODO: if all requested squares lack road data, pd.concat
+    raises ValueError; return an empty GeoDataFrame instead.
 
     Args:
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded. Default None to load whole GB.
@@ -319,14 +485,22 @@ def load_gdf_os_openroad(
 
         for file in files:
             print(f"\nLoading OS OpenRoad file: {file}")
-            gdfs.append(gpd.read_file(file))
+            try:
+                gdfs.append(gpd.read_file(file))
+            except (FileNotFoundError, DataSourceError) as e:
+                # skip grid squares with no road data (e.g. sea-only squares)
+                if isinstance(e, DataSourceError) and "does not exist" not in str(e):
+                    raise
+                logging.warning(f"Skipping missing OS OpenRoad file {file}: {e}")
 
         gdf = pd.concat(gdfs)
 
     return gdf
 
 
-def load_gdf_poi() -> gpd.GeoDataFrame:
+def load_gdf_poi(
+    parquet: bool = True, grid_squares: Optional[List[str]] = None, **kwargs
+) -> pl.DataFrame | gpd.GeoDataFrame:
     """
     Load and process Points of Interest data. CRS EPSG 4326.
 
@@ -345,12 +519,26 @@ def load_gdf_poi() -> gpd.GeoDataFrame:
         "alternate_category",
         "geometry",
     ]
-    poi = gpd.read_file(
-        filename=config["data"]["geodata"]["UK_poi_locations"],
-        columns=required_columns,
-        layer="poi_uk",
-    ).to_crs("EPSG:4326")
-    print(f"POI CRS: {poi.crs}")
+
+    if parquet:
+        if grid_squares:
+            paths = [
+                config["data"]["geodata"]["UK_poi_locations_partitioned"].format(
+                    grid_square=sq
+                )
+                for sq in grid_squares
+            ]
+            return pl.read_parquet(paths, **kwargs)
+        path = config["data"]["geodata"]["UK_poi_locations_parquet"]
+        return pl.read_parquet(path, **kwargs)
+
+    else:
+        poi = gpd.read_file(
+            filename=config["data"]["geodata"]["UK_poi_locations"],
+            columns=required_columns,
+            layer="poi_uk",
+        ).to_crs("EPSG:4326")
+        print(f"POI CRS: {poi.crs}")
 
     return poi
 
@@ -395,17 +583,23 @@ def load_gdf_code_points() -> gpd.GeoDataFrame:
     return code_point_gdf
 
 
-def load_gdf_gb_coast_boundaries():
+def load_gdf_gb_coast_boundaries(
+    clip: shapely.Polygon | shapely.MultiPolygon = None, **kwargs
+):
     """
     Load GB coastline boundaries geodataframe and dissolve into a single geometry.
     (CRS: EPSG:27700)
+
+    Args:
+        clip (shapely.Polygon | shapely.MultiPolygon): boundary to clip coastline to. Default None for unclipped coastline for all of GB.
+        **kwargs for geopandas.read_parquet
 
     Returns:
         gpd.GeoDataFrame: geodataframe with single geometry of GB coastline boundaries.
     """
 
-    coast_gdf = gpd.read_file(
-        config["data"]["geodata"]["gb_coast_boundaries"],
+    coast_gdf = gpd.read_parquet(
+        config["data"]["geodata"]["gb_coast_boundaries_parquet"], **kwargs
     )
 
     # Dissolve coastline boundaries into a single geometry
@@ -416,53 +610,12 @@ def load_gdf_gb_coast_boundaries():
     print(
         f"GB coastline boundaries geodataframe successfully loaded with CRS {coast_gdf.crs}."
     )
-    return coast_gdf
 
-
-def load_transform_dict_uprn_to_country_mapping() -> dict:
-    """
-    Load and transform the UPRN to country mapping data from S3.
-
-    Returns:
-        dict: A dictionary mapping UPRN to corresponding country information.
-    """
-
-    print("Loading UPRN to country mapping...")
-    s3_client = boto3.client("s3")
-
-    path = config["data"]["geodata"]["gb_uprn_country_mapping"]
-    bucket_name = path.split("s3://")[1].split("/")[0]
-    prefix = path.split(f"s3://{bucket_name}/")[1]
-
-    response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
-    files = [
-        f"s3://{bucket_name}/{obj['Key']}"
-        for obj in response.get("Contents", [])
-        if obj["Key"].endswith(".csv")
-    ]
-
-    uprn_to_country_df = pd.concat(
-        [pd.read_csv(file, usecols=["UPRN", "PCDS", "ctry25cd"]) for file in files],
-        ignore_index=True,
-    )
-
-    uprn_to_country_df["COUNTRY"] = (
-        uprn_to_country_df["ctry25cd"]
-        .str[0]
-        .map(
-            {
-                "E": "England",
-                "W": "Wales",
-                "S": "Scotland",
-            }
-        )
-    )
-
-    uprn_to_country_dict = dict(
-        zip(uprn_to_country_df["UPRN"], uprn_to_country_df["COUNTRY"])
-    )
-
-    return uprn_to_country_dict
+    if clip:
+        print("Clipping coastline to boundaries...")
+        return coast_gdf.clip(clip)
+    else:
+        return coast_gdf
 
 
 def load_gdf_listed_buildings(nation: str = "GB", **kwargs) -> gpd.GeoDataFrame:

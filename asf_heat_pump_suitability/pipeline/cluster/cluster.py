@@ -9,6 +9,10 @@ python asf_heat_pump_suitability/pipeline/cluster/cluster.py
 Required args:
 --local_authorities to specify which local authority / authorities to run the script for
 --save - Set to save output GeoDataFrame to S3.
+
+Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
+save outputs to. Defaults to running the pipeline using today's date. Multi-day runs
+should pass the same --release_date to every stage.
 """
 
 from typing import Optional, List
@@ -18,12 +22,12 @@ import pandas as pd
 import numpy as np
 import polars as pl
 import shapely
-from shapely.geometry import MultiPoint, Polygon, MultiPolygon
+from shapely.geometry import MultiPoint, Polygon, MultiPolygon, Point
 from asf_heat_pump_suitability.pipeline.transform import local_authority
 import libpysal
 import warnings
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.utils import save_utils
+from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
 ANCHOR_RADIUS = config["constant"]["anchor_radius"]
@@ -63,7 +67,6 @@ def generate_gdf_clusters(
     buildings_gdf: gpd.GeoDataFrame,
     boundary_gdf: gpd.GeoDataFrame,
     tech_gdf: gpd.GeoDataFrame,
-    line_overlay_gdf: gpd.GeoDataFrame,
     polygon_overlay_gdf: gpd.GeoDataFrame,
     combined_anchor_gdf: gpd.GeoDataFrame,
     radius: float,
@@ -80,7 +83,6 @@ def generate_gdf_clusters(
         buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
         boundary_gdf (gpd.GeoDataFrame): boundaries of Local Authorities to generate clusters for.
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
-        line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries to separate clusters by.
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
         combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
         radius (float): radius in metres around anchor property within which communal solutions should be assigned
@@ -94,14 +96,15 @@ def generate_gdf_clusters(
 
     # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
     for boundary in boundary_gdf["geometry"].unique():
+        bounded_tech_gdf = tech_gdf[tech_gdf.within(boundary)]
         voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
 
         # One cell per building
         cells_gdf = overlay_gdf_physical_barriers(
             voronoi_gdf=voronoi_gdf,
-            tech_gdf=tech_gdf,
-            line_overlay_gdf=line_overlay_gdf,
+            tech_gdf=bounded_tech_gdf,
             polygon_overlay_gdf=polygon_overlay_gdf,
+            id_col=id_col,
         )
         # TODO No reassignment based on neighbouring cells - TBC if wanted by user testing
         # gdfs.append(reassign_gdf_communal_networked(cells_gdf))
@@ -123,14 +126,14 @@ def generate_gdf_clusters(
             UserWarning,
         )
 
-    # Tech reassignment for cells within a certain distance of anchor properties
+    # Tech reassignment for building footprints within a certain distance of anchor properties
     reassigned_gdf = reassign_gdf_near_anchor_properties(
         tech_gdf=tech_gdf,
         combined_anchor_gdf=combined_anchor_gdf,
         radius=radius,
     )
 
-    cells_gdf["assigned_tech"] = cells_gdf.ID.map(
+    cells_gdf["assigned_tech"] = cells_gdf[id_col].map(
         reassigned_gdf.set_index(id_col).to_dict()["assigned_tech"]
     )
 
@@ -163,7 +166,19 @@ def generate_gdf_clusters(
     # At this point we have multiple rows of each cluster geometry with one row for every building within the cluster.
     # We need to flatten the cluster geometries to one row per cluster, aggregating the within_anchor_radius boolean flag.
     # Selecting `max` of the boolean will mean any clusters containing one building within the anchor radius will be labelled as within the radius.
-    clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max").reset_index()
+    # clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max").reset_index()
+    clusters_gdf = (
+        clusters_gdf.groupby(by="cluster_id")
+        .agg(
+            {
+                "geometry": "first",
+                "assigned_tech": "first",
+                f"within_{radius}m_from_anchor_load": "max",
+            }
+        )
+        .reset_index()
+        .set_geometry(col="geometry", crs=clusters_gdf.crs)
+    )
 
     # TODO move to testing when sample set available
     if round(clusters_gdf["geometry"].area.sum(), 3) > round(
@@ -233,17 +248,18 @@ def extend_edges_gdf(
     gdf = gdf[gdf.within(boundary)]
 
     # Add an internal unique ID to each building
-    id_col = "_internal_building_id"
-    gdf[id_col] = np.arange(len(gdf))
+    building_id_col = "_internal_building_id"
+    gdf[building_id_col] = np.arange(len(gdf))
 
     all_points = []
-    all_ids = []
+    all_building_ids = []
 
     print("Densifying building polygon edges...")
     # Densify polygon edges with additional points to prepare for Voronoi diagram
     for _, row in gdf.iterrows():
         geom = row.geometry
-        id = row[id_col]
+        # Assign building ID
+        building_id = row[building_id_col]
         # Deal with any multipolygon buildings
         polys = geom.geoms if isinstance(geom, MultiPolygon) else [geom]
 
@@ -258,44 +274,76 @@ def extend_edges_gdf(
             num_pts = int(np.ceil(exterior.length / spacing))
             # Return a list of points at each segment-distance-interval along the exterior edge of the building
             pts = [exterior.interpolate(i * spacing) for i in range(num_pts)]
+            # Add corner vertices of building into list, dropping the last one which is a duplicate of the starting point
+            pts.extend(Point(coord) for coord in exterior.coords[:-1])
             all_points.extend(pts)
-            all_ids.extend([id] * len(pts))
+            all_building_ids.extend([building_id] * len(pts))
 
     print(f"Generated {len(all_points)} points.")
-    # Create a gdf of all densified points, where one row is one point
-    points_gdf = gpd.GeoDataFrame({id_col: all_ids}, geometry=all_points, crs=gdf.crs)
+    # Extract a flat (N, 2) float64 array of all point coordinates
+    coords_arr = shapely.get_coordinates(np.array(all_points))
+
+    # ordered=True requires every input coordinate to be unique — GEOS raises GEOSException otherwise.
+    # Buildings can (rarely) share corner coordinates (e.g. shared walls), so duplicates can exist.
+    # To combat this we jitter duplicates by a 0.1mm x-offset so both buildings keep their seed points.
+
+    # Returns the index of the first occurrence of each unique coordinate pair
+    _, first_occ = np.unique(coords_arr, axis=0, return_index=True)
+    # Mark every position that is NOT a first occurrence as a duplicate
+    is_dup = np.ones(len(coords_arr), dtype=bool)
+    is_dup[first_occ] = False
+    # Offset each duplicate's x coordinate by a unique multiple of 0.1mm - this should not affect the overall shape of buildings significantly.
+    # (progressive multiples ensure jittered points don't collide with each other)
+    coords_arr[is_dup, 0] += np.arange(1, is_dup.sum() + 1) * 1e-4
 
     # Convert to a Multipoint collection for Voronoi
-    coords = MultiPoint(points_gdf.geometry.tolist())
+    coords = MultiPoint(coords_arr)
 
     print("Computing Voronoi diagram...")
-    # Compute Voronoi polygons up to specified boundary, create one Voronoi cell per point
-    voronoi_collection = shapely.voronoi_polygons(coords, extend_to=boundary)
+    # Compute Voronoi polygons up to specified boundary, create one Voronoi cell per point and retain the original order of points
+    voronoi_collection = shapely.voronoi_polygons(
+        coords, extend_to=boundary, ordered=True
+    )
 
-    # Convert to a geodataframe
-    voronoi_gdf = gpd.GeoDataFrame(geometry=list(voronoi_collection.geoms), crs=gdf.crs)
+    # Convert to a geodataframe — with ordered=True the nth cell maps directly to the nth input point
+    voronoi_gdf = gpd.GeoDataFrame(
+        {
+            building_id_col: all_building_ids,
+            "geometry": np.array(voronoi_collection.geoms),
+        },
+        crs=gdf.crs,
+    )
 
     print(
         "Joining Voronois to original building footprints and dissolving per footprint..."
     )
-    # Join the original building points with IDs to the Voronoi cells and dissolve to get one polygon per internal building ID
-    voronoi_gdf = (
-        voronoi_gdf.sjoin(points_gdf, how="inner", predicate="contains")
-        .dissolve(by=id_col)
-        .reset_index()
+
+    voronoi_gdf.geometry = voronoi_gdf.geometry.make_valid()
+    # Sort building IDs and then get the first index of each unique building ID
+    arr = voronoi_gdf.sort_values(building_id_col)
+    unique_ids, first_idx = np.unique(arr[building_id_col].values, return_index=True)
+    # Split the Voronoi geometries into groups. One group == one building ID
+    # first_idx[1:] skips the first element which is always 0. This is because np.split splits the array at the locations of
+    # each index. If we included index 0, it would create an empty group at the start.
+    geom_groups = np.split(arr.geometry.values, first_idx[1:])
+    voronoi_gdf = gpd.GeoDataFrame(
+        {building_id_col: unique_ids},
+        # For each group of Voronoi polygons, union them into one polygon representing a Voronoi for the whole building
+        geometry=[shapely.union_all(g) for g in geom_groups],
+        crs=voronoi_gdf.crs,
     ).clip(boundary)
 
     # Clip Voronoi cells to a max buffer
     print("Clip Voronoi cells to maximum buffer...")
     clipped_voronoi_gdf = _clip_gdf_voronoi_cells_polygon_buffer(
-        polygon_gdf=gdf, voronoi_gdf=voronoi_gdf, buffer=buffer, id_col=id_col
+        polygon_gdf=gdf, voronoi_gdf=voronoi_gdf, buffer=buffer, id_col=building_id_col
     )
 
     # Return Voronoi cell geometries per building with original building ID
     return gpd.GeoDataFrame(
         gdf.drop(columns=["geometry"])
-        .merge(clipped_voronoi_gdf, how="inner", on=id_col)
-        .drop(columns=["index_right", id_col]),
+        .merge(clipped_voronoi_gdf, how="inner", on=building_id_col)
+        .drop(columns=[building_id_col]),
         geometry="geometry",
         crs=gdf.crs,
     )
@@ -329,21 +377,24 @@ def _clip_gdf_voronoi_cells_polygon_buffer(
         # Simplify with a tolerance of 1mm to remove vertices which are extremely close together
     ).simplify(0.001)
 
-    # Clip Voronoi cells to the defined buffer area if they are larger than it by calculating intersections
-    clipped_gdf = voronoi_gdf.overlay(buffered_gdf, how="intersection")
-    # Filter clipped cells (intersections) to ensure each polygon's Voronoi cell is clipped only by its own buffer
-    return (
-        clipped_gdf[clipped_gdf[f"{id_col}_1"] == clipped_gdf[f"{id_col}_2"]]
-        .drop(columns=[f"{id_col}_2"])
-        .rename(columns={f"{id_col}_1": id_col})
+    # Clip each Voronoi cell to its own building's buffer using a 1:1 merge and vectorised intersection.
+    # This avoids the full cross-join overhead of overlay by only computing the intersection for matching pairs.
+    clipped_gdf = voronoi_gdf.merge(
+        buffered_gdf.rename(columns={"geometry": "buffer_geom"}), on=id_col
+    )
+    clipped_gdf["geometry"] = clipped_gdf["geometry"].intersection(
+        clipped_gdf["buffer_geom"]
+    )
+    return clipped_gdf.set_geometry(col="geometry", crs=voronoi_gdf.crs).drop(
+        columns="buffer_geom"
     )
 
 
 def overlay_gdf_physical_barriers(
     voronoi_gdf: gpd.GeoDataFrame,
     tech_gdf: gpd.GeoDataFrame,
-    line_overlay_gdf: gpd.GeoDataFrame,
     polygon_overlay_gdf: gpd.GeoDataFrame,
+    id_col: str,
 ) -> gpd.GeoDataFrame:
     """
     Conduct difference overlay of physical barriers onto Voronoi polygons. Physical barriers represent features of the
@@ -354,8 +405,8 @@ def overlay_gdf_physical_barriers(
     Args:
         voronoi_gdf (gpd.GeoDataFrame): Voronoi polygons around building footprints
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types
-        line_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)LineString geometries
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries.
+        id_col (str): building ID column.
 
     Returns:
         gpd.GeoDataFrame: domestic building cells with overlapping physical barriers removed
@@ -373,26 +424,22 @@ def overlay_gdf_physical_barriers(
         cell_gdf=voronoi_gdf,
         building_gdf=tech_gdf,
         cell_id=cell_id_col,
-        building_cols=["ID", "assigned_tech", "geometry"],
+        building_cols=[id_col, "assigned_tech", "geometry"],
     )
     # Map each building to its corresponding Voronoi ID
-    cell_to_building_mapping = intersection_gdf.set_index(cell_id_col)["ID"].to_dict()
+    cell_to_building_mapping = intersection_gdf.set_index(cell_id_col)[id_col].to_dict()
 
     # Use the mapping to label the original Voronoi cells with the correct building ID
-    voronoi_gdf["select_id"] = voronoi_gdf[cell_id_col].replace(
-        cell_to_building_mapping
-    )
+    voronoi_gdf["select_id"] = voronoi_gdf[cell_id_col].map(cell_to_building_mapping)
     # Filter to the rows where the building ID matches (i.e. only domestic buildings are retained here)
     domestic_voronoi_gdf = voronoi_gdf[
-        voronoi_gdf["ID"] == voronoi_gdf["select_id"]
+        voronoi_gdf[id_col] == voronoi_gdf["select_id"]
     ].drop(columns="select_id")
 
     # Remove areas covered by polygons and lines
-    cells_gdf = (
-        domestic_voronoi_gdf.overlay(polygon_overlay_gdf, how="difference")
-        .overlay(line_overlay_gdf, how="difference")
-        .explode()
-    )
+    cells_gdf = domestic_voronoi_gdf.overlay(
+        polygon_overlay_gdf, how="difference"
+    ).explode()
 
     # Deal with buildings that have multiple cell fragments
     # This happens in edge cases where a barrier bisects a Voronoi polygon
@@ -527,43 +574,6 @@ def sjoin_gdf_max_intersection(
     )
 
 
-def load_transform_gdf_linestring_barriers(
-    grid_squares: Optional[List[str]],
-) -> gpd.GeoDataFrame:
-    """
-    Load physical barriers with (Multi)LineString geometries - major roads and railways - for the specified grid squares. A
-    buffer is added around each geometry to cover the width of the road / railway.
-
-    # TODO add road types to docstring
-
-    Args:
-        grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
-        Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
-
-    Returns:
-        gpd.GeoDataFrame: physical barriers with (Multi)LineString geometries
-    """
-    # Linestrings
-    roads_gdf = load_geodata.load_gdf_os_openroad(grid_squares=grid_squares)
-
-    railways_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="railway_track", grid_squares=grid_squares
-    )
-
-    barrier_road_types = ["A Road", "B Road", "Motorway", "Minor Road"]
-
-    barrier_roads_gdf = roads_gdf[roads_gdf["function"].isin(barrier_road_types)]
-
-    line_overlays = [barrier_roads_gdf, railways_gdf]
-    line_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in line_overlays])
-
-    # TODO make more specific for different road types
-    # Add buffer assumed to be width of road / railway (3.5m total - 1.75m either side)
-    line_overlay_gdf["geometry"] = line_overlay_gdf.geometry.buffer(1.75)
-
-    return line_overlay_gdf
-
-
 def load_transform_gdf_polygon_barriers(
     grid_squares: Optional[List[str]],
 ) -> gpd.GeoDataFrame:
@@ -573,6 +583,10 @@ def load_transform_gdf_polygon_barriers(
     - Water bodies
     - Tidal boundaries
     - Woodland
+
+    Additionally, load physical barriers with (Multi)LineString geometries - railways, and roads of the following types:
+    "A Road", "B Road", "Motorway", "Minor Road"- for the specified grid squares. A buffer is added around each
+    geometry to cover the width of the road / railway.
 
     Args:
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
@@ -598,9 +612,31 @@ def load_transform_gdf_polygon_barriers(
         layer="tidal_water", grid_squares=grid_squares
     )
 
-    polygon_overlays = [forest_gdf, greenspace_gdf, tidal_water_gdf, surface_water_gdf]
+    # Linestrings
+    roads_gdf = load_geodata.load_gdf_os_openroad(grid_squares=grid_squares)
+    barrier_road_types = ["A Road", "B Road", "Motorway", "Minor Road"]
+    barrier_roads_gdf = roads_gdf[roads_gdf["function"].isin(barrier_road_types)]
 
-    return pd.concat([gdf[["geometry"]] for gdf in polygon_overlays])
+    railways_gdf = load_geodata.load_gdf_os_openmap_layer(
+        layer="railway_track", grid_squares=grid_squares
+    )
+
+    line_overlays = [barrier_roads_gdf, railways_gdf]
+    line_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in line_overlays])
+
+    # TODO make more specific for different road types
+    # Add buffer assumed to be width of road / railway (3.5m total - 1.75m either side)
+    line_overlay_gdf["geometry"] = line_overlay_gdf.geometry.buffer(1.75)
+
+    overlays = [
+        forest_gdf,
+        greenspace_gdf,
+        tidal_water_gdf,
+        surface_water_gdf,
+        line_overlay_gdf,
+    ]
+
+    return pd.concat([gdf[["geometry"]] for gdf in overlays])
 
 
 def reassign_gdf_communal_networked(
@@ -734,33 +770,6 @@ def reassign_gdf_near_anchor_properties(
     return tech_gdf
 
 
-def append_gdf_heat_network_zone_layer(
-    clusters_gdf: gpd.GeoDataFrame, hn_zones_gdf: gpd.GeoDataFrame
-) -> gpd.GeoDataFrame:
-    """
-    Append DESNZ heat network zones to clusters geodataframe, where `assigned_tech` is 'DESNZ_HNZ'. DESNZ heat network
-    zones are also assigned unique cluster IDs by Local Authority.
-
-    Args:
-        clusters_gdf (gpd.GeoDataFrame): clusters with `assigned_tech`, `cluster_id`, and `geometry` columns.
-        hn_zones_gdf (gpd.GeoDataFrame): DESNZ heat network zones with geometries.
-
-    Returns:
-        gpd.GeoDataFrame: cluster and DESNZ heat network zone geometries
-    """
-    if len(hn_zones_gdf) > 0:
-        id_col = [col for col in hn_zones_gdf.columns if "ID" in col][0]
-        hn_zones_gdf = hn_zones_gdf.rename(columns={id_col: "cluster_id"}).assign(
-            assigned_tech="DESNZ_HNZ",
-            cluster_id=lambda df: "DESNZ_HNZ_"
-            + df["cluster_id"].astype(str).str.replace("-", "_"),
-        )[["assigned_tech", "geometry", "cluster_id"]]
-
-        return pd.concat([clusters_gdf, hn_zones_gdf], ignore_index=True)
-    else:
-        return clusters_gdf
-
-
 def map_df_uprns_to_clusters(
     uprns_df: pl.DataFrame,
     buildings_gdf: gpd.GeoDataFrame,
@@ -777,13 +786,8 @@ def map_df_uprns_to_clusters(
         building_id (str): name of building ID column in both `uprns_df` and `buildings_gdf`.
 
     Returns:
-        pl.DataFrame: UPRNs mapped to their clusters. Expect some UPRNs to be duplicated if the `clusters_gdf` contains DESNZ Heat Network zones.
+        pl.DataFrame: UPRNs mapped to their clusters.
     """
-    # Split clusters into DESNZ heat network zones and clusters
-    desnz_hn_zones_gdf = clusters_gdf[clusters_gdf["cluster_id"].str.contains("DESNZ")]
-    clusters_gdf = clusters_gdf[
-        ~clusters_gdf["cluster_id"].isin(desnz_hn_zones_gdf["cluster_id"])
-    ]
 
     building_cluster_mapping = sjoin_gdf_buildings_to_clusters(
         buildings_gdf=buildings_gdf, clusters_gdf=clusters_gdf
@@ -792,25 +796,12 @@ def map_df_uprns_to_clusters(
         "cluster_id"
     ].to_dict()
     uprns_df = uprns_df.with_columns(
-        pl.col("ID").replace_strict(building_cluster_mapping).alias("cluster_id")
+        pl.col(building_id)
+        # TODO: investigate why some building IDs are not mapping to clusters.
+        .replace_strict(building_cluster_mapping, default=None).alias("cluster_id")
     )
 
-    if desnz_hn_zones_gdf.empty:
-        return uprns_df
-    else:
-        building_desnz_mapping = sjoin_gdf_buildings_to_clusters(
-            buildings_gdf=buildings_gdf, clusters_gdf=desnz_hn_zones_gdf
-        ).dropna(subset="cluster_id")
-        building_desnz_mapping = building_desnz_mapping.set_index(building_id)[
-            "cluster_id"
-        ].to_dict()
-        desnz_uprns_df = uprns_df.with_columns(
-            pl.col("ID")
-            .replace_strict(building_desnz_mapping, default=None)
-            .alias("cluster_id")
-        ).drop_nulls(subset="cluster_id")
-
-        return pl.concat([uprns_df, desnz_uprns_df])
+    return uprns_df
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -835,6 +826,11 @@ def parse_arguments() -> argparse.Namespace:
         "--save", help="Set to save output GeoDataFrame to S3.", action="store_true"
     )
 
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
+    )
+
     return parser.parse_args()
 
 
@@ -844,10 +840,15 @@ if __name__ == "__main__":
 
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
+    release_date = save_utils.get_str_release_date(args.release_date)
+
     tech_gdf = (
         gpd.read_parquet(
-            config["output"]["dataset"]["buildings_most_suitable_tech"].format(
-                local_authorities=local_authority_dict["url_slug"]
+            save_utils.get_str_output_path(
+                "buildings_most_suitable_tech",
+                release_date=release_date,
+                check_exists=True,
+                local_authorities=local_authority_dict["url_slug"],
             )
         )
         .set_geometry("geometry")
@@ -864,9 +865,6 @@ if __name__ == "__main__":
     )
 
     # Load and transform physical barriers for clusters
-    line_overlay_gdf = load_transform_gdf_linestring_barriers(
-        local_authority_dict["grid_squares"]
-    )
     polygon_overlay_gdf = load_transform_gdf_polygon_barriers(
         local_authority_dict["grid_squares"]
     )
@@ -880,25 +878,26 @@ if __name__ == "__main__":
         buildings_gdf=buildings_gdf,
         boundary_gdf=boundary_gdf,
         tech_gdf=tech_gdf,
-        line_overlay_gdf=line_overlay_gdf,
         polygon_overlay_gdf=polygon_overlay_gdf,
         combined_anchor_gdf=combined_anchor_gdf,
         radius=ANCHOR_RADIUS,
         local_authorities_slug=local_authority_dict["url_slug"],
     )
 
-    # Add heat network zones to clusters_gdf, if they exist
-    hn_zones_gdf = load_geodata.load_gdf_heat_network_zones(boundary=boundary_gdf)
-
-    if hn_zones_gdf is not None:
-        clusters_gdf = append_gdf_heat_network_zone_layer(
-            clusters_gdf=clusters_gdf, hn_zones_gdf=hn_zones_gdf
-        )
-
     if args.save:
-        save_utils.save_to_s3(
-            clusters_gdf,
-            config["output"]["dataset"]["tech_clusters"].format(
-                local_authorities=local_authority_dict["url_slug"],
-            ),
+        output_path = save_utils.get_str_output_path(
+            "tech_clusters",
+            release_date=release_date,
+            local_authorities=local_authority_dict["url_slug"],
+        )
+        save_utils.save_to_s3(clusters_gdf, output_path)
+        manifest_utils.generate_and_save_run_manifest_to_s3(
+            output_path,
+            stage="cluster",
+            local_authority=local_authority_dict["url_slug"],
+            row_count=len(clusters_gdf),
+            params={
+                "local_authorities": args.local_authorities,
+                "release_date": release_date,
+            },
         )
