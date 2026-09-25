@@ -193,8 +193,8 @@ def get_dict_distribution_frames(
     df_areas_new: pl.DataFrame | None,
 ) -> dict[str, tuple[pl.DataFrame, pl.DataFrame]]:
     """
-    Map each of a stage's distribution columns to the (old, new) frames
-    that carry it.
+    Map each of a stage's distribution columns to the (old, new) pair of
+    DataFrames that hold it.
 
     The derived cluster area reads the geometry-derived frames (when
     loaded); the stage's configured `DISTRIBUTION_COLUMNS` read the tabular
