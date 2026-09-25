@@ -191,24 +191,6 @@ def _calculate_gdf_plot_ratio_proxy(
     return buildings_gdf
 
 
-def _get_int_count_vertices(geom: shapely.Polygon | shapely.MultiPolygon) -> int:
-    """
-    Counts the number of vertices in a polygon or mutipolygon
-    Args:
-        geom (shapely.Polygon | shapely.MultiPolygon): shapely geometry representing building footprint polygon
-
-    Returns:
-        int: count of vertices in the polygon or multi polygon
-    """
-    if geom.geom_type == "Polygon":
-        # Count the coordinates forming the outer boundary
-        return len(geom.exterior.coords)
-    elif geom.geom_type == "MultiPolygon":
-        # Sum the coordinates for all pieces of the multi-polygon
-        return sum(len(poly.exterior.coords) for poly in geom.geoms)
-    return 0
-
-
 def _compute_voronoi_area(
     gdf: gpd.GeoDataFrame,
     grid_squares: list[str] | str,
