@@ -743,8 +743,7 @@ def load_df_cluster_areas(path: str) -> pl.DataFrame:
 
     Areas are measured in EPSG:27700 (metres); an output saved in another
     CRS — the contextual-features geojson is EPSG:4326, with simplified
-    geometry — is reprojected first. A zero-feature geojson degrades to an
-    empty frame.
+    geometry — is reprojected first.
 
     Args:
         path: S3 path of the stage output (.parquet or .geojson)
@@ -758,11 +757,7 @@ def load_df_cluster_areas(path: str) -> pl.DataFrame:
     if path.endswith(".parquet"):
         gdf = gpd.read_parquet(path, columns=["geometry"])
     elif path.endswith(".geojson"):
-        try:
-            gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
-        except ValueError:
-            logging.warning("No features in geojson at %s; no areas to load.", path)
-            return pl.DataFrame(schema={AREA_COL: pl.Float64})
+        gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
     else:
         raise ValueError(f"Cannot read geometry of {path}; expected parquet/geojson.")
     gdf = geo_utils.verify_gdf_crs(gdf)

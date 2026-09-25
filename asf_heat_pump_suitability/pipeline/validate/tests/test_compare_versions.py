@@ -1336,22 +1336,6 @@ class TestLoadDfClusterAreas:
             [100.0, 400.0], rel=1e-3
         ), "geojson areas must be measured in m² after reprojection"
 
-    def test_zero_feature_geojson_degrades_to_an_empty_frame(self, mocker):
-        """A geojson with every feature filtered out must degrade to an
-        empty areas frame, matching the tabular loader's behaviour."""
-        mocker.patch(
-            "asf_heat_pump_suitability.getters.base_getters.load_gdf_from_s3_geojson",
-            side_effect=ValueError(
-                "Assigning CRS to a GeoDataFrame without a geometry column "
-                "is not supported"
-            ),
-        )
-        df = compare_versions.load_df_cluster_areas("s3://bucket/dir/output.geojson")
-        assert df.is_empty(), "a zero-feature geojson must degrade to an empty frame"
-        assert df.columns == [
-            "area_m2"
-        ], "the empty frame must still carry the area column for downstream sums"
-
     def test_unreadable_file_type_raises(self):
         """File types the comparison cannot read geometry from fail loudly."""
         with pytest.raises(ValueError, match="csv"):
