@@ -163,8 +163,8 @@ def generate_dict_distribution_stats(df: pl.DataFrame, column: str) -> dict | No
     distribution and a widened one stay distinguishable. Nulls are excluded.
 
     Args:
-        df: one version of a stage output
-        column: column to summarise
+        df (pl.DataFrame): one version of a stage output
+        column (str): column to summarise
 
     Returns:
         dict: min/q1/mean/q3/max, or None when the column is missing or has
