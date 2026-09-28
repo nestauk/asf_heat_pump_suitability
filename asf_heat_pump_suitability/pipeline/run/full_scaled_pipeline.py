@@ -3,12 +3,12 @@ import numpy as np
 import argparse
 
 
-def chunk_list(arr: np.array, n: int, size: bool) -> list:
+def chunk_list_local_authorities(arr: np.array, n: int, size: bool) -> list:
     if not size:
         # Calculate how many items per chunk
         n = math.ceil(len(arr) / n)
-    chunks = [list(l) for l in np.array_split(arr, n)]
-    print(f"{len(chunks)} chunks to process. Each approx. {len(chunks[0])} items long.")
+    chunks = [f'"{'" "'.join(l)}"' for l in np.array_split(arr, n)]
+    print(f"{len(chunks)} chunks to process. Each approx. {n} items long.")
 
     return chunks
 
@@ -56,14 +56,17 @@ if __name__ == "__main__":
     from tqdm import tqdm
     import subprocess
     from asf_heat_pump_suitability import config
+    from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
     local_authorities = args.local_authorities
-    release_date = args.release_date
+    release_date = save_utils.get_str_release_date(args.release_date)
+    print(f"Release date pinned to: {release_date}")
+
     if local_authorities == "GB":
         local_authorities = pl.read_csv(config["data"]["processed"]["valid_la_names"])
 
-    chunks = chunk_list(
+    chunks = chunk_list_local_authorities(
         np.asarray(local_authorities), n=args.size, size=args.number_of_chunks
     )
 
@@ -73,6 +76,7 @@ if __name__ == "__main__":
             [
                 "orbit",
                 "launch",
+                "--script",
                 "asf_heat_pump_suitability/pipeline/run/run_pipeline.py",
                 "--team",
                 "ASF",
