@@ -1110,13 +1110,13 @@ class TestGenerateStrReportGeometrySections:
         """No geometry drift means zero cluster and area deltas."""
         report = generate_report(
             df_clusters_old,
-            df_clusters_old.clone(),
+            df_clusters_old,
             None,
             None,
             stage="cluster",
             trigger=None,
             df_areas_old=df_areas_old,
-            df_areas_new=df_areas_old.clone(),
+            df_areas_new=df_areas_old,
         )
         assert (
             "| Cluster counts | 3 | 3 | +0 |" in report
@@ -1134,7 +1134,7 @@ class TestGenerateStrReportGeometrySections:
         kwargs = dict(
             trigger=None,
             df_areas_old=df_areas_old,
-            df_areas_new=df_areas_old.clone(),
+            df_areas_new=df_areas_old,
         )
         contextual = generate_report(
             df_clusters_old,
@@ -1222,7 +1222,7 @@ class TestGenerateStrReportGeometrySections:
             stage="cluster",
             trigger=None,
             df_areas_old=df_areas_old,
-            df_areas_new=df_areas_old.clone(),
+            df_areas_new=df_areas_old,
         )
         assert (
             "cluster_id" in report and "Cluster geometry" in report
