@@ -1075,6 +1075,8 @@ def _generate_str_cluster_geometry_section(
             f"| {area_delta['area_m2_new']:,.1f} "
             f"| {area_delta['area_m2_delta']:+,.1f} |"
         )
+    # count_delta is None only when a version has no CLUSTER_ID_COL column
+    # (see generate_dict_cluster_count_delta), so the note names that column.
     if count_delta is None:
         lines.extend(
             [
