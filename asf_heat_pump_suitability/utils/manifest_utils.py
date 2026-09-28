@@ -25,7 +25,7 @@ STAGE_INPUT_KEYS = config["run_manifest"]["stage_input_keys"]
 
 
 def run_git_or_none(
-    args: list[str], warning: str, *warning_args: object
+    args: list[str], warning: str, warning_args: tuple = ()
 ) -> subprocess.CompletedProcess | None:
     """
     Run a git command in this repo's own directory, or None on failure.
@@ -38,7 +38,7 @@ def run_git_or_none(
     Args:
         args: full git command, e.g. ["git", "rev-parse", "HEAD"]
         warning: logging.warning format string logged on failure
-        *warning_args: values for the warning format string
+        warning_args: values for the warning format string's placeholders
 
     Returns:
         subprocess.CompletedProcess: completed command with captured stdout,
@@ -61,9 +61,9 @@ def get_str_git_commit() -> str:
         str: 40-character commit hash, or "unknown" if git is unavailable
     """
     result = run_git_or_none(
-        ["git", "rev-parse", "HEAD"],
-        "Could not read git commit hash; recording '%s' in run manifest.",
-        UNKNOWN_GIT_COMMIT,
+        args=["git", "rev-parse", "HEAD"],
+        warning="Could not read git commit hash; recording '%s' in run manifest.",
+        warning_args=(UNKNOWN_GIT_COMMIT,),
     )
     return UNKNOWN_GIT_COMMIT if result is None else result.stdout.strip()
 
