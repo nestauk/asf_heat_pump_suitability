@@ -152,7 +152,8 @@ def filter_df_clusters_layer(df: pl.DataFrame) -> pl.DataFrame:
     (a pre-layers output) is all clusters and passes through unchanged.
 
     Args:
-        df: one version of a geometry-stage output (tabular or per-row areas)
+        df: one version of a geometry-stage output (tabular or per-cluster
+            areas)
 
     Returns:
         pl.DataFrame: the rows whose layer is the configured clusters layer,
@@ -236,9 +237,9 @@ def get_dict_distribution_frames(
         stage (str): pipeline stage the outputs belong to
         df_old (pl.DataFrame): older version of the tabular stage output
         df_new (pl.DataFrame): newer version of the tabular stage output
-        df_areas_old (pl.DataFrame | None): older version's per-row areas,
+        df_areas_old (pl.DataFrame | None): older version's per-cluster areas,
             or None
-        df_areas_new (pl.DataFrame | None): newer version's per-row areas,
+        df_areas_new (pl.DataFrame | None): newer version's per-cluster areas,
             or None
 
     Returns:
@@ -888,21 +889,21 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
 
 def load_df_cluster_areas(path: str) -> pl.DataFrame:
     """
-    Load one stage output and measure the area of each shape, in m².
+    Load one stage output and measure the area of each cluster, in m².
 
     Reads a .parquet or .geojson output; any other file type raises an
     error. Shapes not already in EPSG:27700 (metres) are converted to it
     before measuring, so areas come out in square metres. The result is a
-    table with one area per row; the shapes themselves are not kept. A
-    multi-layer output keeps its `layer` column, so the checks can filter
-    to the clusters layer.
+    table with one area per cluster; the shapes themselves are not kept.
+    A multi-layer output also keeps its other layers' shapes, with their
+    `layer` column, so the checks can filter to the clusters layer.
 
     Args:
         path (str): S3 path of the stage output (.parquet or .geojson)
 
     Returns:
-        pl.DataFrame: one `area_m2` row for each shape in the file, plus
-            the `layer` column when the file has one
+        pl.DataFrame: one `area_m2` row for each cluster, plus the `layer`
+            column when the file has one
 
     Raises:
         ValueError: for file types the comparison cannot read geometry from
