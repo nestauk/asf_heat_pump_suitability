@@ -1111,6 +1111,9 @@ class TestGenerateStrReportGeometrySections:
             "simplified geometry" in contextual
         ), "the contextual-features report must carry the simplified-geometry caveat"
         assert (
+            f"up to {compare_versions.SIMPLIFY_TOLERANCE_M} m" in contextual
+        ), "the caveat must say how far simplification can move a boundary"
+        assert (
             "simplified geometry" not in cluster
         ), "the cluster stage's exact geometry must not carry the caveat"
 

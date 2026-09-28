@@ -58,6 +58,7 @@ STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
 BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"]
 DISTRIBUTION_COLUMNS = config["compare_versions"]["distribution_columns"]
 TOLERANCES = config["compare_versions"]["tolerances"]
+SIMPLIFY_TOLERANCE_M = config["constant"]["clustering"]["tolerance_m"]
 
 
 def get_dict_tolerances(trigger: str) -> dict:
@@ -1094,8 +1095,9 @@ def _generate_str_cluster_geometry_section(
         if stage == "compute_contextual_features":
             lines.append(
                 "Note: this stage's areas are measured on simplified geometry "
-                "(reprojected from EPSG:4326); small differences from the "
-                "cluster stage are simplification artefacts, not drift."
+                "(reprojected from EPSG:4326), where each boundary point can "
+                f"move by up to {SIMPLIFY_TOLERANCE_M} m. Small differences "
+                "from the cluster stage come from this, not drift."
             )
     return _render_section("Cluster geometry", *lines)
 
