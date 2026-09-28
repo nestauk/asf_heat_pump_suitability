@@ -7,7 +7,7 @@ def chunk_list_local_authorities(arr: np.array, n: int, size: bool) -> list:
     if not size:
         # Calculate how many items per chunk
         n = math.ceil(len(arr) / n)
-    chunks = [f'"{'" "'.join(l)}"' for l in np.array_split(arr, n)]
+    chunks = [list(l) for l in np.array_split(arr, n)]
     print(f"{len(chunks)} chunks to process. Each approx. {n} items long.")
 
     return chunks
@@ -77,7 +77,7 @@ if __name__ == "__main__":
                 "orbit",
                 "launch",
                 "--script",
-                "asf_heat_pump_suitability/pipeline/run/run_pipeline.py",
+                "asf_heat_pump_suitability/pipeline/run/pipeline.py",
                 "--team",
                 "ASF",
                 "--project",
@@ -89,7 +89,7 @@ if __name__ == "__main__":
                 "-e",
                 "PYTHONPATH=/app",
                 "--local_authorities",
-                chunk,
+                *chunk,
                 "--release_date",
                 release_date,
             ]
