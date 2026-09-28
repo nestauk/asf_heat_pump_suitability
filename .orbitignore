@@ -114,13 +114,9 @@ target/
 
 # exclude /inputs and /outputs except top-level markdown
 /inputs/*
-!/inputs/*.md
 /outputs/*
-!/outputs/*.md
 /outputs/data/*
-!/outputs/data/*.md
 /outputs/models/*
-!/outputs/models/*.md
 
 # exclude file types
 *.kml
