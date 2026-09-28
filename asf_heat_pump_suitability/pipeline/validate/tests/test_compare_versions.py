@@ -1666,8 +1666,8 @@ class TestPlotDistributionOverlay:
         assert path.stat().st_size > 0, "the saved plot must not be an empty file"
 
     def test_skewed_distribution_saves_a_log_binned_png(self, tmp_path):
-        """A heavily right-skewed distribution (real cluster areas) still
-        plots cleanly on the log-spaced bins."""
+        """A heavily right-skewed distribution, like real cluster areas, is
+        saved as a PNG drawn on log-spaced bins."""
         path = tmp_path / "cluster_plymouth_area_m2.png"
         compare_versions.plot_distribution_overlay(
             pl.Series("area_m2", [20.0] * 50 + [3_000.0] * 10 + [400_000.0]),
