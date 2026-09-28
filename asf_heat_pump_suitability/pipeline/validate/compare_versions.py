@@ -1043,9 +1043,22 @@ def _format_stat(value: float | int) -> str:
 def _generate_str_cluster_geometry_section(
     count_delta: dict | None, area_delta: dict | None, stage: str
 ) -> str:
-    """Render cluster count and total area deltas as a markdown section,
-    with the CRS/units stated and the simplified-geometry caveat for the
-    contextual-features stage."""
+    """
+    Render the cluster count and total area changes as a markdown section.
+
+    Args:
+        count_delta (dict | None): from `generate_dict_cluster_count_delta`,
+            with int keys `clusters_old`, `clusters_new`, `clusters_delta`;
+            None when a version has no cluster id column
+        area_delta (dict | None): from `generate_dict_total_area_delta`,
+            with float keys (m²) `area_m2_old`, `area_m2_new`,
+            `area_m2_delta`; None when geometry was not loaded
+        stage (str): pipeline stage, used to add the simplified-geometry
+            note for `compute_contextual_features`
+
+    Returns:
+        str: markdown section; a missing delta is replaced by a note
+    """
     lines = [
         "| Metric | Old | New | Delta |",
         "| --- | --- | --- | --- |",
