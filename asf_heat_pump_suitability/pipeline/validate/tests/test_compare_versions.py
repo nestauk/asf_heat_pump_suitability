@@ -1755,6 +1755,17 @@ class TestGenerateDictUprnsMissingClusters:
         ), "only the clusters layer's n_UPRNs may count as UPRNs in clusters"
         assert counts["uprns_missing"] == 1, "one of four UPRNs is missing a cluster"
 
+    def test_empty_uprns_give_zero_share(self):
+        """An empty add_features output gives a zero share, not a division
+        error."""
+        counts = compare_versions.generate_dict_uprns_missing_clusters(
+            df_uprns=pl.DataFrame({"UPRN": []}, schema={"UPRN": pl.Int64}),
+            df_clusters=pl.DataFrame({"n_UPRNs": []}, schema={"n_UPRNs": pl.Int64}),
+        )
+        assert (
+            counts["missing_share"] == 0.0
+        ), "no UPRNs going in must give a zero missing share"
+
 
 @pytest.fixture(scope="module")
 def df_contextual():
