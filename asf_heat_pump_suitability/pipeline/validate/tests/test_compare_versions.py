@@ -1469,6 +1469,35 @@ class TestLoadTupleDfBuildings:
         load.assert_not_called()
 
 
+class TestLoadTupleDfAddFeaturesUprns:
+    """Tests for `load_tuple_df_add_features_uprns`."""
+
+    def test_missing_output_degrades_that_version_only(self, mocker, tmp_path):
+        """A version with no add_features output loads as None, and the
+        other version still loads its UPRN column only."""
+        path_new = tmp_path / "with_features.parquet"
+        pl.DataFrame({"UPRN": [1, 2], "in_hn_zone": [True, False]}).write_parquet(
+            path_new
+        )
+        mocker.patch.object(
+            compare_versions,
+            "_get_str_output_path",
+            side_effect=[
+                FileNotFoundError("No file found at s3://bucket/old.parquet"),
+                str(path_new),
+            ],
+        )
+        df_old, df_new = compare_versions.load_tuple_df_add_features_uprns(
+            local_authority="east_lothian",
+            release_date_old="20260601",
+            release_date_new="20260722",
+        )
+        assert df_old is None, "a missing add_features output must load as None"
+        assert df_new.columns == [
+            "UPRN"
+        ], "the other version must still load, with its UPRN column only"
+
+
 class TestGenerateDictClusterCountDelta:
     """Tests for `generate_dict_cluster_count_delta`."""
 

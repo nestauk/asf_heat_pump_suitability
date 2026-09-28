@@ -4,8 +4,10 @@ Compare two dated versions of a pipeline stage output for one local authority.
 The report covers row and UPRN counts, schema changes, UPRN churn, per-tech
 counts and the tech transition matrix (decision tree stage), cluster count
 and area changes with distribution plots (cluster and contextual features
-stages), and the commits that touched the stage's code between the two
-versions. Distribution plots are saved as PNGs next to the report.
+stages), the UPRNs missing a cluster (contextual features stage, from the
+add_features output of the same release), and the commits that touched the
+stage's code between the two versions. Distribution plots are saved as PNGs
+next to the report.
 
 Pass --trigger methodology_change or --trigger input_release to check the
 numbers against that trigger's tolerances. Leave it out to get the numbers
@@ -1016,6 +1018,45 @@ def load_tuple_df_buildings(
         return None, None
 
 
+def load_tuple_df_add_features_uprns(
+    local_authority: str, release_date_old: str, release_date_new: str
+) -> tuple[pl.DataFrame | None, pl.DataFrame | None]:
+    """
+    Load the UPRN column of both versions' add_features outputs.
+
+    Each version degrades to None on its own, with a logged warning, when
+    its output is missing or unreadable, so the other version's count still
+    shows.
+
+    Args:
+        local_authority: local authority slug used in output paths
+        release_date_old: dated version folder of the older output
+        release_date_new: dated version folder of the newer output
+
+    Returns:
+        tuple: (older, newer) UPRN columns, each None when unavailable
+    """
+    frames = []
+    for release_date in (release_date_old, release_date_new):
+        try:
+            path = _get_str_output_path(
+                dataset=STAGE_OUTPUT_DATASETS["add_features"],
+                local_authority=local_authority,
+                release_date=release_date,
+                check_exists=True,
+            )
+            frames.append(pl.from_arrow(pq.read_table(path, columns=[UPRN_COL])))
+        except (OSError, ValueError) as error:
+            logging.warning(
+                "add_features output unavailable for %s (%s); its UPRNs "
+                "missing clusters count is skipped.",
+                release_date,
+                error,
+            )
+            frames.append(None)
+    return frames[0], frames[1]
+
+
 def _render_section(title: str, *body: str) -> str:
     """Render a markdown section: a `## Title` heading, then body lines."""
     return "\n".join([f"## {title}", "", *body])
@@ -1722,6 +1763,13 @@ if __name__ == "__main__":
             release_date_old=release_date_old,
             release_date_new=release_date_new,
         )
+    df_uprns_old = df_uprns_new = None
+    if args.stage == "compute_contextual_features":
+        df_uprns_old, df_uprns_new = load_tuple_df_add_features_uprns(
+            local_authority=local_authority,
+            release_date_old=release_date_old,
+            release_date_new=release_date_new,
+        )
     report_dir = Path(args.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
     report_stem = (
@@ -1759,6 +1807,8 @@ if __name__ == "__main__":
         df_areas_old=df_areas_old,
         df_areas_new=df_areas_new,
         plot_files=plot_files,
+        df_uprns_old=df_uprns_old,
+        df_uprns_new=df_uprns_new,
     )
     report_path = report_dir / f"{report_stem}.md"
     report_path.write_text(report)
