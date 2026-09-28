@@ -1,22 +1,15 @@
-#!/usr/bin/env python3
 """
-Runs the entire pipeline for a list of local authorities. Executes each of
-the five stages in sequence, per local authority, and checks for errors
-after each stage.
-
-To make the script executable, run:
-    chmod +x asf_heat_pump_suitability/pipeline/run/run_pipeline.py
+Runs the entire pipeline for a list of local authorities. Executes each of the five stages in sequence, per local
+authority, and checks for errors after each stage.
 
 You can then run it with:
-    ./asf_heat_pump_suitability/pipeline/run/run_pipeline.py \
-        --local_authorities "Barking and Dagenham" "Flintshire"
+    asf_heat_pump_suitability/pipeline/run/run_pipeline.py --local_authorities "Plymouth" "Vale of Glamorgan"
 
 Usage:
-    python asf_heat_pump_suitability/pipeline/run/run_pipeline.py \
-        --local_authorities <name> [<name> ...] [--release_date YYYYMMDD]
+    python asf_heat_pump_suitability/pipeline/run/run_pipeline.py --local_authorities <LOCAL_AUTHORITY> [--release_date YYYYMMDD]
 
-The release date defaults to today and is pinned across all stages, so a run
-crossing midnight still writes to a single dated release directory.
+The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
+dated release directory.
 """
 
 import argparse
@@ -24,7 +17,6 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 from asf_heat_pump_suitability.utils.save_utils import get_str_release_date
 
@@ -50,7 +42,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--local_authorities",
         help="One or more local authority names to run the pipeline for, "
-        "e.g. --local_authorities 'Barking and Dagenham' 'Flintshire'.",
+        "e.g. --local_authorities 'Plymouth' 'Vale of Glamorgan'.",
         type=str,
         nargs="+",
         required=True,
@@ -66,9 +58,9 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_stage(script_path: str, local_authority: str, release_date: str) -> int:
+def run_script(script_path: str, local_authority: str, release_date: str) -> int:
     """
-    Run one pipeline stage for one local authority.
+    Run one pipeline stage for one local authority and save outputs to S3.
 
     Args:
         script_path: path to the stage script, relative to the repo root.
@@ -94,17 +86,12 @@ def run_stage(script_path: str, local_authority: str, release_date: str) -> int:
 
 if __name__ == "__main__":
     # Run from the repo root regardless of where the script is invoked from
-    repo_root = Path(__file__).resolve().parents[3]
-    os.chdir(repo_root)
+    from asf_heat_pump_suitability import PROJECT_DIR
+
+    os.chdir(PROJECT_DIR)
 
     args = parse_arguments()
-
-    # Resolve the release date once (defaulting to today) and validate its
-    # format via get_str_release_date, failing fast before any stage runs
-    try:
-        release_date = get_str_release_date(args.release_date)
-    except ValueError as e:
-        sys.exit(f"Error: {e}")
+    release_date = get_str_release_date(args.release_date)
     print(f"Release date pinned to: {release_date}")
 
     print("--> Checking S3 input paths exist: check_inputs.py")
@@ -128,8 +115,8 @@ if __name__ == "__main__":
 
         la_failed = False
         for stage_name, script_path in STAGES:
-            print(f"--> Running: {stage_name}")
-            returncode = run_stage(script_path, la, release_date)
+            print(f"\n--> Running: {stage_name}")
+            returncode = run_script(script_path, la, release_date)
             if returncode != 0:
                 elapsed = int(time.monotonic() - la_start)
                 print(
