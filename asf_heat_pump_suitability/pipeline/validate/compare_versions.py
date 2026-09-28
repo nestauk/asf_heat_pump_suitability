@@ -234,8 +234,16 @@ N_PLOT_BINS = 40
 
 
 def _use_log_bins(values: np.ndarray) -> bool:
-    """Log-spaced bins suit a heavily right-skewed, all-positive
-    distribution; anything else keeps linear bins."""
+    """
+    Decide whether a distribution should be plotted on log-spaced bins.
+
+    Args:
+        values (np.ndarray): the old and new values together
+
+    Returns:
+        bool: True when every value is above zero and the largest is more
+            than `LOG_BINS_SKEW_RATIO` times the median
+    """
     if values.min() <= 0:
         return False
     return values.max() / np.median(values) > LOG_BINS_SKEW_RATIO
@@ -1037,7 +1045,16 @@ def _generate_str_churn_section(churn: dict | None, tolerances: dict | None) -> 
 
 
 def _format_stat(value: float | int) -> str:
-    """Format a statistic for a report table (floats to one decimal place)."""
+    """
+    Format a statistic for a report table.
+
+    Args:
+        value (float | int): the statistic
+
+    Returns:
+        str: the value with thousands separators; floats to one decimal
+            place, for example `1,234.5`
+    """
     return f"{value:,.1f}" if isinstance(value, float) else f"{value:,}"
 
 
@@ -1108,8 +1125,20 @@ def _generate_str_distribution_section(
     frame_new: pl.DataFrame,
     plot_file: str | None,
 ) -> str:
-    """Render one distribution's per-version statistics as a markdown
-    section, with its overlaid plot embedded when one was saved."""
+    """
+    Render one column's statistics for both versions as a markdown section.
+
+    Args:
+        column (str): column to summarise
+        frame_old (pl.DataFrame): older version's DataFrame holding `column`
+        frame_new (pl.DataFrame): newer version's DataFrame holding `column`
+        plot_file (str | None): file name of the saved plot to show below
+            the table, or None for no plot
+
+    Returns:
+        str: markdown section with min, Q1, mean, Q3 and max per version,
+            or a note when either version has no values
+    """
     title = f"Distribution: {column}"
     stats_old = generate_dict_distribution_stats(frame_old, column)
     stats_new = generate_dict_distribution_stats(frame_new, column)
