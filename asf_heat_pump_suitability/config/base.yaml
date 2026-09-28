@@ -406,9 +406,9 @@ compare_versions:
     compute_contextual_features: "clusters_tech_contextual_info"
   decision_tree_buildings_dataset: "buildings_most_suitable_tech"
   # Columns whose distributions the report compares per stage (Q1/Q3, min,
-  # max, mean, old vs new). Real output columns only: derived metrics such
-  # as cluster area are computed from geometry in code and fed through the
-  # same shared helper.
+  # max, mean, old vs new). List below includes original output columns
+  # only: derived metrics such as cluster area are computed from geometry
+  # in code.
   distribution_columns:
     cluster: []
     compute_contextual_features:
@@ -442,5 +442,9 @@ compare_versions:
   tolerances:
     methodology_change:
       max_removed_uprn_share: 0.05
+      max_added_uprn_share: 0.05
     input_release:
       max_removed_uprn_share: 0.05
+      # New releases legitimately add properties; tune upward once real
+      # release-to-release growth rates are known.
+      max_added_uprn_share: 0.05
