@@ -1057,7 +1057,7 @@ class TestGenerateStrReportGeometrySections:
         )
         assert "Cluster geometry" in report, "the geometry section must appear"
         assert (
-            "| Clusters | 3 | 2 | -1 |" in report
+            "| Cluster counts | 3 | 2 | -1 |" in report
         ), "the cluster merge must appear as a -1 cluster count delta"
         assert (
             "| Total area (m²) | 300.0 | 310.0 | +10.0 |" in report
@@ -1079,7 +1079,7 @@ class TestGenerateStrReportGeometrySections:
             df_areas_new=df_areas_old.clone(),
         )
         assert (
-            "| Clusters | 3 | 3 | +0 |" in report
+            "| Cluster counts | 3 | 3 | +0 |" in report
         ), "stable versions must show a zero cluster count delta"
         assert (
             "| Total area (m²) | 300.0 | 300.0 | +0.0 |" in report

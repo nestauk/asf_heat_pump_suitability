@@ -1065,7 +1065,7 @@ def _generate_str_cluster_geometry_section(
     ]
     if count_delta is not None:
         lines.append(
-            f"| Clusters | {count_delta['clusters_old']} "
+            f"| Cluster counts | {count_delta['clusters_old']} "
             f"| {count_delta['clusters_new']} "
             f"| {count_delta['clusters_delta']:+d} |"
         )
