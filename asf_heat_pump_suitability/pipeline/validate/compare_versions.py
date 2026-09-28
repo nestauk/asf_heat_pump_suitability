@@ -248,7 +248,7 @@ def plot_distribution_overlay(
     heavily right-skewed distribution (see `_use_log_bins`) is drawn on
     log-spaced bins with a log x-axis, so the bulk of the values stays
     readable instead of collapsing into one bar next to the extremes; the
-    x-axis label says when this applied.
+    x-axis label says when this is applied.
 
     Args:
         values_old: older version's values
