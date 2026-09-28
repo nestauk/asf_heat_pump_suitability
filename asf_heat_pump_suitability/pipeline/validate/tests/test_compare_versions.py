@@ -1191,7 +1191,7 @@ class TestGenerateStrReportGeometrySections:
     def test_stats_render_consistently_across_int_and_float_dtypes(self):
         """One version's n_UPRNs loading as Float64 (a geojson round-trip
         upcast) must not render "1,738.0" against the other's "1,738":
-        whole-number floats render like ints."""
+        whole number floats render like ints."""
         df_old = pl.DataFrame({"cluster_id": ["a", "b"], "n_UPRNs": [1165, 2311]})
         df_new = df_old.with_columns(pl.col("n_UPRNs").cast(pl.Float64))
         report = generate_report(
@@ -1207,10 +1207,10 @@ class TestGenerateStrReportGeometrySections:
         ), "an Int64 and a Float64 version must render the same min"
         assert (
             "| Mean | 1,738 | 1,738 |" in report
-        ), "whole-number float means must render like ints, with no trailing .0"
+        ), "whole number float means must render like ints, with no trailing .0"
         assert (
             "1,738.0" not in report
-        ), "no whole-number statistic may keep a trailing .0 in either column"
+        ), "no whole number statistic may keep a trailing .0 in either column"
 
     def test_fractional_stats_keep_one_decimal_place(self):
         """A genuinely fractional statistic still renders to one decimal
