@@ -1036,6 +1036,46 @@ class TestGenerateStrReport:
         ), "non-decision-tree stages must not carry per-tech count sections"
 
 
+@pytest.fixture(scope="module")
+def df_clusters_old():
+    """Old-version cluster-level output: three clusters across two techs."""
+    return pl.DataFrame(
+        {
+            "cluster_id": ["NHP_1", "NHP_2", "DHN_1"],
+            "assigned_tech": [
+                "Networked heat pump",
+                "Networked heat pump",
+                "District heat network",
+            ],
+        }
+    )
+
+
+@pytest.fixture(scope="module")
+def df_clusters_merged(df_clusters_old):
+    """New-version cluster-level output with genuine geometry drift: the two
+    heat-pump clusters merged into one."""
+    return pl.DataFrame(
+        {
+            "cluster_id": ["NHP_1", "DHN_1"],
+            "assigned_tech": ["Networked heat pump", "District heat network"],
+        }
+    )
+
+
+@pytest.fixture(scope="module")
+def df_areas_old():
+    """Old-version per-cluster areas: three 100 m² clusters."""
+    return pl.DataFrame({"area_m2": [100.0, 100.0, 100.0]})
+
+
+@pytest.fixture(scope="module")
+def df_areas_merged():
+    """New-version per-cluster areas after the merge: the merged cluster
+    absorbed the 10 m² gap between its parents (100 + 100 + 10)."""
+    return pl.DataFrame({"area_m2": [210.0, 100.0]})
+
+
 class TestGenerateStrReportGeometrySections:
     """Tests for `generate_str_report`'s cluster geometry sections."""
 
@@ -1321,46 +1361,6 @@ class TestLoadTupleDfBuildings:
             release_date_new="20260722",
         )
         load.assert_not_called()
-
-
-@pytest.fixture(scope="module")
-def df_clusters_old():
-    """Old-version cluster-level output: three clusters across two techs."""
-    return pl.DataFrame(
-        {
-            "cluster_id": ["NHP_1", "NHP_2", "DHN_1"],
-            "assigned_tech": [
-                "Networked heat pump",
-                "Networked heat pump",
-                "District heat network",
-            ],
-        }
-    )
-
-
-@pytest.fixture(scope="module")
-def df_clusters_merged(df_clusters_old):
-    """New-version cluster-level output with genuine geometry drift: the two
-    heat-pump clusters merged into one."""
-    return pl.DataFrame(
-        {
-            "cluster_id": ["NHP_1", "DHN_1"],
-            "assigned_tech": ["Networked heat pump", "District heat network"],
-        }
-    )
-
-
-@pytest.fixture(scope="module")
-def df_areas_old():
-    """Old-version per-cluster areas: three 100 m² clusters."""
-    return pl.DataFrame({"area_m2": [100.0, 100.0, 100.0]})
-
-
-@pytest.fixture(scope="module")
-def df_areas_merged():
-    """New-version per-cluster areas after the merge: the merged cluster
-    absorbed the 10 m² gap between its parents (100 + 100 + 10)."""
-    return pl.DataFrame({"area_m2": [210.0, 100.0]})
 
 
 class TestGenerateDictClusterCountDelta:
