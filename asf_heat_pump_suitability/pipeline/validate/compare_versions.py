@@ -1105,8 +1105,8 @@ def _format_stat(value: float | int) -> str:
         value (float | int): the statistic
 
     Returns:
-        str: the value with thousands separators; non-integral floats to
-            one decimal place, for example `1,234.5`
+        str: the value with thousands separators; floats with a fractional
+            part to one decimal place, for example `1,234.5`
     """
     if isinstance(value, float) and not value.is_integer():
         return f"{value:,.1f}"
