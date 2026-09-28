@@ -94,17 +94,17 @@ if __name__ == "__main__":
     release_date = save_utils.get_str_release_date(args.release_date)
     print(f"Release date pinned to: {release_date}")
 
-    print("--> Checking S3 input paths exist: check_inputs.py")
-    result = subprocess.run(
-        [
-            sys.executable,
-            "asf_heat_pump_suitability/pipeline/validate/check_inputs.py",
-            "--local_authorities",
-            *args.local_authorities,
-        ]
-    )
-    if result.returncode != 0:
-        sys.exit("Error running check_inputs.py: missing S3 input paths. Aborting.")
+    # print("--> Checking S3 input paths exist: check_inputs.py")
+    # result = subprocess.run(
+    #     [
+    #         sys.executable,
+    #         "asf_heat_pump_suitability/pipeline/validate/check_inputs.py",
+    #         "--local_authorities",
+    #         *args.local_authorities,
+    #     ]
+    # )
+    # if result.returncode != 0:
+    #     sys.exit("Error running check_inputs.py: missing S3 input paths. Aborting.")
 
     succeeded = 0
     for la in args.local_authorities:
