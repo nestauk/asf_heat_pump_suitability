@@ -300,8 +300,9 @@ def generate_dict_distribution_plots(
         file_stem (str): filename prefix, shared with the markdown report
 
     Returns:
-        dict: column to saved PNG filename (relative to `plot_dir`, so the
-            report next to the PNGs can link them relatively)
+        dict: for each plotted column, the PNG's file name, for example
+            `cluster_plymouth_20260801_vs_20260907_area_m2.png`. The report
+            is saved in the same folder, so it links to each PNG by this name.
     """
     plot_files = {}
     for column, (frame_old, frame_new) in frames.items():
