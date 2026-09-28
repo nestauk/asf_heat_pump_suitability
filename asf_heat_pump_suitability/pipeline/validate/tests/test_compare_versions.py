@@ -1690,6 +1690,101 @@ class TestFilterDfClustersLayer:
         ), "base.yaml must set compare_versions.cluster_layer"
 
 
+class TestGenerateDictUprnsMissingClusters:
+    """Tests for `generate_dict_uprns_missing_clusters`."""
+
+    def test_counts_uprns_in_minus_uprns_in_clusters(self):
+        """Five distinct UPRNs go in and the clusters hold three, so two are
+        missing a cluster; a repeated UPRN row counts once."""
+        df_uprns = pl.DataFrame({"UPRN": [1, 2, 3, 4, 5, 5]})
+        df_clusters = pl.DataFrame({"cluster_id": ["HP_1", "HP_2"], "n_UPRNs": [2, 1]})
+        counts = compare_versions.generate_dict_uprns_missing_clusters(
+            df_uprns=df_uprns, df_clusters=df_clusters
+        )
+        assert counts == {
+            "uprns_in": 5,
+            "uprns_in_clusters": 3,
+            "uprns_missing": 2,
+            "missing_share": 0.4,
+        }, "missing must be distinct UPRNs in minus the clusters' n_UPRNs sum"
+
+    def test_counts_the_clusters_layer_only(self):
+        """Non-cluster layers of a multi-layer output must not add to the
+        UPRNs counted in clusters."""
+        df_uprns = pl.DataFrame({"UPRN": [1, 2, 3, 4]})
+        df_clusters = pl.DataFrame(
+            {
+                "n_UPRNs": [3, 50],
+                "layer": [compare_versions.CLUSTER_LAYER, "anchor_loads"],
+            }
+        )
+        counts = compare_versions.generate_dict_uprns_missing_clusters(
+            df_uprns=df_uprns, df_clusters=df_clusters
+        )
+        assert (
+            counts["uprns_in_clusters"] == 3
+        ), "only the clusters layer's n_UPRNs may count as UPRNs in clusters"
+        assert counts["uprns_missing"] == 1, "one of four UPRNs is missing a cluster"
+
+
+@pytest.fixture(scope="module")
+def df_contextual():
+    """Contextual-features output: two clusters holding three UPRNs."""
+    return pl.DataFrame({"cluster_id": ["HP_1", "HP_2"], "n_UPRNs": [2, 1]})
+
+
+class TestGenerateStrReportUprnsMissingClusters:
+    """Tests for `generate_str_report`'s UPRNs-missing-clusters section."""
+
+    def test_gives_each_version_and_the_change(self, df_contextual):
+        """The section gives each version's counts and share, and the change
+        in the missing count."""
+        report = generate_report(
+            df_contextual,
+            df_contextual,
+            None,
+            None,
+            stage="compute_contextual_features",
+            trigger=None,
+            df_uprns_old=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
+            df_uprns_new=pl.DataFrame({"UPRN": [1, 2, 3, 4, 5]}),
+        )
+        assert "UPRNs missing clusters" in report, "the section must appear"
+        assert (
+            "| UPRNs in | 4 | 5 | +1 |" in report
+        ), "the section must give the UPRNs going in for each version"
+        assert (
+            "| UPRNs in clusters | 3 | 3 | +0 |" in report
+        ), "the section must give the UPRNs held by clusters for each version"
+        assert (
+            "| UPRNs missing a cluster | 1 | 2 | +1 |" in report
+        ), "the section must give the missing count and its change"
+        assert (
+            "| Missing share | 25.0% | 40.0% | +15.0 pp |" in report
+        ), "the section must give the missing share and its change"
+
+    def test_missing_add_features_output_is_noted(self, df_contextual):
+        """A version with no add_features output gets a note, not an error,
+        and the rest of the report still renders."""
+        report = generate_report(
+            df_contextual,
+            df_contextual,
+            None,
+            None,
+            stage="compute_contextual_features",
+            trigger=None,
+            df_uprns_old=None,
+            df_uprns_new=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
+        )
+        assert (
+            "| UPRNs missing a cluster | n/a | 1 | n/a |" in report
+        ), "the version without add_features output must show n/a"
+        assert (
+            "Count unavailable for the old version" in report
+        ), "the section must say which version has no add_features output"
+        assert "Lineage" in report, "the rest of the report must still render"
+
+
 class TestGenerateDictDistributionStats:
     """Tests for `generate_dict_distribution_stats`."""
 

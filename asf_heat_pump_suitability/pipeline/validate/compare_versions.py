@@ -49,6 +49,7 @@ TECH_COL = "assigned_tech"
 NULL_TECH_LABEL = "(null)"
 CLUSTER_ID_COL = "cluster_id"
 AREA_COL = "area_m2"
+N_UPRNS_COL = "n_UPRNs"
 # Multi-layer front-end outputs (August 2026 onwards) tag every row with
 # the layer it belongs to; earlier outputs have no such column.
 LAYER_COL = "layer"
@@ -183,6 +184,31 @@ def generate_dict_total_area_delta(
         "area_m2_old": total_old,
         "area_m2_new": total_new,
         "area_m2_delta": total_new - total_old,
+    }
+
+
+def generate_dict_uprns_missing_clusters(
+    df_uprns: pl.DataFrame, df_clusters: pl.DataFrame
+) -> dict:
+    """
+    Count the domestic UPRNs that one release's clusters do not hold.
+
+    Args:
+        df_uprns: the add_features output of the release, with a UPRN column
+        df_clusters: the contextual-features output of the same release
+
+    Returns:
+        dict: uprns_in, uprns_in_clusters, uprns_missing and missing_share
+            (a fraction of uprns_in)
+    """
+    uprns_in = df_uprns[UPRN_COL].n_unique()
+    uprns_in_clusters = int(filter_df_clusters_layer(df_clusters)[N_UPRNS_COL].sum())
+    uprns_missing = uprns_in - uprns_in_clusters
+    return {
+        "uprns_in": uprns_in,
+        "uprns_in_clusters": uprns_in_clusters,
+        "uprns_missing": uprns_missing,
+        "missing_share": uprns_missing / uprns_in if uprns_in else 0.0,
     }
 
 
@@ -1231,6 +1257,62 @@ def _generate_str_distribution_section(
     return _render_section(title, *lines)
 
 
+def _generate_str_uprns_missing_clusters_section(
+    counts_old: dict | None, counts_new: dict | None
+) -> str:
+    """
+    Render the UPRNs missing clusters, per version, as a markdown section.
+
+    Args:
+        counts_old: from `generate_dict_uprns_missing_clusters` for the older
+            version, or None when it has no add_features output
+        counts_new: the same for the newer version
+
+    Returns:
+        str: markdown section; a version without counts shows n/a and a note
+    """
+    # (label, key, value format, delta format); the share's change is in
+    # percentage points.
+    rows = [
+        ("UPRNs in", "uprns_in", "{:d}", "{:+d}"),
+        ("UPRNs in clusters", "uprns_in_clusters", "{:d}", "{:+d}"),
+        ("UPRNs missing a cluster", "uprns_missing", "{:d}", "{:+d}"),
+        ("Missing share", "missing_share", "{:.1%}", "{:+.1f} pp"),
+    ]
+    lines = [
+        "| Metric | Old | New | Delta |",
+        "| --- | --- | --- | --- |",
+    ]
+    for label, key, value_format, delta_format in rows:
+        old, new = (
+            value_format.format(counts[key]) if counts is not None else "n/a"
+            for counts in (counts_old, counts_new)
+        )
+        if counts_old is None or counts_new is None:
+            delta = "n/a"
+        else:
+            change = counts_new[key] - counts_old[key]
+            delta = delta_format.format(
+                change * 100 if key == "missing_share" else change
+            )
+        lines.append(f"| {label} | {old} | {new} | {delta} |")
+    lines.extend(
+        [
+            "",
+            "UPRNs in: distinct UPRNs in the add_features output of the same "
+            f"release. UPRNs in clusters: sum of `{N_UPRNS_COL}` over the "
+            f"`{CLUSTER_LAYER}` layer. Report only; no tolerance applies.",
+        ]
+    )
+    for label, counts in (("old", counts_old), ("new", counts_new)):
+        if counts is None:
+            lines.append(
+                f"\nCount unavailable for the {label} version: no add_features "
+                "output for its release date."
+            )
+    return _render_section("UPRNs missing clusters", *lines)
+
+
 def _generate_list_churn_notes(churn: dict, tolerances: dict) -> list[str]:
     """Collect the above-tolerance warnings for removed and added UPRN shares."""
     notes = [
@@ -1386,6 +1468,8 @@ def generate_str_report(
     df_areas_old: pl.DataFrame | None = None,
     df_areas_new: pl.DataFrame | None = None,
     plot_files: dict[str, str] | None = None,
+    df_uprns_old: pl.DataFrame | None = None,
+    df_uprns_new: pl.DataFrame | None = None,
 ) -> str:
     """
     Assemble the full markdown comparison report.
@@ -1412,6 +1496,10 @@ def generate_str_report(
         plot_files: for each compared column (see
             `get_dict_distribution_frames`), the file name of its saved
             plot, shown in the report; None shows no plots
+        df_uprns_old: older version's add_features UPRNs (contextual-features
+            stage), or None when missing (its count is then noted as
+            unavailable)
+        df_uprns_new: newer version's add_features UPRNs, or None
 
     Returns:
         str: markdown report; lineage sections are replaced by a note when a
@@ -1485,6 +1573,26 @@ def generate_str_report(
                 plot_file=(plot_files or {}).get(column),
             )
             for column, (frame_old, frame_new) in frames.items()
+        )
+    if stage == "compute_contextual_features":
+        counts_old = (
+            generate_dict_uprns_missing_clusters(
+                df_uprns=df_uprns_old, df_clusters=df_old
+            )
+            if df_uprns_old is not None
+            else None
+        )
+        counts_new = (
+            generate_dict_uprns_missing_clusters(
+                df_uprns=df_uprns_new, df_clusters=df_new
+            )
+            if df_uprns_new is not None
+            else None
+        )
+        sections.append(
+            _generate_str_uprns_missing_clusters_section(
+                counts_old=counts_old, counts_new=counts_new
+            )
         )
     if stage == "decision_tree":
         sections.append(
