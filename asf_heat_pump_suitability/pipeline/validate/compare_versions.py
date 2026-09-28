@@ -253,19 +253,20 @@ def plot_distribution_overlay(
     values_old: pl.Series, values_new: pl.Series, label: str, path: Path
 ) -> None:
     """
-    Save an overlaid old-vs-new histogram of one distribution as a PNG.
+    Save one PNG with the old and new histograms of a column drawn on top
+    of each other.
 
-    Both versions share the same bins so the shapes are comparable. A
-    heavily right-skewed distribution (see `_use_log_bins`) is drawn on
-    log-spaced bins with a log x-axis, so the bulk of the values stays
-    readable instead of collapsing into one bar next to the extremes; the
-    x-axis label says when this is applied.
+    Both versions use the same bins, so their shapes can be compared. When
+    a few values are much larger than the rest (see `_use_log_bins`), the
+    bins are log-spaced and the x-axis uses a log scale, so the many small
+    values do not all fall into one bar. The x-axis label says when this is
+    applied.
 
     Args:
-        values_old: older version's values
-        values_new: newer version's values
-        label: distribution name, used for the x-axis and title
-        path: file path the PNG is saved to
+        values_old (pl.Series): older version's values
+        values_new (pl.Series): newer version's values
+        label (str): column name, used for the x-axis and title
+        path (Path): file path the PNG is saved to
     """
     old, new = values_old.to_numpy(), values_new.to_numpy()
     combined = np.concatenate([old, new])
@@ -297,10 +298,10 @@ def generate_dict_distribution_plots(
     file_stem: str,
 ) -> dict[str, str]:
     """
-    Save an overlaid old-vs-new histogram for each of a stage's distributions.
+    Save an old-vs-new histogram PNG for each column the report compares.
 
-    A distribution with a missing column or no values on either side is
-    skipped with a warning — its stats section already notes the gap.
+    A column that is missing, or has no values, in either version gets no
+    plot and a logged warning. Its section in the report already says so.
 
     Args:
         frames (dict[str, tuple[pl.DataFrame, pl.DataFrame]]): column to
