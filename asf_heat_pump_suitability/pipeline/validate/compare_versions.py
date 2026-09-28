@@ -1616,19 +1616,18 @@ def generate_str_report(
             for column, (frame_old, frame_new) in frames.items()
         )
     if stage == "compute_contextual_features":
-        counts_old = (
-            generate_dict_uprns_missing_clusters(
-                df_uprns=df_uprns_old, df_clusters=df_old
+        counts_old, counts_new = (
+            (
+                generate_dict_uprns_missing_clusters(
+                    df_uprns=df_uprns, df_clusters=df_clusters
+                )
+                if df_uprns is not None
+                else None
             )
-            if df_uprns_old is not None
-            else None
-        )
-        counts_new = (
-            generate_dict_uprns_missing_clusters(
-                df_uprns=df_uprns_new, df_clusters=df_new
+            for df_uprns, df_clusters in (
+                (df_uprns_old, df_old),
+                (df_uprns_new, df_new),
             )
-            if df_uprns_new is not None
-            else None
         )
         sections.append(
             _generate_str_uprns_missing_clusters_section(
