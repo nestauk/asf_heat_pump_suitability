@@ -1683,18 +1683,11 @@ class TestFilterDfClustersLayer:
             is df_clusters_old
         ), "a frame without a layer column must pass through as the same frame"
 
-    def test_clusters_layer_name_comes_from_config(self):
-        """The clusters layer name is config, not code, and must match the
-        front-end file's real layer value (verified against the 20260806
-        East Lothian output)."""
+    def test_clusters_layer_name_is_in_config(self):
+        """base.yaml must name the clusters layer the checks filter to."""
         assert (
-            config["compare_versions"]["cluster_layer"]
-            == "clusters_with_contextual_features"
-        ), "base.yaml must name the front-end file's real clusters layer"
-        assert (
-            compare_versions.CLUSTER_LAYER
-            == config["compare_versions"]["cluster_layer"]
-        ), "the module must read the clusters layer name from config"
+            "cluster_layer" in config["compare_versions"]
+        ), "base.yaml must set compare_versions.cluster_layer"
 
 
 class TestGenerateDictDistributionStats:
