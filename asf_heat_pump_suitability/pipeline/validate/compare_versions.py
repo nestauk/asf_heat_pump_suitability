@@ -228,6 +228,8 @@ def get_dict_distribution_frames(
 # uses log-spaced bins. Cluster areas and UPRNs per cluster have a few very
 # large values, so with even bins almost every value lands in the first bar.
 LOG_BINS_SKEW_RATIO = 50
+# Number of histogram bars in each distribution plot.
+N_PLOT_BINS = 40
 
 
 def _use_log_bins(values: np.ndarray) -> bool:
@@ -260,9 +262,12 @@ def plot_distribution_overlay(
     combined = np.concatenate([old, new])
     log_bins = _use_log_bins(combined)
     if log_bins:
-        bins = np.logspace(np.log10(combined.min()), np.log10(combined.max()), num=41)
+        # N bars need N + 1 edges.
+        bins = np.logspace(
+            np.log10(combined.min()), np.log10(combined.max()), num=N_PLOT_BINS + 1
+        )
     else:
-        bins = np.histogram_bin_edges(combined, bins=40)
+        bins = np.histogram_bin_edges(combined, bins=N_PLOT_BINS)
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.hist(old, bins=bins, alpha=0.6, label="Old", color="tab:blue")
     ax.hist(new, bins=bins, alpha=0.6, label="New", color="tab:orange")
