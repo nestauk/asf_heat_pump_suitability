@@ -224,9 +224,9 @@ def get_dict_distribution_frames(
     return frames
 
 
-# Max-to-median ratio above which a distribution is drawn on log-spaced
-# bins: cluster areas and UPRNs-per-cluster are heavily right-skewed, and
-# linear bins collapse almost every value into one bar.
+# If the largest value is more than this many times the median, the plot
+# uses log-spaced bins. Cluster areas and UPRNs per cluster have a few very
+# large values, so with even bins almost every value lands in the first bar.
 LOG_BINS_SKEW_RATIO = 50
 
 
