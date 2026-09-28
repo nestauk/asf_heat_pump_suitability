@@ -1830,11 +1830,14 @@ class TestGetDictDistributionFrames:
             df_areas,
             df_areas,
         )
-        assert frames["n_UPRNs"][0]["n_UPRNs"].drop_nulls().to_list() == [
+        # Each column maps to its (old, new) pair of DataFrames.
+        df_n_uprns_old, _ = frames["n_UPRNs"]
+        _, df_area_new = frames["area_m2"]
+        assert df_n_uprns_old["n_UPRNs"].drop_nulls().to_list() == [
             5,
             8,
         ], "ward rows must not enter the n_UPRNs distribution"
-        assert frames["area_m2"][1]["area_m2"].to_list() == [
+        assert df_area_new["area_m2"].to_list() == [
             100.0,
             200.0,
         ], "whole-county ward polygons must not enter the area distribution"
