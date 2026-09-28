@@ -294,10 +294,10 @@ def generate_dict_distribution_plots(
     skipped with a warning — its stats section already notes the gap.
 
     Args:
-        frames: column to (old, new) frame pair, as built by
-            `get_dict_distribution_frames`
-        plot_dir: directory the PNGs are saved to
-        file_stem: filename prefix, shared with the markdown report
+        frames (dict[str, tuple[pl.DataFrame, pl.DataFrame]]): column to
+            (old, new) DataFrame pair, as built by `get_dict_distribution_frames`
+        plot_dir (Path): directory the PNGs are saved to
+        file_stem (str): filename prefix, shared with the markdown report
 
     Returns:
         dict: column to saved PNG filename (relative to `plot_dir`, so the
