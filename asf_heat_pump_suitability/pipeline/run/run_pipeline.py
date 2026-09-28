@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 
-from asf_heat_pump_suitability.utils.save_utils import get_str_release_date
+from asf_heat_pump_suitability.utils import save_utils
 
 # (display name, path relative to the repo root) for each stage, in run order
 STAGES = [
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     os.chdir(PROJECT_DIR)
 
     args = parse_arguments()
-    release_date = get_str_release_date(args.release_date)
+    release_date = save_utils.get_str_release_date(args.release_date)
     print(f"Release date pinned to: {release_date}")
 
     print("--> Checking S3 input paths exist: check_inputs.py")
@@ -140,11 +140,11 @@ if __name__ == "__main__":
     )
     print("=" * 50)
 
-    print("--> Generating manifest.json: create_manifest.py")
-    result = subprocess.run(
-        [sys.executable, "asf_heat_pump_suitability/pipeline/run/create_manifest.py"]
-    )
-    if result.returncode != 0:
-        sys.exit("Error running create_manifest.py")
+    # print("--> Generating manifest.json: create_manifest.py")
+    # result = subprocess.run(
+    #     [sys.executable, "asf_heat_pump_suitability/pipeline/run/create_manifest.py"]
+    # )
+    # if result.returncode != 0:
+    #     sys.exit("Error running create_manifest.py")
 
     print("Pipeline finished!")
