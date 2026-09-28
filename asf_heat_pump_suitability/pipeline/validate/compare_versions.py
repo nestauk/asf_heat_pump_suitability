@@ -324,7 +324,12 @@ def generate_dict_distribution_plots(
             logging.warning("No %s values in one version; plot skipped.", column)
             continue
         filename = f"{file_stem}_{column}.png"
-        plot_distribution_overlay(values_old, values_new, column, plot_dir / filename)
+        plot_distribution_overlay(
+            values_old=values_old,
+            values_new=values_new,
+            label=column,
+            path=plot_dir / filename,
+        )
         plot_files[column] = filename
     return plot_files
 
@@ -1140,8 +1145,8 @@ def _generate_str_distribution_section(
             or a note when either version has no values
     """
     title = f"Distribution: {column}"
-    stats_old = generate_dict_distribution_stats(frame_old, column)
-    stats_new = generate_dict_distribution_stats(frame_new, column)
+    stats_old = generate_dict_distribution_stats(df=frame_old, column=column)
+    stats_new = generate_dict_distribution_stats(df=frame_new, column=column)
     if stats_old is None or stats_new is None:
         return _render_section(
             title, f"Skipped: no `{column}` values in one or both versions."
@@ -1377,21 +1382,34 @@ def generate_str_report(
     ]
     if stage in GEOMETRY_STAGES:
         area_delta = (
-            generate_dict_total_area_delta(df_areas_old, df_areas_new)
+            generate_dict_total_area_delta(
+                df_areas_old=df_areas_old, df_areas_new=df_areas_new
+            )
             if df_areas_old is not None and df_areas_new is not None
             else None
         )
         sections.append(
             _generate_str_cluster_geometry_section(
-                generate_dict_cluster_count_delta(df_old, df_new), area_delta, stage
+                count_delta=generate_dict_cluster_count_delta(
+                    df_old=df_old, df_new=df_new
+                ),
+                area_delta=area_delta,
+                stage=stage,
             )
         )
         frames = get_dict_distribution_frames(
-            stage, df_old, df_new, df_areas_old, df_areas_new
+            stage=stage,
+            df_old=df_old,
+            df_new=df_new,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_new,
         )
         sections.extend(
             _generate_str_distribution_section(
-                column, frame_old, frame_new, (plot_files or {}).get(column)
+                column=column,
+                frame_old=frame_old,
+                frame_new=frame_new,
+                plot_file=(plot_files or {}).get(column),
             )
             for column, (frame_old, frame_new) in frames.items()
         )
