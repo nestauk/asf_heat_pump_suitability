@@ -28,6 +28,7 @@ def parse_arguments() -> argparse.Namespace:
         type=str,
         nargs="+",
         required=True,
+        default="GB",
     )
 
     parser.add_argument(
@@ -38,13 +39,6 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--number_of_chunks",
-        required=False,
-        type="store_true",
-    )
-
-    parser.add_argument(
-        "--save",
-        help="If --save is set, it saves outputs to S3.",
         required=False,
         action="store_true",
     )
@@ -58,18 +52,23 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    import polars as pl
     from tqdm import tqdm
     import subprocess
+    from asf_heat_pump_suitability import config
 
     args = parse_arguments()
     local_authorities = args.local_authorities
     release_date = args.release_date
+    if local_authorities == "GB":
+        local_authorities = pl.read_csv(config["data"]["processed"]["valid_la_names"])
 
     chunks = chunk_list(
         np.asarray(local_authorities), n=args.size, size=args.number_of_chunks
     )
 
     for chunk in tqdm(chunks):
+        print(f"Running chunk: {chunk}")
         subprocess.run(
             [
                 "orbit",
