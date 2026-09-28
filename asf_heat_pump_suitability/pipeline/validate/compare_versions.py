@@ -1548,14 +1548,18 @@ if __name__ == "__main__":
     )
     df_areas_old = df_areas_new = plot_files = None
     if args.stage in GEOMETRY_STAGES:
-        df_areas_old = load_df_cluster_areas(path_old)
-        df_areas_new = load_df_cluster_areas(path_new)
+        df_areas_old = load_df_cluster_areas(path=path_old)
+        df_areas_new = load_df_cluster_areas(path=path_new)
         plot_files = generate_dict_distribution_plots(
-            get_dict_distribution_frames(
-                args.stage, df_old, df_new, df_areas_old, df_areas_new
+            frames=get_dict_distribution_frames(
+                stage=args.stage,
+                df_old=df_old,
+                df_new=df_new,
+                df_areas_old=df_areas_old,
+                df_areas_new=df_areas_new,
             ),
-            report_dir,
-            report_stem,
+            plot_dir=report_dir,
+            file_stem=report_stem,
         )
     report = generate_str_report(
         df_old=df_old,
