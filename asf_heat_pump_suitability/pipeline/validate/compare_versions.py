@@ -198,12 +198,12 @@ def get_dict_distribution_frames(
     df_areas_new: pl.DataFrame | None,
 ) -> dict[str, tuple[pl.DataFrame, pl.DataFrame]]:
     """
-    Map each of a stage's distribution columns to the (old, new) pair of
-    DataFrames that hold it.
+    List the columns whose spread of values the report compares, each with
+    the (old, new) pair of DataFrames that hold it.
 
-    The derived cluster area reads the geometry-derived frames (when
-    loaded); the stage's configured `DISTRIBUTION_COLUMNS` read the tabular
-    outputs.
+    These are cluster area, taken from the per-cluster areas when they are
+    loaded, plus any columns listed for the stage under
+    `distribution_columns` in base.yaml, taken from the stage outputs.
 
     Args:
         stage (str): pipeline stage the outputs belong to
@@ -1339,8 +1339,9 @@ def generate_str_report(
         df_areas_old: older version's per-cluster areas (geometry stages), or
             None (the total-area check is then skipped)
         df_areas_new: newer version's per-cluster areas, or None
-        plot_files: distribution column to saved plot filename, embedded as
-            image links; None embeds no plots
+        plot_files: for each compared column (see
+            `get_dict_distribution_frames`), the file name of its saved
+            plot, shown in the report; None shows no plots
 
     Returns:
         str: markdown report; lineage sections are replaced by a note when a
