@@ -62,6 +62,7 @@ if __name__ == "__main__":
         uprns,
         outdoor_space,
     )
+    from asf_heat_pump_suitability.pipeline.run import optimise_inputs
     from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
@@ -87,7 +88,9 @@ if __name__ == "__main__":
         uprns_path,
         columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
     )
-    uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
+    uprns_df = optimise_inputs.assign_df_grid_squares(
+        uprns_df, x_col="X_COORDINATE", y_col="Y_COORDINATE"
+    )
 
     print("Loading land registry file index...")
     inspire_file_gdf = gpd.read_parquet(
