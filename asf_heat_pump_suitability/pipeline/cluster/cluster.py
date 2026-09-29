@@ -747,7 +747,7 @@ def reassign_gdf_near_anchor_properties(
 ) -> gpd.GeoDataFrame:
     """
     Reassign building tech type to communal if within a given radius of an anchor load property, if assigned N-GSHP by the decision tree.
-    Flipped buildings get the anchor-proximity `communal_origin`; buildings already communal keep their decision-tree origin.
+    Buildings getting their technology reassigned due to anchor-proximity get `communal_origin` updated to reflect that; buildings already communal keep their original value of `communal_origin`.
 
     Args:
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types and `communal_origin`.
@@ -767,7 +767,7 @@ def reassign_gdf_near_anchor_properties(
 
     # distance_m column now reads a number (distance from anchor) for all buildings within radius of anchor, and NaN for all outside of that radius
     # if distance column is not NaN (i.e. building is within the radius of an anchor), reassign tech type according to the map
-    # Flag the buildings the reassignment flips to communal, before flipping them.
+    # Flag the buildings reassigned to communal, before reassigning them.
     # Buildings that were already communal keep their decision-tree origin.
     newly_communal = tech_gdf["distance_m"].notna() & (
         tech_gdf["assigned_tech"] == NETWORKED
