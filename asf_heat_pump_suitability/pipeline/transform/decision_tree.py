@@ -198,27 +198,27 @@ def identify_df_building_most_suitable_tech(
         buildings_with_multiple_solutions_df
     )
     buildings_with_multiple_solutions_df = buildings_with_multiple_solutions_df.select(
-        [id_col, "assigned_tech", "communal_origin"]
+        [id_col, "assigned_tech"]
     )
 
     # For building footprints with only 1 solution, assign that solution as the unique solution for the building
-    # A single-solution communal building means all its UPRNs are in a block of flats
     buildings_with_single_solution_df = (
         solutions_per_footprint_df.filter(pl.col("n_solutions") == 1)
-        .with_columns(
-            assigned_tech=pl.col("assigned_tech").list.get(0),
-            communal_origin=pl.when(
-                pl.col("assigned_tech").list.contains(TECH_TYPES["communal"])
-            )
-            .then(pl.lit(COMMUNAL_ORIGIN["block_of_flats"]))
-            .otherwise(pl.lit(None, dtype=pl.String)),
-        )
-        .select([id_col, "assigned_tech", "communal_origin"])
+        .with_columns(assigned_tech=pl.col("assigned_tech").list.get(0))
+        .select([id_col, "assigned_tech"])
     )
 
     # Combine the dataframes of building footprints with multiple solutions and single solution to get the final dataframe with a unique assigned solution for each building footprint
     solutions_per_footprint_df = pl.concat(
         [buildings_with_multiple_solutions_df, buildings_with_single_solution_df]
+    )
+
+    # Blocks of flats are the only route to communal in the decision tree, so every
+    # communal building gets that origin. Anchor proximity is added later in cluster.py.
+    solutions_per_footprint_df = solutions_per_footprint_df.with_columns(
+        communal_origin=pl.when(pl.col("assigned_tech") == TECH_TYPES["communal"])
+        .then(pl.lit(COMMUNAL_ORIGIN["block_of_flats"]))
+        .otherwise(pl.lit(None, dtype=pl.String))
     )
 
     # Convert back to Pandas df to be merged to GeoDataFrames in the next steps of the pipeline
@@ -239,14 +239,11 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
         - "Individual or Networked" otherwise
     - Else, assign "Unexpected combination of solutions in building footprint"
 
-    Also adds a `communal_origin` column stating why a building resolves to "Communal" (currently
-    always a block of flats); null for non-communal buildings.
-
     Args:
         solutions_per_footprint_df (pl.DataFrame): DataFrame with the set of most suitable tech for each building footprint and median outdoor space
 
     Returns:
-        pl.DataFrame: DataFrame with assigned unique solution and communal origin for each building footprint.
+        pl.DataFrame: DataFrame with assigned unique solution for each building footprint.
     """
     # Assign a unique solution for each building footprint based on the combination of solutions in the set
     solutions_per_footprint_df = solutions_per_footprint_df.with_columns(
@@ -273,13 +270,6 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
                 .otherwise(pl.lit(TECH_TYPES["individual_or_networked"]))
             )
             .otherwise(pl.lit("Unexpected combination"))
-        ),
-        # A set containing communal means at least one UPRN is in a block of flats,
-        # which is the only route to a communal UPRN in the decision tree
-        communal_origin=(
-            pl.when(pl.col("assigned_tech").list.contains(TECH_TYPES["communal"]))
-            .then(pl.lit(COMMUNAL_ORIGIN["block_of_flats"]))
-            .otherwise(pl.lit(None, dtype=pl.String))
         ),
     )
 

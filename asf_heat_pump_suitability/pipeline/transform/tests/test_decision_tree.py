@@ -205,19 +205,12 @@ class TestAssignDfUniqueSolution:
         )
         return decision_tree.assign_df_unique_solution(solutions_per_footprint_df)
 
-    def test_communal_set_gets_block_of_flats_origin(self, result_df):
-        """A solution set containing communal resolves to communal with block-of-flats origin."""
-        row = result_df.filter(pl.col("ID") == "B1")
+    def test_most_collaborative_tech_takes_precedence(self, result_df):
+        """A solution set containing more than one tech resolves to the most collaborative solution."""
+        resolved = dict(zip(result_df["ID"], result_df["assigned_tech"]))
         assert (
-            row["assigned_tech"].item() == TECH_TYPES["communal"]
-        ), "a solution set containing communal must resolve to communal"
+            resolved["B1"] == TECH_TYPES["communal"]
+        ), "'communal' must take precedence over 'networked'"
         assert (
-            row["communal_origin"].item() == COMMUNAL_ORIGIN["block_of_flats"]
-        ), "a set containing communal comes from a block of flats so must carry that origin"
-
-    def test_non_communal_set_gets_null_origin(self, result_df):
-        """A solution set without communal has a null communal origin."""
-        row = result_df.filter(pl.col("ID") == "B2")
-        assert (
-            row["communal_origin"].item() is None
-        ), "a building not resolved to communal must have a null communal origin"
+            resolved["B2"] == TECH_TYPES["networked"]
+        ), "'networked' must take precedence over 'individual'"
