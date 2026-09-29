@@ -1,5 +1,5 @@
 """
-Run full pipeline end-to-end for one or multiple batches of Local Authorities in chunks.
+Run full pipeline end-to-end for any number of Local Authorities in batches using `orbit`.
 
 Splits the given local authorities into chunks and launches one `orbit` job per chunk, each running `pipeline.py`
 remotely for that chunk's local authorities.
@@ -14,7 +14,8 @@ Usage:
         python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities 'glasgow city' 'south lanarkshire'
 
 Pass `--local_authorities GB` to run for every local authority in GB, otherwise pass one or more local authority names.
-`--size` sets the chunk size by default, or the number of chunks if `--number_of_chunks` is also passed; if `--size` is
+`--size` sets the chunk size by default (the number of Local Authorities to be run in each batch), or the number of
+chunks if `--number_of_chunks` is also passed (the number of batches to run in parallel). If `--size` is
 omitted, all local authorities are run in a single chunk.
 
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
@@ -189,7 +190,7 @@ if __name__ == "__main__":
                     "--memory",
                     "60gb",
                     "-e",
-                    "PYTHONPATH=/app",
+                    "PYTHONPATH=/app",  # Install repository in docker image
                     "--local_authorities",
                     *chunk,
                     "--release_date",
