@@ -92,7 +92,7 @@ for la in "${local_authorities[@]}"; do
 
     # Step 5: Compute contextual features
     echo "--> Running: compute_contextual_features.py"
-    python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities "$la" --release_date "$release_date" --save
+    python asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py --local_authorities "$la" --release_date "$release_date" --save --prod
     if [ $? -ne 0 ]; then echo "Error in compute_contextual_features.py for $la. Skipping... (after $((SECONDS-la_start))s)"; continue; fi
 
     echo "Successfully finished pipeline for: $la (took $((SECONDS-la_start))s)"
