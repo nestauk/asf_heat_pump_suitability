@@ -15,6 +15,39 @@ For GB-wide processing, you can omit the --grid_squares argument or set it to No
 """
 
 import argparse
+import polars as pl
+
+# Distance (m) to buffer around a grid square's land parcels when selecting
+# which buildings to load, so parcels near a grid square boundary are still
+# intersected against buildings that physically sit in the neighbouring square.
+BUILDING_BUFFER_M = 500
+
+
+def _get_list_neighbouring_grid_squares(
+    grid_square_lookup: pl.DataFrame, square: str, valid_squares: list[str]
+) -> list[str]:
+    """
+    Return `square` plus its immediate 100km neighbours that have GB land data.
+
+    Args:
+        grid_square_lookup (pl.DataFrame): DataFrame with columns "grid_square", "easting_100km", "northing_100km" for all GB grid squares with land data
+        square (str): 2-letter grid square code to find neighbours for
+        valid_squares (list[str]): List of valid grid squares to consider
+
+    Returns:
+        list[str]: List of grid squares including `square` and its immediate 100km neighbours
+    """
+    row = grid_square_lookup.filter(pl.col("grid_square") == square)
+    easting, northing = row["easting_100km"][0], row["northing_100km"][0]
+    neighbour_coords = [
+        {"easting_100km": easting + de, "northing_100km": northing + dn}
+        for de in (-1, 0, 1)
+        for dn in (-1, 0, 1)
+    ]
+    neighbours = grid_square_lookup.filter(
+        pl.struct(["easting_100km", "northing_100km"]).is_in(neighbour_coords)
+    )["grid_square"].to_list()
+    return [s for s in neighbours if s in valid_squares]
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -51,6 +84,7 @@ if __name__ == "__main__":
     import polars as pl
     import geopandas as gpd
     import pandas as pd
+    import shapely
 
     from asf_heat_pump_suitability import config
 
@@ -97,8 +131,18 @@ if __name__ == "__main__":
         config["data"]["processed"]["inspire_file_names"]
     )
 
+    # grid square lookup to find neighbouring squares
+    grid_square_lookup = optimise_inputs.build_df_grid_square_lookup()
+
     for square in grid_squares:
         square_uprns_df = uprns_df.filter(pl.col("grid_square") == square)
+
+        # Get list of neighbouring grid squares (in addition to this square) to load building footprints from,
+        # so that buildings in neighbouring squares that intersect with this square's land parcels are included
+        neighbouring_grid_squares_list = _get_list_neighbouring_grid_squares(
+            grid_square_lookup, square=square, valid_squares=grid_squares
+        )
+
         if square_uprns_df.is_empty():
             print(f"No UPRNs found in {square}, skipping")
             continue
@@ -127,12 +171,18 @@ if __name__ == "__main__":
         land_parcels_gdf = land_parcels_gdf.drop_duplicates(subset=["geometry"])
 
         buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
-            layer="building", grid_squares=[square]
+            layer="building", grid_squares=neighbouring_grid_squares_list
         )
 
         if buildings_gdf.empty:
             print(f"No building footprints found for {square}, skipping")
             continue
+
+        # Restrict buildings to a buffer around this `square`'s own land parcels
+        buffered_bbox = shapely.box(*land_parcels_gdf.total_bounds).buffer(
+            BUILDING_BUFFER_M
+        )
+        buildings_gdf = buildings_gdf[buildings_gdf.intersects(buffered_bbox)]
 
         intersection_gdf = outdoor_space.generate_gdf_building_intersections(
             land_parcels_gdf=land_parcels_gdf,
