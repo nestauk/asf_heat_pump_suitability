@@ -121,10 +121,10 @@ class TestIdentifyGdfTupleMostSuitableTechUprnAndBuilding:
 def tech_gdf():
     """
     Generate UPRN-level decision tree outputs for four buildings:
-    - B_FLATS: both UPRNs communal (block of flats)
-    - B_FLATS_MIX: one communal UPRN and one networked UPRN
-    - B_NET: one networked UPRN
-    - B_IND_NET: one individual and one networked UPRN
+    - B_FLATS: multiple UPRNs assigned 'communal' because they are in a block of flats
+    - B_FLATS_MIX: one UPRN assigned 'communal' and one UPRN assigned 'networked'
+    - B_NET: one UPRN assigned 'networked'
+    - B_IND_NET: one UPRN assigned 'individual' and one UPRN assigned 'networked'
     """
     rows = [
         ("U01", TECH_TYPES["communal"], "B_FLATS", None),
