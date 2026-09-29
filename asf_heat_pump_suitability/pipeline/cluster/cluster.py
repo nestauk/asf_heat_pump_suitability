@@ -135,7 +135,7 @@ def generate_gdf_clusters(
         radius=radius,
     )
 
-    reassigned_lookup = reassigned_gdf.set_index(id_col)
+    reassigned_lookup = reassigned_gdf.set_index(id_col).to_dict()
     cells_gdf["assigned_tech"] = cells_gdf[id_col].map(
         reassigned_lookup["assigned_tech"]
     )
