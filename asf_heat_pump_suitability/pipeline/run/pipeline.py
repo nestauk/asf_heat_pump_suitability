@@ -52,6 +52,15 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
         required=False,
     )
+
+    parser.add_argument(
+        "--prod",
+        help="Set to push changes to production (i.e. staging area). This should only be used when running from `dev`. "
+        "If `save` is not set, `prod` will automatically be rendered False.",
+        action="store_true",
+        default=False,
+    )
+
     return parser.parse_args()
 
 
@@ -96,6 +105,7 @@ if __name__ == "__main__":
     release_date = save_utils.get_str_release_date(args.release_date)
     print(f"Release date pinned to: {release_date}")
 
+    # TODO commented out due to errors in running check_inputs.py
     # print("--> Checking S3 input paths exist: check_inputs.py")
     # result = subprocess.run(
     #     [
@@ -118,7 +128,7 @@ if __name__ == "__main__":
         la_failed = False
         for stage_name, script_path in STAGES:
             print(f"\n--> Running: {stage_name}")
-            if stage_name == "compute_contextual_features.py":
+            if stage_name == "compute_contextual_features.py" and args.prod:
                 returncode = run_script(script_path, la, release_date, flags=["--prod"])
             else:
                 returncode = run_script(script_path, la, release_date)
