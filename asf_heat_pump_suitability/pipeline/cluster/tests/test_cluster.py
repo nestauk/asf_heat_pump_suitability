@@ -921,7 +921,7 @@ class TestReassignGdfAnchorProperties:
             ), f"'communal' building {building} must keep its decision-tree origin even if close to an anchor load"
 
     def test_untouched_buildings_keep_null_origin(self, tech_gdf, gdf_anchor_property):
-        """Test buildings the anchor reassignment does not flip keep a null origin."""
+        """Verify that buildings not reassigned to 'communal' retain a null communal_origin."""
         reassigned_gdf = reassign_gdf_near_anchor_properties(
             tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
         )
