@@ -177,7 +177,7 @@ class TestIdentifyDfBuildingMostSuitableTech:
     def test_mixed_building_containing_communal_gets_block_of_flats_origin(
         self, solutions_df
     ):
-        """A building mixing communal and networked UPRNs resolves to communal with block-of-flats origin."""
+        """A building with UPRNs assigned to a mix of 'communal' and 'networked' solutions resolves to 'communal' with block-of-flats origin."""
         assert (
             solutions_df.loc["B_FLATS_MIX", "assigned_tech"] == TECH_TYPES["communal"]
         ), "communal must take precedence in a building mixing communal and networked UPRNs"
