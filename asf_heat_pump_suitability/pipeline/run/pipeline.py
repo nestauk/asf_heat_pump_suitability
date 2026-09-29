@@ -2,9 +2,6 @@
 Runs the entire pipeline for a list of local authorities. Executes each of the five stages in sequence, per local
 authority, and checks for errors after each stage.
 
-You can then run it with:
-    asf_heat_pump_suitability/pipeline/run/run_pipeline.py --local_authorities "Plymouth" "Vale of Glamorgan"
-
 Usage:
     python asf_heat_pump_suitability/pipeline/run/run_pipeline.py --local_authorities <LOCAL_AUTHORITY> [--release_date YYYYMMDD]
 
