@@ -1780,10 +1780,10 @@ class TestGenerateStrReportUprnsMissingClusters:
         """The section gives each version's counts and share, and the change
         in the missing count."""
         report = generate_report(
-            df_contextual,
-            df_contextual,
-            None,
-            None,
+            df_old=df_contextual,
+            df_new=df_contextual,
+            manifest_old=None,
+            manifest_new=None,
             stage="compute_contextual_features",
             trigger=None,
             df_uprns_old=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
@@ -1807,10 +1807,10 @@ class TestGenerateStrReportUprnsMissingClusters:
         """A version with no add_features output gets a note, not an error,
         and the rest of the report still renders."""
         report = generate_report(
-            df_contextual,
-            df_contextual,
-            None,
-            None,
+            df_old=df_contextual,
+            df_new=df_contextual,
+            manifest_old=None,
+            manifest_new=None,
             stage="compute_contextual_features",
             trigger=None,
             df_uprns_old=None,
