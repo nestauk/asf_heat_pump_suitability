@@ -1475,6 +1475,10 @@ class TestLoadTupleDfAddFeaturesUprns:
     def test_missing_output_gives_none_for_that_version_only(self, mocker, tmp_path):
         """A version with no add_features output loads as None, and the
         other version still loads its UPRN column only."""
+        # Tests have no S3 access, so the newer version is a local parquet
+        # file. The loader resolves the old path first, then the new one:
+        # the first call raises as a missing S3 file would, and the second
+        # returns the local file.
         path_new = tmp_path / "with_features.parquet"
         pl.DataFrame({"UPRN": [1, 2], "in_hn_zone": [True, False]}).write_parquet(
             path_new
