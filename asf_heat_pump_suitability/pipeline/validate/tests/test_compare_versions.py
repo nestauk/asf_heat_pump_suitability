@@ -1811,7 +1811,7 @@ class TestGenerateStrReportUprnsMissingClusters:
         ), "the section must give the UPRNs going in for each version"
         assert (
             "| UPRNs in clusters | 3 | 3 | +0 |" in report
-        ), "the section must give the UPRNs held by clusters for each version"
+        ), "the section must give the UPRNs in clusters for each version"
         assert (
             "| UPRNs missing a cluster | 1 | 2 | +1 |" in report
         ), "the section must give the missing count and its change"
