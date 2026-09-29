@@ -16,6 +16,7 @@ from asf_heat_pump_suitability.pipeline.transform import decision_tree
 
 TECH_TYPES = config["constant"]["tech_types"]
 COMMUNAL_ORIGIN = config["constant"]["communal_origin"]
+BUILDING_ID = config["constant"]["id"]["building"]
 
 
 @pytest.fixture(scope="module")
@@ -144,7 +145,7 @@ def tech_gdf():
         {
             "UPRN": [row[0] for row in rows],
             "assigned_tech": [row[1] for row in rows],
-            "ID": [row[2] for row in rows],
+            BUILDING_ID: [row[2] for row in rows],
             "max_contiguous_outdoor_space_area_m2": [row[3] for row in rows],
         },
         # Points stand in for the UPRN locations: this test does not check geometry
@@ -160,8 +161,8 @@ class TestIdentifyDfBuildingMostSuitableTech:
     def solutions_df(self, tech_gdf):
         """Run the function once and index the result by building ID."""
         return decision_tree.identify_df_building_most_suitable_tech(
-            tech_gdf, id_col="ID"
-        ).set_index("ID")
+            tech_gdf, id_col=BUILDING_ID
+        ).set_index(BUILDING_ID)
 
     def test_all_communal_building_gets_block_of_flats_origin(self, solutions_df):
         """A building where every UPRN is communal resolves to communal with block-of-flats origin."""
@@ -201,7 +202,7 @@ class TestAssignDfUniqueSolution:
         """Resolve one building containing communal and one without."""
         solutions_per_footprint_df = pl.DataFrame(
             {
-                "ID": ["B1", "B2"],
+                BUILDING_ID: ["B1", "B2"],
                 "assigned_tech": [
                     [TECH_TYPES["communal"], TECH_TYPES["networked"]],
                     [TECH_TYPES["networked"], TECH_TYPES["individual"]],
@@ -213,7 +214,7 @@ class TestAssignDfUniqueSolution:
 
     def test_most_collaborative_tech_takes_precedence(self, result_df):
         """A solution set containing more than one tech resolves to the most collaborative solution."""
-        resolved = dict(zip(result_df["ID"], result_df["assigned_tech"]))
+        resolved = dict(zip(result_df[BUILDING_ID], result_df["assigned_tech"]))
         assert (
             resolved["B1"] == TECH_TYPES["communal"]
         ), "'communal' must take precedence over 'networked'"
