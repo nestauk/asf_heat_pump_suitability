@@ -3,7 +3,7 @@ Runs the entire pipeline for a list of local authorities. Executes each of the f
 authority, and checks for errors after each stage.
 
 Usage:
-    python asf_heat_pump_suitability/pipeline/run/run_pipeline.py --local_authorities <LOCAL_AUTHORITY> [--release_date YYYYMMDD]
+    python asf_heat_pump_suitability/pipeline/run/run_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--release_date YYYYMMDD]
 
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
