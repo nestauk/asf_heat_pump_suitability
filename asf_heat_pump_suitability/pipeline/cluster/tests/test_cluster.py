@@ -267,7 +267,7 @@ def tech_gdf(gdf_mixed_buildings):
         utils.assign_str_tech_type, args=(tech_mapping,)
     )
 
-    # Decision-tree communal buildings are blocks of flats; other techs have no communal origin
+    # After decision_tree.py is run, all buildings assigned 'communal' are blocks of flats
     gdf_mixed_buildings["communal_origin"] = gdf_mixed_buildings["assigned_tech"].map(
         {"Communal solution": "block of flats"}
     )
