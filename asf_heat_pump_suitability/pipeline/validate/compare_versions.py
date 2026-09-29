@@ -238,9 +238,10 @@ def get_dict_distribution_frames(
         df_old (pl.DataFrame): older version of the tabular stage output
         df_new (pl.DataFrame): newer version of the tabular stage output
         df_areas_old (pl.DataFrame | None): older version's per-cluster areas,
-            or None
+            or None if the stage has no geometry. If either version is None,
+            cluster area is left out
         df_areas_new (pl.DataFrame | None): newer version's per-cluster areas,
-            or None
+            or None if the stage has no geometry
 
     Returns:
         dict: column name to (old, new) clusters-layer frame pair,
