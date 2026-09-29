@@ -5,9 +5,9 @@ The report covers row and UPRN counts, schema changes, UPRN churn, per-tech
 counts and the tech transition matrix (decision tree stage), cluster count
 and area changes with distribution plots (cluster and contextual features
 stages), the UPRNs that are in no cluster (compute_contextual_features,
-counted against the add_features output of the same release), and the commits that touched the
-stage's code between the two versions. Distribution plots are saved as PNGs
-next to the report.
+counted against the add_features output of the same release), and the
+commits that touched the stage's code between the two versions.
+Distribution plots are saved as PNGs next to the report.
 
 Pass --trigger methodology_change or --trigger input_release to check the
 numbers against that trigger's tolerances. Leave it out to get the numbers
@@ -196,12 +196,17 @@ def generate_dict_uprns_missing_clusters(
     Count the domestic UPRNs that are in no cluster, for one release.
 
     Args:
-        df_uprns: the add_features output of the release, with a UPRN column
-        df_clusters: the contextual-features output of the same release
+        df_uprns (pl.DataFrame): the add_features output of the release, with
+            a UPRN column
+        df_clusters (pl.DataFrame): the compute_contextual_features output of
+            the same release, with an n_UPRNs column
 
     Returns:
-        dict: uprns_in, uprns_in_clusters, uprns_missing and missing_share
-            (a fraction of uprns_in)
+        dict: four keys:
+            - uprns_in (int): distinct UPRNs in `df_uprns`
+            - uprns_in_clusters (int): sum of n_UPRNs over the clusters layer
+            - uprns_missing (int): uprns_in minus uprns_in_clusters
+            - missing_share (float): uprns_missing as a fraction of uprns_in
     """
     uprns_in = df_uprns[UPRN_COL].n_unique()
     uprns_in_clusters = int(filter_df_clusters_layer(df_clusters)[N_UPRNS_COL].sum())
@@ -1029,12 +1034,13 @@ def load_tuple_df_add_features_uprns(
     count still shows.
 
     Args:
-        local_authority: local authority slug used in output paths
-        release_date_old: release date (YYYYMMDD) of the older output
-        release_date_new: release date (YYYYMMDD) of the newer output
+        local_authority (str): local authority slug used in output paths
+        release_date_old (str): release date (YYYYMMDD) of the older output
+        release_date_new (str): release date (YYYYMMDD) of the newer output
 
     Returns:
-        tuple: (older, newer) UPRN columns, each None when unavailable
+        tuple[pl.DataFrame | None, pl.DataFrame | None]: (older, newer)
+            DataFrames with a UPRN column only, each None when unavailable
     """
     uprns_by_version = []
     for release_date in (release_date_old, release_date_new):
@@ -1307,9 +1313,11 @@ def _generate_str_uprns_missing_clusters_section(
     Render the UPRNs missing clusters, per version, as a markdown section.
 
     Args:
-        counts_old: from `generate_dict_uprns_missing_clusters` for the older
-            version, or None when it has no add_features output
-        counts_new: the same for the newer version
+        counts_old (dict | None): the older version's counts, with keys
+            uprns_in, uprns_in_clusters, uprns_missing and missing_share (see
+            `generate_dict_uprns_missing_clusters`); None when that version
+            has no add_features output
+        counts_new (dict | None): the same for the newer version
 
     Returns:
         str: markdown section; a version without counts shows n/a and a note
@@ -1539,10 +1547,12 @@ def generate_str_report(
         plot_files: for each compared column (see
             `get_dict_distribution_frames`), the file name of its saved
             plot, shown in the report; None shows no plots
-        df_uprns_old: older version's add_features UPRNs, used only when
-            comparing compute_contextual_features outputs; None when missing,
-            and the report then says its count is unavailable
-        df_uprns_new: newer version's add_features UPRNs, or None
+        df_uprns_old (pl.DataFrame | None): older version's add_features
+            UPRNs, used only when comparing compute_contextual_features
+            outputs; None when missing, and the report then says its count is
+            unavailable
+        df_uprns_new (pl.DataFrame | None): newer version's add_features
+            UPRNs, or None
 
     Returns:
         str: markdown report; lineage sections are replaced by a note when a
