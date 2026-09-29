@@ -1727,10 +1727,20 @@ class TestGenerateDictUprnsMissingClusters:
     """Tests for `generate_dict_uprns_missing_clusters`."""
 
     def test_counts_uprns_in_minus_uprns_in_clusters(self):
-        """Five distinct UPRNs go in and the clusters hold three, so two are
-        missing a cluster; a repeated UPRN row counts once."""
+        """Five distinct UPRNs go in and three are in clusters, so two are
+        missing a cluster. A repeated UPRN row counts once, and the
+        anchor_loads row is not a cluster, so its n_UPRNs is not counted."""
         df_uprns = pl.DataFrame({"UPRN": [1, 2, 3, 4, 5, 5]})
-        df_clusters = pl.DataFrame({"cluster_id": ["HP_1", "HP_2"], "n_UPRNs": [2, 1]})
+        df_clusters = pl.DataFrame(
+            {
+                "n_UPRNs": [2, 1, 50],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "anchor_loads",
+                ],
+            }
+        )
         counts = compare_versions.generate_dict_uprns_missing_clusters(
             df_uprns=df_uprns, df_clusters=df_clusters
         )
@@ -1739,7 +1749,7 @@ class TestGenerateDictUprnsMissingClusters:
             "uprns_in_clusters": 3,
             "uprns_missing": 2,
             "missing_share": 0.4,
-        }, "missing must be distinct UPRNs in minus the clusters' n_UPRNs sum"
+        }, "missing must be distinct UPRNs in minus the clusters layer's n_UPRNs sum"
 
     def test_float_n_uprns_gives_whole_counts(self):
         """The real geojson loads n_UPRNs as a float with nulls; the counts
@@ -1751,24 +1761,6 @@ class TestGenerateDictUprnsMissingClusters:
         assert counts["uprns_in_clusters"] == 3 and isinstance(
             counts["uprns_in_clusters"], int
         ), "a float n_UPRNs sum must become a whole count, skipping nulls"
-
-    def test_counts_the_clusters_layer_only(self):
-        """Non-cluster layers of a multi-layer output must not add to the
-        UPRNs counted in clusters."""
-        df_uprns = pl.DataFrame({"UPRN": [1, 2, 3, 4]})
-        df_clusters = pl.DataFrame(
-            {
-                "n_UPRNs": [3, 50],
-                "layer": [compare_versions.CLUSTER_LAYER, "anchor_loads"],
-            }
-        )
-        counts = compare_versions.generate_dict_uprns_missing_clusters(
-            df_uprns=df_uprns, df_clusters=df_clusters
-        )
-        assert (
-            counts["uprns_in_clusters"] == 3
-        ), "only the clusters layer's n_UPRNs may count as UPRNs in clusters"
-        assert counts["uprns_missing"] == 1, "one of four UPRNs is missing a cluster"
 
 
 @pytest.fixture(scope="module")
