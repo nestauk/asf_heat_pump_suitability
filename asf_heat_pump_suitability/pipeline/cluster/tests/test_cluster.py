@@ -918,7 +918,7 @@ class TestReassignGdfAnchorProperties:
         for building in ["B07", "B11", "B12", "B13"]:
             assert (
                 results[building] == "block of flats"
-            ), f"communal building {building} must keep its decision-tree origin inside the anchor radius"
+            ), f"'communal' building {building} must keep its decision-tree origin even if close to an anchor load"
 
     def test_untouched_buildings_keep_null_origin(self, tech_gdf, gdf_anchor_property):
         """Test buildings the anchor reassignment does not flip keep a null origin."""
