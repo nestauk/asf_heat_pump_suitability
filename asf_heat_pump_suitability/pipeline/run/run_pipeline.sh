@@ -1,8 +1,8 @@
 #!/bin/bash
 # This script runs the entire pipeline for a list of local authorities. It executes each step in sequence and checks for errors after each step.
 # To make the script executable, run: chmod +x asf_heat_pump_suitability/pipeline/run/run_pipeline.sh
-# You can then run the script with: ./asf_heat_pump_suitability/pipeline/run/run_pipeline.sh --local_authorities "Barking and Dagenham" "Flintshire"
-# Usage: ./asf_heat_pump_suitability/pipeline/run/run_pipeline.sh --local_authorities <name> [<name> ...] [--release_date YYYYMMDD]
+# You can then run the script with: ./asf_heat_pump_suitability/pipeline/run/run_pipeline.sh --local_authorities <local_authority>
+# Usage: ./asf_heat_pump_suitability/pipeline/run/run_pipeline.sh --local_authorities <local_authority> [<local_authority> ...] [--release_date YYYYMMDD]
 # The release date defaults to today and is pinned across all stages, so a run
 # crossing midnight still writes to a single dated release directory.
 
@@ -14,7 +14,7 @@ usage() {
     echo "Error: $1" >&2
     echo "Usage: $0 --local_authorities <name> [<name> ...] [--release_date YYYYMMDD]" >&2
     echo "  --local_authorities  one or more local authority names to run the pipeline for," >&2
-    echo "                       e.g. --local_authorities 'Barking and Dagenham' 'Flintshire'." >&2
+    echo "                       e.g. --local_authorities 'Plymouth' 'Vale of Glamorgan'." >&2
     echo "  --release_date       the release date to pin across all stages, e.g. 20260801." >&2
     echo "                       Defaults to today." >&2
     exit 1
