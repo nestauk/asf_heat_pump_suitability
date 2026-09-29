@@ -4,8 +4,8 @@ Compare two dated versions of a pipeline stage output for one local authority.
 The report covers row and UPRN counts, schema changes, UPRN churn, per-tech
 counts and the tech transition matrix (decision tree stage), cluster count
 and area changes with distribution plots (cluster and contextual features
-stages), the UPRNs missing a cluster (contextual features stage, from the
-add_features output of the same release), and the commits that touched the
+stages), the UPRNs that are in no cluster (compute_contextual_features,
+counted against the add_features output of the same release), and the commits that touched the
 stage's code between the two versions. Distribution plots are saved as PNGs
 next to the report.
 
@@ -193,7 +193,7 @@ def generate_dict_uprns_missing_clusters(
     df_uprns: pl.DataFrame, df_clusters: pl.DataFrame
 ) -> dict:
     """
-    Count the domestic UPRNs that one release's clusters do not hold.
+    Count the domestic UPRNs that are in no cluster, for one release.
 
     Args:
         df_uprns: the add_features output of the release, with a UPRN column
@@ -1024,19 +1024,19 @@ def load_tuple_df_add_features_uprns(
     """
     Load the UPRN column of both versions' add_features outputs.
 
-    Each version degrades to None on its own, with a logged warning, when
-    its output is missing or unreadable, so the other version's count still
-    shows.
+    If one version's output is missing or cannot be read, that version is
+    None and a warning is logged. The other version still loads, so its
+    count still shows.
 
     Args:
         local_authority: local authority slug used in output paths
-        release_date_old: dated version folder of the older output
-        release_date_new: dated version folder of the newer output
+        release_date_old: release date (YYYYMMDD) of the older output
+        release_date_new: release date (YYYYMMDD) of the newer output
 
     Returns:
         tuple: (older, newer) UPRN columns, each None when unavailable
     """
-    frames = []
+    uprns_by_version = []
     for release_date in (release_date_old, release_date_new):
         try:
             path = _get_str_output_path(
@@ -1045,7 +1045,9 @@ def load_tuple_df_add_features_uprns(
                 release_date=release_date,
                 check_exists=True,
             )
-            frames.append(pl.from_arrow(pq.read_table(path, columns=[UPRN_COL])))
+            uprns_by_version.append(
+                pl.from_arrow(pq.read_table(path, columns=[UPRN_COL]))
+            )
         except (OSError, ValueError) as error:
             logging.warning(
                 "add_features output unavailable for %s (%s); its UPRNs "
@@ -1053,8 +1055,8 @@ def load_tuple_df_add_features_uprns(
                 release_date,
                 error,
             )
-            frames.append(None)
-    return frames[0], frames[1]
+            uprns_by_version.append(None)
+    return uprns_by_version[0], uprns_by_version[1]
 
 
 def _render_section(title: str, *body: str) -> str:
@@ -1342,7 +1344,7 @@ def _generate_str_uprns_missing_clusters_section(
             "",
             "UPRNs in: distinct UPRNs in the add_features output of the same "
             f"release. UPRNs in clusters: sum of `{N_UPRNS_COL}` over the "
-            f"`{CLUSTER_LAYER}` layer. Report only; no tolerance applies.",
+            f"`{CLUSTER_LAYER}` layer. This count does not fail the run.",
         ]
     )
     for label, counts in (("old", counts_old), ("new", counts_new)):
@@ -1537,9 +1539,9 @@ def generate_str_report(
         plot_files: for each compared column (see
             `get_dict_distribution_frames`), the file name of its saved
             plot, shown in the report; None shows no plots
-        df_uprns_old: older version's add_features UPRNs (contextual-features
-            stage), or None when missing (its count is then noted as
-            unavailable)
+        df_uprns_old: older version's add_features UPRNs, used only when
+            comparing compute_contextual_features outputs; None when missing,
+            and the report then says its count is unavailable
         df_uprns_new: newer version's add_features UPRNs, or None
 
     Returns:

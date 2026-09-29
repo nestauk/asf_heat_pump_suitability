@@ -1472,7 +1472,7 @@ class TestLoadTupleDfBuildings:
 class TestLoadTupleDfAddFeaturesUprns:
     """Tests for `load_tuple_df_add_features_uprns`."""
 
-    def test_missing_output_degrades_that_version_only(self, mocker, tmp_path):
+    def test_missing_output_gives_none_for_that_version_only(self, mocker, tmp_path):
         """A version with no add_features output loads as None, and the
         other version still loads its UPRN column only."""
         path_new = tmp_path / "with_features.parquet"
