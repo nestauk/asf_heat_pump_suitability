@@ -897,7 +897,7 @@ class TestReassignGdfAnchorProperties:
     def test_flipped_buildings_get_anchor_proximity_origin(
         self, tech_gdf, gdf_anchor_property
     ):
-        """Test buildings flipped to communal by anchor proximity get the anchor-proximity origin."""
+        """Assert whether buildings reassigned to 'communal' due to anchor proximity get the anchor-proximity origin."""
         reassigned_gdf = reassign_gdf_near_anchor_properties(
             tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
         )
