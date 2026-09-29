@@ -100,7 +100,7 @@ if __name__ == "__main__":
     release_date = save_utils.get_str_release_date(args.release_date)
     print(f"Release date pinned to: {release_date}")
 
-    if local_authorities == "GB":
+    if local_authorities == ["GB"]:
         local_authorities = pl.read_csv(config["data"]["processed"]["valid_la_names"])[
             "LAD23NM"
         ].to_list()
