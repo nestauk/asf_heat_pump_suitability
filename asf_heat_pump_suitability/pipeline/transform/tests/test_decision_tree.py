@@ -187,7 +187,7 @@ class TestIdentifyDfBuildingMostSuitableTech:
         ), "a building resolved to 'communal' because it is a block of flats must carry the block-of-flats origin"
 
     def test_non_communal_buildings_have_null_origin(self, solutions_df):
-        """Buildings not resolved to communal have a null communal origin."""
+        """Buildings not resolved to 'communal' have a null communal origin."""
         for building in ["B_NET", "B_IND_NET"]:
             assert pd.isna(
                 solutions_df.loc[building, "communal_origin"]
