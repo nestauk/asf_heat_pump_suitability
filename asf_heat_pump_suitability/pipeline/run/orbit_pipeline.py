@@ -1,3 +1,26 @@
+"""
+Run full pipeline end-to-end for one or multiple batches of Local Authorities in chunks.
+
+Splits the given local authorities into chunks and launches one `orbit` job per chunk, each running `pipeline.py`
+remotely for that chunk's local authorities.
+
+Usage:
+    python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--size N [--number_of_chunks]] [--release_date YYYYMMDD]
+
+    e.g. to run for Great Britain in chunks of 20 local authorities each:
+        python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities GB --size 20
+
+    e.g. to run for two named local authorities as a single chunk:
+        python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities 'glasgow city' 'south lanarkshire'
+
+Pass `--local_authorities GB` to run for every local authority in GB, otherwise pass one or more local authority names.
+`--size` sets the chunk size by default, or the number of chunks if `--number_of_chunks` is also passed; if `--size` is
+omitted, all local authorities are run in a single chunk.
+
+The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
+dated release directory.
+"""
+
 import math
 import numpy as np
 import argparse
@@ -45,12 +68,14 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--size",
+        help="Number of chunks for batch processing if `--number_of_chunks` passed, otherwise size of chunks for batch processing.",
         required=False,
         type=int,
     )
 
     parser.add_argument(
         "--number_of_chunks",
+        help="Pass this argument if `--size` represents number of chunks.",
         required=False,
         action="store_true",
     )
