@@ -165,7 +165,7 @@ class TestIdentifyDfBuildingMostSuitableTech:
         ).set_index(BUILDING_ID)
 
     def test_all_communal_building_gets_block_of_flats_origin(self, solutions_df):
-        """A building where every UPRN is communal resolves to communal with block-of-flats origin."""
+        """A building with UPRNs assigned to 'communal' resolves to 'communal' with block-of-flats origin."""
         assert (
             solutions_df.loc["B_FLATS", "assigned_tech"] == TECH_TYPES["communal"]
         ), "a building whose UPRNs are all communal must resolve to communal"
