@@ -55,8 +55,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--prod",
-        help="Set to push changes to production (i.e. staging area). This should only be used when running from `dev`. "
-        "If `save` is not set, `prod` will automatically be rendered False.",
+        help="Set to push changes to production (i.e. staging area). This should only be used when running from `dev`.",
         action="store_true",
         default=False,
     )
@@ -118,6 +117,8 @@ if __name__ == "__main__":
     # if result.returncode != 0:
     #     sys.exit("Error running check_inputs.py: missing S3 input paths. Aborting.")
 
+    failed = dict()
+
     succeeded = 0
     for la in args.local_authorities:
         print("=" * 50)
@@ -139,6 +140,7 @@ if __name__ == "__main__":
                     f"(after {elapsed}s)"
                 )
                 la_failed = True
+                failed[la] = stage_name
                 break
 
         if la_failed:
@@ -152,3 +154,7 @@ if __name__ == "__main__":
         f"\n\nPipeline completed for {succeeded} of {len(args.local_authorities)} "
         "local authorities."
     )
+    if failed:
+        print(
+            f"Pipeline failed for the following Local Authorities at the specified stages: {failed}"
+        )
