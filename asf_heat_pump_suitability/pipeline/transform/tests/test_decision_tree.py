@@ -142,6 +142,7 @@ def tech_gdf():
             "ID": [row[2] for row in rows],
             "max_contiguous_outdoor_space_area_m2": [row[3] for row in rows],
         },
+        # Points stand in for the UPRN locations: this test does not check geometry
         geometry=[Point(400000 + i, 400000) for i in range(len(rows))],
         crs="EPSG:27700",
     )
