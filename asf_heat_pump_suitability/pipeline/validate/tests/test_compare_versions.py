@@ -1737,6 +1737,17 @@ class TestGenerateDictUprnsMissingClusters:
             "missing_share": 0.4,
         }, "missing must be distinct UPRNs in minus the clusters' n_UPRNs sum"
 
+    def test_float_n_uprns_gives_whole_counts(self):
+        """The real geojson loads n_UPRNs as a float with nulls; the counts
+        must still be whole numbers."""
+        counts = compare_versions.generate_dict_uprns_missing_clusters(
+            df_uprns=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
+            df_clusters=pl.DataFrame({"n_UPRNs": [2.0, 1.0, None]}),
+        )
+        assert counts["uprns_in_clusters"] == 3 and isinstance(
+            counts["uprns_in_clusters"], int
+        ), "a float n_UPRNs sum must become a whole count, skipping nulls"
+
     def test_counts_the_clusters_layer_only(self):
         """Non-cluster layers of a multi-layer output must not add to the
         UPRNs counted in clusters."""
@@ -1758,8 +1769,20 @@ class TestGenerateDictUprnsMissingClusters:
 
 @pytest.fixture(scope="module")
 def df_contextual():
-    """Contextual-features output: two clusters holding three UPRNs."""
-    return pl.DataFrame({"cluster_id": ["HP_1", "HP_2"], "n_UPRNs": [2, 1]})
+    """Contextual-features output: two clusters holding three UPRNs, and a
+    ward row. As in the real geojson, n_UPRNs is a float and is null on the
+    ward row."""
+    return pl.DataFrame(
+        {
+            "cluster_id": ["HP_1", "HP_2", None],
+            "n_UPRNs": [2.0, 1.0, None],
+            "layer": [
+                compare_versions.CLUSTER_LAYER,
+                compare_versions.CLUSTER_LAYER,
+                "ward_boundaries",
+            ],
+        }
+    )
 
 
 class TestGenerateStrReportUprnsMissingClusters:

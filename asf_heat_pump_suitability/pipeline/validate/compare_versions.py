@@ -209,6 +209,8 @@ def generate_dict_uprns_missing_clusters(
             - missing_share (float): uprns_missing as a fraction of uprns_in
     """
     uprns_in = df_uprns[UPRN_COL].n_unique()
+    # n_UPRNs loads from the geojson as a float, because the rows of the
+    # other layers are null, so the sum is cast back to a whole count.
     uprns_in_clusters = int(filter_df_clusters_layer(df=df_clusters)[N_UPRNS_COL].sum())
     uprns_missing = uprns_in - uprns_in_clusters
     return {
