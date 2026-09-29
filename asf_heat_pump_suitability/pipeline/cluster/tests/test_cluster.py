@@ -905,7 +905,7 @@ class TestReassignGdfAnchorProperties:
         for building in ["B02", "B03", "B04"]:
             assert (
                 results[building] == "anchor proximity"
-            ), f"networked building {building} flipped by the anchor must carry the anchor-proximity origin"
+            ), f"building {building} originally assigned 'networked' must be reassigned to 'communal' with 'anchor-proximity' origin due to anchor load proximity"
 
     def test_block_of_flats_buildings_keep_origin_within_radius(
         self, tech_gdf, gdf_anchor_property
