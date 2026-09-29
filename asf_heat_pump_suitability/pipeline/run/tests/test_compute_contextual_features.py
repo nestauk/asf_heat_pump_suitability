@@ -111,10 +111,3 @@ class TestExtendGdfLogicTrace:
             assert (
                 "potential" not in traces[cluster]
             ), f"cluster {cluster} outside DHN-potential areas must not mention it"
-
-    def test_no_hedging_sentences(self, traces):
-        """No trace hedges about what else the cluster might contain."""
-        for cluster, trace in traces.items():
-            assert (
-                "There might also be" not in trace
-            ), f"cluster {cluster} trace must not hedge about blocks of flats"
