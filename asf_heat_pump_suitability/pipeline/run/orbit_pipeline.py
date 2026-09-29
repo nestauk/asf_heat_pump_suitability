@@ -76,7 +76,9 @@ if __name__ == "__main__":
     print(f"Release date pinned to: {release_date}")
 
     if local_authorities == "GB":
-        local_authorities = pl.read_csv(config["data"]["processed"]["valid_la_names"])
+        local_authorities = pl.read_csv(config["data"]["processed"]["valid_la_names"])[
+            "LAD23NM"
+        ].to_list()
 
     chunks = chunk_list_strings(
         np.asarray(local_authorities), n=args.size, size=args.number_of_chunks
