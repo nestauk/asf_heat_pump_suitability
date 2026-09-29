@@ -1,9 +1,21 @@
 import math
 import numpy as np
 import argparse
+from typing import List
 
 
-def chunk_list_local_authorities(arr: np.array, n: int, size: bool) -> list:
+def chunk_list_strings(arr: np.array, n: int, size: bool) -> List[List[str]]:
+    """
+    Split an array of strings into chunks for processing.
+
+    Args:
+        arr (np.array): array of strings to chunk.
+        n (int): size of chunks if `size` set to `True` otherwise, number of chunks.
+        size (bool): set to `True` if `n` represents size of chunks, or `False` if `n` represents number of chunks.
+
+    Returns:
+        List[List[str]]: list of lists of strings
+    """
     if not size:
         # Calculate how many items per chunk
         n = math.ceil(len(arr) / n)
@@ -66,7 +78,7 @@ if __name__ == "__main__":
     if local_authorities == "GB":
         local_authorities = pl.read_csv(config["data"]["processed"]["valid_la_names"])
 
-    chunks = chunk_list_local_authorities(
+    chunks = chunk_list_strings(
         np.asarray(local_authorities), n=args.size, size=args.number_of_chunks
     )
 
@@ -79,7 +91,7 @@ if __name__ == "__main__":
                 "--script",
                 "asf_heat_pump_suitability/pipeline/run/pipeline.py",
                 "--team",
-                "ASF",
+                "asf",
                 "--project",
                 "local_heat_planning_tool",
                 "--cpu",
