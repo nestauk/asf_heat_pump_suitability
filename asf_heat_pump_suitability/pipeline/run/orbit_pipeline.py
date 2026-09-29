@@ -105,6 +105,61 @@ if __name__ == "__main__":
             "LAD23NM"
         ].to_list()
 
+    # TODO remove later - temporary list for testing
+    if local_authorities == ["test"]:
+        print("Running for test LAs...")
+        local_authorities = [
+            "Hartlepool",
+            "Middlesbrough",
+            "Redcar and Cleveland",
+            "Stockton-on-Tees",
+            "Darlington",
+            "Halton",
+            "Warrington",
+            "Blackburn with Darwen",
+            "Blackpool",
+            "Kingston upon Hull, City of",
+            "East Riding of Yorkshire",
+            "North East Lincolnshire",
+            "North Lincolnshire",
+            "York",
+            "Derby",
+            "Leicester",
+            "Rutland",
+            "Nottingham",
+            "Herefordshire, County of",
+            "Telford and Wrekin",
+            "Stoke-on-Trent",
+            "Bath and North East Somerset",
+            "Bristol, City of",
+            "North Somerset",
+            "South Gloucestershire",
+            "Torbay",
+            "Swindon",
+            "Peterborough",
+            "Luton",
+            "Southend-on-Sea",
+            "Thurrock",
+            "Medway",
+            "Bracknell Forest",
+            "West Berkshire",
+            "Reading",
+            "Slough",
+            "Windsor and Maidenhead",
+            "Wokingham",
+            "Milton Keynes",
+            "Brighton and Hove",
+            "Portsmouth",
+            "Southampton",
+            "Isle of Wight",
+            "County Durham",
+            "Cheshire East",
+            "Cheshire West and Chester",
+            "Shropshire",
+            "Cornwall",
+            "Isles of Scilly",
+        ]
+
     chunks = chunk_list_strings(
         np.asarray(local_authorities), n=args.size, size=args.number_of_chunks
     )
