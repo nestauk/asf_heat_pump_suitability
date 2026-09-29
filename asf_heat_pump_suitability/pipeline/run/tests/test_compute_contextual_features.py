@@ -56,6 +56,7 @@ def clusters_gdf():
             "in_hn_zone": [row[3] for row in rows],
             "in_city_centre": [row[4] for row in rows],
         },
+        # Points stand in for the cluster polygons: this test does not check geometry
         geometry=[Point(400000 + i, 400000) for i in range(len(rows))],
         crs="EPSG:27700",
     )
