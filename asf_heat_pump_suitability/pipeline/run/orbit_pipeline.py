@@ -85,6 +85,13 @@ def parse_arguments() -> argparse.Namespace:
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
     )
 
+    parser.add_argument(
+        "--prod",
+        help="Set to push changes to production (i.e. staging area). This should only be used when running from `dev`.",
+        action="store_true",
+        default=False,
+    )
+
     return parser.parse_args()
 
 
@@ -166,25 +173,50 @@ if __name__ == "__main__":
 
     for chunk in tqdm(chunks):
         print(f"Running chunk: {chunk}")
-        subprocess.run(
-            [
-                "orbit",
-                "launch",
-                "--script",
-                "asf_heat_pump_suitability/pipeline/run/pipeline.py",
-                "--team",
-                "asf",
-                "--project",
-                "local_heat_planning_tool",
-                "--cpu",
-                "8",
-                "--memory",
-                "60gb",
-                "-e",
-                "PYTHONPATH=/app",
-                "--local_authorities",
-                *chunk,
-                "--release_date",
-                release_date,
-            ]
-        )
+        if args.prod:
+            subprocess.run(
+                [
+                    "orbit",
+                    "launch",
+                    "--script",
+                    "asf_heat_pump_suitability/pipeline/run/pipeline.py",
+                    "--team",
+                    "asf",
+                    "--project",
+                    "local_heat_planning_tool",
+                    "--cpu",
+                    "8",
+                    "--memory",
+                    "60gb",
+                    "-e",
+                    "PYTHONPATH=/app",
+                    "--local_authorities",
+                    *chunk,
+                    "--release_date",
+                    release_date,
+                    "--prod",
+                ]
+            )
+        else:
+            subprocess.run(
+                [
+                    "orbit",
+                    "launch",
+                    "--script",
+                    "asf_heat_pump_suitability/pipeline/run/pipeline.py",
+                    "--team",
+                    "asf",
+                    "--project",
+                    "local_heat_planning_tool",
+                    "--cpu",
+                    "8",
+                    "--memory",
+                    "60gb",
+                    "-e",
+                    "PYTHONPATH=/app",
+                    "--local_authorities",
+                    *chunk,
+                    "--release_date",
+                    release_date,
+                ]
+            )
