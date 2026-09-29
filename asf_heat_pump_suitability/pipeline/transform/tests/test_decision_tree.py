@@ -184,7 +184,7 @@ class TestIdentifyDfBuildingMostSuitableTech:
         assert (
             solutions_df.loc["B_FLATS_MIX", "communal_origin"]
             == COMMUNAL_ORIGIN["block_of_flats"]
-        ), "a building resolved communal because it contains flats must carry the block-of-flats origin"
+        ), "a building resolved to 'communal' because it is a block of flats must carry the block-of-flats origin"
 
     def test_non_communal_buildings_have_null_origin(self, solutions_df):
         """Buildings not resolved to communal have a null communal origin."""
