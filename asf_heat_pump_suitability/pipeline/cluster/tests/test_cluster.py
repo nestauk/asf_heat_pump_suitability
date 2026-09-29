@@ -434,7 +434,7 @@ class TestGenerateGdfClusters:
         tech_gdf,
         empty_gdf,
     ):
-        """Test adjacent communal buildings with different origins form separate clusters."""
+        """Assert that adjacent buildings assigned 'communal' for different reasons (blocks of flats vs anchor proximity) form separate clusters."""
         # B11 and B12 are the neighbouring communal buildings that merge into one
         # cluster when their origins match (see `test_cluster_dissolve`: 9 clusters)
         split_tech_gdf = tech_gdf.copy()
