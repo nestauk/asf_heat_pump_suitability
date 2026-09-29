@@ -125,6 +125,11 @@ def tech_gdf():
     - B_FLATS_MIX: one UPRN assigned 'communal' and one UPRN assigned 'networked'
     - B_NET: one UPRN assigned 'networked'
     - B_IND_NET: one UPRN assigned 'individual' and one UPRN assigned 'networked'
+    Each row contains the following information:
+    - UPRN
+    - Most suitable tech
+    - Building ID
+    - Outdoor space
     """
     rows = [
         ("U01", TECH_TYPES["communal"], "B_FLATS", None),
