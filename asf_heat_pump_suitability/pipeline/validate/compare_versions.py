@@ -215,7 +215,7 @@ def generate_dict_uprns_missing_clusters(
         "uprns_in": uprns_in,
         "uprns_in_clusters": uprns_in_clusters,
         "uprns_missing": uprns_missing,
-        "missing_share": uprns_missing / uprns_in if uprns_in else 0.0,
+        "missing_share": uprns_missing / uprns_in,
     }
 
 
