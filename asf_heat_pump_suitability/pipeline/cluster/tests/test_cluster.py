@@ -929,4 +929,4 @@ class TestReassignGdfAnchorProperties:
         for building in ["B01", "B09"]:
             assert pd.isna(
                 results[building]
-            ), f"non-communal building {building} must keep a null communal origin"
+            ), f"building {building} not reassigned to 'communal' must keep a null communal_origin"
