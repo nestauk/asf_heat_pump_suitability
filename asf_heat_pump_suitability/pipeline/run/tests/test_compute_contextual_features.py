@@ -18,9 +18,9 @@ COMMUNAL_ORIGIN = config["constant"]["communal_origin"]
 @pytest.fixture(scope="module")
 def clusters_gdf():
     """
-    Generate one cluster per logic-trace branch: each communal origin with and without
+    Generate one cluster per logic-trace branch, including: each communal origin with and without
     DHN potential, the non-communal techs with and without DHN potential, and one
-    tech no rule matches.
+    unexpected combination.
     """
     rows = [
         # (cluster_id, assigned_tech, communal_origin, in_hn_zone, in_city_centre)
