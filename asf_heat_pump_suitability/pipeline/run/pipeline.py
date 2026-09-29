@@ -55,18 +55,22 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_script(script_path: str, local_authority: str, release_date: str) -> int:
+def run_script(
+    script_path: str, local_authority: str, release_date: str, flags: list = None
+) -> int:
     """
     Run one pipeline stage for one local authority and save outputs to S3.
 
     Args:
-        script_path: path to the stage script, relative to the repo root.
-        local_authority: local authority name to run the stage for.
-        release_date: release date to pin, in the configured format.
+        script_path (str): path to the stage script, relative to the repo root.
+        local_authority (str): local authority name to run the stage for.
+        release_date (str): release date to pin, in the configured format.
+        flags (list): additional flags for running pipeline script. Default None.
 
     Returns:
         int: the stage's process exit code (0 on success).
     """
+    flags = flags or []
     result = subprocess.run(
         [
             sys.executable,
@@ -76,6 +80,7 @@ def run_script(script_path: str, local_authority: str, release_date: str) -> int
             "--release_date",
             release_date,
             "--save",
+            *flags,
         ]
     )
     return result.returncode
@@ -113,7 +118,10 @@ if __name__ == "__main__":
         la_failed = False
         for stage_name, script_path in STAGES:
             print(f"\n--> Running: {stage_name}")
-            returncode = run_script(script_path, la, release_date)
+            if stage_name == "compute_contextual_features.py":
+                returncode = run_script(script_path, la, release_date, flags=["--prod"])
+            else:
+                returncode = run_script(script_path, la, release_date)
             if returncode != 0:
                 elapsed = int(time.monotonic() - la_start)
                 print(
@@ -129,9 +137,8 @@ if __name__ == "__main__":
         elapsed = int(time.monotonic() - la_start)
         print(f"Successfully finished pipeline for: {la} (took {elapsed}s)")
         succeeded += 1
-        print()
 
     print(
-        f"Pipeline completed for {succeeded} of {len(args.local_authorities)} "
+        f"\n\nPipeline completed for {succeeded} of {len(args.local_authorities)} "
         "local authorities."
     )
