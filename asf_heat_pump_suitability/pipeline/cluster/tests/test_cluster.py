@@ -910,7 +910,7 @@ class TestReassignGdfAnchorProperties:
     def test_block_of_flats_buildings_keep_origin_within_radius(
         self, tech_gdf, gdf_anchor_property
     ):
-        """Test a block of flats within the anchor radius keeps its block-of-flats origin."""
+        """Assert whether a 'block of flats' building near an anchor load keeps its block-of-flats communal origin."""
         reassigned_gdf = reassign_gdf_near_anchor_properties(
             tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
         )
