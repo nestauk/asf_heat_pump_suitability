@@ -1,8 +1,8 @@
 ---
 title: "Cross-version comparison report: count UPRNs missing clusters"
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/519
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/520
 asana: https://app.asana.com/1/5571817120120/project/1214222223606748/task/1218394231045431
 created: 2026-09-28
 ---
@@ -89,8 +89,8 @@ the cause of unmatched UPRNs, no #474 decomposition.
 The acceptance criteria are in
 [#519](https://github.com/nestauk/asf_heat_pump_suitability/issues/519). In addition:
 
-- [ ] `uv run python -m pytest asf_heat_pump_suitability/pipeline/validate/tests/test_compare_versions.py`
+- [x] `uv run python -m pytest asf_heat_pump_suitability/pipeline/validate/tests/test_compare_versions.py`
       passes, with new tests for the count, the layer filter and a missing add_features output
-- [ ] East Lothian acceptance run:
+- [x] East Lothian acceptance run:
       `uv run python -m asf_heat_pump_suitability.pipeline.validate.compare_versions --stage compute_contextual_features --local_authority east_lothian`
-      gives a missing count of 0 or more, and the count agrees with a manual recount from the two outputs
+      gives a missing count of 0 or more, and the count agrees with a manual recount from the two outputs (2026-09-29, 20260806 vs 20260907, 291 to 292 missing, recount matched)
