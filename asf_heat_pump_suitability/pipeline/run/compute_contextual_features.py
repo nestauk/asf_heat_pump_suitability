@@ -82,6 +82,14 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--prod",
+        help="Set to push changes to production (i.e. staging area). This should only be used when running from `dev`. "
+        "If `save` is not set, `prod` will automatically be rendered False.",
+        action="store_true",
+        default=False,
+    )
+
+    parser.add_argument(
         "--release_date",
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
     )
@@ -295,61 +303,64 @@ def extend_gdf_logic_trace(
         clusters_with_contextual_features_gdf["in_city_centre"] == "Yes"
     )
 
+    is_communal = assigned_tech == TECH_TYPES["communal"]
+    is_networked = assigned_tech == TECH_TYPES["networked"]
+    is_ind_or_net = assigned_tech == TECH_TYPES["individual_or_networked"]
+    is_individual = assigned_tech == TECH_TYPES["individual"]
+
     logic_trace = [
         # 1) Communal solution (anchor proximity) + DHN potential
         (
-            (assigned_tech == TECH_TYPES["communal"])
+            is_communal
             & (communal_origin == COMMUNAL_ORIGIN["anchor_proximity"])
             & dhn_potential,
             f"This cluster:\n- is in an area of 'district heat network' potential,\n- contains homes that have no or little outdoor space (up to 30m2),\n and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school),\n so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed. \n A 'communal solution' could be considered as an alternative solution because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school). This 'communal solution' could be integrated into a 'district heat network' in the future.\n",
         ),
         # 2) Communal solution (anchor proximity)
         (
-            (assigned_tech == TECH_TYPES["communal"])
-            & (communal_origin == COMMUNAL_ORIGIN["anchor_proximity"]),
+            is_communal & (communal_origin == COMMUNAL_ORIGIN["anchor_proximity"]),
             f"This cluster is assigned 'communal solution' because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school).",
         ),
         # 3) Communal solution (blocks of flats) + DHN potential
         (
-            (assigned_tech == TECH_TYPES["communal"])
+            is_communal
             & (communal_origin == COMMUNAL_ORIGIN["block_of_flats"])
             & dhn_potential,
             "This cluster is in an area of 'district heat network' potential and it contains one or multiple blocks of flats, so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed.\n A 'communal solution' could also be considered as an alternative solution, because it contains one or multiple blocks of flats. This 'communal solution' could be integrated into a 'district heat network' in the future.",
         ),
         # 4) Communal solution (blocks of flats)
         (
-            (assigned_tech == TECH_TYPES["communal"])
-            & (communal_origin == COMMUNAL_ORIGIN["block_of_flats"]),
+            is_communal & (communal_origin == COMMUNAL_ORIGIN["block_of_flats"]),
             "This cluster is assigned 'communal solution' because it contains one or multiple blocks of flats.",
         ),
         # 5) Networked heat pump + DHN potential
         (
-            (assigned_tech == TECH_TYPES["networked"]) & dhn_potential,
+            is_networked & dhn_potential,
             "This cluster is in an area of 'district heat network' potential and homes have no or little outdoor space (up to 30m2), so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed.\n A 'networked heat pump' could be considered as an alternative solution because multiple properties within these buildings have no or little outdoor space (up to 30m2).\n",
         ),
         # 6) Networked heat pump
         (
-            (assigned_tech == TECH_TYPES["networked"]),
+            is_networked,
             "This cluster is assigned 'networked heat pump' because multiple properties within these buildings have no or little outdoor space (up to 30m2)",
         ),
         # 7) Individual solution or networked HP (lack of outdoor space info) + DHN potential
         (
-            (assigned_tech == TECH_TYPES["individual_or_networked"]) & dhn_potential,
+            is_ind_or_net & dhn_potential,
             "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space:\n -This cluster is in an area of 'district heat network' potential and if homes have no or little outdoor space (up to 30m2), then homes would be most suitable for a district heat network connection when/if a 'district heat network' is constructed.\n A 'networked heat pump' could also be considered as an alternative solution, because multiple properties within these buildings have no or little outdoor space (up to 30m2).\n\nIf there is sufficient outdoor space for each property (above 30m2):\n - 'Individual solutions' will be the most suitable option for properties in this cluster because outdoor space is above 30m2 for all properties.\n - The cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
         ),
         # 8) Individual solution or networked HP (lack of outdoor space info)
         (
-            (assigned_tech == TECH_TYPES["individual_or_networked"]),
+            is_ind_or_net,
             "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space, a 'networked heat pump' solution is most suitable. If there is sufficient outdoor space for each property (above 30m2) an 'individual solution' will be most suitable.",
         ),
         # 9) Individual solution + DHN potential
         (
-            (assigned_tech == TECH_TYPES["individual"]) & dhn_potential,
+            is_individual & dhn_potential,
             "This cluster is assigned 'individual solution' because outdoor space is above 30m2 for all properties in this cluster.\nThe cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
         ),
         # 10) Individual solution
         (
-            (assigned_tech == TECH_TYPES["individual"]),
+            is_individual,
             "This cluster is assigned 'individual solution' because outdoor space is above 30m2 for all properties in this cluster.",
         ),
     ]
@@ -379,6 +390,7 @@ def create_gdf_contextual_features(
     Returns:
         gpd.GeoDataFrame: geodataframe with cluster_id, geometry and contextual features for each cluster (CRS: EPSG:4326)
     """
+    target_crs = "EPSG:27700"
 
     clusters_with_contextual_features_df = extend_df_contextual_features(
         clusters_df=pl.from_pandas(
@@ -400,21 +412,28 @@ def create_gdf_contextual_features(
             on="cluster_id",
         ),
         geometry="geometry",
-        crs="EPSG:27700",
+        crs=target_crs,
     )
 
-    geo_utils.verify_gdf_crs(hn_zones_gdf, target_crs="EPSG:27700")
-    geo_utils.verify_gdf_crs(spatial_signatures_gdf, target_crs="EPSG:27700")
+    geo_utils.verify_gdf_crs(hn_zones_gdf, target_crs=target_crs)
+    geo_utils.verify_gdf_crs(spatial_signatures_gdf, target_crs=target_crs)
 
     # Add in_hn_zone and in_city_centre flags to clusters_gdf
-    clusters_with_contextual_features_gdf["in_hn_zone"] = (
-        clusters_with_contextual_features_gdf.intersects(hn_zones_gdf.union_all())
-    ).map({True: "Yes", False: "No"})
-    clusters_with_contextual_features_gdf["in_city_centre"] = (
-        clusters_with_contextual_features_gdf.intersects(
-            spatial_signatures_gdf.union_all()
-        )
-    ).map({True: "Yes", False: "No"})
+    if hn_zones_gdf is not None and not hn_zones_gdf.empty:
+        clusters_with_contextual_features_gdf["in_hn_zone"] = (
+            clusters_with_contextual_features_gdf.intersects(hn_zones_gdf.union_all())
+        ).map({True: "Yes", False: "No"})
+    else:
+        clusters_with_contextual_features_gdf["in_hn_zone"] = "No"
+
+    if spatial_signatures_gdf is not None and not spatial_signatures_gdf.empty:
+        clusters_with_contextual_features_gdf["in_city_centre"] = (
+            clusters_with_contextual_features_gdf.intersects(
+                spatial_signatures_gdf.union_all()
+            )
+        ).map({True: "Yes", False: "No"})
+    else:
+        clusters_with_contextual_features_gdf["in_city_centre"] = "No"
 
     return clusters_with_contextual_features_gdf
 
@@ -438,8 +457,10 @@ def create_json_contextual_features_metadata(
        json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
 
     """
+    target_crs = "EPSG:4326"
+
     geo_utils.verify_gdf_crs(
-        clusters_with_contextual_features_gdf, target_crs="EPSG:4326"
+        clusters_with_contextual_features_gdf, target_crs=target_crs
     )
     print("Adding metadata and converting to geojson format...")
     # Convert to geojson format and add metadata
@@ -451,7 +472,7 @@ def create_json_contextual_features_metadata(
 
     if optional_data_layers:
         for layer_name, layer_gdf in optional_data_layers.items():
-            geo_utils.verify_gdf_crs(layer_gdf, target_crs="EPSG:4326")
+            geo_utils.verify_gdf_crs(layer_gdf, target_crs=target_crs)
             layer_json = json.loads(layer_gdf.to_json(drop_id=True))
             for feature in layer_json["features"]:
                 feature["properties"]["layer"] = layer_name
@@ -493,6 +514,7 @@ def create_json_contextual_features_metadata(
 
 
 if __name__ == "__main__":
+    import warnings
     from asf_heat_pump_suitability.getters import load_geodata
     from asf_heat_pump_suitability.pipeline.transform import local_authority
     from asf_heat_pump_suitability import config
@@ -501,6 +523,12 @@ if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = args.local_authorities
     detail_level = args.detail
+
+    if args.prod and not args.save:
+        warnings.warn(
+            "`save` not set. `prod` rendered as False. Please set `save` and `prod` to push outputs to production."
+        )
+        args.prod = False
 
     tolerance_m = config["constant"]["clustering"]["tolerance_m"]
 
@@ -580,21 +608,38 @@ if __name__ == "__main__":
     )
 
     print("Creating layer with district HN potential and converting to EPSG:4326...")
-    hn_potential = pd.concat(
-        [
-            hn_zones_gdf[["geometry", "source_annotation"]],
-            # Create a single polygon for all spatial signatures to represent city centres
-            gpd.GeoDataFrame(
-                {
-                    "source_annotation": [
-                        spatial_signatures_gdf["source_annotation"].iloc[0]
-                    ],
-                    "geometry": [spatial_signatures_gdf.geometry.union_all()],
-                },
-                crs=spatial_signatures_gdf.crs,
-            ),
-        ]
-    ).to_crs(epsg=4326)
+    if (len(spatial_signatures_gdf) > 0) and (len(hn_zones_gdf) > 0):
+        hn_potential = pd.concat(
+            [
+                hn_zones_gdf[["geometry", "source_annotation"]],
+                # Create a single polygon for all spatial signatures to represent city centres
+                gpd.GeoDataFrame(
+                    {
+                        "source_annotation": [
+                            spatial_signatures_gdf["source_annotation"].iloc[0]
+                        ],
+                        "geometry": [spatial_signatures_gdf.geometry.union_all()],
+                    },
+                    crs=spatial_signatures_gdf.crs,
+                ),
+            ]
+        ).to_crs(epsg=4326)
+    elif len(spatial_signatures_gdf) > 0:
+        hn_potential = gpd.GeoDataFrame(
+            {
+                "source_annotation": [
+                    spatial_signatures_gdf["source_annotation"].iloc[0]
+                ],
+                "geometry": [spatial_signatures_gdf.geometry.union_all()],
+            },
+            crs=spatial_signatures_gdf.crs,
+        ).to_crs(epsg=4326)
+    elif len(hn_zones_gdf) > 0:
+        hn_potential = hn_zones_gdf[["geometry", "source_annotation"]].to_crs(epsg=4326)
+    else:
+        hn_potential = gpd.GeoDataFrame(
+            {"source_annotation": [], "geometry": []}, crs="EPSG:4326"
+        )
 
     print("Loading anchor property geodataframes and transforming to EPSG:4326...")
     combined_anchor_gdf = cluster.load_transform_anchor_property_gdfs(
@@ -640,6 +685,7 @@ if __name__ == "__main__":
             s3_file_path,
         )
 
+    if args.prod:
         # Save to front-end S3 bucket for use in the tool
         front_end_staging_s3_path = os.environ.get("front_end_staging_s3_path")
         front_end_s3_bucket = os.environ.get("front_end_s3_bucket")
@@ -654,6 +700,8 @@ if __name__ == "__main__":
         # Only the dated data-science copy gets a run manifest; the undated
         # front-end copy above is overwritten every run, so there is no
         # version history to attach lineage to.
+        # This is only created when `prod` is True because we only need traceable lineage for outputs pushed to
+        # production.
         manifest_utils.generate_and_save_run_manifest_to_s3(
             s3_file_path,
             stage="compute_contextual_features",

@@ -1,0 +1,899 @@
+"""
+Create a sample of buildings containing flats, for manual labelling to train the block of flats classifier
+model.
+
+Buildings are grouped into primary strata by area, number of flats, and deprivation group. Two further binary
+attributes are applied as secondary constraints: rurality, and whether the building is predominantly flats
+(>80%) or not.
+
+The sample is built to meet the following conditions:
+- Total sample size is `target_n` (or as close as possible) - see args below.
+- The sample is split 75% train & validation, 25% test (each building is labelled with its split).
+- Train & validation sample:
+    - ~50 buildings are taken from each primary stratum first, with secondary constraints applied evenly (a
+    50/50 split across each binary attribute). This "padding" ensures smaller groups are still represented in
+    model training.
+    - The remaining buildings are then sampled proportionally across primary strata, with secondary constraints
+    reflecting real-world proportions.
+    - The result is a sample that's close to real-world proportions, but with extra representation for smaller
+    groups.
+- Test sample:
+    - Sampled separately, entirely proportionally - both primary strata and secondary constraints reflect
+    real-world proportions.
+
+The final dataset contains the full sample (train & validation and test combined). Where a building was
+labelled in a previous manual labelling round, that label is carried over. These should be checked and
+confirmed or reassigned during labelling, since the sampling strategy has changed since that round.
+
+The sample is enriched with Google Maps URLs and saved as a KML file to S3 for labelling.
+
+Usage:
+    python sample_for_labelling.py [options]
+
+Options:
+    --local_authorities     One or more local authority names to filter to.
+                            Defaults to all of GB.
+                            e.g. --local_authorities plymouth
+                                 --local_authorities "glasgow city" "south lanarkshire"
+    --release_date          Release date of the input UPRN file in YYYYMMDD format.
+                            Defaults to today's date.
+    --seed                  Random seed for reproducibility. Default: 7.
+    --target_n              Target number of buildings in the sample. Default: 3000.
+    -m, --map_uprns_to_building
+                            If set, regenerates the UPRN-to-building-ID mapping from scratch
+                            and saves it to S3. Otherwise loads the existing mapping.
+    --save                  If set, saves intermediate outputs to S3.
+
+Examples:
+    # Run for all of GB with defaults
+    python sample_for_labelling.py
+
+    # Run for Plymouth with a smaller sample
+    python sample_for_labelling.py --local_authorities plymouth --target_n 500
+
+    # Run for multiple local authorities and save outputs
+    python sample_for_labelling.py --local_authorities "glasgow city" "south lanarkshire" --save
+
+    # Regenerate UPRN to building ID mapping and save
+    python sample_for_labelling.py --map_uprns_to_building --save
+"""
+
+import simplekml
+import os
+import boto3
+
+import geopandas as gpd
+
+from typing import List
+import argparse
+import polars as pl
+from scipy.optimize import minimize
+
+import numpy as np
+from numpy.typing import ArrayLike
+
+from asf_heat_pump_suitability import config, PROJECT_DIR
+from asf_heat_pump_suitability.getters import base_getters
+
+BUILDING_CONSTRUCTION_AGE_MAPPING = {
+    "england and wales: before 1900": "1_England and Wales: before 1900",
+    "scotland: before 1919": "2_Scotland: Before 1919",
+    "1900-1929": "3_1900-1929",
+    "1930-1949": "4_1930-1949",
+    "1950-1966": "5_1950-1966",
+    "1965-1975": "6_1965-1975",
+    "1976-1983": "7_1976-1983",
+    "1983-1991": "8_1983-1991",
+    "1991-1998": "9_1991-1998",
+    "1996-2002": "10_1996-2002",
+    "2003-2007": "11_2003-2007",
+    "2007 onwards": "12_2007 onwards",
+    "unknown": "",
+}
+
+
+def load_df_scotland_postcode_lookup() -> pl.DataFrame:
+    """
+    Load Scotland postcode lookup containing Scottish postcodes and their corresponding population data.
+
+    Returns:
+        pl.DataFrame: Scotland postcode lookup
+    """
+    df = pl.read_csv(config["data"]["lookups"]["scotland"])
+    return df.with_columns(
+        pl.col("Postcode").str.strip_chars().name.keep(),
+    ).select(["Postcode", "DataZone2011Code"])
+
+
+def load_df_lsoa_imd_decile(nation: str = None) -> pl.DataFrame:
+    """
+    Load IMD decile for LSOAs (England & Wales) or Data Zones (Scotland) in GB.
+
+    Args:
+        nation (str): nation to load IMD decile data for, of "England", "Scotland" or "Wales". Default None to load all nations.
+
+    Returns:
+        pl.DataFrame: IMD decile data per LSOA / Data Zone for specified nation.
+    """
+    dfs = []
+    # England
+    if not nation or nation.lower() == "england":
+        df = pl.read_csv(config["data"]["imd_deciles"]["england"])
+        dfs.append(
+            df.rename(
+                {
+                    "LSOA code (2021)": "LSOA_or_DZ",
+                    "Index of Multiple Deprivation (IMD) Decile (where 1 is most deprived 10% of LSOAs)": "IMD_decile",
+                }
+            ).select(["LSOA_or_DZ", "IMD_decile"])
+        )
+
+    # Scotland
+    if not nation or nation.lower() == "scotland":
+        df = base_getters.get_df_from_excel_s3_path(
+            config["data"]["imd_deciles"]["scotland"],
+            sheet_name="SIMD 2020v2 DZ lookup data",
+        )
+        dfs.append(
+            df.rename({"DZ": "LSOA_or_DZ", "SIMD2020v2_Decile": "IMD_decile"}).select(
+                ["LSOA_or_DZ", "IMD_decile"]
+            )
+        )
+
+    # Wales
+    if not nation or nation.lower() == "wales":
+        df = pl.read_csv(config["data"]["imd_deciles"]["wales"])
+        dfs.append(
+            df.filter(
+                pl.col("Domain") == "WIMD", pl.col("Data description") == "Decile"
+            )
+            .rename({"Area code": "LSOA_or_DZ", "Data values": "IMD_decile"})
+            .select(["LSOA_or_DZ", "IMD_decile"])
+        )
+
+    return pl.concat(dfs)
+
+
+def calculate_int_ssd(
+    sample_allocations: np.array,
+    primary_group_ids: ArrayLike,
+    target_per_primary: float | ArrayLike,
+) -> float:
+    """
+    Calculate the sum of squared deviations from the target sample size per primary strata.
+
+    Args:
+        sample_allocations (np.array): proposed count of samples to take from each cell
+        primary_group_ids (ArrayLike): unique IDs of the primary strata combinations to group by
+        target_per_primary (float | ArrayLike): target sample number per primary stratum
+
+    Returns:
+        int: sum of squared deviations
+    """
+    # Sum sample allocations for each of the primary strata.
+    # This is effectively a vectorised 'groupby' - we group the full combination of sampling cells into their primary
+    # strata
+    primary_totals = np.bincount(primary_group_ids, weights=sample_allocations)
+    # Minimize sum of squared deviations from the target sample size
+    return np.sum((primary_totals - target_per_primary) ** 2)
+
+
+def calculate_array_sample_allocations(
+    population_df: pl.DataFrame,
+    grouped_df: pl.DataFrame,
+    total_sample: int,
+    secondary_attributes: List[str],
+    even: bool = True,
+    primary_col: str = "primary_strata",
+) -> np.array:
+    """
+    Calculate optimal count of samples per group to fulfil primary stratification (proportional or even) and secondary
+    constraints.
+
+    Args:
+        population_df (pl.DataFrame): whole population dataframe to sample from. Must contain secondary attribute columns.
+        grouped_df (pl.DataFrame): sampling cells containing counts for each unique combination of primary and
+        secondary attributes.
+        total_sample (int): desired sample size for whole sample.
+        secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling. Must
+        be boolean attributes. Across the whole sample, these are sampled either evenly or proportionally depending on
+        if `even` is set to `True` or `False`, respectively.
+        even (bool): Set to True to evenly sample across primary groups. Set to False to sample groups proportionally to
+        their representation across the whole population.
+        primary_col (str): name of column to be created containing unique IDs for the primary strata combinations.
+        Default `primary_strata`.
+
+    Returns:
+        np.array: count of samples per group in `grouped_df` required to meet constraints.
+    """
+    # Total number of cells to optimise sample count from.
+    # This is the number of combinations multiplied by the number of groups in each secondary constraint.
+    n_cells = grouped_df.height
+
+    # Get the target number of samples per group
+    n_primary_groups = grouped_df[primary_col].n_unique()
+    if even:
+        print("Sampling evenly across primary groups.")
+        target_per_primary = total_sample / n_primary_groups
+    else:
+        print("Proportional stratified sampling across primary groups.")
+        # Get the count of buildings per primary group. The line below is a vectorised groupby.
+        count_per_primary = np.bincount(
+            grouped_df[primary_col], weights=grouped_df["n_buildings"]
+        )
+        n_population = grouped_df["n_buildings"].sum()
+        target_per_primary = total_sample * (count_per_primary / n_population)
+
+    # Sample size per cell must be between 0 and real population count
+    bounds_per_group = [(0, i) for i in grouped_df["n_buildings"]]
+
+    # Seed the optimiser with an initial guess: evenly distribute sample across all cells
+    x0 = np.full(n_cells, total_sample / n_cells)
+    objective_args = {
+        "primary_group_ids": grouped_df[primary_col],
+        "target_per_primary": target_per_primary,
+    }
+
+    # Set secondary sampling constraints
+    sampling_constraints = [
+        # Constraint 1: overall total must equal total_sample requested.
+        # The constraint checks equality of the LHS to zero.
+        {"type": "eq", "fun": lambda x: np.sum(x) - total_sample},
+    ]
+
+    for attr in secondary_attributes:
+        # Create array of 0 and 1 values for each boolean secondary attribute
+        binary_array = grouped_df[attr].to_numpy().astype(int)
+        # Additional constraints: binary constraints should be distributed evenly or according to whole population proportions
+        if even:
+            proportion = 0.5
+        else:
+            proportion = round(
+                population_df.filter(pl.col(attr)).height / population_df.height, 2
+            )
+        sampling_constraints.append(
+            {
+                "type": "eq",
+                # Here we multiply the proposed sample by a boolean value to get the proposed count of the positive class.
+                # The result must be equal to 50% of the total sample.
+                "fun": lambda x, _vals=binary_array: np.sum(x * _vals)
+                - (proportion * total_sample),
+            }
+        )
+
+    # Run optimiser to calculate the optimal number of samples from each group
+    result = minimize(
+        # Objective function to be minimised (i.e. here we are minimising the sum of squared deviations to
+        # penalise large deviations from the desired sample size for each group)
+        fun=lambda x: calculate_int_ssd(x, **objective_args),
+        x0=x0,
+        # SLSQP was chosen as it is able to handle all requirements of the sampling:
+        # secondary constraints, bounds of each cell, and even / proportional sampling across strata
+        method="SLSQP",
+        bounds=bounds_per_group,
+        constraints=sampling_constraints,
+    )
+
+    # Extract results and round them (they are floats originally)
+    sample_allocations = np.round(result.x).astype(int)
+    print("Optimized sub-cell sample sizes:", sample_allocations)
+    print("Total sampled:", np.sum(sample_allocations))
+    for attr in secondary_attributes:
+        print(
+            f"{attr} total sampled:",
+            sum(sample_allocations * grouped_df[attr].to_numpy().astype(int)),
+        )
+
+    return sample_allocations
+
+
+def generate_df_sampling_cells(
+    buildings_df: pl.DataFrame,
+    primary_attributes: List[str],
+    secondary_attributes: List[str],
+    primary_col: str = "primary_strata",
+) -> pl.DataFrame:
+    """
+    Generate a DataFrame of cells to sample from based on primary strata and secondary constraints. The resulting
+    dataframe will have N rows, where N is equal to the number of combinations of primary and secondary attributes. One
+    row represents one combination. The cells will contain the counts of buildings in each unique group combination.
+
+    Args:
+        buildings_df (pl.DataFrame): buildings where each row represents a unique building, and each row is enriched with
+        the specified primary and secondary attributes.
+        primary_attributes (List[str]): list of primary attributes to stratify sample by
+        secondary_attributes (List[str]): list of secondary attributes which will act as constraints in sampling
+        primary_col (str): name of column to be created containing unique IDs for the primary strata combinations. Default `primary_strata`.
+
+    Returns:
+        pl.DataFrame: sampling cells containing building counts for each unique combination of primary and secondary attributes
+    """
+    all_attributes = primary_attributes + secondary_attributes
+
+    return (
+        buildings_df.group_by(all_attributes)
+        .agg(
+            pl.count("building_id").alias("n_buildings"),
+        )
+        .with_columns(
+            # Create unique ID from primary attributes
+            pl.concat_list(primary_attributes)
+            .list.join("_")
+            .cast(pl.Categorical)
+            .to_physical()  # required to cast categorical strings to numbers
+            .alias(primary_col),
+        )
+    )
+
+
+def sample_df_by_quota(
+    population_df: pl.DataFrame,
+    quota_col: str,
+    id_col: str,
+    attributes: List[str],
+    seed: float | int,
+) -> pl.DataFrame:
+    """
+    Sample population dataset by given quota per attribute combination.
+
+    Args:
+        population_df (pl.DataFrame): whole population dataset to sample from.
+        quota_col (str): name of column containing quotas per attribute combination.
+        id_col (str): name of column containing sample IDs.
+        attributes (List[str]): attributes to sample on.
+        seed (float | int): random seed.
+
+    Returns:
+        pl.DataFrame: selected samples from whole population according to given quotas.
+    """
+    # Sample IDs randomly from each combination of attributes
+    sampled_ids = (
+        population_df.with_columns(
+            # Generates a sequential integer index for all rows in the dataframe from 0 to N-1
+            pl.int_range(pl.len())
+            # Randomly shuffles the row indices independently within each combination of attributes
+            .shuffle(seed=seed).over(attributes)
+            # Assigns the randomised integer index to a temporary '_rank' column
+            .alias("_rank")
+        )
+        # Keep rows where '_rank' is less than 'n_to_sample' - this is the method to identify the sample rows
+        .filter(pl.col("_rank") < pl.col(quota_col)).select(id_col)
+    )
+
+    # Filter population dataset to sample IDs
+    return population_df.filter(pl.col(id_col).is_in(sampled_ids[id_col].to_list()))
+
+
+def _enrich_gdf_google_maps_url(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Enrich a geodataframe with a Google Maps URL per row representing the centroid of each geometry.
+
+    Args:
+        gdf (gpd.GeoDataFrame): geometries of interest
+
+    Return:
+        gpd.GeoDataFrame: enriched with `url` column
+    """
+    print("Enrich with Google Maps URL...")
+    # Convert to 4326 projection and create google maps URL
+    gdf = gdf.to_crs(epsg=4326)
+    gdf[["x", "y"]] = gdf.centroid.get_coordinates()
+    gdf["url"] = (
+        "https://www.google.com/maps/search/?api=1&query="
+        + gdf["y"].astype(str)
+        + ","
+        + gdf["x"].astype(str)
+    )
+    return gdf
+
+
+def save_building_sample_to_kml(
+    gdf: gpd.GeoDataFrame, s3_client: boto3.client, bucket: str, fname: str
+) -> None:
+    """
+    Save sample to KML file, locally and to S3.
+
+    Args:
+        gdf (gpd.GeoDataFrame): geometries of building sample
+        s3_client (boto3.client): intialised S3 client.
+        bucket (str): S3 bucket name.
+        fname (str): filename for sample.
+
+    Returns:
+        None
+    """
+    print("Saving to KML file...")
+    gdf = _enrich_gdf_google_maps_url(gdf)
+    kml = simplekml.Kml()
+    for url, label, building_id, n_flats, n_total, geom in zip(
+        gdf["url"],
+        gdf["label"],
+        gdf["ID"],
+        gdf["n_flats"],
+        gdf["n_uprns"],
+        gdf["geometry"],
+    ):
+        if not label:
+            label = "unlabelled"
+        pol = kml.newpolygon(
+            name=label,
+            description=f"Location: {url} -------- building_id: {building_id} -------- N flats: {n_flats} -------- N total: {n_total}",
+            outerboundaryis=list(geom.exterior.coords),
+        )
+        pol.style.polystyle.color = "9939FF14"
+        pol.style.polystyle.outline = 1
+    fpath = os.path.join(PROJECT_DIR, "outputs", "data", fname)
+    kml.save(fpath)
+    s3_client.Bucket(bucket).upload_file(
+        os.path.join(os.getcwd(), fpath),
+        os.path.join("outputs", "models", "block_of_flats_classifier", fname),
+    )
+
+
+def parse_arguments() -> argparse.Namespace:
+    """
+    Create ArgumentParser and parse.
+
+    Returns:
+        argparse.Namespace: populated `Namespace`
+    """
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--local_authorities",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
+        type=str,
+        nargs="+",
+        default=["GB"],
+        required=False,
+    )
+
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the input UPRN file to access. Defaults to today's date.",
+        required=False,
+    )
+
+    parser.add_argument(
+        "--seed",
+        help="Seed for random sampling. Default 7.",
+        default=7,
+        required=False,
+    )
+
+    parser.add_argument(
+        "--target_n",
+        help="Target size of sample. Default 3000.",
+        default=3000,
+        required=False,
+    )
+
+    parser.add_argument(
+        "-m",
+        "--map_uprns_to_building",
+        help="Set to generate UPRN to building ID mapping. Otherwise, existing mapping loaded.",
+        required=False,
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--save",
+        help="If --save is set, it saves outputs to S3.",
+        required=False,
+        action="store_true",
+    )
+
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    from asf_heat_pump_suitability.getters import load_data, load_geodata
+    from asf_heat_pump_suitability.pipeline.impute import property_type
+    from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
+    from asf_heat_pump_suitability.utils import save_utils
+
+    # ------------------------------------ #
+    # LOAD ARGS
+    # ------------------------------------ #
+    args = parse_arguments()
+    release_date = save_utils.get_str_release_date(args.release_date)
+    seed = args.seed
+    target_n = args.target_n
+
+    # ------------------------------------ #
+    # LOAD GRID SQUARES
+    # ------------------------------------ #
+    local_authorities = [la.lower() for la in args.local_authorities]
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
+    grid_squares = local_authority_dict["grid_squares"]
+
+    print("Map UPRNs to building footprints...")
+    buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
+        layer="building", grid_squares=grid_squares
+    )
+
+    # Note: putting this at the top of the script prevents memory overload. The datasets loaded in this `if` statement
+    # can be very large. Therefore, we load and process them first, then delete them before moving on to the rest of the
+    # script.
+    if args.map_uprns_to_building:
+        print("Generating UPRN to building ID mapping...")
+        all_uprns_df = load_geodata.load_df_osopen_uprn(grid_squares=grid_squares)
+        all_uprns_gdf = uprns.generate_gdf_uprn_coords(all_uprns_df)
+
+        uprn_building_mapping = uprns.map_dict_uprns_to_building_id(
+            uprns_gdf=all_uprns_gdf, buildings_gdf=buildings_gdf, id_col="ID"
+        )
+
+        del all_uprns_gdf, all_uprns_df
+        # Save mapping
+        fpath = config["data"]["processed"]["uprn_to_building_id_mapping"].format(
+            local_authorities=local_authorities
+        )
+        pl.DataFrame(
+            {
+                "UPRN": uprn_building_mapping.keys(),
+                "building_ID": uprn_building_mapping.values(),
+            }
+        ).write_parquet(fpath)
+
+    # ------------------------------------ #
+    # LOAD DOMESTIC UPRNS
+    # ------------------------------------ #
+    # Load our domestic UPRNs from processing
+    print("Load domestic UPRNs and NSUL...")
+    slug = local_authority_dict["url_slug"]
+    fpath = config["output"]["dataset"]["domestic_uprns"].format(
+        local_authority=slug, release_date=release_date
+    )
+    domestic_uprns = (
+        pl.scan_parquet(fpath)
+        .collect()
+        .select(["UPRN"])
+        .with_columns(pl.lit(True).alias("is_domestic"))
+    )
+
+    # Load the lookup with all the additional data
+    uprns_df = (
+        load_data.load_df_uprn_lookup(
+            columns=[
+                "UPRN",
+                "ctry25cd",
+                "lad25cd",
+                "PCDS",
+                "lsoa21cd",
+                "GRIDGB1E",
+                "GRIDGB1N",
+                "ruc21ind",
+            ],
+        )
+        .with_columns(
+            pl.col("lad25cd").str.starts_with("E09").alias("in_london"),
+        )
+        .rename({"ctry25cd": "country"})
+        .join(domestic_uprns, how="left", on="UPRN")
+        .with_columns(pl.col("is_domestic").fill_null(False))
+    )
+    del domestic_uprns
+
+    # ------------------------------------ #
+    # ADD IMD DECILE DATA
+    # ------------------------------------ #
+    print("Add IMD decile data...")
+    # Note: a separate Scotland lookup is required here because: the uprns_df contains 2022 Scottish Data Zones for each
+    # UPRN, but the IMD decile data for Scotland is for 2019 DZs. This additional lookup maps postcodes to 2019 DZs, so
+    # is ultimately used to map UPRNs to their 2019 DZs, which can then be mapped to their IMD decile.
+    # This is required because DZs changed between 2019 and 2022.
+    scotland_dz_lookup_df = load_df_scotland_postcode_lookup()
+    imd_df = load_df_lsoa_imd_decile()
+
+    uprns_df = (
+        uprns_df.join(
+            scotland_dz_lookup_df, how="left", left_on="PCDS", right_on="Postcode"
+        )
+        .with_columns(
+            pl.when(pl.col("country") == "S92000003")
+            .then(pl.col("DataZone2011Code"))
+            .otherwise(pl.col("lsoa21cd"))
+            .alias("IMD_LSOA_or_DZ")
+        )
+        .join(imd_df, how="left", left_on="IMD_LSOA_or_DZ", right_on="LSOA_or_DZ")
+    )
+    del scotland_dz_lookup_df, imd_df
+
+    # ------------------------------------ #
+    # IMPUTE FLAT LABELS
+    # ------------------------------------ #
+    print("Impute flat labels...")
+    flat_uprns = property_type.impute_set_flat_properties(
+        uprns_df, x_col="GRIDGB1E", y_col="GRIDGB1N"
+    )
+    uprns_df = uprns_df.with_columns(
+        (pl.col("UPRN").is_in(flat_uprns) & pl.col("is_domestic")).alias("is_flat")
+    )
+    del flat_uprns
+
+    # ------------------------------------ #
+    # MAP UPRNS TO BUILDINGS
+    # ------------------------------------ #
+    if not args.map_uprns_to_building:
+        print("Loading UPRN to building ID mapping...")
+        uprn_building_mapping = pl.read_parquet(
+            "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/gb_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
+        )
+        uprn_building_mapping = dict(
+            zip(uprn_building_mapping["UPRN"], uprn_building_mapping["building_ID"])
+        )
+
+    uprns_df = (
+        uprns_df.with_columns(
+            # Map building IDs to the UPRNs they contain
+            pl.col("UPRN")
+            .replace_strict(uprn_building_mapping, default=None)
+            .alias("building_id")
+        )
+        .with_columns(
+            pl.col("is_flat").sum().over("building_id").alias("n_flats"),
+            pl.col("is_domestic").sum().over("building_id").alias("n_domestic"),
+        )
+        .filter(pl.col("n_flats") > 1, pl.col("n_domestic") > 0)
+    )
+    del uprn_building_mapping
+
+    # ------------------------------------ #
+    # ENRICH WITH EPC BUILDING AGE DATA
+    # ------------------------------------ #
+    print("Enrich with EPC building age data...")
+    epc_df = (
+        load_data.load_df_domestic_epc(
+            grid_squares=grid_squares, columns=["UPRN", "CONSTRUCTION_AGE_BAND"]
+        ).with_columns(
+            pl.col("CONSTRUCTION_AGE_BAND")
+            .str.to_lowercase()
+            .replace(BUILDING_CONSTRUCTION_AGE_MAPPING)
+            .alias("construction_age_band"),
+            pl.lit(True).alias("has_epc"),
+        )
+        # This is required to replace empty string with None which we need to do so that the agg max() below works
+        # i.e. this prevents 'unknown' from being the max value and ensures consistency in treatment of Null values.
+        .with_columns(
+            pl.when(pl.col("construction_age_band") == "")
+            .then(None)
+            .otherwise(pl.col("construction_age_band"))
+            .name.keep()
+        )
+    )
+    uprns_df = uprns_df.join(epc_df, how="left", on="UPRN")
+    del epc_df
+
+    # ------------------------------------ #
+    # AGGREGATE UP TO BUILDING LEVEL
+    # ------------------------------------ #
+    print("Aggregate to building level...")
+    buildings_df = (
+        uprns_df.group_by("building_id")
+        .agg(
+            pl.col("UPRN").n_unique().alias("n_uprns"),
+            pl.col("is_domestic").sum().alias("n_domestic_uprns"),
+            # The features below are not expected to have different values within the same buildings.
+            # Construction age band may vary across different UPRNs within buildings due to either errors in EPC, or
+            # due to genuine differences within a larger building footprint. For this reason, we take the earliest value.
+            pl.col("n_flats").first().alias("n_flats"),
+            pl.col("construction_age_band").min().alias("construction_age_band"),
+            pl.col("country").first().alias("country"),
+            pl.col("ruc21ind").first().alias("rurality"),
+            pl.col("IMD_decile").first().alias("IMD_decile"),
+            pl.col("in_london").first().alias("in_london"),
+        )
+        .with_columns(
+            # Add proportion of flats
+            (pl.col("n_flats") / pl.col("n_uprns")).alias("proportion_flats"),
+            # Group flat count
+            pl.when(pl.col("n_flats").is_between(2, 6, closed="both"))
+            .then(pl.lit("2-6_flats"))
+            .when(pl.col("n_flats").is_between(7, 15, closed="both"))
+            .then(pl.lit("7-15_flats"))
+            .when(pl.col("n_flats") > 15)
+            .then(pl.lit("16+_flats"))
+            .otherwise(None)
+            .alias("n_flats_grouped"),
+            # Add London as a separate area
+            pl.when(pl.col("in_london"))
+            .then(pl.lit("London"))
+            .otherwise(pl.col("country"))
+            .alias("area"),
+            # Group construction age bands
+            pl.when(
+                pl.col("construction_age_band").is_in(
+                    [
+                        "1_England and Wales: before 1900",
+                        "2_Scotland: Before 1919",
+                        "3_1900-1929",
+                    ]
+                )
+            )
+            .then(pl.lit("Before 1929"))
+            .when(pl.col("construction_age_band") == "4_1930-1949")
+            .then(pl.lit("1930-1949"))
+            .when(pl.col("construction_age_band").is_in(["5_1950-1966", "6_1965-1975"]))
+            .then(pl.lit("1950-1975"))
+            .when(
+                pl.col("construction_age_band").is_in(
+                    ["7_1976-1983", "8_1983-1991", "9_1991-1998", "10_1996-2002"]
+                )
+            )
+            .then(pl.lit("1976-2002"))
+            .when(
+                pl.col("construction_age_band").is_in(
+                    ["11_2003-2007", "12_2007 onwards"]
+                )
+            )
+            .then(pl.lit("2003 onwards"))
+            .otherwise(None)
+            .alias("grouped_construction_age_band"),
+            # Group IMD deciles
+            pl.when(pl.col("IMD_decile").is_in([1, 2, 3]))
+            .then(True)
+            .when(pl.col("IMD_decile").is_in([4, 5, 6, 7, 8, 9, 10]))
+            .then(False)
+            .otherwise(None)
+            .alias("high_deprivation"),
+            # Group rurality
+            pl.when(pl.col("rurality").is_in(["UN1", "UF1", "1", "2"]))
+            .then(True)
+            .when(
+                pl.col("rurality").is_in(
+                    ["RLN1", "RLF1", "3", "4", "RSN1", "RSF1", "5", "6"]
+                )
+            )
+            .then(False)
+            .otherwise(None)
+            .alias("is_urban"),
+        )
+        .with_columns((pl.col("proportion_flats") > 0.8).alias("over_80_pc_flats"))
+    )
+
+    del uprns_df
+
+    if args.save:
+        save_utils.save_to_s3(
+            df=buildings_df,
+            path=config["output"]["model"]["training_data"][
+                "enriched_buildings"
+            ].format(local_authorities=local_authorities),
+        )
+
+        _save_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
+            buildings_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
+        )
+        save_utils.save_to_s3(
+            df=_save_buildings_gdf,
+            path=config["output"]["model"]["training_data"][
+                "enriched_buildings_with_geoms"
+            ].format(local_authorities=local_authorities),
+        )
+        del _save_buildings_gdf
+
+    # ------------------------------------ #
+    # TAKE SAMPLE
+    # ------------------------------------ #
+
+    print("Taking sample of buildings...")
+    primary_strata = [
+        "area",
+        "n_flats_grouped",
+        "high_deprivation",
+    ]
+
+    secondary_constraints = ["is_urban", "over_80_pc_flats"]
+
+    attributes = primary_strata + secondary_constraints
+
+    null_count = buildings_df.filter(
+        pl.any_horizontal(pl.col(attributes).is_null())
+    ).height
+    print(f"Dropping {null_count} rows from population dataset due to nulls...")
+    buildings_df = buildings_df.filter(
+        pl.any_horizontal(pl.col(attributes).is_not_null()),
+    )
+
+    training_n = round(target_n * 0.75)
+
+    # Create dataframe of cells to calculate sample sizes from
+    group_counts_df = generate_df_sampling_cells(
+        buildings_df=buildings_df,
+        primary_attributes=primary_strata,
+        secondary_attributes=secondary_constraints,
+    )
+
+    # Split the training set into a padding portion (~50 samples per primary stratum) and a proportional group of the remainder
+    padding_n = 50 * group_counts_df["primary_strata"].n_unique()
+    remaining_n = training_n - padding_n
+    # Padding sample is even, remaining sample is proportional (True/False)
+    sampling_strategy = [(padding_n, True), (remaining_n, False)]
+
+    n_samples_per_group = np.zeros(group_counts_df.height)
+    for n, even in sampling_strategy:
+        n_samples_per_group += calculate_array_sample_allocations(
+            population_df=buildings_df,
+            grouped_df=group_counts_df,
+            total_sample=n,
+            secondary_attributes=secondary_constraints,
+            even=even,
+        )
+
+    group_counts_df = group_counts_df.with_columns(
+        pl.Series(name="n_to_sample_train", values=n_samples_per_group)
+    )
+
+    test_n = target_n - training_n
+    n_samples_per_group = calculate_array_sample_allocations(
+        population_df=buildings_df,
+        grouped_df=group_counts_df,
+        total_sample=test_n,
+        secondary_attributes=secondary_constraints,
+        even=False,
+    )
+    group_counts_df = group_counts_df.with_columns(
+        pl.Series(name="n_to_sample_test", values=n_samples_per_group)
+    )
+
+    # Sample per group using per-group sampling quota
+    buildings_df = buildings_df.join(
+        group_counts_df.select(attributes + ["n_to_sample_train", "n_to_sample_test"]),
+        on=attributes,
+        how="left",
+    )
+
+    # Sample IDs randomly from each combination of attributes
+    train_sample_df = sample_df_by_quota(
+        population_df=buildings_df,
+        quota_col="n_to_sample_train",
+        id_col="building_id",
+        attributes=attributes,
+        seed=seed,
+    ).with_columns(pl.lit("train").alias("split"))
+
+    test_sample_df = sample_df_by_quota(
+        population_df=buildings_df.filter(
+            ~pl.col("building_id").is_in(train_sample_df["building_id"].to_list())
+        ),
+        quota_col="n_to_sample_test",
+        id_col="building_id",
+        attributes=attributes,
+        seed=seed,
+    ).with_columns(pl.lit("test").alias("split"))
+
+    # Join labels from first labelling round where label is confident
+    already_labelled = pl.read_parquet(
+        config["output"]["model"]["training_data"]["first_labelling"]
+    )
+    sample_df = pl.concat([train_sample_df, test_sample_df]).join(
+        already_labelled.select(["oct_building_id", "label"]),
+        how="left",
+        left_on="building_id",
+        right_on="oct_building_id",
+    )
+
+    sample_gdf = buildings_gdf[["ID", "geometry"]].merge(
+        sample_df.to_pandas(), how="inner", left_on="ID", right_on="building_id"
+    )
+    del buildings_gdf
+
+    # ------------------------------------ #
+    # SAVE FILES
+    # ------------------------------------ #
+    if args.save:
+        path = config["output"]["model"]["training_data"][
+            "sample_for_block_of_flats_model"
+        ].format(release_date=release_date, l=len(sample_df), seed=seed)
+        save_utils.save_to_s3(
+            sample_df,
+            path=path,
+        )
+        s3 = boto3.resource("s3")
+        BUCKET = config["constant"]["s3"]["bucket"]
+        # Extract file name from full path to save kml
+        fname = path.split("/")[-1].split(".parquet")[0]
+        save_building_sample_to_kml(
+            gdf=sample_gdf, s3_client=s3, bucket=BUCKET, fname=f"{fname}.kml"
+        )

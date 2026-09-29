@@ -53,6 +53,13 @@ local_authorities=(
     "east lothian"
 )
 
+echo "--> Checking S3 input paths exist: check_inputs.py"
+python asf_heat_pump_suitability/pipeline/validate/check_inputs.py --local_authorities "${local_authorities[@]}"
+if [ $? -ne 0 ]; then
+    echo "Error running check_inputs.py: missing S3 input paths. Aborting."
+    exit 1
+fi
+
 succeeded=0
 for la in "${local_authorities[@]}"; do
     echo "=================================================="
