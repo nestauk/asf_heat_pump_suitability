@@ -138,13 +138,3 @@ if __name__ == "__main__":
         f"Pipeline completed for {succeeded} of {len(args.local_authorities)} "
         "local authorities."
     )
-    print("=" * 50)
-
-    # print("--> Generating manifest.json: create_manifest.py")
-    # result = subprocess.run(
-    #     [sys.executable, "asf_heat_pump_suitability/pipeline/run/create_manifest.py"]
-    # )
-    # if result.returncode != 0:
-    #     sys.exit("Error running create_manifest.py")
-
-    print("Pipeline finished!")
