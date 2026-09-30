@@ -631,8 +631,8 @@ def load_tuple_df_buildings(
         tuple: (older, newer) building-level tech columns, or (None, None)
     """
     try:
-        # The building-level output is read only for the per-tech counts;
-        # every other decision-tree check uses the UPRN-level output.
+        # Only the per-tech counts use the building-level output; every
+        # other decision-tree check uses the UPRN-level output.
         path_old = _get_str_output_path(
             dataset=BUILDINGS_DATASET,
             local_authority=local_authority,
