@@ -277,10 +277,16 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--uprns",
-        help="Path to domestic UPRN dataset with X and Y coordinates in parquet.",
+        "--local_authorities",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
+        nargs="+",
         required=True,
+    )
+
+    parser.add_argument(
+        "--release_date",
+        help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
     )
 
     parser.add_argument(
@@ -301,9 +307,10 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    import geopandas as gpd
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.getters import load_geodata
-    from asf_heat_pump_suitability.pipeline.transform import uprns
+    from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
         feature_engineering,
@@ -311,23 +318,38 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
+    local_authorities = [la.lower() for la in args.local_authorities]
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
+    release_date = save_utils.get_str_release_date(args.release_date)
 
     # ------------------------ #
     # LOAD DATA
-    # Load UPRN data
-    print(f"Loading domestic UPRNs from: {args.uprns}")
-    uprns_df = pl.read_parquet(
-        args.uprns, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
+    # ------------------------ #
+    labelled_df = pl.read_parquet(args.labelled_data)
+
+    uprn_to_building_mapping = pl.read_parquet(
+        config["data"]["processed"]["uprn_to_building_id_mapping"].format(
+            local_authorities=local_authority_dict["url_slug"],
+            release_date=release_date,
+        )
+    ).join(labelled_df, how="semi", on="building_id")
+
+    # Load building footprint data for buildings containing flats
+    building_footprints_gdf = gpd.read_parquet(
+        config["output"]["model"]["enriched_buildings_with_geoms"]
     )
+    building_footprints_gdf = building_footprints_gdf[
+        building_footprints_gdf["building_id"].isin(labelled_df["building_id"])
+    ]
+
+    print(f"Loading UPRNs...")
+    uprns_df = load_geodata.load_df_osopen_uprn(
+        grid_squares=local_authority_dict["grid_squares"],
+        columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
+    ).join(uprn_to_building_mapping, how="semi", on="UPRN")
+
     # Get geopoints of UPRNs
     uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
-
-    # Load building footprint data
-    # TODO scale beyond sampling areas
-    building_footprints_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="building",
-        grid_squares=config["constant"]["sampling_areas"]["grid_squares"],
-    )
 
     # ------------------------ #
     # IMPUTE PROPERTY TYPE FLAT
@@ -345,7 +367,6 @@ if __name__ == "__main__":
 
     # ------------------------ #
     # TRAIN MODEL
-    labelled_df = pl.read_parquet(args.labelled_data)
     model_df = labelled_df.join(building_features_df, how="left", on="ID")
 
     model = train_eval_rfc_block_of_flats_classifier(
