@@ -139,7 +139,7 @@ def generate_dict_uprn_churn(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict
 
     Returns:
         dict: added/removed/retained counts, the removed and added shares
-            (each as a fraction of the old version's UPRN count), and
+            (each is that count divided by the old version's UPRN count), and
             per-version null-UPRN counts, or None when either version has
             no UPRN column
     """
@@ -177,11 +177,13 @@ def generate_str_churn_note(
     share: float, max_share: float, description: str
 ) -> str | None:
     """
-    Warn when a churn share is above its tolerance.
+    Warn when the removed or added UPRN share is above its tolerance.
 
     Args:
-        share: observed share, as a fraction of the old version's UPRN count
-        max_share: the tolerance for this share, from the trigger's settings
+        share: removed (or added) UPRNs divided by the old version's UPRN
+            count, e.g. 0.05 means 5% of the old version's UPRNs
+        max_share: the largest share the trigger's tolerances allow before
+            a warning is raised
         description: what the share measures, e.g. "of old UPRNs were removed"
 
     Returns:
