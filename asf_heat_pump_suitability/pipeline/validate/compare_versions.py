@@ -631,8 +631,9 @@ def load_tuple_df_buildings(
         tuple: (older, newer) building-level tech columns, or (None, None)
     """
     try:
-        # Only the per-tech counts use the building-level output; every
-        # other decision-tree check uses the UPRN-level output.
+        # The decision tree saves one file per property and one per building.
+        # The building file is loaded here only to count buildings per tech;
+        # every other check in this script uses the property file.
         path_old = _get_str_output_path(
             dataset=BUILDINGS_DATASET,
             local_authority=local_authority,
