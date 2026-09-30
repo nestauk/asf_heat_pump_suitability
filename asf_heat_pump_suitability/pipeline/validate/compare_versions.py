@@ -401,10 +401,6 @@ def _get_str_output_path(
     """
     Build the exact dated S3 path of one output dataset.
 
-    All six output path templates share the same placeholders, and this is
-    the one place that fills them, so a new placeholder means one edit.
-    `save_utils` validates the date and can check the file exists.
-
     Args:
         dataset: key of the dataset in `config["output"]["dataset"]`
         local_authority: local authority slug used in output paths
