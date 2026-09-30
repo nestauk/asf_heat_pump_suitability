@@ -787,7 +787,7 @@ def generate_report(df_old, df_new, manifest_old, manifest_new, **overrides):
 class TestGenerateStrReport:
     """Tests for `generate_str_report`."""
 
-    def test_states_the_trigger_and_versions(
+    def test_report_states_the_trigger_and_versions(
         self, df_old, df_new_identical, manifests, mocker
     ):
         """The report names both versions and the trigger it was checked against."""
