@@ -206,10 +206,10 @@ def generate_df_tech_transitions(
 
     Real outputs can contain UPRNs with no tech assignment (e.g. a UPRN
     that never matched a building), so nulls are labelled "(null)" and shown
-    as a regular matrix row/column rather than treated as errors. Each version is deduplicated on UPRN first, so a
-    duplicate UPRN (a data-quality regression, not expected but not
-    prevented upstream either) can't cross-product into inflated counts —
-    the count/churn checks already flag a rows-vs-UPRNs mismatch when one
+    as a regular matrix row/column rather than treated as errors. Each
+    version is deduplicated on UPRN first, so a duplicate UPRN (a
+    data-quality regression) can't cross-product into inflated counts; the
+    count/churn checks already flag a rows-vs-UPRNs mismatch when one
     occurs.
 
     Args:
