@@ -54,8 +54,8 @@ def generate_dict_count_delta(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dic
     Compare row and distinct-UPRN counts between two versions of an output.
 
     Args:
-        df_old: older version of the stage output
-        df_new: newer version of the stage output
+        df_old (pl.DataFrame): older version of the stage output
+        df_new (pl.DataFrame): newer version of the stage output
 
     Returns:
         dict: old/new/delta counts; UPRN entries are None when either version
@@ -81,8 +81,8 @@ def generate_dict_schema_diff(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dic
     Diff column names and dtypes between two versions of an output.
 
     Args:
-        df_old: older version of the stage output
-        df_new: newer version of the stage output
+        df_old (pl.DataFrame): older version of the stage output
+        df_new (pl.DataFrame): newer version of the stage output
 
     Returns:
         dict: "added" and "removed" map column to dtype string;
@@ -134,8 +134,8 @@ def generate_dict_uprn_churn(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict
     silently undercount) and reported as their own counts instead.
 
     Args:
-        df_old: older version of the stage output
-        df_new: newer version of the stage output
+        df_old (pl.DataFrame): older version of the stage output
+        df_new (pl.DataFrame): newer version of the stage output
 
     Returns:
         dict: added/removed/retained counts, the removed and added shares
@@ -180,11 +180,11 @@ def generate_str_churn_note(
     Warn when the removed or added UPRN share is above its tolerance.
 
     Args:
-        share: removed (or added) UPRNs divided by the old version's UPRN
+        share (float): removed (or added) UPRNs divided by the old version's UPRN
             count, e.g. 0.05 means 5% of the old version's UPRNs
-        max_share: the largest share the trigger's tolerances allow before
+        max_share (float): the largest share the trigger's tolerances allow before
             a warning is raised
-        description: what the share measures, e.g. "of old UPRNs were removed"
+        description (str): what the share measures, e.g. "of old UPRNs were removed"
 
     Returns:
         str: warning naming the share and the tolerance, or None when the
@@ -213,8 +213,8 @@ def generate_df_tech_transitions(
     occurs.
 
     Args:
-        df_old: older version of the UPRN-level decision-tree output
-        df_new: newer version of the UPRN-level decision-tree output
+        df_old (pl.DataFrame): older version of the UPRN-level decision-tree output
+        df_new (pl.DataFrame): newer version of the UPRN-level decision-tree output
 
     Returns:
         pl.DataFrame: one row per (assigned_tech_old, assigned_tech_new) pair
@@ -244,8 +244,8 @@ def _generate_df_tech_tally(df: pl.DataFrame, alias: str) -> pl.DataFrame:
     Count rows per tech assignment in one version of an output.
 
     Args:
-        df: one version of a decision-tree output
-        alias: name for the count column, e.g. "n_old"
+        df (pl.DataFrame): one version of a decision-tree output
+        alias (str): name for the count column, e.g. "n_old"
 
     Returns:
         pl.DataFrame: one row per tech with its row count
@@ -266,8 +266,8 @@ def generate_df_tech_counts(
     other.
 
     Args:
-        df_old: older version of a decision-tree output
-        df_new: newer version of a decision-tree output
+        df_old (pl.DataFrame): older version of a decision-tree output
+        df_new (pl.DataFrame): newer version of a decision-tree output
 
     Returns:
         pl.DataFrame: one row per tech with n_old, n_new and n_delta counts,
@@ -298,7 +298,7 @@ def load_dict_manifest(output_path: str) -> dict | None:
     Load the run manifest saved next to a pipeline output.
 
     Args:
-        output_path: S3 path of the output file the manifest describes
+        output_path (str): S3 path of the output file the manifest describes
 
     Returns:
         dict: the run manifest, or None when it is missing or unreadable
@@ -318,8 +318,8 @@ def generate_dict_input_version_changes(manifest_old: dict, manifest_new: dict) 
     Compare the input dataset versions recorded in two run manifests.
 
     Args:
-        manifest_old: run manifest of the older output version
-        manifest_new: run manifest of the newer output version
+        manifest_old (dict): run manifest of the older output version
+        manifest_new (dict): run manifest of the newer output version
 
     Returns:
         dict: "changed" maps an input key to its (old, new) paths. "added"
@@ -350,9 +350,9 @@ def generate_list_commit_log(
     List commits between two recorded commits that touched a stage's modules.
 
     Args:
-        commit_old: git commit recorded in the older version's manifest
-        commit_new: git commit recorded in the newer version's manifest
-        stage: pipeline stage name, a key of `STAGE_MODULE_PATHS` (e.g.
+        commit_old (str): git commit recorded in the older version's manifest
+        commit_new (str): git commit recorded in the newer version's manifest
+        stage (str): pipeline stage name, a key of `STAGE_MODULE_PATHS` (e.g.
             "cluster"). The log keeps only commits that changed a file under
             that stage's listed paths; commits elsewhere in the repo are
             dropped.
@@ -402,10 +402,10 @@ def _get_str_output_path(
     Build the exact dated S3 path of one output dataset.
 
     Args:
-        dataset: key of the dataset in `config["output"]["dataset"]`
-        local_authority: local authority slug used in output paths
-        release_date: dated version folder in YYYYMMDD format
-        check_exists: if True, raise when no file exists at the path
+        dataset (str): key of the dataset in `config["output"]["dataset"]`
+        local_authority (str): local authority slug used in output paths
+        release_date (str): dated version folder in YYYYMMDD format
+        check_exists (bool): if True, raise when no file exists at the path
 
     Returns:
         str: S3 path of that dataset for that version
@@ -431,9 +431,9 @@ def _generate_str_output_glob(
     still found.
 
     Args:
-        dataset: key of the dataset in `config["output"]["dataset"]`
-        local_authority: local authority slug used in output paths
-        release_date: dated version folder, or "*" (default) for all versions
+        dataset (str): key of the dataset in `config["output"]["dataset"]`
+        local_authority (str): local authority slug used in output paths
+        release_date (str): dated version folder, or "*" (default) for all versions
 
     Returns:
         str: pattern for `s3fs.S3FileSystem().glob`
@@ -461,10 +461,10 @@ def get_str_stage_output_path(
     stay comparable after the tolerance changes.
 
     Args:
-        stage: pipeline stage, a key of `STAGE_OUTPUT_DATASETS`
-        local_authority: local authority slug used in output paths
-        release_date: dated version folder in YYYYMMDD format
-        check_exists: if True, raise when no file exists at the path
+        stage (str): pipeline stage, a key of `STAGE_OUTPUT_DATASETS`
+        local_authority (str): local authority slug used in output paths
+        release_date (str): dated version folder in YYYYMMDD format
+        check_exists (bool): if True, raise when no file exists at the path
 
     Returns:
         str: S3 path of the stage's output for that version
@@ -501,8 +501,8 @@ def generate_list_release_dates(stage: str, local_authority: str) -> list[str]:
     List the dated versions of a stage's output available on S3.
 
     Args:
-        stage: pipeline stage, a key of `STAGE_OUTPUT_DATASETS`
-        local_authority: local authority slug used in output paths
+        stage (str): pipeline stage, a key of `STAGE_OUTPUT_DATASETS`
+        local_authority (str): local authority slug used in output paths
 
     Returns:
         list[str]: distinct release dates in YYYYMMDD format, oldest first
@@ -533,8 +533,8 @@ def get_tuple_default_release_dates(
     Pick the latest two dated versions of a stage's output to compare.
 
     Args:
-        stage: pipeline stage, a key of `STAGE_OUTPUT_DATASETS`
-        local_authority: local authority slug used in output paths
+        stage (str): pipeline stage, a key of `STAGE_OUTPUT_DATASETS`
+        local_authority (str): local authority slug used in output paths
 
     Returns:
         tuple[str, str]: (older, newer) of the two latest release dates
@@ -563,7 +563,7 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
     carry. Geojson outputs are loaded with geopandas (EPSG:4326, as saved).
 
     Args:
-        path: S3 path of the stage output (.parquet or .geojson)
+        path (str): S3 path of the stage output (.parquet or .geojson)
 
     Returns:
         pl.DataFrame: the output's tabular columns
@@ -601,7 +601,7 @@ def load_df_buildings_tech(path: str) -> pl.DataFrame:
     missing column.
 
     Args:
-        path: S3 path of the building-level output parquet
+        path (str): S3 path of the building-level output parquet
 
     Returns:
         pl.DataFrame: the tech-assignment column, or an empty frame
@@ -623,9 +623,9 @@ def load_tuple_df_buildings(
     a note instead of aborting the whole comparison.
 
     Args:
-        local_authority: local authority slug used in output paths
-        release_date_old: dated version folder of the older output
-        release_date_new: dated version folder of the newer output
+        local_authority (str): local authority slug used in output paths
+        release_date_old (str): dated version folder of the older output
+        release_date_new (str): dated version folder of the newer output
 
     Returns:
         tuple: (older, newer) building-level tech columns, or (None, None)
@@ -658,7 +658,16 @@ def load_tuple_df_buildings(
 
 
 def _render_section(title: str, *body: str) -> str:
-    """Render a markdown section: a `## Title` heading, then body lines."""
+    """
+    Render a markdown section: a `## Title` heading, then body lines.
+
+    Args:
+        title (str): section heading
+        *body (str): lines placed under the heading
+
+    Returns:
+        str: the section as markdown
+    """
     return "\n".join([f"## {title}", "", *body])
 
 
@@ -667,7 +676,7 @@ def _generate_str_counts_section(counts: dict) -> str:
     Render the row and UPRN counts as a markdown section.
 
     Args:
-        counts: as returned by `generate_dict_count_delta` (rows_old,
+        counts (dict): as returned by `generate_dict_count_delta` (rows_old,
             rows_new, rows_delta and the uprns_* equivalents)
     """
     lines = [
@@ -693,7 +702,7 @@ def _generate_str_schema_section(schema_diff: dict) -> str:
     Render the schema diff as a markdown section.
 
     Args:
-        schema_diff: as returned by `generate_dict_schema_diff` ("added",
+        schema_diff (dict): as returned by `generate_dict_schema_diff` ("added",
             "removed" and "dtype_changed")
     """
     lines = []
@@ -717,9 +726,9 @@ def _generate_str_churn_section(churn: dict | None, tolerances: dict | None) -> 
     Render UPRN churn as a markdown section.
 
     Args:
-        churn: churn counts and shares, as returned by
+        churn (dict | None): churn counts and shares, as returned by
             `generate_dict_uprn_churn`, or None when the stage has no UPRN column
-        tolerances: the trigger's tolerance settings, or None when the
+        tolerances (dict | None): the trigger's tolerance settings, or None when the
             comparison was run without a trigger (shares are then shown
             without warnings)
     """
@@ -762,7 +771,17 @@ def _generate_str_churn_section(churn: dict | None, tolerances: dict | None) -> 
 
 
 def _generate_list_churn_notes(churn: dict, tolerances: dict) -> list[str]:
-    """Collect the above-tolerance warnings for removed and added UPRN shares."""
+    """
+    Collect the above-tolerance warnings for removed and added UPRN shares.
+
+    Args:
+        churn (dict): churn counts and shares, as returned by
+            `generate_dict_uprn_churn`
+        tolerances (dict): the trigger's tolerance settings
+
+    Returns:
+        list[str]: one warning per share above its tolerance
+    """
     notes = [
         generate_str_churn_note(
             share=churn["removed_share"],
@@ -781,7 +800,19 @@ def _generate_list_churn_notes(churn: dict, tolerances: dict) -> list[str]:
 def _generate_str_tech_counts_section(
     df_old: pl.DataFrame | None, df_new: pl.DataFrame | None, level: str
 ) -> str:
-    """Render per-tech counts for one output level as a markdown section."""
+    """
+    Render per-tech counts for one output level as a markdown section.
+
+    Args:
+        df_old (pl.DataFrame | None): older version of the output, or None
+            when it is missing
+        df_new (pl.DataFrame | None): newer version of the output, or None
+            when it is missing
+        level (str): label for the section title, e.g. "UPRN-level"
+
+    Returns:
+        str: the section as markdown
+    """
     title = f"Per-tech counts ({level})"
     if df_old is None or df_new is None:
         return _render_section(
@@ -813,8 +844,8 @@ def _generate_str_transitions_section(
     Render the UPRN-level tech transition matrix as a markdown section.
 
     Args:
-        df_old: older version of the UPRN-level decision-tree output
-        df_new: newer version of the UPRN-level decision-tree output
+        df_old (pl.DataFrame): older version of the UPRN-level decision-tree output
+        df_new (pl.DataFrame): newer version of the UPRN-level decision-tree output
     """
     title = "Tech-assignment transitions (UPRN-level)"
     transitions = generate_df_tech_transitions(df_old=df_old, df_new=df_new)
@@ -847,8 +878,8 @@ def _generate_str_input_changes_section(manifest_old: dict, manifest_new: dict) 
     Render the manifest-recorded input version changes as a markdown section.
 
     Args:
-        manifest_old: run manifest of the older output version
-        manifest_new: run manifest of the newer output version
+        manifest_old (dict): run manifest of the older output version
+        manifest_new (dict): run manifest of the newer output version
     """
     changes = generate_dict_input_version_changes(
         manifest_old=manifest_old, manifest_new=manifest_new
@@ -870,7 +901,17 @@ def _generate_str_input_changes_section(manifest_old: dict, manifest_new: dict) 
 def _generate_str_commit_log_section(
     manifest_old: dict, manifest_new: dict, stage: str
 ) -> str:
-    """Render the module-scoped commit log between recorded commits."""
+    """
+    Render the module-scoped commit log between recorded commits.
+
+    Args:
+        manifest_old (dict): run manifest of the older output version
+        manifest_new (dict): run manifest of the newer output version
+        stage (str): pipeline stage name, a key of `STAGE_MODULE_PATHS`
+
+    Returns:
+        str: the section as markdown
+    """
     commit_old = manifest_old["git_commit"]
     commit_new = manifest_new["git_commit"]
     # 7 characters is git's usual short hash, as printed by git log --oneline.
@@ -912,21 +953,21 @@ def generate_str_report(
     Assemble the full markdown comparison report.
 
     Args:
-        df_old: older version of the stage output
-        df_new: newer version of the stage output
-        manifest_old: older version's run manifest, or None when missing
-        manifest_new: newer version's run manifest, or None when missing
-        stage: pipeline stage the outputs belong to
-        local_authority: local authority slug the outputs cover
-        trigger: why the comparison is run (picks which tolerances apply),
+        df_old (pl.DataFrame): older version of the stage output
+        df_new (pl.DataFrame): newer version of the stage output
+        manifest_old (dict | None): older version's run manifest, or None when missing
+        manifest_new (dict | None): newer version's run manifest, or None when missing
+        stage (str): pipeline stage the outputs belong to
+        local_authority (str): local authority slug the outputs cover
+        trigger (str | None): why the comparison is run (picks which tolerances apply),
             or None to show the numbers without tolerance checks
-        release_date_old: dated version folder of the older output
-        release_date_new: dated version folder of the newer output
-        path_old: S3 path of the older output
-        path_new: S3 path of the newer output
-        df_buildings_old: older building-level decision-tree output, or None
+        release_date_old (str): dated version folder of the older output
+        release_date_new (str): dated version folder of the newer output
+        path_old (str): S3 path of the older output
+        path_new (str): S3 path of the newer output
+        df_buildings_old (pl.DataFrame | None): older building-level decision-tree output, or None
             when missing (its per-tech counts section is then skipped)
-        df_buildings_new: newer building-level output, or None when missing
+        df_buildings_new (pl.DataFrame | None): newer building-level output, or None when missing
 
     Returns:
         str: markdown report; lineage sections are replaced by a note when a
