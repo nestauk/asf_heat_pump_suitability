@@ -49,31 +49,6 @@ BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"
 TOLERANCES = config["compare_versions"]["tolerances"]
 
 
-def get_dict_tolerances(trigger: str) -> dict:
-    """
-    Get the tolerance settings for a comparison trigger from base.yaml.
-
-    This exists instead of a plain dict lookup so that a mistyped trigger
-    fails with an error naming the valid options.
-
-    Args:
-        trigger: why the comparison is being run, e.g. "methodology_change"
-
-    Returns:
-        dict: tolerance name to value
-
-    Raises:
-        KeyError: if the trigger has no tolerances configured
-    """
-    try:
-        return TOLERANCES[trigger]
-    except KeyError as error:
-        raise KeyError(
-            f"No tolerances configured for trigger '{trigger}'; expected "
-            f"one of {sorted(TOLERANCES)} in config['compare_versions']"
-        ) from error
-
-
 def generate_dict_count_delta(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict:
     """
     Compare row and distinct-UPRN counts between two versions of an output.
@@ -965,7 +940,7 @@ def generate_str_report(
         str: markdown report; lineage sections are replaced by a note when a
             version's run manifest is missing (outputs predating manifests)
     """
-    tolerances = get_dict_tolerances(trigger) if trigger is not None else None
+    tolerances = TOLERANCES[trigger] if trigger is not None else None
     trigger_line = (
         f"- Trigger: `{trigger}`. Numbers are checked against this trigger's tolerances."
         if trigger is not None
@@ -1160,7 +1135,7 @@ if __name__ == "__main__":
         )
         if args.trigger is not None:
             for churn_note in _generate_list_churn_notes(
-                churn=churn, tolerances=get_dict_tolerances(trigger=args.trigger)
+                churn=churn, tolerances=TOLERANCES[args.trigger]
             ):
                 logging.warning(churn_note)
     logging.info("Report written to %s", report_path)

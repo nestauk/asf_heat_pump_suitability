@@ -233,23 +233,6 @@ class TestGenerateStrChurnNote:
         assert "removed" in note, "the warning must say what the share measures"
 
 
-class TestGetDictTolerances:
-    """Tests for `get_dict_tolerances`."""
-
-    @pytest.mark.parametrize("trigger", ["methodology_change", "input_release"])
-    def test_each_trigger_has_a_removed_uprn_tolerance(self, trigger):
-        """Both triggers are configured in base.yaml with the churn tolerance."""
-        tolerances = compare_versions.get_dict_tolerances(trigger)
-        assert isinstance(
-            tolerances["max_removed_uprn_share"], float
-        ), "each trigger must configure a numeric removed-UPRN tolerance"
-
-    def test_unknown_trigger_raises_keyerror(self):
-        """A trigger without configured tolerances fails loudly."""
-        with pytest.raises(KeyError):
-            compare_versions.get_dict_tolerances("vibes")
-
-
 class TestGenerateDfTechTransitions:
     """Tests for `generate_df_tech_transitions`."""
 
