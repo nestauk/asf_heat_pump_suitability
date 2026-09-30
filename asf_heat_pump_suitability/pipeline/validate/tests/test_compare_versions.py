@@ -495,15 +495,9 @@ class TestGenerateListCommitLog:
         assert (
             f"{'a' * 40}..{'b' * 40}" in command
         ), "git log must be scoped to the old..new commit range"
-        # `command` is the git call as a list of words, for example
-        #   ["git", "log", "--oneline", "aaa..bbb", "--", "path/a.py", "path/b.py"]
-        #     0      1      2            3           4     5            6
-        # git's "--" marks where the file paths start. command.index("--")
-        # gives the position of that marker (4 here). "+ 1" moves one place
-        # past the marker, because we want the files and not the marker
-        # itself. The trailing ":" keeps everything from there to the end.
-        # So here `paths` is ["path/a.py", "path/b.py"], the files git log
-        # was told to look at.
+        # In a git command, the file paths come after "--". This takes
+        # everything after "--" (the "+ 1" skips the "--" itself), which
+        # gives the list of files git log was asked to look at.
         paths = command[command.index("--") + 1 :]
         assert (
             paths == compare_versions.STAGE_MODULE_PATHS["decision_tree"]
