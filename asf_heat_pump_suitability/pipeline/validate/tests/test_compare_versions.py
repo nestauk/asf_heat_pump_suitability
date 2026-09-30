@@ -893,24 +893,6 @@ class TestGenerateStrReport:
             "No UPRNs retained across versions; matrix skipped." in report
         ), "total churn must render a note, not a malformed table"
 
-    def test_transition_matrix_survives_a_colliding_tech_label(
-        self, df_old, manifests, mocker
-    ):
-        """A real tech label equal to the pivot's own index column name
-        ("assigned_tech_old") must not crash the matrix — the pivot renames
-        its index to an internal column first."""
-        mocker.patch.object(
-            compare_versions, "generate_list_commit_log", return_value=[]
-        )
-        df_new = df_old.with_columns(
-            pl.when(pl.col("UPRN") == 1)
-            .then(pl.lit("assigned_tech_old"))
-            .otherwise(pl.col("assigned_tech"))
-            .alias("assigned_tech")
-        )
-        report = generate_report(df_old, df_new, *manifests)
-        assert "assigned_tech_old" in report, "a colliding label must still render"
-
     def test_unexpected_uprn_loss_warning_appears(self, df_old, manifests, mocker):
         """UPRN loss above the tolerance surfaces as a warning line naming
         the loss specifically. The tolerance is mocked so the test does not

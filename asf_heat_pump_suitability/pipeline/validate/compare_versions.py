@@ -830,23 +830,17 @@ def _generate_str_transitions_section(
         return _render_section(
             title, "No UPRNs retained across versions; matrix skipped."
         )
-    # Pivot creates one column per distinct tech in "assigned_tech_new". If
-    # a tech value were literally the string "assigned_tech_old", its new
-    # column would clash with the index column's name and polars would raise
-    # a duplicate-name error. Renaming the index first avoids any clash.
-    matrix = (
-        transitions.rename({"assigned_tech_old": "_old_tech"})
-        .pivot(on="assigned_tech_new", index="_old_tech", values="n_uprns")
-        .fill_null(0)
-    )
-    new_techs = sorted(col for col in matrix.columns if col != "_old_tech")
+    matrix = transitions.pivot(
+        on="assigned_tech_new", index="assigned_tech_old", values="n_uprns"
+    ).fill_null(0)
+    new_techs = sorted(col for col in matrix.columns if col != "assigned_tech_old")
     lines = [
         "| Old tech \\ New tech | " + " | ".join(new_techs) + " |",
         "| --- |" + " --- |" * len(new_techs),
     ]
-    for row in matrix.sort("_old_tech").iter_rows(named=True):
+    for row in matrix.sort("assigned_tech_old").iter_rows(named=True):
         cells = " | ".join(str(row[tech]) for tech in new_techs)
-        lines.append(f"| {row['_old_tech']} | {cells} |")
+        lines.append(f"| {row['assigned_tech_old']} | {cells} |")
     return _render_section(title, *lines)
 
 
