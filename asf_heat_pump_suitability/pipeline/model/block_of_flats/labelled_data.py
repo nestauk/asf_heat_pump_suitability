@@ -10,12 +10,15 @@ BLOCK_OF_FLATS_ARCHETYPES = [
     "SF",
     "TT",
     "AS",
+    "IW",
+    "NH",
 ]
 
 NOT_BLOCKS_ARCHETYPES = [
     "TS",
     "TE",
     "TF",
+    "TY",
     "BB",
     "WB",
     "FC",
@@ -41,7 +44,7 @@ def extract_df_labelled_data(gdf: gpd.GeoDataFrame, id_str: str) -> pl.DataFrame
         pl.DataFrame: extracted information for manually labelled sample data
     """
     gdf[id_str] = gdf.description.str.extract(r"building_id: (.+) -")
-    gdf["label"] = gdf.Name.str[:2]
+    gdf["label"] = gdf.Name.str[:2].str.upper()
     gdf["confidence"] = gdf["Name"].str[-1:]
     gdf["url"] = gdf.description.str.extract(r"Location: (.+) -")
 
@@ -52,9 +55,20 @@ def extract_df_labelled_data(gdf: gpd.GeoDataFrame, id_str: str) -> pl.DataFrame
         0
     ], "There are unexpected null values in the processed labelled sample. Please check processing has worked."
 
+    all_labels = BLOCK_OF_FLATS_ARCHETYPES + NOT_BLOCKS_ARCHETYPES + EXCLUDED_ARCHETYPES
+    assert not set(df["label"]).difference(
+        set(all_labels)
+    ), "There are unexpected archetype labels in the labelled sample."
+
     return df.with_columns(
         pl.when(pl.col("label") == "UL")
         .then(pl.lit(None))
         .otherwise(pl.col("confidence"))
-        .alias("confidence")
+        .alias("confidence"),
+        pl.when(pl.col("label").is_in(BLOCK_OF_FLATS_ARCHETYPES))
+        .then(True)
+        .when(pl.col("label").is_in(NOT_BLOCKS_ARCHETYPES))
+        .then(False)
+        .otherwise(None)
+        .alias("block_of_flats"),
     )
