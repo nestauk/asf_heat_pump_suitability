@@ -463,8 +463,8 @@ def create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf, target_crs=target_crs
     )
     print("Adding metadata and converting to geojson format...")
-    # geoparquet returns the anchor_ids list column as numpy arrays, which json cannot
-    # serialise; convert back to lists so the geojson carries a JSON array
+    # parquet and the polars round trip return anchor_ids cells as numpy arrays, which json
+    # cannot serialise; convert them to lists so the geojson carries a JSON array
     clusters_with_contextual_features_gdf = (
         clusters_with_contextual_features_gdf.assign(
             anchor_ids=clusters_with_contextual_features_gdf["anchor_ids"].map(
