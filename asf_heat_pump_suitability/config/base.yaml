@@ -242,7 +242,7 @@ metadata:
     "cluster_id": "Unique identifier for each cluster."
     "assigned_tech": "Assigned low-carbon heating technology category. Categories are: `Individual solution`, `Networked heat pump`, `Communal solution`, `District heat network`. Can additionally contain `DESNZ_HNZ` values (if the local authority was part of the DESNZ heat network zoning pilot)."
     "communal_origin": "Route by which a `Communal solution` cluster was assigned: `block of flats` (the cluster contains blocks of flats) or `anchor proximity` (buildings near an anchor load such as a school or hospital). Null for non-communal clusters."
-    "anchor_ids": "List of `anchor_id` values of the anchor loads that switched at least one building in the cluster to a `Communal solution`. Only set for clusters with `communal_origin` of `anchor proximity`; null otherwise."
+    "anchor_ids": "List of `anchor_id` values of the anchor loads that switched at least one building in the cluster to a `Communal solution`. Only set for clusters with `communal_origin` of `anchor proximity`; null otherwise — including for block-of-flats clusters that merely sit within the anchor radius (use `within_50m_from_anchor_load` for proximity alone)."
     "anchor_id": "Unique identifier of an anchor load feature in the `anchor_loads` layer, derived from its footprint geometry. Referenced by the `anchor_ids` of clusters."
     "geometry": "Polygon geometry of the cluster"
     "n_UPRNs": "Number of domestic UPRNs (properties) within the cluster"
