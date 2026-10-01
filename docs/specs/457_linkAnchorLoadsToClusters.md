@@ -40,7 +40,7 @@ Thread anchor identity from the anchor list to the geojson, exposing both ends o
 5. **Layer content: all anchors ship, all with IDs.** The layer keeps its role as general context; clusters reference the subset that flipped their buildings; the frontend filters by ID. _Rejected: shipping only linked anchors (changes the layer's meaning silently)._
 6. **Tests: fold in #392.** The reassignment function is rewritten to keep anchor identity, so it gets the tests #392 asked for, including the equidistant-anchor case — which also fixes the latent duplication (`sjoin_nearest` returns one row per tied anchor and the pipeline never deduplicated).
 7. **Branch: stacked on `485_splitCommunalClustersByOrigin`.** Links are defined via `communal_origin`, which only exists post-split. Merges after #485.
-8. **Issue: re-scope #457** rather than open a new one, so the exploration and the sprint-review decision stay on one thread; #453 closes when this merges (its layer already exists; IDs arrive here).
+8. **Issue: re-scope #457** rather than open a new one, so the exploration and the sprint-review decision stay on one thread; #453 was closed by PR #462, which added the geometry-only `anchor_loads` layer; this work adds the IDs to it.
 
 Implementation sketch (pipeline only):
 
