@@ -115,7 +115,8 @@ def compare_tuple_labellers(
             # Aggregate the multiple labels and other information into a list per building
             pl.col("block_of_flats"),
             pl.col("confidence"),
-            pl.col("labeller"),
+            pl.col("labeller").first(),
+            pl.col("secondary_labeller").first(),
         )
         .with_columns(
             # Convert lists to structs and then unnest to create one row per building with information from both labellers
@@ -125,9 +126,8 @@ def compare_tuple_labellers(
             pl.col("confidence").list.to_struct(
                 fields=["confidence_labeller1", "confidence_labeller1"]
             ),
-            pl.col("labeller").list.to_struct(fields=["labeller1", "labeller2"]),
         )
-        .unnest(columns=["block_of_flats", "confidence", "labeller"])
+        .unnest(columns=["block_of_flats", "confidence"])
         .with_columns(
             (pl.col("label_labeller1") == pl.col("label_labeller2")).alias(
                 "agree_label"
@@ -143,11 +143,11 @@ def compare_tuple_labellers(
     )
 
     # Building IDs where the labels (of the aggregated four categories) do not match between labellers
-    drop_building_ids = (
+    disagree_building_ids = (
         double_labelled_df.filter(~pl.col("agree_label"))[id_str].unique().to_list()
     )
 
-    return (agree_buildings_ids, drop_building_ids)
+    return agree_buildings_ids, disagree_building_ids
 
 
 def print_labeller_agreement_matrix(df: pl.DataFrame):
@@ -173,16 +173,33 @@ def transform_df_labelled_data(
     """
     Prepare labelled data for modelling inputs.
     """
-    labelled_df = labelled_df.join(
-        unlabelled_df.select([id_str, "split", "labeller", "secondary_labeller"]),
-        how="left",
-        on=id_str,
-    ).with_columns(
-        pl.when(pl.col("label").is_in(BLOCK_OF_FLATS_ARCHETYPES))
-        .then(True)
-        .when(pl.col("label").is_in(NOT_BLOCKS_ARCHETYPES))
-        .then(False)
-        .otherwise(None)
-        .alias("block_of_flats"),
+    agree_ids, disagree_ids = compare_tuple_labellers(
+        labelled_df=labelled_df, unlabelled_df=unlabelled_df, id_str=id_str
     )
-    return labelled_df
+
+    return (
+        labelled_df.join(unlabelled_df.select([id_str, "split"]))
+        .filter(
+            # Remove buildings where labellers disagree
+            ~pl.col(id_str).is_in(disagree_ids),
+        )
+        .with_columns(
+            # For buildings where labellers agree, set the confidence to 1, otherwise retain original confidence
+            pl.when(pl.col(id_str).is_in(agree_ids))
+            .then(pl.lit("1"))
+            .otherwise(pl.col("confidence"))
+            .alias("confidence")
+        )
+        .with_columns(
+            pl.col("confidence")
+            .cast(pl.Int8)
+            .alias("confidence")
+            # Drop duplicate building IDs (i.e. buildings with two labellers)
+            # Note that this affects the distribution of subclasses within groups which may be different between labellers
+        )
+        .unique(subset=[id_str], keep="any")
+        .filter(
+            # Remove buildings which are excluded from training data
+            ~pl.col("label").is_in(EXCLUDED_ARCHETYPES)
+        )
+    )
