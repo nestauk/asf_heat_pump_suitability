@@ -19,7 +19,7 @@ Pass the optional `save` parameter if saving to S3 is desired.
 
 import numpy as np
 import polars as pl
-from typing import Iterable, Type
+from typing import Iterable, Type, List
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.experimental import enable_halving_search_cv  # noqa
 from sklearn.model_selection import (
@@ -75,42 +75,48 @@ FEATURES = [
 def train_eval_rfc_block_of_flats_classifier(
     df: pl.DataFrame,
     id_col: str,
-    features: Iterable[str],
+    features: List[str],
     target: str,
     param_search: Type[BaseSearchCV] = "default",
     scoring: str = "f1",
     **kwargs,
 ) -> RandomForestClassifier:
     """
-    Train and evaluate RandomForestClassifier in binary classification to predict whether a building is a block of flats or not. Uses a search cross-validator to identify best
-    hyperparameters and conduct cross validation. Model training and cross-validation is performed on 80% of the data in
-    `df` with stratification. A final round of training is performed on the full 80% of training data using the best
-    hyperparameters identified, and the model is tested on the 20% hold-out test set.
+    Train and evaluate RandomForestClassifier in binary classification to predict whether a building footprint is a block
+    of flats or not. Uses a search cross-validator to identify best hyperparameters and conduct cross validation. Model
+    training and cross-validation is performed on the data in `df` labelled `train`. A final round of training is
+    performed on the full set of training data using the best hyperparameters identified, and the model is tested on
+    the remaining hold-out test set.
 
     Args:
-        df (pl.DataFrame): engineered features with labelled target variable
+        df (pl.DataFrame): engineered features with labelled target variable and `split` column containing `train` and
+        `test` labels for each sample.
         id_col (str): name of building ID column
-        features (Iterable[str]): features used to train the model
+        features (List[str]): features used to train the model
         target (str): name of target variable
-        param_search (Type[BaseSearchCV]): a class (not an instance) of `BaseSearchCV`, e.g. `HalvingRandomSearchCV` or `HalvingGridSearchCV` etc.
-        Defaults to using `HalvingRandomSearchCV` which will create an instance of this class with selected custom arguments for `param_distributions`, `factor`, `cv`,
-        and `n_jobs`, using F1 `scoring` metric. If using something other than the default option, kwargs for the selected `BaseSearchCV` class must be given, including param_distributions.
-        However, note that `estimator` and `random_state` args will always default to RandomForestClassifier and global RANDOM_STATE, respectively, for consistency.
+        param_search (Type[BaseSearchCV]): a class (not an instance) of `BaseSearchCV`, e.g. `HalvingRandomSearchCV` or
+        `HalvingGridSearchCV` etc. Defaults to using `HalvingRandomSearchCV` which will create an instance of this class
+        with selected custom arguments for `param_distributions`, `factor`, `cv`, and `n_jobs`, using F1 `scoring`
+        metric. If using something other than the default option, kwargs for the selected `BaseSearchCV` class must be
+        given, including param_distributions. However, note that `estimator` and `random_state` args will always default
+        to RandomForestClassifier and global RANDOM_STATE, respectively, for consistency.
         scoring (str): `param_search` scoring metric used to evaluate predictions on the test set. Default "f1".
-        **kwargs for selected `BaseSearchCV` if `param_search` not set to `default`. Note that any kwargs here will be ignored if `param_search` set to `default`.
+        **kwargs for selected `BaseSearchCV` if `param_search` not set to `default`. Note that any kwargs here will be
+        ignored if `param_search` set to `default`.
 
     Returns:
         RandomForestClassifier: trained binary classifier model
     """
     # Sort model dataframe so that results are replicable
     pd_df = df.to_pandas().set_index(id_col).sort_values(id_col)
-    X = pd_df[features]
-    y = pd_df[target]
+    X = pd_df[features + ["split"]]
+    y = pd_df[[target, "split"]]
 
     # Keep a final hold out test set aside
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
-    )
+    X_train = X[X["split"] == "train"].drop(columns="split")
+    X_test = X[X["split"] == "test"].drop(columns="split")
+    y_train = y[y["split"] == "test"].drop(columns="split")
+    y_test = y[y["split"] == "test"].drop(columns="split")
 
     # Create cross-validation splitter and classifier
     cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
@@ -345,6 +351,7 @@ if __name__ == "__main__":
             local_authorities=local_authority_dict["url_slug"],
             release_date=release_date,
         )
+        # Filter to UPRNs in buildings in the sample
     ).join(labelled_df, how="semi", on="building_id")
 
     # Load building footprint data for buildings containing flats
@@ -359,6 +366,7 @@ if __name__ == "__main__":
     uprns_df = load_geodata.load_df_osopen_uprn(
         grid_squares=local_authority_dict["grid_squares"],
         columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
+        # Filter to UPRNs in buildings in the sample
     ).join(uprn_to_building_mapping, how="semi", on="UPRN")
 
     # Get geopoints of UPRNs
