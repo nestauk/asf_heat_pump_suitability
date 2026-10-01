@@ -23,6 +23,17 @@ The sprint review (2026-08) considered merging the anchor's geometry into its cl
 Thread anchor identity from the anchor list to the geojson, exposing both ends of a cluster→anchor link. Decisions settled in the kickoff interview, with rationale:
 
 1. **Link rule: a cluster references every anchor that flipped at least one of its buildings.** Causal and consistent with the logic trace; many-to-many is harmless now that nothing merges geometry. Only anchor-origin communal clusters carry links. _Rejected: all anchors within 50 m (overstates the anchor's role for clusters that were communal anyway — the PR #466 objection); nearest anchor only (hides real multi-anchor cases: 18 contested clusters in Plymouth)._
+
+   **Tension to keep visible — proximity is not causation.** A block of flats within 50 m of a school is communal because it is a block of flats, so it carries `communal_origin = "block of flats"`, `anchor_ids = null` and is _not_ highlighted when selected — even though `within_50m_from_anchor_load` is `True` for it. The link means "this anchor is why the cluster is communal", not "an anchor is nearby". The three states a communal cluster can be in:
+
+   | Cluster                          | `communal_origin` | `anchor_ids` | `within_50m_from_anchor_load` |
+   | -------------------------------- | ----------------- | ------------ | ----------------------------- |
+   | Houses switched by a school      | anchor proximity  | `["…"]`      | True                          |
+   | Flats that happen to be near one | block of flats    | null         | True                          |
+   | Flats nowhere near an anchor     | block of flats    | null         | False                         |
+
+   The boolean flag is kept unchanged precisely so the frontend can give the middle row a weaker cue (for example a dotted outline) without a backend change, if the product view wants proximity shown.
+
 2. **Contract: enrich the existing single geojson.** Anchor-load features gain an `anchor_id` property; anchor-origin cluster features gain an anchor-ID list. No new layer or file — matches the frontend's "an ID could work" suggestion and their hesitancy about juggling layers. _Rejected: a standalone anchors file (adds a fetch and a layer)._
 3. **Single source of anchor IDs: the cluster stage saves an anchors dataset** (id + geometry, all anchors in the LA) to the dated release directory; the contextual-features stage loads it for the `anchor_loads` layer instead of re-deriving anchors. The drawn polygons and the cluster links cannot disagree. _Rejected: deriving IDs independently in both stages (silent divergence if inputs differ)._
 4. **ID format: geometry-hash** — a short hex digest of the normalised footprint WKB. Stable across runs, releases and LAs while the footprint is unchanged. _Rejected: sequential per run (shuffles whenever the list changes); OS building IDs (mixed provenance across the two anchor sources; can change between OS releases)._
@@ -51,6 +62,8 @@ Implementation sketch (pipeline only):
 - Retiring `within_50m_from_anchor_load` (it becomes derivable from the ID list, but removing it would break the current frontend contract).
 
 ## Open questions
+
+- Should the UI give a weaker visual cue to communal clusters that are near an anchor without being caused by one (`within_50m_from_anchor_load` true, `anchor_ids` null)? The data supports it; the product call is the frontend's.
 
 - Property name for the cluster-side list (proposed `anchor_ids`) — confirm with the frontend before the PR opens.
 - Serialisation of the list column: native list type in parquet and a JSON array in the geojson, versus a delimited string — decide at implementation with the frontend's parsing preference.
