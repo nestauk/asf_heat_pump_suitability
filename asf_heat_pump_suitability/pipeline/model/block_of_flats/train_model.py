@@ -399,5 +399,7 @@ if __name__ == "__main__":
     )
 
     if args.save:
-        save_as = config["output"]["model"]["block_of_flats_model"]
+        save_as = config["output"]["model"]["block_of_flats_model"].format(
+            release_date=release_date
+        )
         save_utils.save_model_to_pkl_s3(model, save_as)
