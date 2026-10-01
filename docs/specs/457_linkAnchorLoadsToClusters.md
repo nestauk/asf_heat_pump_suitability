@@ -1,8 +1,8 @@
 ---
 title: Link anchor loads to communal clusters by ID so the UI can highlight them
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/457
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/525
 asana: TBD
 created: 2026-08-28
 ---
