@@ -12,6 +12,7 @@ from shapely.affinity import rotate
 from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.cluster.cluster import (
     extend_edges_gdf,
+    filter_gdf_anchors_to_save,
     generate_gdf_clusters,
     generate_series_anchor_ids,
     overlay_gdf_physical_barriers,
@@ -1100,3 +1101,39 @@ class TestGenerateSeriesAnchorIds:
         assert set(anchor_id) <= set(
             "0123456789abcdef"
         ), "anchor IDs must be lowercase hex"
+
+
+class TestFilterGdfAnchorsToSave:
+    """Tests for `filter_gdf_anchors_to_save`."""
+
+    def test_keeps_la_anchors_and_referenced_outside_anchors(self):
+        """Anchors in the LA are kept whether linked or not; anchors outside it only if a cluster references them."""
+
+        def square(x):
+            return Polygon([(x, 0), (x + 10, 0), (x + 10, 10), (x, 10)])
+
+        anchor_gdf = gpd.GeoDataFrame(
+            {"anchor_id": ["INSIDE", "OUTSIDE_LINKED", "OUTSIDE_UNLINKED"]},
+            geometry=[square(0), square(200), square(400)],
+            crs="EPSG:27700",
+        )
+        boundary_gdf = gpd.GeoDataFrame(
+            geometry=[Polygon([(-50, -50), (100, -50), (100, 100), (-50, 100)])],
+            crs="EPSG:27700",
+        )
+        clusters_gdf = pd.DataFrame(
+            {"anchor_ids": [["OUTSIDE_LINKED"], None]},
+        )
+
+        kept = filter_gdf_anchors_to_save(
+            anchor_gdf=anchor_gdf, boundary_gdf=boundary_gdf, clusters_gdf=clusters_gdf
+        )
+
+        assert set(kept["anchor_id"]) == {
+            "INSIDE",
+            "OUTSIDE_LINKED",
+        }, "every ID a cluster references must ship, and unlinked anchors outside the LA must not"
+        assert list(kept.columns) == [
+            "anchor_id",
+            "geometry",
+        ], "the saved anchors must carry only the ID and the footprint"

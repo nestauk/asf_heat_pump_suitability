@@ -783,6 +783,34 @@ def generate_series_anchor_ids(geometry: gpd.GeoSeries) -> pd.Series:
     )
 
 
+def filter_gdf_anchors_to_save(
+    anchor_gdf: gpd.GeoDataFrame,
+    boundary_gdf: gpd.GeoDataFrame,
+    clusters_gdf: pd.DataFrame,
+) -> gpd.GeoDataFrame:
+    """
+    Select the anchors to save: every anchor in the local authority, plus any anchor outside it
+    that a cluster references.
+
+    Reassignment uses anchors from whole grid squares, so a building inside the local authority
+    can be reassigned by an anchor just over the boundary; keeping those means every ID in
+    `anchor_ids` resolves to a saved anchor.
+
+    Args:
+        anchor_gdf (gpd.GeoDataFrame): anchor footprints with `anchor_id`.
+        boundary_gdf (gpd.GeoDataFrame): local authority boundaries.
+        clusters_gdf (pd.DataFrame): clusters with an `anchor_ids` list column.
+
+    Returns:
+        gpd.GeoDataFrame: `anchor_id` and `geometry` of the anchors to save.
+    """
+    referenced_ids = set(clusters_gdf["anchor_ids"].dropna().explode())
+    in_la = anchor_gdf.intersects(boundary_gdf.union_all())
+    return anchor_gdf[in_la | anchor_gdf["anchor_id"].isin(referenced_ids)][
+        ["anchor_id", "geometry"]
+    ]
+
+
 def reassign_gdf_near_anchor_properties(
     tech_gdf: gpd.GeoDataFrame,
     combined_anchor_gdf: gpd.GeoDataFrame,
@@ -958,11 +986,13 @@ if __name__ == "__main__":
         local_authorities_slug=local_authority_dict["url_slug"],
     )
 
-    # Anchors in the local authority, saved so the contextual-features stage draws the
-    # same footprints and IDs that the clusters reference
-    anchors_gdf = combined_anchor_gdf[
-        combined_anchor_gdf.intersects(boundary_gdf.union_all())
-    ][["anchor_id", "geometry"]]
+    # Saved so the contextual-features stage draws the same footprints and IDs that the
+    # clusters reference
+    anchors_gdf = filter_gdf_anchors_to_save(
+        anchor_gdf=combined_anchor_gdf,
+        boundary_gdf=boundary_gdf,
+        clusters_gdf=clusters_gdf,
+    )
 
     if args.save:
         run_params = {
