@@ -60,6 +60,7 @@ Implementation sketch (pipeline only):
 - Frontend implementation of the outline-on-select behaviour.
 - Any change to cluster geometry, block-of-flats clusters, or the anchor category list.
 - Retiring `within_50m_from_anchor_load` (it becomes derivable from the ID list, but removing it would break the current frontend contract).
+- Making the building-to-cluster join robust to floating-point rounding at cluster edges. A building fractionally outside its cluster's outline is not attached, so it is missing from the cluster's flag and `anchor_ids` (seen on Plymouth as `COM_99_plymouth`). This predates #457 and is tracked in [#524](https://github.com/nestauk/asf_heat_pump_suitability/issues/524).
 
 ## Open questions
 
