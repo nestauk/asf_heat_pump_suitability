@@ -1,3 +1,7 @@
+"""
+Functions to load and process manually labelled data and prepare it for use in binary classification model training.
+"""
+
 import pathlib
 import s3fs
 import numpy as np
