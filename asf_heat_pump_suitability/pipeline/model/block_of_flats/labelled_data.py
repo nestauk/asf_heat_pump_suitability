@@ -86,7 +86,18 @@ def extract_df_labelled_data(
         pl.when(pl.col("label") == "UL")
         .then(pl.lit(None))
         .otherwise(pl.col("confidence"))
-        .alias("confidence"),
+        .alias("confidence")
+    )
+
+
+def compare_df_labellers(
+    labelled_df: pl.DataFrame, unlabelled_df: pl.DataFrame, id_str: str
+) -> pl.DataFrame:
+    labelled_df = labelled_df.join(
+        unlabelled_df.select([id_str, "split", "labeller", "secondary_labeller"]),
+        how="left",
+        on=id_str,
+    ).with_columns(
         pl.when(pl.col("label").is_in(BLOCK_OF_FLATS_ARCHETYPES))
         .then(True)
         .when(pl.col("label").is_in(NOT_BLOCKS_ARCHETYPES))
@@ -94,3 +105,63 @@ def extract_df_labelled_data(
         .otherwise(None)
         .alias("block_of_flats"),
     )
+
+    # Filter to duplicated building IDs (meaning the building has been labelled by two different people)
+    labelled_df = (
+        labelled_df.with_columns(pl.col(id_str).is_duplicated().alias("duplicate"))
+        .filter(pl.col("duplicate"))
+        .group_by(id_str, maintain_order=True)
+        .agg(
+            # Aggregate the multiple labels and other information into a list per building
+            pl.col("label"),
+            pl.col("block_of_flats"),
+            pl.col("confidence"),
+            pl.col("labeller"),
+            pl.col("url").first(),
+        )
+        .with_columns(
+            # Convert lists to structs and then unnest to create one row per building with information from both labellers
+            pl.col("label").list.to_struct(
+                fields=["sublabel_labeller1", "sublabel_labeller2"]
+            ),
+            pl.col("block_of_flats").list.to_struct(
+                fields=["label_labeller1", "label_labeller2"]
+            ),
+            pl.col("confidence").list.to_struct(
+                fields=["confidence_labeller1", "confidence_labeller1"]
+            ),
+            pl.col("labeller").list.to_struct(fields=["labeller1", "labeller2"]),
+        )
+        .unnest(columns=["label", "block_of_flats", "confidence", "labeller"])
+        .with_columns(
+            (pl.col("label_labeller1") == pl.col("label_labeller2")).alias(
+                "agree_label"
+            ),
+            (pl.col("sublabel_labeller1") == pl.col("sublabel_labeller2")).alias(
+                "agree_sublabel"
+            ),
+        )
+    )
+
+    return labelled_df
+
+
+def transform_df_labelled_data(
+    labelled_df: pl.DataFrame, unlabelled_df: pl.DataFrame, id_str: str
+) -> pl.DataFrame:
+    """
+    Prepare labelled data for modelling inputs.
+    """
+    labelled_df = labelled_df.join(
+        unlabelled_df.select([id_str, "split", "labeller", "secondary_labeller"]),
+        how="left",
+        on=id_str,
+    ).with_columns(
+        pl.when(pl.col("label").is_in(BLOCK_OF_FLATS_ARCHETYPES))
+        .then(True)
+        .when(pl.col("label").is_in(NOT_BLOCKS_ARCHETYPES))
+        .then(False)
+        .otherwise(None)
+        .alias("block_of_flats"),
+    )
+    return labelled_df
