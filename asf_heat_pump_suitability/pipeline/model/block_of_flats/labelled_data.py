@@ -38,7 +38,7 @@ NOT_BLOCKS_ARCHETYPES = [
 EXCLUDED_ARCHETYPES = ["DE", "UL"]
 
 
-def load_gdf_unprocessed_labelled() -> gpd.GeoDataFrame:
+def load_gdf_unprocessed_labelled_data() -> gpd.GeoDataFrame:
     """
     Load unprocessed manually labelled data for block of flats classifier model and concatenate into a single GeoDataFrame.
 

@@ -326,9 +326,16 @@ if __name__ == "__main__":
     # ------------------------ #
     # LOAD LABELLED DATA
     # ------------------------ #
-    labelled_gdf = labelled_data.load_gdf_unprocessed_labelled()
+    unlabelled_df = pl.read_parquet(
+        config["output"]["model"]["training_data"][
+            "sample_for_block_of_flats_model"
+        ].format(release_date=release_date)
+    )
+    labelled_gdf = labelled_data.load_gdf_unprocessed_labelled_data()
     labelled_df = labelled_data.extract_df_labelled_data(labelled_gdf)
-    labelled_df = labelled_data.transform_df_labelled_data(labelled_df)
+    labelled_df = labelled_data.transform_df_labelled_data(
+        labelled_df=labelled_df, unlabelled_df=unlabelled_df
+    )
 
     # ------------------------ #
     # LOAD UPRN AND BUILDING DATA
