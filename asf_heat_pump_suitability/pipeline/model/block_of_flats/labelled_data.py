@@ -86,18 +86,7 @@ def extract_df_labelled_data(
         pl.when(pl.col("label") == "UL")
         .then(pl.lit(None))
         .otherwise(pl.col("confidence"))
-        .alias("confidence")
-    )
-
-
-def compare_df_labellers(
-    labelled_df: pl.DataFrame, unlabelled_df: pl.DataFrame, id_str: str
-) -> pl.DataFrame:
-    labelled_df = labelled_df.join(
-        unlabelled_df.select([id_str, "split", "labeller", "secondary_labeller"]),
-        how="left",
-        on=id_str,
-    ).with_columns(
+        .alias("confidence"),
         pl.when(pl.col("label").is_in(BLOCK_OF_FLATS_ARCHETYPES))
         .then(True)
         .when(pl.col("label").is_in(NOT_BLOCKS_ARCHETYPES))
@@ -106,24 +95,30 @@ def compare_df_labellers(
         .alias("block_of_flats"),
     )
 
-    # Filter to duplicated building IDs (meaning the building has been labelled by two different people)
-    labelled_df = (
-        labelled_df.with_columns(pl.col(id_str).is_duplicated().alias("duplicate"))
+
+def compare_tuple_labellers(
+    labelled_df: pl.DataFrame, unlabelled_df: pl.DataFrame, id_str: str
+) -> tuple:
+
+    double_labelled_df = (
+        # Join labellers onto labelled buildings
+        labelled_df.join(
+            unlabelled_df.select([id_str, "labeller", "secondary_labeller"]),
+            how="left",
+            on=id_str,
+            # Filter to duplicated building IDs (meaning the building has been labelled by two different people)
+        )
+        .with_columns(pl.col(id_str).is_duplicated().alias("duplicate"))
         .filter(pl.col("duplicate"))
         .group_by(id_str, maintain_order=True)
         .agg(
             # Aggregate the multiple labels and other information into a list per building
-            pl.col("label"),
             pl.col("block_of_flats"),
             pl.col("confidence"),
             pl.col("labeller"),
-            pl.col("url").first(),
         )
         .with_columns(
             # Convert lists to structs and then unnest to create one row per building with information from both labellers
-            pl.col("label").list.to_struct(
-                fields=["sublabel_labeller1", "sublabel_labeller2"]
-            ),
             pl.col("block_of_flats").list.to_struct(
                 fields=["label_labeller1", "label_labeller2"]
             ),
@@ -132,18 +127,44 @@ def compare_df_labellers(
             ),
             pl.col("labeller").list.to_struct(fields=["labeller1", "labeller2"]),
         )
-        .unnest(columns=["label", "block_of_flats", "confidence", "labeller"])
+        .unnest(columns=["block_of_flats", "confidence", "labeller"])
         .with_columns(
             (pl.col("label_labeller1") == pl.col("label_labeller2")).alias(
                 "agree_label"
             ),
-            (pl.col("sublabel_labeller1") == pl.col("sublabel_labeller2")).alias(
-                "agree_sublabel"
-            ),
         )
     )
 
-    return labelled_df
+    print_labeller_agreement_matrix(df=double_labelled_df)
+
+    # Building IDs where the labels (of the aggregated four categories) match between labellers
+    agree_buildings_ids = (
+        double_labelled_df.filter(pl.col("agree_label"))[id_str].unique().to_list()
+    )
+
+    # Building IDs where the labels (of the aggregated four categories) do not match between labellers
+    drop_building_ids = (
+        double_labelled_df.filter(~pl.col("agree_label"))[id_str].unique().to_list()
+    )
+
+    return (agree_buildings_ids, drop_building_ids)
+
+
+def print_labeller_agreement_matrix(df: pl.DataFrame):
+    labellers = df["labeller1"].unique().to_list()
+
+    for l1 in labellers:
+        labeller1_df = df.filter(pl.col("labeller1") == l1)
+        labellers_2 = labeller1_df["labeller2"].unique().to_list()
+        for l2 in labellers_2:
+            print(
+                f"\n\nPrimary labeller: {l1}; seconary labeller: {l2};\nAgreement matrix:\n"
+            )
+            print(
+                labeller1_df.filter(pl.col("labeller2") == l2)[
+                    "agree_label"
+                ].value_counts()
+            )
 
 
 def transform_df_labelled_data(
