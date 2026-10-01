@@ -8,6 +8,7 @@ pytest asf_heat_pump_suitability/pipeline/validate/tests/test_compare_versions.p
 import json
 import subprocess
 
+import numpy as np
 import polars as pl
 import pytest
 
@@ -1003,6 +1004,318 @@ class TestGenerateStrReport:
         ), "non-decision-tree stages must not carry per-tech count sections"
 
 
+@pytest.fixture(scope="module")
+def df_clusters_old():
+    """Old-version cluster-level output: three clusters across two techs."""
+    return pl.DataFrame(
+        {
+            "cluster_id": ["NHP_1", "NHP_2", "DHN_1"],
+            "assigned_tech": [
+                "Networked heat pump",
+                "Networked heat pump",
+                "District heat network",
+            ],
+        }
+    )
+
+
+@pytest.fixture(scope="module")
+def df_clusters_merged():
+    """New-version cluster-level output with genuine geometry drift: the two
+    heat-pump clusters merged into one."""
+    return pl.DataFrame(
+        {
+            "cluster_id": ["NHP_1", "DHN_1"],
+            "assigned_tech": ["Networked heat pump", "District heat network"],
+        }
+    )
+
+
+@pytest.fixture(scope="module")
+def df_areas_old():
+    """Old-version per-cluster areas: three 100 m² clusters."""
+    return pl.DataFrame({"area_m2": [100.0, 100.0, 100.0]})
+
+
+@pytest.fixture(scope="module")
+def df_areas_merged():
+    """New-version per-cluster areas after the merge: the merged cluster
+    absorbed the 10 m² gap between its parents (100 + 100 + 10)."""
+    return pl.DataFrame({"area_m2": [210.0, 100.0]})
+
+
+class TestGenerateStrReportGeometrySections:
+    """Tests for `generate_str_report`'s cluster geometry sections."""
+
+    def test_geometry_drift_surfaces_in_counts_and_area(
+        self, df_clusters_old, df_clusters_merged, df_areas_old, df_areas_merged
+    ):
+        """A cluster merge (genuine geometry drift invisible to the tabular
+        checks) must surface as a cluster count delta and an area delta,
+        with the CRS and units stated."""
+        report = generate_report(
+            df_clusters_old,
+            df_clusters_merged,
+            None,
+            None,
+            stage="cluster",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_merged,
+        )
+        assert "Cluster geometry" in report, "the geometry section must appear"
+        assert (
+            "| Cluster counts | 3 | 2 | -1 |" in report
+        ), "the cluster merge must appear as a -1 cluster count delta"
+        assert (
+            "| Total area (m²) | 300.0 | 310.0 | +10.0 |" in report
+        ), "the absorbed 10 m² gap must appear as the total-area delta"
+        assert "EPSG:27700" in report, "the report must state the CRS areas use"
+
+    def test_stable_versions_show_zero_geometry_deltas(
+        self, df_clusters_old, df_areas_old
+    ):
+        """No geometry drift means zero cluster and area deltas."""
+        report = generate_report(
+            df_clusters_old,
+            df_clusters_old,
+            None,
+            None,
+            stage="cluster",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_old,
+        )
+        assert (
+            "| Cluster counts | 3 | 3 | +0 |" in report
+        ), "stable versions must show a zero cluster count delta"
+        assert (
+            "| Total area (m²) | 300.0 | 300.0 | +0.0 |" in report
+        ), "stable versions must show a zero total-area delta"
+
+    def test_simplified_geometry_caveat_only_at_the_contextual_stage(
+        self, df_clusters_old, df_areas_old
+    ):
+        """The contextual-features geojson carries simplified geometry, so
+        its report warns that area differences may be simplification
+        artefacts; the cluster stage's exact geometry needs no caveat."""
+        kwargs = dict(
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_old,
+        )
+        contextual = generate_report(
+            df_clusters_old,
+            df_clusters_old,
+            None,
+            None,
+            stage="compute_contextual_features",
+            **kwargs,
+        )
+        cluster = generate_report(
+            df_clusters_old, df_clusters_old, None, None, stage="cluster", **kwargs
+        )
+        assert (
+            "simplified geometry" in contextual
+        ), "the contextual-features report must carry the simplified-geometry caveat"
+        assert (
+            f"up to {compare_versions.SIMPLIFY_TOLERANCE_M} m" in contextual
+        ), "the caveat must say how far simplification can move a boundary"
+        assert (
+            "simplified geometry" not in cluster
+        ), "the cluster stage's exact geometry must not carry the caveat"
+
+    def test_distribution_sections_report_the_statistics_per_version(
+        self, df_clusters_old, df_areas_old, df_areas_merged
+    ):
+        """Each distribution gets a section with Q1, Q3, min, max and mean
+        for both versions; the contextual stage also covers n_UPRNs."""
+        df_old = df_clusters_old.with_columns(pl.lit(5).alias("n_UPRNs"))
+        df_new = df_old.with_columns(pl.lit(8).alias("n_UPRNs"))
+        report = generate_report(
+            df_old,
+            df_new,
+            None,
+            None,
+            stage="compute_contextual_features",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_merged,
+        )
+        assert (
+            "Distribution: area_m2" in report
+        ), "the cluster-area distribution section must appear"
+        assert (
+            "Distribution: n_UPRNs" in report
+        ), "the UPRNs-per-cluster distribution section must appear"
+        for statistic in ("Min", "Q1", "Mean", "Q3", "Max"):
+            assert (
+                f"| {statistic} |" in report
+            ), f"each distribution must report {statistic} per version"
+        assert (
+            "| Mean | 5 | 8 |" in report
+        ), "the n_UPRNs shift must appear as old and new means"
+
+    def test_stats_render_consistently_across_int_and_float_dtypes(self):
+        """One version's n_UPRNs loading as Float64 (a geojson round-trip
+        upcast) must not render "1,738.0" against the other's "1,738":
+        whole number floats render like ints."""
+        df_old = pl.DataFrame({"cluster_id": ["a", "b"], "n_UPRNs": [1165, 2311]})
+        df_new = df_old.with_columns(pl.col("n_UPRNs").cast(pl.Float64))
+        report = generate_report(
+            df_old,
+            df_new,
+            None,
+            None,
+            stage="compute_contextual_features",
+            trigger=None,
+        )
+        assert (
+            "| Min | 1,165 | 1,165 |" in report
+        ), "an Int64 and a Float64 version must render the same min"
+        assert (
+            "| Mean | 1,738 | 1,738 |" in report
+        ), "whole number float means must render like ints, with no trailing .0"
+        assert (
+            "1,738.0" not in report
+        ), "no whole number statistic may keep a trailing .0 in either column"
+
+    def test_fractional_stats_keep_one_decimal_place(self):
+        """A genuinely fractional statistic still renders to one decimal
+        place, so real precision is not rounded away."""
+        df = pl.DataFrame({"cluster_id": ["a", "b"], "n_UPRNs": [2, 3]})
+        report = generate_report(
+            df,
+            df.clone(),
+            None,
+            None,
+            stage="compute_contextual_features",
+            trigger=None,
+        )
+        assert (
+            "| Mean | 2.5 | 2.5 |" in report
+        ), "a fractional mean must keep its one decimal place"
+
+    def test_plots_are_embedded_as_image_links(
+        self, df_clusters_old, df_areas_old, df_areas_merged
+    ):
+        """Saved distribution plots are embedded in the report via image
+        links, next to their distribution's statistics."""
+        report = generate_report(
+            df_clusters_old,
+            df_clusters_old,
+            None,
+            None,
+            stage="cluster",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_merged,
+            plot_files={"area_m2": "cluster_plymouth_area_m2.png"},
+        )
+        assert (
+            "![Distribution of area_m2: old vs new](cluster_plymouth_area_m2.png)"
+            in report
+        ), "the saved plot must be embedded via a markdown image link"
+
+    def test_missing_cluster_id_degrades_the_count_to_a_note(
+        self, df_old, df_areas_old
+    ):
+        """A geometry-stage version without a cluster_id column (schema
+        change) must degrade the count to a note, not crash the report."""
+        report = generate_report(
+            df_old,
+            df_old,
+            None,
+            None,
+            stage="cluster",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_old,
+        )
+        assert (
+            "cluster_id" in report and "Cluster geometry" in report
+        ), "the missing cluster_id must be noted inside the geometry section"
+
+    def test_layered_output_scopes_headline_checks_to_the_clusters_layer(
+        self, df_clusters_old, df_areas_old
+    ):
+        """A new-format multi-layer output (ward boundaries bundled with the
+        clusters) must not swamp the cluster count and total area: the
+        headline checks cover the clusters layer only, the pre-layers old
+        version counts entirely as clusters, and the report says so."""
+        df_new = pl.DataFrame(
+            {
+                "cluster_id": ["HP_1", "DHN_1", None],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                ],
+            }
+        )
+        df_areas_new = pl.DataFrame(
+            {
+                "area_m2": [210.0, 100.0, 5_000_000.0],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                ],
+            }
+        )
+        report = generate_report(
+            df_clusters_old,
+            df_new,
+            None,
+            None,
+            stage="compute_contextual_features",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_new,
+        )
+        assert (
+            "| Cluster counts | 3 | 2 | -1 |" in report
+        ), "the ward row (null cluster_id) must not count as a cluster"
+        assert (
+            "| Total area (m²) | 300.0 | 310.0 | +10.0 |" in report
+        ), "the 5M m² ward polygon must not enter the total-area check"
+        assert (
+            f"`{compare_versions.CLUSTER_LAYER}` layer only" in report
+        ), "the report must state the headline checks cover the clusters layer only"
+
+    def test_unlayered_versions_carry_no_layer_filtering_note(
+        self, df_clusters_old, df_areas_old
+    ):
+        """Two pre-layers versions have nothing filtered, so the report
+        must not claim a layer scope that was never applied."""
+        report = generate_report(
+            df_clusters_old,
+            df_clusters_old.clone(),
+            None,
+            None,
+            stage="cluster",
+            trigger=None,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_old.clone(),
+        )
+        assert (
+            "layer only" not in report
+        ), "no layer column anywhere means no filtering note may appear"
+
+    def test_geometry_sections_only_for_geometry_stages(
+        self, df_old, df_new_identical, manifests, mocker
+    ):
+        """Stages without cluster geometry must not carry geometry or
+        distribution sections."""
+        mocker.patch.object(
+            compare_versions, "generate_list_commit_log", return_value=[]
+        )
+        report = generate_report(df_old, df_new_identical, *manifests)
+        assert (
+            "Cluster geometry" not in report and "Distribution:" not in report
+        ), "non-geometry stages must not carry geometry sections"
+
+
 class TestLoadTransformDfStageOutput:
     """Tests for `load_transform_df_stage_output`."""
 
@@ -1122,6 +1435,484 @@ class TestLoadTupleDfBuildings:
             release_date_new="20260722",
         )
         load.assert_not_called()
+
+
+class TestGenerateDictClusterCountDelta:
+    """Tests for `generate_dict_cluster_count_delta`."""
+
+    def test_identical_versions_have_zero_delta(self, df_clusters_old):
+        """No drift means no change in the distinct-cluster count."""
+        counts = compare_versions.generate_dict_cluster_count_delta(
+            df_clusters_old, df_clusters_old.clone()
+        )
+        assert counts == {
+            "clusters_old": 3,
+            "clusters_new": 3,
+            "clusters_delta": 0,
+        }, "identical versions must show no cluster count change"
+
+    def test_merged_clusters_show_a_negative_delta(
+        self, df_clusters_old, df_clusters_merged
+    ):
+        """Two clusters merging into one is genuine geometry drift the
+        tabular checks cannot see; the count delta must surface it."""
+        counts = compare_versions.generate_dict_cluster_count_delta(
+            df_clusters_old, df_clusters_merged
+        )
+        assert counts == {
+            "clusters_old": 3,
+            "clusters_new": 2,
+            "clusters_delta": -1,
+        }, "a cluster merge must appear as a negative cluster count delta"
+
+    def test_counts_distinct_cluster_ids_not_rows(self, df_clusters_old):
+        """A cluster-id column with repeated values (e.g. a UPRN-level frame)
+        must count distinct clusters, not rows."""
+        repeated = pl.concat([df_clusters_old, df_clusters_old])
+        counts = compare_versions.generate_dict_cluster_count_delta(
+            repeated, df_clusters_old
+        )
+        assert (
+            counts["clusters_old"] == 3
+        ), "repeated cluster ids must count as one cluster each"
+
+    def test_returns_none_without_cluster_id_column(self, df_old):
+        """Outputs without a cluster_id column (e.g. UPRN-stage outputs)
+        cannot be cluster-counted."""
+        assert (
+            compare_versions.generate_dict_cluster_count_delta(df_old, df_old) is None
+        ), "no cluster_id column means no cluster count, so None is expected"
+
+
+class TestGenerateDictTotalAreaDelta:
+    """Tests for `generate_dict_total_area_delta`."""
+
+    def test_identical_versions_have_zero_delta(self, df_areas_old):
+        """No drift means no total-area change."""
+        totals = compare_versions.generate_dict_total_area_delta(
+            df_areas_old, df_areas_old.clone()
+        )
+        assert totals == {
+            "area_m2_old": 300.0,
+            "area_m2_new": 300.0,
+            "area_m2_delta": 0.0,
+        }, "identical versions must show no total-area change"
+
+    def test_reports_the_total_area_delta_in_m2(self, df_areas_old, df_areas_merged):
+        """The cluster merge grew the total area by the 10 m² gap it
+        absorbed; the delta must surface it in m²."""
+        totals = compare_versions.generate_dict_total_area_delta(
+            df_areas_old, df_areas_merged
+        )
+        assert totals == {
+            "area_m2_old": 300.0,
+            "area_m2_new": 310.0,
+            "area_m2_delta": 10.0,
+        }, "the total-area delta must be new minus old, in m²"
+
+    def test_a_version_with_no_clusters_totals_zero(self, df_areas_old):
+        """An empty areas frame (zero-feature geojson) totals 0 m² rather
+        than crashing the delta."""
+        empty = pl.DataFrame(schema={"area_m2": pl.Float64})
+        totals = compare_versions.generate_dict_total_area_delta(df_areas_old, empty)
+        assert (
+            totals["area_m2_new"] == 0.0 and totals["area_m2_delta"] == -300.0
+        ), "a version with no clusters must total zero area, not crash"
+
+
+class TestLoadDfClusterAreas:
+    """Tests for `load_df_cluster_areas`."""
+
+    @staticmethod
+    def gdf_two_squares(crs: str):
+        """Two square clusters near Plymouth, 10 m and 20 m wide, so their
+        areas are exactly 100 m² and 400 m². Built in EPSG:27700 (metres),
+        then converted to the requested CRS."""
+        import geopandas as gpd
+        from shapely.geometry import box
+
+        gdf = gpd.GeoDataFrame(
+            {"cluster_id": ["NHP_1", "NHP_2"]},
+            geometry=[
+                box(250000, 55000, 250010, 55010),
+                box(250100, 55100, 250120, 55120),
+            ],
+            crs="EPSG:27700",
+        )
+        return gdf.to_crs(crs)
+
+    def test_geoparquet_areas_measured_in_m2(self, tmp_path):
+        """The cluster stage's geoparquet carries exact EPSG:27700 geometry;
+        areas come back in m², one row per cluster."""
+        path = tmp_path / "clusters.parquet"
+        self.gdf_two_squares("EPSG:27700").to_parquet(path)
+        df = compare_versions.load_df_cluster_areas(str(path))
+        assert df.columns == ["area_m2"], "only the derived area column is returned"
+        assert df["area_m2"].to_list() == [
+            100.0,
+            400.0,
+        ], "areas must be measured in m² on the saved EPSG:27700 geometry"
+
+    def test_geoparquet_in_another_crs_is_reprojected_before_measuring(self, tmp_path):
+        """A geoparquet not in the target CRS must be reprojected to
+        EPSG:27700 first — measuring in EPSG:4326 would return degrees²."""
+        path = tmp_path / "clusters.parquet"
+        self.gdf_two_squares("EPSG:4326").to_parquet(path)
+        df = compare_versions.load_df_cluster_areas(str(path))
+        assert df["area_m2"].to_list() == pytest.approx(
+            [100.0, 400.0], rel=1e-3
+        ), "areas must be measured in metres after reprojection, not degrees"
+
+    def test_geojson_is_reprojected_to_the_target_crs_before_measuring(self, mocker):
+        """The contextual-features geojson is saved in EPSG:4326; its areas
+        must be measured after reprojecting back to EPSG:27700."""
+        load = mocker.patch(
+            "asf_heat_pump_suitability.getters.base_getters.load_gdf_from_s3_geojson",
+            return_value=self.gdf_two_squares("EPSG:4326"),
+        )
+        df = compare_versions.load_df_cluster_areas("s3://bucket/dir/output.geojson")
+        assert load.call_args.kwargs.get("crs") == "EPSG:4326" or (
+            "EPSG:4326" in load.call_args.args
+        ), "the geojson must be loaded as the EPSG:4326 it is saved in"
+        assert df["area_m2"].to_list() == pytest.approx(
+            [100.0, 400.0], rel=1e-3
+        ), "geojson areas must be measured in m² after reprojection"
+
+    def test_unreadable_file_type_raises(self):
+        """Raise error for file types that don't allow reading geometry for
+        comparisons."""
+        with pytest.raises(ValueError, match="csv"):
+            compare_versions.load_df_cluster_areas("s3://bucket/dir/output.csv")
+
+    def test_geojson_layer_column_is_carried_alongside_areas(self, mocker):
+        """A multi-layer front-end geojson's areas must keep each feature's
+        layer, so the checks can filter to clusters."""
+        gdf = self.gdf_two_squares("EPSG:4326")
+        gdf["layer"] = [compare_versions.CLUSTER_LAYER, "ward_boundaries"]
+        mocker.patch(
+            "asf_heat_pump_suitability.getters.base_getters.load_gdf_from_s3_geojson",
+            return_value=gdf,
+        )
+        df = compare_versions.load_df_cluster_areas("s3://bucket/dir/output.geojson")
+        assert df.columns == [
+            "area_m2",
+            "layer",
+        ], "a layered source must yield areas alongside their layer"
+        assert df["layer"].to_list() == [
+            compare_versions.CLUSTER_LAYER,
+            "ward_boundaries",
+        ], "each area row must keep its feature's layer"
+
+    def test_geoparquet_layer_column_is_carried_alongside_areas(self, tmp_path):
+        """The loader carries `layer` from geoparquet too, so a future
+        layered parquet output filters the same way as the geojson."""
+        path = tmp_path / "clusters.parquet"
+        gdf = self.gdf_two_squares("EPSG:27700")
+        gdf["layer"] = [compare_versions.CLUSTER_LAYER, "anchor_loads"]
+        gdf.to_parquet(path)
+        df = compare_versions.load_df_cluster_areas(str(path))
+        assert df["layer"].to_list() == [
+            compare_versions.CLUSTER_LAYER,
+            "anchor_loads",
+        ], "geoparquet area rows must keep their feature's layer too"
+
+
+class TestFilterDfClustersLayer:
+    """Tests for `filter_df_clusters_layer`."""
+
+    def test_keeps_only_the_configured_clusters_layer(self):
+        """A multi-layer front-end output bundles whole-county ward polygons
+        with the clusters; the filter must keep clusters-layer rows only so
+        the wards cannot swamp the cluster checks."""
+        df = pl.DataFrame(
+            {
+                "cluster_id": ["HP_1", None, "HP_2"],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                    compare_versions.CLUSTER_LAYER,
+                ],
+            }
+        )
+        filtered = compare_versions.filter_df_clusters_layer(df)
+        assert filtered.height == 2, "only the two clusters-layer rows may survive"
+        assert filtered["layer"].unique().to_list() == [
+            compare_versions.CLUSTER_LAYER
+        ], "no other layer's rows may survive the filter"
+
+    def test_frame_without_a_layer_column_passes_through_unchanged(
+        self, df_clusters_old
+    ):
+        """Pre-layers outputs have no `layer` column and are treated as
+        all-clusters, so old-vs-new comparisons across the format change
+        keep working."""
+        assert (
+            compare_versions.filter_df_clusters_layer(df_clusters_old)
+            is df_clusters_old
+        ), "a frame without a layer column must pass through as the same frame"
+
+    def test_clusters_layer_name_is_in_config(self):
+        """base.yaml must name the clusters layer the checks filter to."""
+        assert (
+            "cluster_layer" in config["compare_versions"]
+        ), "base.yaml must set compare_versions.cluster_layer"
+
+
+class TestGenerateDictDistributionStats:
+    """Tests for `generate_dict_distribution_stats`."""
+
+    def test_reports_quartiles_min_max_and_mean(self):
+        """The shared helper reports Q1 and Q3 (both quartiles, so a shift
+        and a widening stay distinguishable) plus min, max and mean."""
+        df = pl.DataFrame({"n_UPRNs": [1, 2, 3, 4, 5]})
+        stats = compare_versions.generate_dict_distribution_stats(df, "n_UPRNs")
+        assert stats == {
+            "min": 1,
+            "q1": 2.0,
+            "mean": 3.0,
+            "q3": 4.0,
+            "max": 5,
+        }, "the helper must report Q1, Q3, min, max and mean for the column"
+
+    def test_nulls_are_excluded_from_the_statistics(self):
+        """Null values must not drag the statistics; they are dropped."""
+        df = pl.DataFrame({"n_UPRNs": [1, 2, 3, 4, 5, None]})
+        stats = compare_versions.generate_dict_distribution_stats(df, "n_UPRNs")
+        assert stats["mean"] == 3.0, "nulls must be excluded, not counted as zeros"
+
+    def test_missing_column_returns_none(self, df_clusters_old):
+        """A version without the target column cannot be summarised."""
+        assert (
+            compare_versions.generate_dict_distribution_stats(
+                df_clusters_old, "n_UPRNs"
+            )
+            is None
+        ), "a missing column must degrade to None, not raise"
+
+    def test_all_null_column_returns_none(self):
+        """A column with no values has no distribution to report."""
+        df = pl.DataFrame({"n_UPRNs": [None, None]}, schema={"n_UPRNs": pl.Int64})
+        assert (
+            compare_versions.generate_dict_distribution_stats(df, "n_UPRNs") is None
+        ), "an all-null column must degrade to None, not report null statistics"
+
+
+class TestDistributionColumns:
+    """Tests for the configured `DISTRIBUTION_COLUMNS` per-stage lists."""
+
+    def test_every_configured_stage_is_a_known_stage(self):
+        """Distribution columns are keyed by real pipeline stages."""
+        assert set(compare_versions.DISTRIBUTION_COLUMNS) <= set(
+            compare_versions.STAGE_OUTPUT_DATASETS
+        ), "distribution columns must be configured under known stage names"
+
+    def test_uprns_per_cluster_is_configured_at_the_contextual_stage(self):
+        """n_UPRNs is computed at the contextual-features stage, so its
+        distribution is configured there — config lists real columns only."""
+        assert (
+            "n_UPRNs"
+            in compare_versions.DISTRIBUTION_COLUMNS["compute_contextual_features"]
+        ), "the UPRNs-per-cluster distribution must target the real n_UPRNs column"
+
+
+class TestGetDictDistributionFrames:
+    """Tests for `get_dict_distribution_frames`."""
+
+    def test_cluster_stage_gets_the_derived_area_distribution_only(
+        self, df_clusters_old, df_areas_old, df_areas_merged
+    ):
+        """The cluster stage output has no configured distribution columns;
+        its only distribution is the geometry-derived area."""
+        frames = compare_versions.get_dict_distribution_frames(
+            "cluster",
+            df_clusters_old,
+            df_clusters_old,
+            df_areas_old,
+            df_areas_merged,
+        )
+        assert list(frames) == [
+            "area_m2"
+        ], "the cluster stage must get exactly the derived area distribution"
+        assert frames["area_m2"] == (
+            df_areas_old,
+            df_areas_merged,
+        ), "the area distribution must read the geometry-derived frames"
+
+    def test_contextual_stage_adds_the_configured_columns(
+        self, df_clusters_old, df_areas_old
+    ):
+        """The contextual-features stage gets the derived area plus its
+        configured columns (n_UPRNs), read from the tabular output."""
+        frames = compare_versions.get_dict_distribution_frames(
+            "compute_contextual_features",
+            df_clusters_old,
+            df_clusters_old,
+            df_areas_old,
+            df_areas_old,
+        )
+        assert set(frames) == {
+            "area_m2",
+            "n_UPRNs",
+        }, "the contextual stage must get the area and n_UPRNs distributions"
+        assert frames["n_UPRNs"] == (
+            df_clusters_old,
+            df_clusters_old,
+        ), "configured columns must read the tabular stage output"
+
+    def test_stage_without_geometry_gets_no_distributions(self, df_old):
+        """Non-geometry stages have no areas and no configured columns yet,
+        so no distribution sections are added."""
+        frames = compare_versions.get_dict_distribution_frames(
+            "decision_tree", df_old, df_old, None, None
+        )
+        assert frames == {}, "a stage without geometry or configured columns gets none"
+
+    def test_layered_frames_are_filtered_to_the_clusters_layer(self):
+        """Multi-layer outputs bundle ward polygons and anchor loads with
+        the clusters; every distribution (and so every plot fed from here)
+        must cover the clusters layer only."""
+        df_tabular = pl.DataFrame(
+            {
+                "n_UPRNs": [5, 8, None],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                ],
+            }
+        )
+        df_areas = pl.DataFrame(
+            {
+                "area_m2": [100.0, 200.0, 5_000_000.0],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "ward_boundaries",
+                ],
+            }
+        )
+        frames = compare_versions.get_dict_distribution_frames(
+            "compute_contextual_features",
+            df_tabular,
+            df_tabular,
+            df_areas,
+            df_areas,
+        )
+        # Each column maps to its (old, new) pair of DataFrames.
+        df_n_uprns_old, _ = frames["n_UPRNs"]
+        _, df_area_new = frames["area_m2"]
+        assert df_n_uprns_old["n_UPRNs"].drop_nulls().to_list() == [
+            5,
+            8,
+        ], "ward rows must not enter the n_UPRNs distribution"
+        assert df_area_new["area_m2"].to_list() == [
+            100.0,
+            200.0,
+        ], "whole-county ward polygons must not enter the area distribution"
+
+
+class TestUseLogBins:
+    """Tests for `_use_log_bins`."""
+
+    def test_heavily_right_skewed_positive_values_use_log_bins(self):
+        """Cluster areas span orders of magnitude (a few huge clusters, a
+        bulk of small ones); linear bins would collapse the bulk into one
+        bar, so log bins apply."""
+        values = np.array([10.0] * 99 + [1_000_000.0])
+        assert compare_versions._use_log_bins(
+            values
+        ), "a max thousands of times the median must switch to log bins"
+
+    def test_compact_values_keep_linear_bins(self):
+        """A distribution without an extreme tail reads best on the familiar
+        linear axis."""
+        values = np.array([80.0, 100.0, 120.0, 150.0])
+        assert not compare_versions._use_log_bins(
+            values
+        ), "values within one order of magnitude must keep linear bins"
+
+    def test_nonpositive_values_keep_linear_bins(self):
+        """Log bins cannot represent zero or negative values, so any such
+        value forces linear bins."""
+        values = np.array([0.0, 10.0, 1_000_000.0])
+        assert not compare_versions._use_log_bins(
+            values
+        ), "a zero value must force linear bins - log10(0) is undefined"
+
+
+class TestPlotDistributionOverlay:
+    """Tests for `plot_distribution_overlay`."""
+
+    def test_saves_a_png_at_the_given_path(self, tmp_path):
+        """The overlaid old-vs-new histogram is saved as a PNG file."""
+        path = tmp_path / "cluster_plymouth_area_m2.png"
+        compare_versions.plot_distribution_overlay(
+            pl.Series("area_m2", [100.0, 100.0, 100.0]),
+            pl.Series("area_m2", [210.0, 100.0]),
+            "area_m2",
+            path,
+        )
+        assert path.exists(), "the plot must be saved at the given path"
+        assert path.stat().st_size > 0, "the saved plot must not be an empty file"
+
+    def test_skewed_distribution_saves_a_log_binned_png(self, tmp_path):
+        """A heavily right-skewed distribution, like real cluster areas, is
+        saved as a PNG drawn on log-spaced bins."""
+        path = tmp_path / "cluster_plymouth_area_m2.png"
+        compare_versions.plot_distribution_overlay(
+            pl.Series("area_m2", [20.0] * 50 + [3_000.0] * 10 + [400_000.0]),
+            pl.Series("area_m2", [25.0] * 60 + [300_000_000.0]),
+            "area_m2",
+            path,
+        )
+        assert path.exists(), "the log-binned plot must be saved at the given path"
+
+
+class TestGenerateDictDistributionPlots:
+    """Tests for `generate_dict_distribution_plots`."""
+
+    def test_saves_one_plot_per_distribution(
+        self, tmp_path, df_areas_old, df_areas_merged, df_clusters_old
+    ):
+        """Each distribution with values on both sides gets one PNG, named
+        after the report stem, and the mapping points the report at it."""
+        df_uprns = df_clusters_old.with_columns(pl.lit(5).alias("n_UPRNs"))
+        frames = {
+            "area_m2": (df_areas_old, df_areas_merged),
+            "n_UPRNs": (df_uprns, df_uprns),
+        }
+        plot_files = compare_versions.generate_dict_distribution_plots(
+            frames, tmp_path, "cluster_plymouth_20260601_vs_20260722"
+        )
+        assert plot_files == {
+            "area_m2": "cluster_plymouth_20260601_vs_20260722_area_m2.png",
+            "n_UPRNs": "cluster_plymouth_20260601_vs_20260722_n_UPRNs.png",
+        }, "each distribution must map to its stem-named PNG"
+        for filename in plot_files.values():
+            assert (tmp_path / filename).exists(), "every mapped PNG must be saved"
+
+    def test_skips_a_distribution_with_no_values_on_one_side(
+        self, tmp_path, df_areas_old
+    ):
+        """A distribution empty on one side (e.g. zero-feature geojson) has
+        nothing to overlay: no file, no mapping entry, no crash."""
+        empty = pl.DataFrame(schema={"area_m2": pl.Float64})
+        plot_files = compare_versions.generate_dict_distribution_plots(
+            {"area_m2": (df_areas_old, empty)}, tmp_path, "stem"
+        )
+        assert plot_files == {}, "an empty side must skip the plot, not crash"
+        assert list(tmp_path.iterdir()) == [], "no file may be written for a skip"
+
+    def test_skips_a_distribution_whose_column_is_missing(
+        self, tmp_path, df_clusters_old
+    ):
+        """A configured column missing from one version (schema change) is
+        skipped; the report's stats section already notes the gap."""
+        with_col = df_clusters_old.with_columns(pl.lit(5).alias("n_UPRNs"))
+        plot_files = compare_versions.generate_dict_distribution_plots(
+            {"n_UPRNs": (with_col, df_clusters_old)}, tmp_path, "stem"
+        )
+        assert plot_files == {}, "a missing column must skip the plot, not raise"
 
 
 class TestParseArguments:

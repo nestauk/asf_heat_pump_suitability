@@ -2,8 +2,10 @@
 Compare two dated versions of a pipeline stage output for one local authority.
 
 The report covers row and UPRN counts, schema changes, UPRN churn, per-tech
-counts and the tech transition matrix (decision tree stage), and the commits
-that touched the stage's code between the two versions.
+counts and the tech transition matrix (decision tree stage), cluster count
+and area changes with distribution plots (cluster and contextual features
+stages), and the commits that touched the stage's code between the two
+versions. Distribution plots are saved as PNGs next to the report.
 
 Pass --trigger methodology_change or --trigger input_release to check the
 numbers against that trigger's tolerances. Leave it out to get the numbers
@@ -31,6 +33,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import fsspec
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import numpy as np
 import polars as pl
 import pyarrow.parquet as pq
 import s3fs
@@ -42,11 +47,22 @@ from asf_heat_pump_suitability.utils import geo_utils, manifest_utils, save_util
 UPRN_COL = "UPRN"
 TECH_COL = "assigned_tech"
 NULL_TECH_LABEL = "(null)"
+CLUSTER_ID_COL = "cluster_id"
+AREA_COL = "area_m2"
+# Multi-layer front-end outputs (August 2026 onwards) tag every row with
+# the layer it belongs to; earlier outputs have no such column.
+LAYER_COL = "layer"
+# Stages whose outputs carry cluster geometry, and so get the cluster
+# count, area and distribution sections.
+GEOMETRY_STAGES = ("cluster", "compute_contextual_features")
 
+CLUSTER_LAYER = config["compare_versions"]["cluster_layer"]
 STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
 BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"]
+DISTRIBUTION_COLUMNS = config["compare_versions"]["distribution_columns"]
 TOLERANCES = config["compare_versions"]["tolerances"]
+SIMPLIFY_TOLERANCE_M = config["constant"]["clustering"]["tolerance_m"]
 
 
 def generate_dict_count_delta(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict:
@@ -74,6 +90,260 @@ def generate_dict_count_delta(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dic
         counts["uprns_new"] = df_new[UPRN_COL].n_unique()
         counts["uprns_delta"] = counts["uprns_new"] - counts["uprns_old"]
     return counts
+
+
+def generate_dict_cluster_count_delta(
+    df_old: pl.DataFrame, df_new: pl.DataFrame
+) -> dict | None:
+    """
+    Compare distinct-cluster counts between two versions of an output.
+
+    Args:
+        df_old (pl.DataFrame): older version of a cluster-bearing stage output
+        df_new (pl.DataFrame): newer version of a cluster-bearing stage output
+
+    Returns:
+        dict: old/new/delta distinct-cluster counts, or None when either
+            version has no cluster-id column
+    """
+    if CLUSTER_ID_COL not in df_old.columns or CLUSTER_ID_COL not in df_new.columns:
+        return None
+    n_old = df_old[CLUSTER_ID_COL].n_unique()
+    n_new = df_new[CLUSTER_ID_COL].n_unique()
+    return {
+        "clusters_old": n_old,
+        "clusters_new": n_new,
+        "clusters_delta": n_new - n_old,
+    }
+
+
+def filter_df_clusters_layer(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Keep only a frame's clusters-layer rows.
+
+    Multi-layer front-end outputs bundle non-cluster layers (ward
+    boundaries, anchor loads) with the clusters in one file; the cluster
+    checks must not aggregate over them. A frame without a `layer` column
+    (a pre-layers output) is all clusters and passes through unchanged.
+
+    Args:
+        df: one version of a geometry-stage output (tabular or per-cluster
+            areas)
+
+    Returns:
+        pl.DataFrame: the rows whose layer is the configured clusters layer,
+            or the frame itself when it has no `layer` column
+    """
+    if LAYER_COL not in df.columns:
+        return df
+    return df.filter(pl.col(LAYER_COL) == CLUSTER_LAYER)
+
+
+def generate_dict_total_area_delta(
+    df_areas_old: pl.DataFrame, df_areas_new: pl.DataFrame
+) -> dict:
+    """
+    Compare total cluster area between two versions, in m² (EPSG:27700).
+
+    Args:
+        df_areas_old (pl.DataFrame): older version's per-cluster areas
+        df_areas_new (pl.DataFrame): newer version's per-cluster areas
+
+    Returns:
+        dict: old/new/delta total areas; a version with no clusters totals 0
+    """
+    total_old = df_areas_old[AREA_COL].sum()
+    total_new = df_areas_new[AREA_COL].sum()
+    return {
+        "area_m2_old": total_old,
+        "area_m2_new": total_new,
+        "area_m2_delta": total_new - total_old,
+    }
+
+
+def generate_dict_distribution_stats(df: pl.DataFrame, column: str) -> dict | None:
+    """
+    Summarise one column's distribution: both quartiles, min, max and mean.
+
+    Q1 and Q3 are reported as two separate numbers, so a distribution that
+    has moved (both go up or down) can be told apart from one that has
+    spread out (they move apart). Nulls are left out.
+
+    Args:
+        df (pl.DataFrame): one version of a stage output
+        column (str): column to summarise
+
+    Returns:
+        dict: min/q1/mean/q3/max, or None when the column is missing or has
+            no non-null values
+    """
+    if column not in df.columns:
+        return None
+    values = df[column]
+    if values.is_empty() or values.null_count() == len(values):
+        return None
+    return {
+        "min": values.min(),
+        "q1": values.quantile(0.25, "linear"),
+        "mean": values.mean(),
+        "q3": values.quantile(0.75, "linear"),
+        "max": values.max(),
+    }
+
+
+def get_dict_distribution_frames(
+    stage: str,
+    df_old: pl.DataFrame,
+    df_new: pl.DataFrame,
+    df_areas_old: pl.DataFrame | None,
+    df_areas_new: pl.DataFrame | None,
+) -> dict[str, tuple[pl.DataFrame, pl.DataFrame]]:
+    """
+    List the columns whose spread of values the report compares, each with
+    the (old, new) pair of DataFrames that hold it.
+
+    These are cluster area, taken from the per-cluster areas when they are
+    loaded, plus any columns listed for the stage under
+    `distribution_columns` in base.yaml, taken from the stage outputs.
+    Every DataFrame is filtered to the clusters layer here, so the stats
+    tables and the plots fed from this mapping cover the same rows.
+
+    Args:
+        stage (str): pipeline stage the outputs belong to
+        df_old (pl.DataFrame): older version of the tabular stage output
+        df_new (pl.DataFrame): newer version of the tabular stage output
+        df_areas_old (pl.DataFrame | None): older version's per-cluster areas,
+            or None if the stage has no geometry. If either version is None,
+            cluster area is left out
+        df_areas_new (pl.DataFrame | None): newer version's per-cluster areas,
+            or None if the stage has no geometry
+
+    Returns:
+        dict: column name to (old, new) clusters-layer frame pair,
+            plot/report order
+    """
+    frames = {}
+    if df_areas_old is not None and df_areas_new is not None:
+        frames[AREA_COL] = (
+            filter_df_clusters_layer(df_areas_old),
+            filter_df_clusters_layer(df_areas_new),
+        )
+    for column in DISTRIBUTION_COLUMNS.get(stage, []):
+        frames[column] = (
+            filter_df_clusters_layer(df_old),
+            filter_df_clusters_layer(df_new),
+        )
+    return frames
+
+
+# If the largest value is more than this many times the median, the plot
+# uses log-spaced bins. Cluster areas and UPRNs per cluster have a few very
+# large values, so with even bins almost every value lands in the first bar.
+LOG_BINS_SKEW_RATIO = 50
+# Number of histogram bars in each distribution plot.
+N_PLOT_BINS = 40
+
+
+def _use_log_bins(values: np.ndarray) -> bool:
+    """
+    Decide whether a distribution should be plotted on log-spaced bins.
+
+    Args:
+        values (np.ndarray): the old and new values together
+
+    Returns:
+        bool: True when every value is above zero and the largest is more
+            than `LOG_BINS_SKEW_RATIO` times the median
+    """
+    if values.min() <= 0:
+        return False
+    return values.max() / np.median(values) > LOG_BINS_SKEW_RATIO
+
+
+def plot_distribution_overlay(
+    values_old: pl.Series, values_new: pl.Series, label: str, path: Path
+) -> None:
+    """
+    Save one PNG with the old and new histograms of a column drawn on top
+    of each other.
+
+    Both versions use the same bins, so their shapes can be compared. When
+    a few values are much larger than the rest (see `_use_log_bins`), the
+    bins are log-spaced and the x-axis uses a log scale, so the many small
+    values do not all fall into one bar. The x-axis label says when this is
+    applied.
+
+    Args:
+        values_old (pl.Series): older version's values
+        values_new (pl.Series): newer version's values
+        label (str): column name, used for the x-axis and title
+        path (Path): file path the PNG is saved to
+    """
+    old, new = values_old.to_numpy(), values_new.to_numpy()
+    combined = np.concatenate([old, new])
+    log_bins = _use_log_bins(combined)
+    if log_bins:
+        # N bars need N + 1 edges.
+        bins = np.logspace(
+            np.log10(combined.min()), np.log10(combined.max()), num=N_PLOT_BINS + 1
+        )
+    else:
+        bins = np.histogram_bin_edges(combined, bins=N_PLOT_BINS)
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.hist(old, bins=bins, alpha=0.6, label="Old", color="tab:blue")
+    ax.hist(new, bins=bins, alpha=0.6, label="New", color="tab:orange")
+    if log_bins:
+        ax.set_xscale("log")
+    ax.set_xlabel(f"{label} (log scale)" if log_bins else label)
+    ax.set_ylabel("Count")
+    ax.set_title(f"Distribution of {label}: old vs new")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def generate_dict_distribution_plots(
+    frames: dict[str, tuple[pl.DataFrame, pl.DataFrame]],
+    plot_dir: Path,
+    file_stem: str,
+) -> dict[str, str]:
+    """
+    Save an old-vs-new histogram PNG for each column the report compares.
+
+    A column that is missing, or has no values, in either version gets no
+    plot and a logged warning. Its section in the report already says so.
+
+    Args:
+        frames (dict[str, tuple[pl.DataFrame, pl.DataFrame]]): column to
+            (old, new) DataFrame pair, as built by `get_dict_distribution_frames`
+        plot_dir (Path): directory the PNGs are saved to
+        file_stem (str): filename prefix, shared with the markdown report
+
+    Returns:
+        dict: for each plotted column, the PNG's file name, for example
+            `cluster_plymouth_20260801_vs_20260907_area_m2.png`. The report
+            is saved in the same folder, so it links to each PNG by this name.
+    """
+    plot_files = {}
+    for column, (frame_old, frame_new) in frames.items():
+        if column not in frame_old.columns or column not in frame_new.columns:
+            logging.warning("Column %s missing from one version; plot skipped.", column)
+            continue
+        values_old = frame_old[column].drop_nulls()
+        values_new = frame_new[column].drop_nulls()
+        if values_old.is_empty() or values_new.is_empty():
+            logging.warning("No %s values in one version; plot skipped.", column)
+            continue
+        filename = f"{file_stem}_{column}.png"
+        plot_distribution_overlay(
+            values_old=values_old,
+            values_new=values_new,
+            label=column,
+            path=plot_dir / filename,
+        )
+        plot_files[column] = filename
+    return plot_files
 
 
 def generate_dict_schema_diff(df_old: pl.DataFrame, df_new: pl.DataFrame) -> dict:
@@ -591,6 +861,43 @@ def load_transform_df_stage_output(path: str) -> pl.DataFrame:
     raise ValueError(f"Cannot compare file type of {path}; expected parquet/geojson.")
 
 
+def load_df_cluster_areas(path: str) -> pl.DataFrame:
+    """
+    Load one stage output and measure the area of each cluster, in m².
+
+    Reads a .parquet or .geojson output; any other file type raises an
+    error. Shapes not already in EPSG:27700 (metres) are converted to it
+    before measuring, so areas come out in square metres. The result is a
+    table with one area per cluster; the shapes themselves are not kept.
+    A multi-layer output also keeps its other layers' shapes, with their
+    `layer` column, so the checks can filter to the clusters layer.
+
+    Args:
+        path (str): S3 path of the stage output (.parquet or .geojson)
+
+    Returns:
+        pl.DataFrame: one `area_m2` row for each cluster, plus the `layer`
+            column when the file has one
+
+    Raises:
+        ValueError: for file types the comparison cannot read geometry from
+    """
+    if path.endswith(".parquet"):
+        columns = ["geometry"]
+        if LAYER_COL in pq.read_schema(path).names:
+            columns.append(LAYER_COL)
+        gdf = gpd.read_parquet(path, columns=columns)
+    elif path.endswith(".geojson"):
+        gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
+    else:
+        raise ValueError(f"Cannot read geometry of {path}; expected parquet/geojson.")
+    gdf = geo_utils.verify_gdf_crs(gdf)
+    areas = {AREA_COL: gdf.area.to_numpy()}
+    if LAYER_COL in gdf.columns:
+        areas[LAYER_COL] = gdf[LAYER_COL].to_numpy()
+    return pl.DataFrame(areas)
+
+
 def load_df_buildings_tech(path: str) -> pl.DataFrame:
     """
     Load only the tech-assignment column of a building-level output.
@@ -771,6 +1078,143 @@ def _generate_str_churn_section(churn: dict | None, tolerances: dict | None) -> 
     return _render_section("UPRN churn", *lines)
 
 
+def _format_stat(value: float | int) -> str:
+    """
+    Format a statistic for a report table.
+
+    A float with no fractional part renders like an int, so a column that
+    loaded as Float64 in one version lines up with Int64 in the other.
+
+    Args:
+        value (float | int): the statistic
+
+    Returns:
+        str: the value with thousands separators; floats with a fractional
+            part to one decimal place, for example `1,234.5`
+    """
+    if isinstance(value, float) and not value.is_integer():
+        return f"{value:,.1f}"
+    return f"{value:,.0f}"
+
+
+def _generate_str_cluster_geometry_section(
+    count_delta: dict | None,
+    area_delta: dict | None,
+    stage: str,
+    layer_filtered: bool,
+) -> str:
+    """
+    Render the cluster count and total area changes as a markdown section.
+
+    Args:
+        count_delta (dict | None): from `generate_dict_cluster_count_delta`,
+            with int keys `clusters_old`, `clusters_new`, `clusters_delta`;
+            None when a version has no cluster id column
+        area_delta (dict | None): from `generate_dict_total_area_delta`,
+            with float keys (m²) `area_m2_old`, `area_m2_new`,
+            `area_m2_delta`; None when geometry was not loaded
+        stage (str): pipeline stage, used to add the simplified-geometry
+            note for `compute_contextual_features`
+        layer_filtered (bool): True when a version has a `layer` column;
+            adds a note that the checks cover the clusters layer only
+
+    Returns:
+        str: markdown section; a missing delta is replaced by a note
+    """
+    lines = [
+        "| Metric | Old | New | Delta |",
+        "| --- | --- | --- | --- |",
+    ]
+    if count_delta is not None:
+        lines.append(
+            f"| Cluster counts | {count_delta['clusters_old']} "
+            f"| {count_delta['clusters_new']} "
+            f"| {count_delta['clusters_delta']:+d} |"
+        )
+    if area_delta is not None:
+        lines.append(
+            f"| Total area (m²) | {area_delta['area_m2_old']:,.1f} "
+            f"| {area_delta['area_m2_new']:,.1f} "
+            f"| {area_delta['area_m2_delta']:+,.1f} |"
+        )
+    if layer_filtered:
+        lines.extend(
+            [
+                "",
+                "This output bundles multiple front-end layers; the cluster "
+                f"checks and distributions cover the `{CLUSTER_LAYER}` layer "
+                f"only. A version without a `{LAYER_COL}` column predates "
+                "layered outputs and counts entirely as clusters.",
+            ]
+        )
+    # count_delta is None only when a version has no CLUSTER_ID_COL column
+    # (see generate_dict_cluster_count_delta), so the note names that column.
+    if count_delta is None:
+        lines.extend(
+            [
+                "",
+                f"Cluster count skipped: no `{CLUSTER_ID_COL}` column in one or "
+                "both versions (see schema diff).",
+            ]
+        )
+    if area_delta is None:
+        lines.extend(["", "Total area skipped: geometry unavailable."])
+    else:
+        lines.extend(
+            ["", "Areas are computed in EPSG:27700 (British National Grid), in m²."]
+        )
+        if stage == "compute_contextual_features":
+            lines.append(
+                "Note: this stage's areas are measured on simplified geometry "
+                "(reprojected from EPSG:4326), where each boundary point can "
+                f"move by up to {SIMPLIFY_TOLERANCE_M} m. Small differences "
+                "from the cluster stage come from this, not drift."
+            )
+    return _render_section("Cluster geometry", *lines)
+
+
+def _generate_str_distribution_section(
+    column: str,
+    frame_old: pl.DataFrame,
+    frame_new: pl.DataFrame,
+    plot_file: str | None,
+) -> str:
+    """
+    Render one column's statistics for both versions as a markdown section.
+
+    Args:
+        column (str): column to summarise
+        frame_old (pl.DataFrame): older version's DataFrame holding `column`
+        frame_new (pl.DataFrame): newer version's DataFrame holding `column`
+        plot_file (str | None): file name of the saved plot to show below
+            the table, or None for no plot
+
+    Returns:
+        str: markdown section with min, Q1, mean, Q3 and max per version,
+            or a note when either version has no values
+    """
+    title = f"Distribution: {column}"
+    stats_old = generate_dict_distribution_stats(df=frame_old, column=column)
+    stats_new = generate_dict_distribution_stats(df=frame_new, column=column)
+    if stats_old is None or stats_new is None:
+        return _render_section(
+            title, f"Skipped: no `{column}` values in one or both versions."
+        )
+    lines = [
+        "| Statistic | Old | New |",
+        "| --- | --- | --- |",
+    ]
+    labels = {"min": "Min", "q1": "Q1", "mean": "Mean", "q3": "Q3", "max": "Max"}
+    for key, label in labels.items():
+        lines.append(
+            f"| {label} | {_format_stat(stats_old[key])} "
+            f"| {_format_stat(stats_new[key])} |"
+        )
+    if plot_file is not None:
+        lines.extend(["", f"![Distribution of {column}: old vs new]({plot_file})"])
+    return _render_section(title, *lines)
+
+
 def _generate_list_churn_notes(churn: dict, tolerances: dict) -> list[str]:
     """
     Collect the above-tolerance warnings for removed and added UPRN shares.
@@ -949,6 +1393,9 @@ def generate_str_report(
     path_new: str,
     df_buildings_old: pl.DataFrame | None = None,
     df_buildings_new: pl.DataFrame | None = None,
+    df_areas_old: pl.DataFrame | None = None,
+    df_areas_new: pl.DataFrame | None = None,
+    plot_files: dict[str, str] | None = None,
 ) -> str:
     """
     Assemble the full markdown comparison report.
@@ -969,6 +1416,13 @@ def generate_str_report(
         df_buildings_old (pl.DataFrame | None): older building-level decision-tree output, or None
             when missing (its per-tech counts section is then skipped)
         df_buildings_new (pl.DataFrame | None): newer building-level output, or None when missing
+        df_areas_old (pl.DataFrame | None): older version's per-cluster areas
+            (geometry stages), or None (the total-area check is then skipped)
+        df_areas_new (pl.DataFrame | None): newer version's per-cluster areas,
+            or None
+        plot_files (dict[str, str] | None): for each compared column (see
+            `get_dict_distribution_frames`), the file name of its saved
+            plot, shown in the report; None shows no plots
 
     Returns:
         str: markdown report; lineage sections are replaced by a note when a
@@ -1002,6 +1456,47 @@ def generate_str_report(
             tolerances=tolerances,
         ),
     ]
+    if stage in GEOMETRY_STAGES:
+        area_delta = (
+            generate_dict_total_area_delta(
+                df_areas_old=filter_df_clusters_layer(df=df_areas_old),
+                df_areas_new=filter_df_clusters_layer(df=df_areas_new),
+            )
+            if df_areas_old is not None and df_areas_new is not None
+            else None
+        )
+        layer_filtered = any(
+            LAYER_COL in frame.columns
+            for frame in (df_old, df_new, df_areas_old, df_areas_new)
+            if frame is not None
+        )
+        sections.append(
+            _generate_str_cluster_geometry_section(
+                count_delta=generate_dict_cluster_count_delta(
+                    df_old=filter_df_clusters_layer(df=df_old),
+                    df_new=filter_df_clusters_layer(df=df_new),
+                ),
+                area_delta=area_delta,
+                stage=stage,
+                layer_filtered=layer_filtered,
+            )
+        )
+        frames = get_dict_distribution_frames(
+            stage=stage,
+            df_old=df_old,
+            df_new=df_new,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_new,
+        )
+        sections.extend(
+            _generate_str_distribution_section(
+                column=column,
+                frame_old=frame_old,
+                frame_new=frame_new,
+                plot_file=(plot_files or {}).get(column),
+            )
+            for column, (frame_old, frame_new) in frames.items()
+        )
     if stage == "decision_tree":
         sections.append(
             _generate_str_tech_counts_section(
@@ -1130,6 +1625,26 @@ if __name__ == "__main__":
             release_date_old=release_date_old,
             release_date_new=release_date_new,
         )
+    report_dir = Path(args.report_dir)
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report_stem = (
+        f"{args.stage}_{local_authority}_{release_date_old}_vs_{release_date_new}"
+    )
+    df_areas_old = df_areas_new = plot_files = None
+    if args.stage in GEOMETRY_STAGES:
+        df_areas_old = load_df_cluster_areas(path=path_old)
+        df_areas_new = load_df_cluster_areas(path=path_new)
+        plot_files = generate_dict_distribution_plots(
+            frames=get_dict_distribution_frames(
+                stage=args.stage,
+                df_old=df_old,
+                df_new=df_new,
+                df_areas_old=df_areas_old,
+                df_areas_new=df_areas_new,
+            ),
+            plot_dir=report_dir,
+            file_stem=report_stem,
+        )
     report = generate_str_report(
         df_old=df_old,
         df_new=df_new,
@@ -1144,12 +1659,11 @@ if __name__ == "__main__":
         path_new=path_new,
         df_buildings_old=df_buildings_old,
         df_buildings_new=df_buildings_new,
+        df_areas_old=df_areas_old,
+        df_areas_new=df_areas_new,
+        plot_files=plot_files,
     )
-    report_dir = Path(args.report_dir)
-    report_dir.mkdir(parents=True, exist_ok=True)
-    report_path = report_dir / (
-        f"{args.stage}_{local_authority}_{release_date_old}_vs_{release_date_new}.md"
-    )
+    report_path = report_dir / f"{report_stem}.md"
     report_path.write_text(report)
 
     counts = generate_dict_count_delta(df_old=df_old, df_new=df_new)
