@@ -223,7 +223,7 @@ def transform_df_labelled_data(
         labelled_df=labelled_df, unlabelled_df=unlabelled_df, id_str=id_str
     )
 
-    return (
+    labelled_df = (
         # Add train / test split label
         labelled_df.join(unlabelled_df.select([id_str, "split"]))
         .filter(
@@ -250,3 +250,10 @@ def transform_df_labelled_data(
             ~pl.col("label").is_in(EXCLUDED_ARCHETYPES)
         )
     )
+
+    print(
+        f"Final labelled sample for model training and testing contains {len(labelled_df)} samples."
+        f"\nSplit of classes:\n{labelled_df['block_of_flats'].value_counts(normalize=True)}"
+    )
+
+    return labelled_df
