@@ -653,9 +653,9 @@ if __name__ == "__main__":
     print(
         "Loading anchor loads saved by the cluster stage and transforming to EPSG:4326..."
     )
-    combined_anchor_gdf = gpd.read_parquet(
+    anchor_loads_gdf = gpd.read_parquet(
         save_utils.get_str_output_path(
-            "anchor_loads",
+            dataset="anchor_loads",
             release_date=release_date,
             check_exists=True,
             local_authorities=local_authority_dict["url_slug"],
@@ -669,7 +669,7 @@ if __name__ == "__main__":
 
     optional_data_layers = {
         "ward_boundaries": ward_boundaries_gdf,
-        "anchor_loads": combined_anchor_gdf,
+        "anchor_loads": anchor_loads_gdf,
         "areas_of_district_heat_network_potential": hn_potential,
     }
 
