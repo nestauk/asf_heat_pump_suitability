@@ -49,10 +49,14 @@ TECH_COL = "assigned_tech"
 NULL_TECH_LABEL = "(null)"
 CLUSTER_ID_COL = "cluster_id"
 AREA_COL = "area_m2"
+# Multi-layer front-end outputs (August 2026 onwards) tag every row with
+# the layer it belongs to; earlier outputs have no such column.
+LAYER_COL = "layer"
 # Stages whose outputs carry cluster geometry, and so get the cluster
 # count, area and distribution sections.
 GEOMETRY_STAGES = ("cluster", "compute_contextual_features")
 
+CLUSTER_LAYER = config["compare_versions"]["cluster_layer"]
 STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
 BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"]
@@ -138,6 +142,28 @@ def generate_dict_cluster_count_delta(
     }
 
 
+def filter_df_clusters_layer(df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Keep only a frame's clusters-layer rows.
+
+    Multi-layer front-end outputs bundle non-cluster layers (ward
+    boundaries, anchor loads) with the clusters in one file; the cluster
+    checks must not aggregate over them. A frame without a `layer` column
+    (a pre-layers output) is all clusters and passes through unchanged.
+
+    Args:
+        df: one version of a geometry-stage output (tabular or per-cluster
+            areas)
+
+    Returns:
+        pl.DataFrame: the rows whose layer is the configured clusters layer,
+            or the frame itself when it has no `layer` column
+    """
+    if LAYER_COL not in df.columns:
+        return df
+    return df.filter(pl.col(LAYER_COL) == CLUSTER_LAYER)
+
+
 def generate_dict_total_area_delta(
     df_areas_old: pl.DataFrame, df_areas_new: pl.DataFrame
 ) -> dict:
@@ -204,6 +230,8 @@ def get_dict_distribution_frames(
     These are cluster area, taken from the per-cluster areas when they are
     loaded, plus any columns listed for the stage under
     `distribution_columns` in base.yaml, taken from the stage outputs.
+    Every DataFrame is filtered to the clusters layer here, so the stats
+    tables and the plots fed from this mapping cover the same rows.
 
     Args:
         stage (str): pipeline stage the outputs belong to
@@ -216,13 +244,20 @@ def get_dict_distribution_frames(
             or None if the stage has no geometry
 
     Returns:
-        dict: column name to (old, new) frame pair, plot/report order
+        dict: column name to (old, new) clusters-layer frame pair,
+            plot/report order
     """
     frames = {}
     if df_areas_old is not None and df_areas_new is not None:
-        frames[AREA_COL] = (df_areas_old, df_areas_new)
+        frames[AREA_COL] = (
+            filter_df_clusters_layer(df_areas_old),
+            filter_df_clusters_layer(df_areas_new),
+        )
     for column in DISTRIBUTION_COLUMNS.get(stage, []):
-        frames[column] = (df_old, df_new)
+        frames[column] = (
+            filter_df_clusters_layer(df_old),
+            filter_df_clusters_layer(df_new),
+        )
     return frames
 
 
@@ -860,25 +895,34 @@ def load_df_cluster_areas(path: str) -> pl.DataFrame:
     Reads a .parquet or .geojson output; any other file type raises an
     error. Shapes not already in EPSG:27700 (metres) are converted to it
     before measuring, so areas come out in square metres. The result is a
-    table with one area per row; the shapes themselves are not kept.
+    table with one area per cluster; the shapes themselves are not kept.
+    A multi-layer output also keeps its other layers' shapes, with their
+    `layer` column, so the checks can filter to the clusters layer.
 
     Args:
         path (str): S3 path of the stage output (.parquet or .geojson)
 
     Returns:
-        pl.DataFrame: one `area_m2` row for each shape in the file
+        pl.DataFrame: one `area_m2` row for each cluster, plus the `layer`
+            column when the file has one
 
     Raises:
         ValueError: for file types the comparison cannot read geometry from
     """
     if path.endswith(".parquet"):
-        gdf = gpd.read_parquet(path, columns=["geometry"])
+        columns = ["geometry"]
+        if LAYER_COL in pq.read_schema(path).names:
+            columns.append(LAYER_COL)
+        gdf = gpd.read_parquet(path, columns=columns)
     elif path.endswith(".geojson"):
         gdf = base_getters.load_gdf_from_s3_geojson(path, crs="EPSG:4326")
     else:
         raise ValueError(f"Cannot read geometry of {path}; expected parquet/geojson.")
     gdf = geo_utils.verify_gdf_crs(gdf)
-    return pl.DataFrame({AREA_COL: gdf.area.to_numpy()})
+    areas = {AREA_COL: gdf.area.to_numpy()}
+    if LAYER_COL in gdf.columns:
+        areas[LAYER_COL] = gdf[LAYER_COL].to_numpy()
+    return pl.DataFrame(areas)
 
 
 def load_df_buildings_tech(path: str) -> pl.DataFrame:
@@ -1055,18 +1099,26 @@ def _format_stat(value: float | int) -> str:
     """
     Format a statistic for a report table.
 
+    A float with no fractional part renders like an int, so a column that
+    loaded as Float64 in one version lines up with Int64 in the other.
+
     Args:
         value (float | int): the statistic
 
     Returns:
-        str: the value with thousands separators; floats to one decimal
-            place, for example `1,234.5`
+        str: the value with thousands separators; floats with a fractional
+            part to one decimal place, for example `1,234.5`
     """
-    return f"{value:,.1f}" if isinstance(value, float) else f"{value:,}"
+    if isinstance(value, float) and not value.is_integer():
+        return f"{value:,.1f}"
+    return f"{value:,.0f}"
 
 
 def _generate_str_cluster_geometry_section(
-    count_delta: dict | None, area_delta: dict | None, stage: str
+    count_delta: dict | None,
+    area_delta: dict | None,
+    stage: str,
+    layer_filtered: bool,
 ) -> str:
     """
     Render the cluster count and total area changes as a markdown section.
@@ -1080,6 +1132,8 @@ def _generate_str_cluster_geometry_section(
             `area_m2_delta`; None when geometry was not loaded
         stage (str): pipeline stage, used to add the simplified-geometry
             note for `compute_contextual_features`
+        layer_filtered (bool): True when a version has a `layer` column;
+            adds a note that the checks cover the clusters layer only
 
     Returns:
         str: markdown section; a missing delta is replaced by a note
@@ -1099,6 +1153,16 @@ def _generate_str_cluster_geometry_section(
             f"| Total area (m²) | {area_delta['area_m2_old']:,.1f} "
             f"| {area_delta['area_m2_new']:,.1f} "
             f"| {area_delta['area_m2_delta']:+,.1f} |"
+        )
+    if layer_filtered:
+        lines.extend(
+            [
+                "",
+                "This output bundles multiple front-end layers; the cluster "
+                f"checks and distributions cover the `{CLUSTER_LAYER}` layer "
+                f"only. A version without a `{LAYER_COL}` column predates "
+                "layered outputs and counts entirely as clusters.",
+            ]
         )
     # count_delta is None only when a version has no CLUSTER_ID_COL column
     # (see generate_dict_cluster_count_delta), so the note names that column.
@@ -1385,18 +1449,26 @@ def generate_str_report(
     if stage in GEOMETRY_STAGES:
         area_delta = (
             generate_dict_total_area_delta(
-                df_areas_old=df_areas_old, df_areas_new=df_areas_new
+                df_areas_old=filter_df_clusters_layer(df=df_areas_old),
+                df_areas_new=filter_df_clusters_layer(df=df_areas_new),
             )
             if df_areas_old is not None and df_areas_new is not None
             else None
         )
+        layer_filtered = any(
+            LAYER_COL in frame.columns
+            for frame in (df_old, df_new, df_areas_old, df_areas_new)
+            if frame is not None
+        )
         sections.append(
             _generate_str_cluster_geometry_section(
                 count_delta=generate_dict_cluster_count_delta(
-                    df_old=df_old, df_new=df_new
+                    df_old=filter_df_clusters_layer(df=df_old),
+                    df_new=filter_df_clusters_layer(df=df_new),
                 ),
                 area_delta=area_delta,
                 stage=stage,
+                layer_filtered=layer_filtered,
             )
         )
         frames = get_dict_distribution_frames(
