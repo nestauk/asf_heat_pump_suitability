@@ -60,7 +60,7 @@ def extract_df_labelled_data(
 
     Args:
         gdf (gpd.GeoDataFrame): manually labelled sample data
-        id_str (str): name of building ID substring to search for in 'Description' column of gdf
+        id_str (str): name of building ID substring to search for in 'Description' column of gdf.  Default 'building_id'.
 
     Returns:
         pl.DataFrame: extracted information for manually labelled sample data
@@ -98,7 +98,7 @@ def extract_df_labelled_data(
 
 
 def compare_tuple_labellers(
-    labelled_df: pl.DataFrame, unlabelled_df: pl.DataFrame, id_str: str
+    labelled_df: pl.DataFrame, unlabelled_df: pl.DataFrame, id_str: str = "building_id"
 ) -> tuple:
     """
     Compare labels of buildings which have received two labels to assess agreement levels between labellers.
@@ -106,7 +106,7 @@ def compare_tuple_labellers(
     Args:
         labelled_df (pl.DataFrame): dataframe containing all labelled samples from all labellers
         unlabelled_df (pl.DataFrame): dataframe containing sample data with `labeller` and `secondary_labeller` columns
-        id_str (str): name of column containing building ID in `labelled_df` and `unlabelled_df`.
+        id_str (str): name of column containing building ID in `labelled_df` and `unlabelled_df`. Default 'building_id'.
 
     Returns:
         tuple: (building IDs where labellers agree on the binary class, building IDs where labellers disagree)
@@ -200,7 +200,7 @@ def print_labeller_agreement_matrix(df: pl.DataFrame) -> None:
 
 
 def transform_df_labelled_data(
-    labelled_df: pl.DataFrame, unlabelled_df: pl.DataFrame, id_str: str
+    labelled_df: pl.DataFrame, unlabelled_df: pl.DataFrame, id_str: str = "building_id"
 ) -> pl.DataFrame:
     """
     Prepare labelled data for training model: assign train / test label; remove buildings where labellers disagree on
@@ -210,7 +210,7 @@ def transform_df_labelled_data(
     Args:
         labelled_df (pl.DataFrame): dataframe containing all labelled samples from all labellers
         unlabelled_df (pl.DataFrame): dataframe containing sample data with `labeller` and `secondary_labeller` columns
-        id_str (str): name of column containing building ID in `labelled_df` and `unlabelled_df`.
+        id_str (str): name of column containing building ID in `labelled_df` and `unlabelled_df`. Default 'building_id'.
 
     Returns:
         pl.DataFrame: labelled data ready for training binary classifier
@@ -220,6 +220,7 @@ def transform_df_labelled_data(
     )
 
     return (
+        # Add train / test split label
         labelled_df.join(unlabelled_df.select([id_str, "split"]))
         .filter(
             # Remove buildings where labellers disagree
