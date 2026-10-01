@@ -1,5 +1,6 @@
 import pathlib
 import s3fs
+import numpy as np
 import pandas as pd
 import geopandas as gpd
 import polars as pl
@@ -172,6 +173,8 @@ def print_labeller_agreement_matrix(df: pl.DataFrame) -> None:
     """
     labellers = df["labeller1"].unique().to_list()
 
+    agreement = []
+
     for l1 in labellers:
         labeller1_df = df.filter(pl.col("labeller1") == l1)
         labellers_2 = labeller1_df["labeller2"].unique().to_list()
@@ -184,6 +187,16 @@ def print_labeller_agreement_matrix(df: pl.DataFrame) -> None:
                     "agree_label"
                 ].value_counts()
             )
+            agreement_matrix = labeller1_df.filter(pl.col("labeller2") == l2)[
+                "agree_label"
+            ].value_counts(normalize=True)
+            agreement.append(
+                agreement_matrix.filter(pl.col("agree_label"))["proportion"][0]
+            )
+
+    print(
+        f"\n\nAverage agreement between labellers: {round(np.mean(agreement) * 100, 2)}%"
+    )
 
 
 def transform_df_labelled_data(
