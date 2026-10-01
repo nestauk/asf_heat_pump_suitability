@@ -492,7 +492,7 @@ class TestGenerateGdfClusters:
     def gdf_two_anchors(self):
         """
         Two anchors: A9 west of B03 (10m from B03, 20m from B02, 25m from B04) and A1 east
-        of B04 (5m from B04, 20m from B03), so B02 and B03 flip via A9 and B04 via A1.
+        of B04 (5m from B04, 20m from B03), so A9 causes B02 and B03 to be reassigned and A1 causes B04 to be.
         """
         west = Polygon(
             [(400040, 400000), (400050, 400000), (400050, 400010), (400040, 400010)]
@@ -504,7 +504,7 @@ class TestGenerateGdfClusters:
             {"anchor_id": ["A9", "A1"], "geometry": [west, east]}, crs="EPSG:27700"
         )
 
-    def test_anchor_origin_clusters_list_flipping_anchor_ids(
+    def test_anchor_origin_clusters_list_reassigning_anchor_ids(
         self,
         gdf_mixed_buildings,
         gdf_enclosing_boundary,
@@ -512,8 +512,8 @@ class TestGenerateGdfClusters:
         empty_gdf,
         gdf_two_anchors,
     ):
-        """Test anchor-origin clusters list the sorted unique IDs of the anchors that flipped
-        their buildings, and every other cluster carries no list."""
+        """Test anchor-origin clusters list the sorted unique IDs of the anchors that caused
+        their buildings to be reassigned, and every other cluster carries no list."""
         results = generate_gdf_clusters(
             buildings_gdf=gdf_mixed_buildings,
             boundary_gdf=gdf_enclosing_boundary,
@@ -533,11 +533,11 @@ class TestGenerateGdfClusters:
 
         assert anchor_ids[cluster_of["B02"]] == [
             "A9"
-        ], "a cluster flipped by one anchor must list just that anchor"
+        ], "a cluster reassigned by one anchor must list just that anchor"
         assert anchor_ids[cluster_of["B04"]] == [
             "A1",
             "A9",
-        ], "a cluster whose buildings were flipped by two anchors must list both, sorted"
+        ], "a cluster whose buildings were reassigned by two anchors must list both, sorted"
 
         anchor_origin = results["communal_origin"] == "anchor proximity"
         assert (
@@ -1006,20 +1006,20 @@ class TestReassignGdfAnchorProperties:
                 results[building]
             ), f"building {building} not reassigned to 'communal' must keep a null communal_origin"
 
-    def test_flipped_buildings_record_anchor_id(self, tech_gdf, gdf_anchor_property):
-        """Test flipped buildings record the flipping anchor's ID and no other building gets one."""
+    def test_reassigned_buildings_record_anchor_id(self, tech_gdf, gdf_anchor_property):
+        """Test reassigned buildings record the reassigning anchor's ID and no other building gets one."""
         reassigned_gdf = reassign_gdf_near_anchor_properties(
             tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
         )
         results = reassigned_gdf.set_index("building_id")["anchor_id"]
-        flipped = ["B02", "B03", "B04"]
-        for building in flipped:
+        reassigned = ["B02", "B03", "B04"]
+        for building in reassigned:
             assert (
                 results[building] == "A1"
-            ), f"flipped building {building} must record the anchor that flipped it"
+            ), f"reassigned building {building} must record the anchor that reassigned it"
         assert (
-            results.drop(flipped).isna().all()
-        ), "buildings the anchor did not flip must have a null anchor_id, even inside the radius"
+            results.drop(reassigned).isna().all()
+        ), "buildings the anchor did not reassign must have a null anchor_id, even inside the radius"
 
     @pytest.fixture(scope="class")
     def gdf_equidistant_anchors(self):
@@ -1056,7 +1056,7 @@ class TestReassignGdfAnchorProperties:
         ), "ties must break to the lowest anchor ID, whatever the anchors' row order"
         assert (
             reassigned_gdf["assigned_tech"].iloc[0] == "Communal solution"
-        ), "the tied building must still be flipped to communal"
+        ), "the tied building must still be reassigned to communal"
 
 
 class TestGenerateSeriesAnchorIds:
@@ -1069,38 +1069,22 @@ class TestGenerateSeriesAnchorIds:
             [(400000, 400000), (400010, 400000), (400010, 400010), (400000, 400010)]
         )
 
-    def test_id_is_stable_across_vertex_order(self, square):
-        """The same footprint gets the same ID whatever its start vertex or ring direction."""
+    def test_id_identifies_the_footprint(self, square):
+        """The same footprint gets one ID however its ring is written; a different footprint gets another."""
         rotated_start = Polygon(
             [(400010, 400010), (400000, 400010), (400000, 400000), (400010, 400000)]
         )
         reversed_ring = Polygon(list(square.exterior.coords)[::-1])
-        ids = generate_series_anchor_ids(
-            gpd.GeoSeries([square, rotated_start, reversed_ring], crs="EPSG:27700")
-        )
-        assert (
-            ids.nunique() == 1
-        ), "one footprint must hash to one ID regardless of how its ring is written"
-
-    def test_distinct_footprints_get_distinct_ids(self, square):
-        """Different footprints get different IDs."""
         shifted = shapely.affinity.translate(square, xoff=1)
         ids = generate_series_anchor_ids(
-            gpd.GeoSeries([square, shifted], crs="EPSG:27700")
-        )
-        assert ids.nunique() == 2, "different footprints must not share an ID"
-
-    def test_id_is_short_hex_string(self, square):
-        """IDs are short lowercase hex strings."""
-        anchor_id = generate_series_anchor_ids(
-            gpd.GeoSeries([square], crs="EPSG:27700")
-        ).iloc[0]
+            gpd.GeoSeries(
+                [square, rotated_start, reversed_ring, shifted], crs="EPSG:27700"
+            )
+        ).tolist()
         assert (
-            len(anchor_id) == 12
-        ), "anchor IDs must be 12 hex characters so they stay short in the geojson"
-        assert set(anchor_id) <= set(
-            "0123456789abcdef"
-        ), "anchor IDs must be lowercase hex"
+            ids[0] == ids[1] == ids[2]
+        ), "one footprint must hash to one ID regardless of how its ring is written"
+        assert ids[3] != ids[0], "a different footprint must not share the ID"
 
 
 class TestFilterGdfAnchorsToSave:

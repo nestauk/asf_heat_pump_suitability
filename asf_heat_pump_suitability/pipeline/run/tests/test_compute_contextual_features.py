@@ -154,8 +154,8 @@ class TestCreateJsonContextualFeaturesMetadata:
             )
         return grouped
 
-    def test_cluster_features_carry_anchor_id_list(self, features_by_layer):
-        """Anchor-origin clusters carry a JSON array of anchor IDs; other clusters carry null."""
+    def test_cluster_features_carry_anchor_id_list(self, geojson, features_by_layer):
+        """Anchor-origin clusters carry a JSON array of anchor IDs; other clusters carry null; the metadata describes it."""
         clusters = {
             props["cluster_id"]: props
             for props in features_by_layer["clusters_with_contextual_features"]
@@ -174,17 +174,15 @@ class TestCreateJsonContextualFeaturesMetadata:
             "anchor_ids",
             "layer",
         }, "existing cluster properties must pass through unchanged"
+        assert (
+            "anchor_ids" in geojson["metadata"]["Variable names and descriptions"]
+        ), "the geojson metadata must describe the new `anchor_ids` property"
 
-    def test_anchor_features_carry_anchor_id(self, features_by_layer):
+    def test_anchor_features_carry_anchor_id(self, geojson, features_by_layer):
         """Anchor-load features keep their anchor_id and are tagged with the layer name."""
         assert features_by_layer["anchor_loads"] == [
             {"anchor_id": "A1", "layer": "anchor_loads"}
         ], "each anchor-load feature must carry its anchor_id and layer tag"
-
-    def test_metadata_describes_anchor_properties(self, geojson):
-        """The output metadata describes both new properties."""
-        descriptions = geojson["metadata"]["Variable names and descriptions"]
-        for name in ["anchor_id", "anchor_ids"]:
-            assert (
-                name in descriptions
-            ), f"metadata must describe the new `{name}` property"
+        assert (
+            "anchor_id" in geojson["metadata"]["Variable names and descriptions"]
+        ), "the geojson metadata must describe the new `anchor_id` property"
