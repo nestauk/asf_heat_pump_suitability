@@ -121,6 +121,7 @@ def load_transform_gdf_land_parcels(land_parcel_file: str) -> gpd.GeoDataFrame:
             f"Nation not identified from file path: {land_parcel_file} \n"
             f"Unable to conduct nation-specific preprocessing of land registry file."
         )
+    gdf["NATIONALCADASTRALREFERENCE"] = gdf["NATIONALCADASTRALREFERENCE"].astype(str)
     return geo_utils.transform_gdf_drop_duplicates(gdf)
 
 
