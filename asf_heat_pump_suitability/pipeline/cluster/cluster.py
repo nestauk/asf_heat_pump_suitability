@@ -178,8 +178,9 @@ def generate_gdf_clusters(
 
     # Sorted unique IDs of the anchors that caused a building in the cluster to be reassigned; null when none did
     anchor_ids = (
-        clusters_gdf.groupby("cluster_id")["anchor_id"]
-        .agg(lambda ids: sorted(ids.dropna().unique()) or None)
+        clusters_gdf.dropna(subset="anchor_id")
+        .groupby("cluster_id")["anchor_id"]
+        .agg(lambda ids: sorted(set(ids)))
         .rename("anchor_ids")
     )
 
