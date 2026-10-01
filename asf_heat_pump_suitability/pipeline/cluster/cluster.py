@@ -764,8 +764,8 @@ def generate_series_anchor_ids(geometry: gpd.GeoSeries) -> pd.Series:
     """
     Generate a short hex ID for each anchor footprint from its normalised WKB.
 
-    The ID is stable across runs, releases and local authorities for as long as the
-    footprint geometry is unchanged.
+    Geometries are normalised here, so callers need not. The ID is stable across runs,
+    releases and local authorities for as long as the footprint geometry is unchanged.
 
     Args:
         geometry (gpd.GeoSeries): anchor footprint geometries.
@@ -832,7 +832,7 @@ def reassign_gdf_near_anchor_properties(
         radius of an anchor property and was assigned N-GSHP by the decision tree, and `anchor_id` (null unless reassigned).
     """
     # Spatial join to find nearest anchor for every building. Equidistant anchors give
-    # one row per tie, so keep the lowest anchor_id per building (index restored after).
+    # one row per tie, so keep the lowest anchor_id per building (row order restored after).
     tech_gdf = (
         tech_gdf.reset_index(drop=True)
         .sjoin_nearest(
@@ -926,7 +926,9 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--save", help="Set to save output GeoDataFrame to S3.", action="store_true"
+        "--save",
+        help="Set to save the clusters and anchor loads GeoDataFrames to S3.",
+        action="store_true",
     )
 
     parser.add_argument(
@@ -1005,13 +1007,13 @@ if __name__ == "__main__":
             ("anchor_loads", anchors_gdf),
         ]:
             output_path = save_utils.get_str_output_path(
-                dataset,
+                dataset=dataset,
                 release_date=release_date,
                 local_authorities=local_authority_dict["url_slug"],
             )
-            save_utils.save_to_s3(output_gdf, output_path)
+            save_utils.save_to_s3(df=output_gdf, path=output_path)
             manifest_utils.generate_and_save_run_manifest_to_s3(
-                output_path,
+                output_path=output_path,
                 stage="cluster",
                 local_authority=local_authority_dict["url_slug"],
                 row_count=len(output_gdf),
