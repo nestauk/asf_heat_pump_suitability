@@ -99,7 +99,17 @@ def extract_df_labelled_data(
 def compare_tuple_labellers(
     labelled_df: pl.DataFrame, unlabelled_df: pl.DataFrame, id_str: str
 ) -> tuple:
+    """
+    Compare labels of buildings which have received two labels to assess agreement levels between labellers.
 
+    Args:
+        labelled_df (pl.DataFrame): dataframe containing all labelled samples from all labellers
+        unlabelled_df (pl.DataFrame): dataframe containing sample data with `labeller` and `secondary_labeller` columns
+        id_str (str): name of column containing building ID in `labelled_df` and `unlabelled_df`.
+
+    Returns:
+        tuple: (building IDs where labellers agree on the binary class, building IDs where labellers disagree)
+    """
     double_labelled_df = (
         # Join labellers onto labelled buildings
         labelled_df.join(
@@ -150,7 +160,16 @@ def compare_tuple_labellers(
     return agree_buildings_ids, disagree_building_ids
 
 
-def print_labeller_agreement_matrix(df: pl.DataFrame):
+def print_labeller_agreement_matrix(df: pl.DataFrame) -> None:
+    """
+    Print the agreement matrix for each labeller pair.
+
+    Args:
+        df (pl.DataFrame): samples with two labels from different labellers. Must have `labeller1`; `labeller2`; and `agree_label` columns.
+
+    Returns:
+        None
+    """
     labellers = df["labeller1"].unique().to_list()
 
     for l1 in labellers:
@@ -158,7 +177,7 @@ def print_labeller_agreement_matrix(df: pl.DataFrame):
         labellers_2 = labeller1_df["labeller2"].unique().to_list()
         for l2 in labellers_2:
             print(
-                f"\n\nPrimary labeller: {l1}; seconary labeller: {l2};\nAgreement matrix:\n"
+                f"\n\nPrimary labeller: {l1}; secondary labeller: {l2};\nAgreement matrix:\n"
             )
             print(
                 labeller1_df.filter(pl.col("labeller2") == l2)[
@@ -171,7 +190,17 @@ def transform_df_labelled_data(
     labelled_df: pl.DataFrame, unlabelled_df: pl.DataFrame, id_str: str
 ) -> pl.DataFrame:
     """
-    Prepare labelled data for modelling inputs.
+    Prepare labelled data for training model: assign train / test label; remove buildings where labellers disagree on
+    binary class; set confidence to 1 where labellers agree on binary class; remove buildings with labels intended for
+    exclusion.
+
+    Args:
+        labelled_df (pl.DataFrame): dataframe containing all labelled samples from all labellers
+        unlabelled_df (pl.DataFrame): dataframe containing sample data with `labeller` and `secondary_labeller` columns
+        id_str (str): name of column containing building ID in `labelled_df` and `unlabelled_df`.
+
+    Returns:
+        pl.DataFrame: labelled data ready for training binary classifier
     """
     agree_ids, disagree_ids = compare_tuple_labellers(
         labelled_df=labelled_df, unlabelled_df=unlabelled_df, id_str=id_str
