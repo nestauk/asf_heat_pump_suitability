@@ -9,7 +9,7 @@ created: 2026-08-28
 
 ## Problem
 
-Buildings within the anchor radius (50 m, `config/base.yaml`) of an anchor load are switched from Networked heat pump to Communal solution, and since #485 their clusters carry `communal_origin = "anchor proximity"`. But the anchor itself is invisible to that story:
+Buildings within the anchor radius (50 m, `config/base.yaml`) of an anchor load are reassigned from Networked heat pump to Communal solution, and since #485 their clusters carry `communal_origin = "anchor proximity"`. But the anchor itself is invisible to that story:
 
 - The tool geojson ships anchor loads as a geometry-only layer (`layer: "anchor_loads"`, added in `compute_contextual_features`), so the frontend can draw them but cannot reference one.
 - Cluster features carry only a boolean `within_50m_from_anchor_load`; nothing says _which_ anchor.
@@ -28,7 +28,7 @@ Thread anchor identity from the anchor list to the geojson, exposing both ends o
 
    | Cluster                          | `communal_origin` | `anchor_ids` | `within_50m_from_anchor_load` |
    | -------------------------------- | ----------------- | ------------ | ----------------------------- |
-   | Houses switched by a school      | anchor proximity  | `["…"]`      | True                          |
+   | Homes reassigned by a school     | anchor proximity  | `["…"]`      | True                          |
    | Flats that happen to be near one | block of flats    | null         | True                          |
    | Flats nowhere near an anchor     | block of flats    | null         | False                         |
 
@@ -74,7 +74,7 @@ Implementation sketch (pipeline only):
 ## Verification
 
 - [ ] A per-LA anchors dataset with stable geometry-derived IDs is saved to the dated release directory and consumed by both the cluster and contextual-features stages
-- [ ] Reassignment records the flipping anchor's ID for each switched building, with equidistant ties handled deterministically and no duplicated buildings
+- [ ] Reassignment records the reassigning anchor's ID for each reassigned building, with equidistant ties handled deterministically and no duplicated buildings
 - [ ] Each anchor-origin communal cluster lists the anchor IDs that flipped at least one of its buildings; non-anchor-origin clusters carry no list
 - [ ] In the tool geojson, anchor-load features carry the anchor ID and anchor-origin cluster features carry the ID list; all existing properties and layers are unchanged
 - [ ] All anchors in the local authority ship in the anchor layer, not only linked ones
