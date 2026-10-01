@@ -463,6 +463,15 @@ def create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf, target_crs=target_crs
     )
     print("Adding metadata and converting to geojson format...")
+    # parquet and the polars round trip return anchor_ids cells as numpy arrays, which json
+    # cannot serialise; convert them to lists so the geojson carries a JSON array
+    clusters_with_contextual_features_gdf = (
+        clusters_with_contextual_features_gdf.assign(
+            anchor_ids=clusters_with_contextual_features_gdf["anchor_ids"].map(
+                lambda ids: list(ids) if isinstance(ids, (list, np.ndarray)) else None
+            )
+        )
+    )
     # Convert to geojson format and add metadata
     clusters_json = json.loads(
         clusters_with_contextual_features_gdf.to_json(drop_id=True)
@@ -641,14 +650,17 @@ if __name__ == "__main__":
             {"source_annotation": [], "geometry": []}, crs="EPSG:4326"
         )
 
-    print("Loading anchor property geodataframes and transforming to EPSG:4326...")
-    combined_anchor_gdf = cluster.load_transform_anchor_property_gdfs(
-        buildings_gdf=buildings_gdf, grid_squares=local_authority_dict["grid_squares"]
-    )[["geometry"]]
-
-    combined_anchor_gdf = combined_anchor_gdf[
-        combined_anchor_gdf["geometry"].intersects(boundary_gdf.union_all())
-    ].to_crs(epsg=4326)
+    print(
+        "Loading anchor loads saved by the cluster stage and transforming to EPSG:4326..."
+    )
+    anchor_loads_gdf = gpd.read_parquet(
+        save_utils.get_str_output_path(
+            dataset="anchor_loads",
+            release_date=release_date,
+            check_exists=True,
+            local_authorities=local_authority_dict["url_slug"],
+        )
+    )[["anchor_id", "geometry"]].to_crs(epsg=4326)
 
     print("Loading ward boundaries and transforming to EPSG:4326...")
     ward_boundaries_gdf = load_boundaries.load_gdf_ward_boundaries(
@@ -657,7 +669,7 @@ if __name__ == "__main__":
 
     optional_data_layers = {
         "ward_boundaries": ward_boundaries_gdf,
-        "anchor_loads": combined_anchor_gdf,
+        "anchor_loads": anchor_loads_gdf,
         "areas_of_district_heat_network_potential": hn_potential,
     }
 
