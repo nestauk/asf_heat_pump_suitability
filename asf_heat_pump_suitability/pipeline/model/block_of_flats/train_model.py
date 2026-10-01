@@ -328,6 +328,7 @@ if __name__ == "__main__":
     # ------------------------ #
     labelled_gdf = labelled_data.load_gdf_unprocessed_labelled()
     labelled_df = labelled_data.extract_df_labelled_data(labelled_gdf)
+    labelled_df = labelled_data.transform_df_labelled_data(labelled_df)
 
     # ------------------------ #
     # LOAD UPRN AND BUILDING DATA
