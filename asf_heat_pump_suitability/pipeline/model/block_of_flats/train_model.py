@@ -314,6 +314,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
         feature_engineering,
+        labelled_data,
     )
     from asf_heat_pump_suitability.utils import save_utils
 
@@ -323,10 +324,14 @@ if __name__ == "__main__":
     release_date = save_utils.get_str_release_date(args.release_date)
 
     # ------------------------ #
-    # LOAD DATA
+    # LOAD LABELLED DATA
     # ------------------------ #
-    labelled_df = pl.read_parquet(args.labelled_data)
+    labelled_gdf = labelled_data.load_gdf_unprocessed_labelled()
+    labelled_df = labelled_data.extract_df_labelled_data(labelled_gdf)
 
+    # ------------------------ #
+    # LOAD UPRN AND BUILDING DATA
+    # ------------------------ #
     uprn_to_building_mapping = pl.read_parquet(
         config["data"]["processed"]["uprn_to_building_id_mapping"].format(
             local_authorities=local_authority_dict["url_slug"],
@@ -336,7 +341,7 @@ if __name__ == "__main__":
 
     # Load building footprint data for buildings containing flats
     building_footprints_gdf = gpd.read_parquet(
-        config["output"]["model"]["enriched_buildings_with_geoms"]
+        config["output"]["model"]["training_data"]["enriched_buildings_with_geoms"]
     )
     building_footprints_gdf = building_footprints_gdf[
         building_footprints_gdf["building_id"].isin(labelled_df["building_id"])
