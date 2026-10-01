@@ -234,23 +234,6 @@ class TestGenerateStrChurnNote:
         assert "removed" in note, "the warning must say what the share measures"
 
 
-class TestGetDictTolerances:
-    """Tests for `get_dict_tolerances`."""
-
-    @pytest.mark.parametrize("trigger", ["methodology_change", "input_release"])
-    def test_each_trigger_has_a_removed_uprn_tolerance(self, trigger):
-        """Both triggers are configured in base.yaml with the churn tolerance."""
-        tolerances = compare_versions.get_dict_tolerances(trigger)
-        assert isinstance(
-            tolerances["max_removed_uprn_share"], float
-        ), "each trigger must configure a numeric removed-UPRN tolerance"
-
-    def test_unknown_trigger_raises_keyerror(self):
-        """A trigger without configured tolerances fails loudly."""
-        with pytest.raises(KeyError):
-            compare_versions.get_dict_tolerances("vibes")
-
-
 class TestGenerateDfTechTransitions:
     """Tests for `generate_df_tech_transitions`."""
 
@@ -513,7 +496,9 @@ class TestGenerateListCommitLog:
         assert (
             f"{'a' * 40}..{'b' * 40}" in command
         ), "git log must be scoped to the old..new commit range"
-        # Everything after git's "--" separator is the path filter.
+        # In a git command, the file paths come after "--". This takes
+        # everything after "--" (the "+ 1" skips the "--" itself), which
+        # gives the list of files git log was asked to look at.
         paths = command[command.index("--") + 1 :]
         assert (
             paths == compare_versions.STAGE_MODULE_PATHS["decision_tree"]
@@ -626,6 +611,7 @@ class TestGetStrStageOutputPath:
         mocker.patch.object(
             compare_versions.save_utils,
             "get_str_output_path",
+            # fake to throw an error instead of returning a value
             side_effect=FileNotFoundError("No file found"),
         )
         # Pretend the folder holds one file saved under a different tolerance.
@@ -804,7 +790,7 @@ def generate_report(df_old, df_new, manifest_old, manifest_new, **overrides):
 class TestGenerateStrReport:
     """Tests for `generate_str_report`."""
 
-    def test_states_the_trigger_and_versions(
+    def test_report_states_the_trigger_and_versions(
         self, df_old, df_new_identical, manifests, mocker
     ):
         """The report names both versions and the trigger it was checked against."""
@@ -909,24 +895,6 @@ class TestGenerateStrReport:
         assert (
             "No UPRNs retained across versions; matrix skipped." in report
         ), "total churn must render a note, not a malformed table"
-
-    def test_transition_matrix_survives_a_colliding_tech_label(
-        self, df_old, manifests, mocker
-    ):
-        """A real tech label equal to the pivot's own index column name
-        ("assigned_tech_old") must not crash the matrix — the pivot renames
-        its index to an internal column first."""
-        mocker.patch.object(
-            compare_versions, "generate_list_commit_log", return_value=[]
-        )
-        df_new = df_old.with_columns(
-            pl.when(pl.col("UPRN") == 1)
-            .then(pl.lit("assigned_tech_old"))
-            .otherwise(pl.col("assigned_tech"))
-            .alias("assigned_tech")
-        )
-        report = generate_report(df_old, df_new, *manifests)
-        assert "assigned_tech_old" in report, "a colliding label must still render"
 
     def test_unexpected_uprn_loss_warning_appears(self, df_old, manifests, mocker):
         """UPRN loss above the tolerance surfaces as a warning line naming

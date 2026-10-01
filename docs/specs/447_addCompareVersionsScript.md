@@ -169,6 +169,15 @@ Reviewer-response pass (2026-08-14, crispy-wonton's PR review, 66 comments):
   `_expr_tech_labelled`), missing Args/Returns filled, flagged comments
   rewritten as full sentences, test mocks annotated.
 
+Second reviewer pass (2026-09-30, 6 new threads + 1 review body):
+
+- **Docstring Args carry types** (`name (type): description`) throughout,
+  including Args blocks on the short private helpers.
+- **`get_dict_tolerances` removed**; `TOLERANCES[trigger]` is read directly,
+  since argparse `choices` already rejects an unknown trigger.
+- **Pivot collision guard removed**: techs are fixed in config, so no label
+  can equal the pivot's index column; the rename and its test are gone.
+
 Review pass on the 2026-08-10 additions (2026-08-12, ten findings applied):
 
 - **Contextual-features paths resolve across clustering-tolerance
