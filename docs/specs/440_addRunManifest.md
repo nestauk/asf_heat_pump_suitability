@@ -1,13 +1,16 @@
 ---
 title: Run manifest for pipeline output lineage
-status: in-review
+status: implemented
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/440
 pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/449
-asana:
+asana: https://app.asana.com/1/5571817120120/project/1214222223606748/task/1216761621134943
 created: 2026-07-22
 ---
 
 ## Problem
+
+Updated 2026-09-23: PR #449 merged to `dev` on 2026-08-18; status flipped to
+`implemented`. The open question at the bottom is now a live defect, see there.
 
 Nothing records which input versions, git commit, or parameters produced a
 given pipeline output. Only the final geojson carries any metadata (creation
@@ -54,6 +57,12 @@ Decisions settled during kickoff interview (2026-07-22):
 - **`git_commit` is captured fresh via `subprocess`** (`git rev-parse HEAD`
   or equivalent) — no existing pattern in this repo to reuse; this is new
   code.
+  Updated 2026-09-23: the subprocess call was extracted into
+  `manifest_utils.run_git_or_none(args, warning, warning_args=())` (3f3cec5,
+  2026-08-13, on the #447 branch; tuple form since 699bfc2, 2026-09-24). It runs any git command with
+  `cwd=PROJECT_DIR` and returns None on failure after logging the warning.
+  `get_str_git_commit` now wraps it, and the comparison script reuses it for
+  `merge-base` and `log`, so the degrade-don't-fail contract is shared.
 - **`params` = CLI args only**: `local_authorities`, `release_date`, and
   (for `add_features` only) `detail`. `config["constant"]` thresholds
   (radii, `tolerance_m`, etc.) are excluded — they're static per code
@@ -195,6 +204,15 @@ review agreeing with Aidan's own inline comment):
   omissions — which is a live instance of the manual-sync risk flagged at
   review and motivates the follow-up issue on deriving input lists from
   the getters.
+  Updated 2026-09-23: #458 merged on 2026-09-08, after #449, so it owned the
+  reconciliation. On `dev` it is half done. Done: `add_features` no longer
+  passes `detail` in its manifest params. Not done: `stage_input_keys. add_features` still lists both `heat_network_zones` keys and both
+  `gb_spatial_signatures` keys although the stage no longer reads them;
+  `compute_contextual_features` now takes `--detail` and loads HN zones and
+  spatial signatures, but its manifest records neither the param nor those
+  keys; `cluster` still lists `heat_network_zones.desnz_polygons` (verify
+  against the post-#458 entrypoint). The tests did not catch either
+  direction, as predicted above. This needs a GitHub issue.
 
 ## Verification
 
