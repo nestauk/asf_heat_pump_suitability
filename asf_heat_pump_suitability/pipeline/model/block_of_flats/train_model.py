@@ -115,8 +115,8 @@ def train_eval_rfc_block_of_flats_classifier(
     # Keep a final hold out test set aside
     X_train = X[X["split"] == "train"].drop(columns="split")
     X_test = X[X["split"] == "test"].drop(columns="split")
-    y_train = y[y["split"] == "test"].drop(columns="split")
-    y_test = y[y["split"] == "test"].drop(columns="split")
+    y_train = y[y["split"] == "train"][target]
+    y_test = y[y["split"] == "test"][target]
 
     # Create cross-validation splitter and classifier
     cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
@@ -296,13 +296,6 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--labelled_data",
-        help="Path to labelled data to train binary classification model on in parquet file format. Building ID column required.",
-        type=str,
-        required=True,
-    )
-
-    parser.add_argument(
         "--save",
         help="Save trained model to S3.",
         required=False,
@@ -335,7 +328,7 @@ if __name__ == "__main__":
     unlabelled_df = pl.read_parquet(
         config["output"]["model"]["training_data"][
             "sample_for_block_of_flats_model"
-        ].format(release_date=release_date)
+        ].format(release_date=release_date, l=3005, seed=7)
     )
     labelled_gdf = labelled_data.load_gdf_unprocessed_labelled_data()
     labelled_df = labelled_data.extract_df_labelled_data(labelled_gdf)
@@ -346,17 +339,26 @@ if __name__ == "__main__":
     # ------------------------ #
     # LOAD UPRN AND BUILDING DATA
     # ------------------------ #
-    uprn_to_building_mapping = pl.read_parquet(
-        config["data"]["processed"]["uprn_to_building_id_mapping"].format(
-            local_authorities=local_authority_dict["url_slug"],
-            release_date=release_date,
+    uprn_to_building_mapping = (
+        pl.read_parquet(
+            config["data"]["processed"]["uprn_to_building_id_mapping"].format(
+                local_authorities=local_authority_dict["url_slug"],
+                release_date=release_date,
+            )
+            # Filter to UPRNs in buildings in the sample
         )
-        # Filter to UPRNs in buildings in the sample
-    ).join(labelled_df, how="semi", on="building_id")
+        .rename({"building_ID": "building_id"})
+        .join(labelled_df, how="semi", on="building_id")
+    )
 
     # Load building footprint data for buildings containing flats
     building_footprints_gdf = gpd.read_parquet(
-        config["output"]["model"]["training_data"]["enriched_buildings_with_geoms"]
+        config["output"]["model"]["training_data"][
+            "enriched_buildings_with_geoms"
+        ].format(
+            local_authorities=local_authority_dict["url_slug"],
+            release_date=release_date,
+        )
     )
     building_footprints_gdf = building_footprints_gdf[
         building_footprints_gdf["building_id"].isin(labelled_df["building_id"])
@@ -388,7 +390,9 @@ if __name__ == "__main__":
 
     # ------------------------ #
     # TRAIN MODEL
-    model_df = labelled_df.join(building_features_df, how="left", on="ID")
+    model_df = labelled_df.join(
+        building_features_df, how="left", left_on="building_id", right_on="ID"
+    ).rename({"building_id": "ID"})
 
     model = train_eval_rfc_block_of_flats_classifier(
         df=model_df,
