@@ -429,7 +429,7 @@ class TestExtendEdgesGdf:
         return gpd.GeoDataFrame(
             {
                 "building_id": ["B01", "B02", "B03", "B04", "B_OUTSIDE", "B_CROSSING"],
-                "within_boundary": [True, True, True, True, False, False],
+                "within_crossing_boundary": [True, True, True, True, False, True],
                 "geometry": [
                     Polygon(
                         [
@@ -541,13 +541,13 @@ class TestExtendEdgesGdf:
         )
         results = cells_gdf["building_id"]
         expected = gdf_polygons_across_boundary[
-            gdf_polygons_across_boundary["within_boundary"]
+            gdf_polygons_across_boundary["within_crossing_boundary"]
         ]["building_id"]
 
         # TODO update when buildings crossing boundaries has been handled differently
         assert set(results) == set(
             expected
-        ), "Polygons outside or crossing boundaries are not handled correctly"
+        ), "Polygons outside boundaries are not handled correctly"
 
     @pytest.fixture(scope="class")
     def gdf_far_apart_polygons(self):
