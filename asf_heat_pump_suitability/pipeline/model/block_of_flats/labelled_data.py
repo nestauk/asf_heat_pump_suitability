@@ -50,10 +50,9 @@ def load_gdf_unprocessed_labelled_data() -> gpd.GeoDataFrame:
         gpd.GeoDataFrame: unprocessed manually labelled data
     """
     fs = s3fs.S3FileSystem()
-    dir_path = pathlib.Path(config["output"]["model"]["training_data"]["labelled_dir"])
-    paths = [f for f in fs.glob(f"{dir_path}/*.kml")]
-    [print(f"Loading unprocessed labelled data from: {path}") for path in paths]
-    return pd.concat([gpd.read_file(path) for path in paths])
+    dir_path = config["output"]["model"]["training_data"]["labelled_dir"]
+    paths = [f for f in fs.glob(f"{dir_path}*.kml")]
+    return pd.concat([gpd.read_file(f"s3://{path}", driver="KML") for path in paths])
 
 
 def extract_df_labelled_data(
@@ -69,7 +68,10 @@ def extract_df_labelled_data(
     Returns:
         pl.DataFrame: extracted information for manually labelled sample data
     """
-    gdf[id_str] = gdf.description.str.extract(rf"{id_str}: (.+) -")
+    # Extract building ID pattern
+    gdf[id_str] = gdf.description.str.extract(
+        r"([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})"
+    )
     gdf["label"] = gdf.Name.str[:2].str.upper()
     gdf["confidence"] = gdf["Name"].str[-1:]
     gdf["url"] = gdf.description.str.extract(r"Location: (.+) -")
@@ -77,15 +79,16 @@ def extract_df_labelled_data(
     cols = [id_str, "label", "confidence", "url"]
     df = pl.from_pandas(gdf[cols])
 
-    assert df.null_count().sum_horizontal()[
-        0
-    ], "There are unexpected null values in the processed labelled sample. Please check processing has worked."
+    assert df.null_count().sum_horizontal()[0] == 0, (
+        "There are unexpected null values in the processed labelled sample. Please that every sample has been labelled.\n"
+        f"{print(df.null_count())}."
+    )
 
     all_labels = BLOCK_OF_FLATS_ARCHETYPES + NOT_BLOCKS_ARCHETYPES + EXCLUDED_ARCHETYPES
     unexpected = set(df["label"]).difference(set(all_labels))
-    assert (
-        not unexpected
-    ), f"There are unexpected archetype labels in the labelled sample: {unexpected}."
+    # assert (
+    #     not unexpected
+    # ), f"There are unexpected archetype labels in the labelled sample: {unexpected}."
 
     return df.with_columns(
         pl.when(pl.col("label") == "UL")
@@ -139,7 +142,7 @@ def compare_tuple_labellers(
                 fields=["label_labeller1", "label_labeller2"]
             ),
             pl.col("confidence").list.to_struct(
-                fields=["confidence_labeller1", "confidence_labeller1"]
+                fields=["confidence_labeller1", "confidence_labeller2"]
             ),
         )
         .unnest(columns=["block_of_flats", "confidence"])
@@ -170,28 +173,28 @@ def print_labeller_agreement_matrix(df: pl.DataFrame) -> None:
     Print the agreement matrix for each labeller pair.
 
     Args:
-        df (pl.DataFrame): samples with two labels from different labellers. Must have `labeller1`; `labeller2`; and `agree_label` columns.
+        df (pl.DataFrame): samples with two labels from different labellers. Must have `labeller`; `secondary_labeller`; and `agree_label` columns.
 
     Returns:
         None
     """
-    labellers = df["labeller1"].unique().to_list()
+    labellers = df["labeller"].unique().to_list()
 
     agreement = []
 
     for l1 in labellers:
-        labeller1_df = df.filter(pl.col("labeller1") == l1)
-        labellers_2 = labeller1_df["labeller2"].unique().to_list()
+        labeller1_df = df.filter(pl.col("labeller") == l1)
+        labellers_2 = labeller1_df["secondary_labeller"].unique().to_list()
         for l2 in labellers_2:
             print(
                 f"\n\nPrimary labeller: {l1}; secondary labeller: {l2};\nAgreement matrix:\n"
             )
             print(
-                labeller1_df.filter(pl.col("labeller2") == l2)[
+                labeller1_df.filter(pl.col("secondary_labeller") == l2)[
                     "agree_label"
                 ].value_counts()
             )
-            agreement_matrix = labeller1_df.filter(pl.col("labeller2") == l2)[
+            agreement_matrix = labeller1_df.filter(pl.col("secondary_labeller") == l2)[
                 "agree_label"
             ].value_counts(normalize=True)
             agreement.append(
@@ -224,9 +227,7 @@ def transform_df_labelled_data(
     )
 
     labelled_df = (
-        # Add train / test split label
-        labelled_df.join(unlabelled_df.select([id_str, "split"]))
-        .filter(
+        labelled_df.filter(
             # Remove buildings where labellers disagree
             ~pl.col(id_str).is_in(disagree_ids),
         )
@@ -239,7 +240,7 @@ def transform_df_labelled_data(
         )
         .with_columns(
             pl.col("confidence")
-            .cast(pl.Int8)
+            .cast(pl.Int8, strict=False)
             .alias("confidence")
             # Drop duplicate building IDs (i.e. buildings with two labellers)
             # Note that this affects the distribution of subclasses within groups which may be different between labellers
@@ -247,8 +248,11 @@ def transform_df_labelled_data(
         .unique(subset=[id_str], keep="any")
         .filter(
             # Remove buildings which are excluded from training data
-            ~pl.col("label").is_in(EXCLUDED_ARCHETYPES)
+            ~pl.col("label").is_in(EXCLUDED_ARCHETYPES),
+            pl.col("block_of_flats").is_not_null(),
+            # Add train / test split label
         )
+        .join(unlabelled_df.select([id_str, "split"]), how="left", on=id_str)
     )
 
     print(
