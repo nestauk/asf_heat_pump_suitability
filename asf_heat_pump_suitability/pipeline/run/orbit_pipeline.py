@@ -13,9 +13,12 @@ Usage:
     e.g. to run for two named local authorities as a single chunk:
         python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities 'glasgow city' 'south lanarkshire'
 
+    e.g. to run for all Local Authorities Great Britain in 10 chunks:
+        python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities GB --size 10 --is_number_of_chunks
+
 Pass `--local_authorities GB` to run for every local authority in GB, otherwise pass one or more local authority names.
 `--size` sets the chunk size by default (the number of Local Authorities to be run in each batch), or the number of
-chunks if `--number_of_chunks` is also passed (the number of batches to run in parallel). If `--size` is
+chunks if `--is_number_of_chunks` is also passed (the number of batches to run in parallel). If `--size` is
 omitted, all local authorities are run in a single chunk.
 
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
@@ -75,7 +78,7 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--number_of_chunks",
+        "--is_number_of_chunks",
         help="Pass this argument if `--size` represents number of chunks.",
         required=False,
         action="store_true",
@@ -169,7 +172,7 @@ if __name__ == "__main__":
         ]
 
     chunks = chunk_list_strings(
-        np.asarray(local_authorities), n=args.size, size=args.number_of_chunks
+        np.asarray(local_authorities), n=args.size, size=args.is_number_of_chunks
     )
 
     for chunk in tqdm(chunks):
