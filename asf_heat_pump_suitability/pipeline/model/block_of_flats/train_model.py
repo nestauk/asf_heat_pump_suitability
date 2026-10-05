@@ -74,7 +74,7 @@ FEATURES = [
 
 def calculate_dict_training_class_weights(df: pl.DataFrame, target: str) -> dict:
     """
-    Calculate weights for training data in classifier model.
+    Calculate inverse class frequency weights for training data in classifier model.
 
     Args:
         df (pl.DataFrame): labelled target variable and `split` column containing `train` and `test` labels for each sample.
