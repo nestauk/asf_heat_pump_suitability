@@ -15,6 +15,8 @@ import subprocess
 import sys
 import time
 
+import pandas as pd
+
 from asf_heat_pump_suitability.utils import save_utils
 
 # (display name, path relative to the repo root) for each stage, in run order
@@ -96,7 +98,7 @@ def run_script(
 
 if __name__ == "__main__":
     # Run from the repo root regardless of where the script is invoked from
-    from asf_heat_pump_suitability import PROJECT_DIR
+    from asf_heat_pump_suitability import PROJECT_DIR, config
 
     os.chdir(PROJECT_DIR)
 
@@ -117,7 +119,7 @@ if __name__ == "__main__":
     # if result.returncode != 0:
     #     sys.exit("Error running check_inputs.py: missing S3 input paths. Aborting.")
 
-    failed = dict()
+    failed = pd.DataFrame({"local_authority": [], "stage_failed": []})
 
     succeeded = 0
     for la in args.local_authorities:
@@ -140,7 +142,8 @@ if __name__ == "__main__":
                     f"(after {elapsed}s)"
                 )
                 la_failed = True
-                failed[la] = stage_name
+                failed["local_authority"] = la
+                failed["stage_failed"] = stage_name
                 break
 
         if la_failed:
@@ -154,7 +157,15 @@ if __name__ == "__main__":
         f"\n\nPipeline completed for {succeeded} of {len(args.local_authorities)} "
         "local authorities."
     )
-    if failed:
+    if len(failed) > 0:
         print(
-            f"Pipeline failed for the following Local Authorities at the specified stages: {failed}"
+            f"Pipeline failed for the following Local Authorities at the specified stages:\n{failed}"
+        )
+        failed.to_csv(
+            config["output"]["log"]["pipeline_failure"].format(
+                release_date=release_date
+            ),
+            mode="a",
+            index=False,
+            header=False,
         )
