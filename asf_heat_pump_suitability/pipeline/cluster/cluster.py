@@ -96,7 +96,9 @@ def generate_gdf_clusters(
 
     # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
     for boundary in boundary_gdf["geometry"].unique():
-        bounded_tech_gdf = tech_gdf[tech_gdf.within(boundary)]
+        # This will retain buildings which straddle an LA boundary - i.e. they could appear in multiple different clusters
+        # across LAs
+        bounded_tech_gdf = tech_gdf[tech_gdf.intersects(boundary)]
         voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
 
         # One cell per building
@@ -232,7 +234,7 @@ def extend_edges_gdf(
     """
     Creates Voronoi polygons around a set of input polygons by interpolating additional points along polygon edges
     to extend Voronoi polygons from.
-    Rewritten logic based on fieldmaps/edge-extender.
+    Rewritten base logic based on fieldmaps/edge-extender.
 
     Args:
         gdf (gpd.GeoDataFrame): polygons to create Voronoi polygons around.
@@ -243,9 +245,8 @@ def extend_edges_gdf(
     Returns:
         gpd.GeoDataFrame: Voronoi polygons around the original input polygons. One row per original polygon.
     """
-    # TODO deal with buildings that cross boundaries
-    # Ensure all buildings are within the boundary
-    gdf = gdf[gdf.within(boundary)]
+    # Buildings that cross boundaries can appear in multiple clusters across multiple LAs
+    gdf = gdf[gdf.intersects(boundary)]
 
     # Add an internal unique ID to each building
     building_id_col = "_internal_building_id"
@@ -283,7 +284,7 @@ def extend_edges_gdf(
     # Extract a flat (N, 2) float64 array of all point coordinates
     coords_arr = shapely.get_coordinates(np.array(all_points))
 
-    # ordered=True requires every input coordinate to be unique — GEOS raises GEOSException otherwise.
+    # ordered=True (below) requires every input coordinate to be unique — GEOS raises GEOSException otherwise.
     # Buildings can (rarely) share corner coordinates (e.g. shared walls), so duplicates can exist.
     # To combat this we jitter duplicates by a 0.1mm x-offset so both buildings keep their seed points.
 
