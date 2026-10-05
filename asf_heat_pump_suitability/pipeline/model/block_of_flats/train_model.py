@@ -72,6 +72,31 @@ FEATURES = [
 ]
 
 
+def calculate_dict_training_class_weights(df: pl.DataFrame, target: str) -> dict:
+    """
+    Calculate weights for training data in classifier model.
+
+    Args:
+        df (pl.DataFrame): labelled target variable and `split` column containing `train` and `test` labels for each sample.
+        target (str): name of target variable
+
+    Returns:
+        dict: where class labels are keys and class weights for training are values
+    """
+    class_counts = df.filter(pl.col("split") == "train")[target].value_counts()
+    total_samples = df.height
+    class_weights = class_counts.with_columns(
+        (total_samples / (2 * pl.col("count"))).alias("weight")
+    )
+
+    print(
+        f"Class weights calculated for target variable: {target}.\n"
+        f"{class_weights.select([target, 'weight'])}"
+    )
+
+    return dict(zip(class_weights[target], class_weights["weight"]))
+
+
 def train_eval_rfc_block_of_flats_classifier(
     df: pl.DataFrame,
     id_col: str,
@@ -114,13 +139,15 @@ def train_eval_rfc_block_of_flats_classifier(
 
     # Keep a final hold out test set aside
     X_train = X[X["split"] == "train"].drop(columns="split")
-    X_test = X[X["split"] == "test"].drop(columns="split")
     y_train = y[y["split"] == "train"][target]
+    X_test = X[X["split"] == "test"].drop(columns="split")
     y_test = y[y["split"] == "test"][target]
 
     # Create cross-validation splitter and classifier
     cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
-    estimator = RandomForestClassifier(random_state=RNG)
+    # Calculate weights for imbalanced classes
+    class_weights = calculate_dict_training_class_weights(df, target=target)
+    estimator = RandomForestClassifier(random_state=RNG, class_weight=class_weights)
     random_state = RANDOM_STATE
     print(
         f"Training Random Forest binary classifier model with random state: {RANDOM_STATE}..."
