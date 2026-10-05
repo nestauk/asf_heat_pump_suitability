@@ -369,12 +369,14 @@ def assign_df_labellers(
     sample_df: pl.DataFrame, labellers: list | Dict[str, int], n_cross: int = 30
 ) -> pl.DataFrame:
     """
-    Assign labellers and secondary cross-labellers to sample for manual labelling.
+    Assign labellers and secondary cross-labellers to sample for manual labelling. Any remaining samples after either
+    even distribution of samples to labellers or assigning labellers their specified counts of samples are assigned to
+    the first labeller in the `labellers` argument.
 
     Args:
         sample_df (pl.DataFrame): dataframe with samples
         labellers (list | Dict[str, int]): list of labeller names or dict where keys are labeller names and values are
-        the sample counts for each labeller to label. If a list is passed, labellers will be assign approximately the same
+        the sample counts for each labeller to label. If a list is passed, labellers will be assigned approximately the same
         number of samples to label each.
         n_cross (int): number of samples to cross-label per labeller. Default 30.
 
@@ -495,7 +497,6 @@ def save_building_sample_to_kml(
         release_date (str): release date for sample.
 
     Returns:
-    Returns:
         None
     """
     print("Saving to KML file...")
@@ -548,7 +549,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--labeller_counts",
-        help="Number of samples each labeller should label. Len of input must match len of `labellers` argument.",
+        help="Number of samples each labeller should label. Length of input must match length of `labellers` argument.",
         type=int,
         nargs="+",
         required=False,
@@ -615,6 +616,10 @@ if __name__ == "__main__":
     seed = args.seed
     target_n = args.target_n
     labellers = args.labellers
+    if args.labeller_counts:
+        assert len(labellers) == len(
+            args.labeller_counts
+        ), "Length of `--labellers` and `--labeller_counts` inputs are not equal."
 
     # ------------------------------------ #
     # LOAD GRID SQUARES
