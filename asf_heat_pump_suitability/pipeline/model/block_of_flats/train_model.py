@@ -28,7 +28,7 @@ from sklearn.model_selection import (
     StratifiedKFold,
 )
 from sklearn.model_selection._search import BaseSearchCV
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, classification_report, confusion_matrix
 import argparse
 
 # Set random state int and RandomState instance
@@ -43,9 +43,6 @@ RNG = np.random.RandomState(
 # Number of splits for StratifiedKFold cross-val strategy in parameter search
 N_SPLITS = 5
 
-# Size (proportion) of test set
-TEST_SIZE = 0.2
-
 # Create param distributions for hyperparameter search
 PARAM_DISTRIBUTIONS = {
     "n_estimators": list(range(100, 1001, 10)),
@@ -54,6 +51,7 @@ PARAM_DISTRIBUTIONS = {
     "min_samples_leaf": list(range(1, 11, 1)),
     "max_features": ["sqrt", "log2"],
     "criterion": ["gini"],
+    "class_weight": [None, "balanced", "balanced_subsample"],
 }
 
 # Model features
@@ -72,31 +70,6 @@ FEATURES = [
 ]
 
 
-def calculate_dict_training_class_weights(df: pl.DataFrame, target: str) -> dict:
-    """
-    Calculate inverse class frequency weights for training data in classifier model.
-
-    Args:
-        df (pl.DataFrame): labelled target variable and `split` column containing `train` and `test` labels for each sample.
-        target (str): name of target variable
-
-    Returns:
-        dict: where class labels are keys and class weights for training are values
-    """
-    class_counts = df.filter(pl.col("split") == "train")[target].value_counts()
-    total_samples = df.height
-    class_weights = class_counts.with_columns(
-        (total_samples / (2 * pl.col("count"))).alias("weight")
-    )
-
-    print(
-        f"Class weights calculated for target variable: {target}.\n"
-        f"{class_weights.select([target, 'weight'])}"
-    )
-
-    return dict(zip(class_weights[target], class_weights["weight"]))
-
-
 def train_eval_rfc_block_of_flats_classifier(
     df: pl.DataFrame,
     id_col: str,
@@ -108,10 +81,10 @@ def train_eval_rfc_block_of_flats_classifier(
 ) -> RandomForestClassifier:
     """
     Train and evaluate RandomForestClassifier in binary classification to predict whether a building footprint is a block
-    of flats or not. Uses a search cross-validator to identify best hyperparameters and conduct cross validation. Model
-    training and cross-validation is performed on the data in `df` labelled `train`. A final round of training is
-    performed on the full set of training data using the best hyperparameters identified, and the model is tested on
-    the remaining hold-out test set.
+    of flats or not. Uses a search cross-validator to identify best hyperparameters (including `class_weight`, to
+    address class imbalance in `target`) and conduct cross validation. Model training and cross-validation is
+    performed on the data in `df` labelled `train`. The search's best estimator, already refit on the full set of
+    training data using the best hyperparameters identified, is tested on the remaining hold-out test set.
 
     Args:
         df (pl.DataFrame): engineered features with labelled target variable and `split` column containing `train` and
@@ -145,9 +118,9 @@ def train_eval_rfc_block_of_flats_classifier(
 
     # Create cross-validation splitter and classifier
     cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
-    # Calculate weights for imbalanced classes
-    class_weights = calculate_dict_training_class_weights(df, target=target)
-    estimator = RandomForestClassifier(random_state=RNG, class_weight=class_weights)
+    # `class_weight` is included in PARAM_DISTRIBUTIONS so the search can select the best strategy for
+    # addressing class imbalance in `target`, rather than fixing it here
+    estimator = RandomForestClassifier(random_state=RNG)
     random_state = RANDOM_STATE
     print(
         f"Training Random Forest binary classifier model with random state: {RANDOM_STATE}..."
@@ -177,14 +150,33 @@ def train_eval_rfc_block_of_flats_classifier(
     )
     print(f"Best params: {search.best_params_}")
 
-    # Train final classifier model on full training set with the selected hyperparameters
-    final_model = RandomForestClassifier(**search.best_params_, random_state=RNG)
-    final_model.fit(X_train, y_train)
+    # Spread of the winning candidate's score across individual CV folds, to gauge how much fold-to-fold
+    # variance is expected (and so whether the hold-out test score is within that normal range)
+    best_fold_scores = [
+        search.cv_results_[f"split{i}_test_score"][search.best_index_]
+        for i in range(N_SPLITS)
+    ]
+    print(
+        f"Per-fold {scoring} scores for best candidate during cross-validation: {best_fold_scores}\n"
+        f"(mean: {np.mean(best_fold_scores):.3f}, std: {np.std(best_fold_scores):.3f})"
+    )
+
+    # `search.best_estimator_` is already refit on the full training set with the best hyperparameters
+    # (including `class_weight`) found during the search
+    final_model = search.best_estimator_
 
     # Evaluate final model on hold out test set
     y_pred = final_model.predict(X_test)
     score = f1_score(y_test, y_pred)
-    print(f"{scoring} score on hold out test set: {score}")
+    print(
+        f"{scoring} score on hold out test set: {score}\n"
+        f"(cross-validation {scoring} score during search: {search.best_score_})"
+    )
+    print(f"Hold out test set class distribution:\n{y_test.value_counts()}")
+    print(
+        f"Classification report on hold out test set:\n{classification_report(y_test, y_pred)}"
+    )
+    print(f"Confusion matrix on hold out test set:\n{confusion_matrix(y_test, y_pred)}")
 
     return final_model
 
