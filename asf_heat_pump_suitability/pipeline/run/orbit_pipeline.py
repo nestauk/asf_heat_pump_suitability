@@ -5,7 +5,7 @@ Splits the given local authorities into chunks and launches one `orbit` job per 
 remotely for that chunk's local authorities.
 
 Usage:
-    python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--size N [--number_of_chunks]] [--release_date YYYYMMDD]
+    python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--size N [--number_of_chunks]] [--release_date YYYYMMDD] [--compare [--trigger TRIGGER]]
 
     e.g. to run for Great Britain in chunks of 20 local authorities each:
         python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities GB --size 20
@@ -23,12 +23,17 @@ omitted, all local authorities are run in a single chunk.
 
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
+
+`--compare` and `--trigger` are passed to every chunk's `pipeline.py` run, which then compares each local authority's
+stage outputs with their latest earlier versions (see `pipeline.py`).
 """
 
 import math
 import numpy as np
 import argparse
 from typing import List
+
+from asf_heat_pump_suitability import config
 
 
 def chunk_list_strings(arr: np.array, n: int, size: bool) -> List[List[str]]:
@@ -96,6 +101,20 @@ def parse_arguments() -> argparse.Namespace:
         default=False,
     )
 
+    parser.add_argument(
+        "--compare",
+        help="Pass `--compare` to every chunk, to compare each stage's output with its latest earlier version.",
+        action="store_true",
+        default=False,
+    )
+
+    parser.add_argument(
+        "--trigger",
+        help="Why the run is made; passed to every chunk's comparisons to check their tolerances.",
+        choices=sorted(config["compare_versions"]["tolerances"]),
+        default=None,
+    )
+
     return parser.parse_args()
 
 
@@ -103,7 +122,6 @@ if __name__ == "__main__":
     import polars as pl
     from tqdm import tqdm
     import subprocess
-    from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
@@ -175,6 +193,10 @@ if __name__ == "__main__":
         np.asarray(local_authorities), n=args.size, size=args.is_number_of_chunks
     )
 
+    compare_flags = ["--compare"] if args.compare else []
+    if args.trigger:
+        compare_flags += ["--trigger", args.trigger]
+
     for chunk in tqdm(chunks):
         print(f"Running chunk: {chunk}")
         if args.prod:
@@ -199,6 +221,7 @@ if __name__ == "__main__":
                     "--release_date",
                     release_date,
                     "--prod",
+                    *compare_flags,
                 ]
             )
         else:
@@ -222,5 +245,6 @@ if __name__ == "__main__":
                     *chunk,
                     "--release_date",
                     release_date,
+                    *compare_flags,
                 ]
             )
