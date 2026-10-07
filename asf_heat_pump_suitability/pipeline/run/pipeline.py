@@ -3,10 +3,15 @@ Runs the entire pipeline for a list of local authorities. Executes each of the f
 authority, and checks for errors after each stage.
 
 Usage:
-    python asf_heat_pump_suitability/pipeline/run/run_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--release_date YYYYMMDD]
+    python asf_heat_pump_suitability/pipeline/run/run_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--release_date YYYYMMDD] [--compare [--trigger TRIGGER]]
 
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
+
+With `--compare`, each local authority whose stages all succeed then gets a cross-version comparison of each stage's
+output against its latest earlier version, saved to S3 (see `pipeline/validate/compare_versions.py`). `--trigger`
+(`methodology_change` or `input_release`) is passed to every comparison. A failed comparison is listed at the end of
+the run but does not fail the local authority.
 """
 
 import argparse
@@ -17,6 +22,7 @@ import time
 
 import pandas as pd
 
+from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import save_utils
 
 # (display name, path relative to the repo root) for each stage, in run order
@@ -33,6 +39,10 @@ STAGES = [
         "asf_heat_pump_suitability/pipeline/run/compute_contextual_features.py",
     ),
 ]
+
+COMPARE_SCRIPT = "asf_heat_pump_suitability/pipeline/validate/compare_versions.py"
+# The stages compare_versions can compare, in run order
+COMPARE_STAGES = list(config["compare_versions"]["stage_output_datasets"])
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -60,6 +70,20 @@ def parse_arguments() -> argparse.Namespace:
         help="Set to push changes to production (i.e. staging area). This should only be used when running from `dev`.",
         action="store_true",
         default=False,
+    )
+
+    parser.add_argument(
+        "--compare",
+        help="Compare each stage's output with its latest earlier version once a local authority's stages succeed.",
+        action="store_true",
+        default=False,
+    )
+
+    parser.add_argument(
+        "--trigger",
+        help="Why the run is made; passed to every comparison to check its tolerances. Omit to show the numbers only.",
+        choices=sorted(config["compare_versions"]["tolerances"]),
+        default=None,
     )
 
     return parser.parse_args()
@@ -96,9 +120,42 @@ def run_script(
     return result.returncode
 
 
+def run_comparison(
+    stage: str, local_authority: str, release_date: str, trigger: str | None = None
+) -> int:
+    """
+    Compare one stage's output for one local authority with its latest earlier version, and save the results to S3.
+
+    Args:
+        stage (str): stage name as used by `compare_versions.py`, e.g. "decision_tree".
+        local_authority (str): local authority name to compare outputs for.
+        release_date (str): release date of the new outputs.
+        trigger (str | None): why the run is made, passed on as `--trigger`. Default None for no tolerance checks.
+
+    Returns:
+        int: the comparison's process exit code (0 on success, including when there is no earlier version).
+    """
+    trigger_flags = ["--trigger", trigger] if trigger else []
+    result = subprocess.run(
+        [
+            sys.executable,
+            COMPARE_SCRIPT,
+            "--stage",
+            stage,
+            "--local_authority",
+            local_authority,
+            "--new_release_date",
+            release_date,
+            "--save",
+            *trigger_flags,
+        ]
+    )
+    return result.returncode
+
+
 if __name__ == "__main__":
     # Run from the repo root regardless of where the script is invoked from
-    from asf_heat_pump_suitability import PROJECT_DIR, config
+    from asf_heat_pump_suitability import PROJECT_DIR
 
     os.chdir(PROJECT_DIR)
 
@@ -120,6 +177,9 @@ if __name__ == "__main__":
     #     sys.exit("Error running check_inputs.py: missing S3 input paths. Aborting.")
 
     failed = pd.DataFrame({"local_authority": [], "stage_failed": []})
+
+    # (local authority, stage) pairs; kept apart from `failed` so the stage-failure CSV only lists failed stages
+    comparisons_failed = []
 
     succeeded = 0
     for la in args.local_authorities:
@@ -149,6 +209,21 @@ if __name__ == "__main__":
         if la_failed:
             continue
 
+        if args.compare:
+            for stage in COMPARE_STAGES:
+                print(f"\n--> Comparing: {stage}")
+                returncode = run_comparison(
+                    stage=stage,
+                    local_authority=la,
+                    release_date=release_date,
+                    trigger=args.trigger,
+                )
+                if returncode != 0:
+                    print(
+                        f"Error comparing {stage} for {la}. Continuing; the comparison does not fail the local authority."
+                    )
+                    comparisons_failed.append((la, stage))
+
         elapsed = int(time.monotonic() - la_start)
         print(f"Successfully finished pipeline for: {la} (took {elapsed}s)")
         succeeded += 1
@@ -169,3 +244,7 @@ if __name__ == "__main__":
             index=False,
             header=False,
         )
+    if comparisons_failed:
+        print("Comparisons failed for the following Local Authorities and stages:")
+        for la, stage in comparisons_failed:
+            print(f"  {la}: {stage}")
