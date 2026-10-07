@@ -2056,14 +2056,15 @@ if __name__ == "__main__":
             release_date=release_date_new,
         )
 
-    counts = generate_dict_count_delta(df_old=df_old, df_new=df_new)
+    # The console summary reads the numbers the JSON summary already holds.
+    counts = summary["counts"]
     logging.info(
         "Rows: %s -> %s (diff: %+d)",
         counts["rows_old"],
         counts["rows_new"],
         counts["rows_delta"],
     )
-    churn = generate_dict_uprn_churn(df_old=df_old, df_new=df_new)
+    churn = summary["uprn_churn"]
     if churn:
         logging.info(
             "UPRN churn: %d added, %d removed, %d retained",
@@ -2071,9 +2072,6 @@ if __name__ == "__main__":
             churn["n_removed"],
             churn["n_retained"],
         )
-        if args.trigger is not None:
-            for churn_note in _generate_list_churn_notes(
-                churn=churn, tolerances=TOLERANCES[args.trigger]
-            ):
-                logging.warning(churn_note)
+    for churn_note in summary["tolerance_warnings"]:
+        logging.warning(churn_note)
     logging.info("Report written to %s, summary to %s", report_path, summary_path)
