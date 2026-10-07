@@ -2071,3 +2071,149 @@ class TestParseArguments:
             and args.new_release_date is None
             and args.trigger is None
         ), "omitted dates and trigger must parse as None, not error or default"
+
+    def test_new_release_date_alone_is_accepted(self, mocker):
+        """The pipeline passes only the new date; the old one is then
+        picked from S3, so this must not be a CLI error."""
+        mocker.patch(
+            "sys.argv",
+            [
+                "compare_versions.py",
+                "--stage",
+                "decision_tree",
+                "--local_authority",
+                "plymouth",
+                "--new_release_date",
+                "20260722",
+            ],
+        )
+        args = compare_versions.parse_arguments()
+        assert (
+            args.old_release_date is None and args.new_release_date == "20260722"
+        ), "a new date on its own must parse, with no old date"
+
+
+class TestGetStrPreviousReleaseDate:
+    """Tests for `get_str_previous_release_date`."""
+
+    def test_picks_the_latest_date_before_the_new_one(self):
+        """The old version is the latest date before the new one, even when
+        a later date exists (e.g. a run repeated after this one)."""
+        release_dates = ["20260601", "20260722", "20260801", "20260901"]
+        assert (
+            compare_versions.get_str_previous_release_date(
+                release_dates=release_dates, release_date_new="20260801"
+            )
+            == "20260722"
+        ), "the old version must be the latest date before the new one"
+
+    def test_no_earlier_date_is_a_baseline(self):
+        """A stage whose only version is the new one has nothing to compare
+        against, which the caller writes as a baseline."""
+        assert (
+            compare_versions.get_str_previous_release_date(
+                release_dates=["20260801"], release_date_new="20260801"
+            )
+            is None
+        ), "no date before the new one must return None (baseline)"
+
+
+class TestGenerateDictComparisonSummary:
+    """Tests for `generate_dict_comparison_summary`."""
+
+    def test_uprn_stage_summary_holds_counts_churn_and_warnings(
+        self, df_old, df_new_churned
+    ):
+        """A UPRN-level stage summary holds the headline numbers and the
+        trigger's tolerance warnings, and can be saved as JSON."""
+        summary = compare_versions.generate_dict_comparison_summary(
+            stage="decision_tree",
+            local_authority="plymouth",
+            trigger="methodology_change",
+            release_date_new="20260722",
+            release_date_old="20260601",
+            df_old=df_old,
+            df_new=df_new_churned,
+        )
+        assert (
+            summary["status"] == "compared"
+            and summary["release_date_old"] == "20260601"
+        ), "a comparison must say it compared, and against which old date"
+        assert (
+            summary["counts"]["rows_delta"] == 1
+        ), "the row delta must match the report's counts"
+        assert (
+            summary["uprn_churn"]["n_removed"] == 1
+            and summary["uprn_churn"]["n_added"] == 2
+        ), "UPRN churn must match the report's churn"
+        assert (
+            len(summary["tolerance_warnings"]) == 2
+        ), "25% removed and 50% added are both above the 5% tolerances"
+        assert (
+            summary["cluster_counts"] is None and summary["total_area"] is None
+        ), "a stage without geometry has no cluster or area numbers"
+        assert (
+            json.loads(json.dumps(summary)) == summary
+        ), "the summary must save to JSON and read back unchanged"
+
+    def test_geometry_stage_summary_covers_the_clusters_layer_only(self, df_contextual):
+        """Cluster count and area deltas skip non-cluster layers, as the
+        report does. With no trigger there are no warnings."""
+        df_new = df_contextual.filter(pl.col("cluster_id") != "HP_2")
+        # The third row is the ward, with a large area that must not count.
+        df_areas_old = pl.DataFrame(
+            {
+                "area_m2": [100.0, 50.0, 9999.0],
+                "layer": df_contextual["layer"],
+            }
+        )
+        df_areas_new = df_areas_old.filter(pl.col("area_m2") != 50.0)
+        summary = compare_versions.generate_dict_comparison_summary(
+            stage="compute_contextual_features",
+            local_authority="plymouth",
+            trigger=None,
+            release_date_new="20260722",
+            release_date_old="20260601",
+            df_old=df_contextual,
+            df_new=df_new,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_new,
+        )
+        assert (
+            summary["cluster_counts"]["clusters_delta"] == -1
+        ), "the ward row must not count as a cluster"
+        assert (
+            summary["total_area"]["area_m2_old"] == 150.0
+            and summary["total_area"]["area_m2_delta"] == -50.0
+        ), "the ward row's area must not count towards the cluster total"
+        assert (
+            summary["tolerance_warnings"] == []
+        ), "no trigger means no tolerance warnings"
+
+    def test_baseline_summary_has_no_old_date_or_numbers(self):
+        """A baseline has no earlier version, so its old date and numbers
+        are null, while its keys match a comparison's keys."""
+        summary = compare_versions.generate_dict_comparison_summary(
+            stage="uprns",
+            local_authority="plymouth",
+            trigger="input_release",
+            release_date_new="20260722",
+        )
+        compared_keys = compare_versions.generate_dict_comparison_summary(
+            stage="uprns",
+            local_authority="plymouth",
+            trigger=None,
+            release_date_new="20260722",
+            release_date_old="20260601",
+            df_old=pl.DataFrame({"UPRN": [1]}),
+            df_new=pl.DataFrame({"UPRN": [1]}),
+        ).keys()
+        assert (
+            summary["status"] == "baseline" and summary["release_date_old"] is None
+        ), "a baseline must say so and have no old date"
+        assert (
+            summary["counts"] is None and summary["uprn_churn"] is None
+        ), "a baseline has nothing to count against"
+        assert (
+            summary.keys() == compared_keys
+        ), "baseline and comparison JSONs must share keys, so one table holds both"
