@@ -2217,3 +2217,35 @@ class TestGenerateDictComparisonSummary:
         assert (
             summary.keys() == compared_keys
         ), "baseline and comparison JSONs must share keys, so one table holds both"
+
+
+class TestUploadComparisonFilesToS3:
+    """Tests for `upload_comparison_files_to_s3`."""
+
+    def test_files_land_in_the_release_comparisons_folder(self, mocker, tmp_path):
+        """Each file goes to outputs/data/{la}/{release_date}/comparisons/
+        under its own name, next to the outputs it describes."""
+        # Replace the S3 client so nothing is uploaded; no AWS calls.
+        s3_client = mocker.patch("boto3.client").return_value
+        report = tmp_path / "uprns_plymouth_20260601_vs_20260722.md"
+        summary = tmp_path / "uprns_plymouth_20260601_vs_20260722.json"
+        compare_versions.upload_comparison_files_to_s3(
+            file_paths=[report, summary],
+            local_authority="plymouth",
+            release_date="20260722",
+        )
+        uploads = [call.args for call in s3_client.upload_file.call_args_list]
+        assert uploads == [
+            (
+                str(report),
+                "asf-local-heat-planning-tool",
+                "outputs/data/plymouth/20260722/comparisons/"
+                "uprns_plymouth_20260601_vs_20260722.md",
+            ),
+            (
+                str(summary),
+                "asf-local-heat-planning-tool",
+                "outputs/data/plymouth/20260722/comparisons/"
+                "uprns_plymouth_20260601_vs_20260722.json",
+            ),
+        ], "each file must land in the new release's comparisons folder"

@@ -12,7 +12,8 @@ Distribution plots are saved as PNGs next to the report.
 Pass --trigger methodology_change or --trigger input_release to check the
 numbers against that trigger's tolerances. Leave it out to get the numbers
 with no judgement applied. Writes a local markdown report, a JSON of the
-headline numbers, and logs a console summary.
+headline numbers, and logs a console summary. Pass --save to also upload the
+report, plots and JSON to the new release's `comparisons/` folder on S3.
 
 Pass --new_release_date alone to compare it against the latest earlier
 version of the same stage. If there is no earlier version, only a JSON with
@@ -74,6 +75,7 @@ CLUSTER_LAYER = config["compare_versions"]["cluster_layer"]
 STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
 BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"]
+COMPARISONS_DIR = config["compare_versions"]["comparisons_dir"]
 DISTRIBUTION_COLUMNS = config["compare_versions"]["distribution_columns"]
 TOLERANCES = config["compare_versions"]["tolerances"]
 SIMPLIFY_TOLERANCE_M = config["constant"]["clustering"]["tolerance_m"]
@@ -1816,6 +1818,33 @@ def generate_dict_comparison_summary(
     return summary
 
 
+def upload_comparison_files_to_s3(
+    file_paths: list[Path], local_authority: str, release_date: str
+) -> None:
+    """
+    Upload a comparison's local files to the new release's comparisons folder.
+
+    Args:
+        file_paths (list[Path]): local report, plot and JSON files
+        local_authority (str): local authority slug used in output paths
+        release_date (str): release date of the newer output, YYYYMMDD
+    """
+    comparisons_dir = COMPARISONS_DIR.format(
+        local_authority=local_authority, release_date=release_date
+    )
+    bucket, key_dir = comparisons_dir.removeprefix("s3://").split("/", 1)
+    for path in file_paths:
+        # upload_file_to_s3 builds the key as f"{s3_key_dir}{subfolder}/{filename}",
+        # so an empty subfolder puts the file straight into key_dir.
+        save_utils.upload_file_to_s3(
+            local_file_path=str(path),
+            s3_bucket=bucket,
+            s3_key_dir=key_dir,
+            filename=path.name,
+            subfolder="",
+        )
+
+
 def parse_arguments() -> argparse.Namespace:
     """
     Parse CLI arguments.
@@ -1858,6 +1887,12 @@ def parse_arguments() -> argparse.Namespace:
         "--report_dir",
         default=str(PROJECT_DIR / "outputs" / "comparisons"),
         help="Directory the markdown report is written to.",
+    )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Also upload the report, plots and JSON to the new release's "
+        "comparisons folder on S3.",
     )
     args = parser.parse_args()
     if args.old_release_date is not None and args.new_release_date is None:
@@ -1918,6 +1953,12 @@ if __name__ == "__main__":
         )
         summary_path.write_text(json.dumps(summary, indent=2))
         logging.info("Baseline summary written to %s", summary_path)
+        if args.save:
+            upload_comparison_files_to_s3(
+                file_paths=[summary_path],
+                local_authority=local_authority,
+                release_date=release_date_new,
+            )
         sys.exit(0)
 
     path_old = get_str_stage_output_path(
@@ -2001,6 +2042,16 @@ if __name__ == "__main__":
     )
     summary_path = report_dir / f"{report_stem}.json"
     summary_path.write_text(json.dumps(summary, indent=2))
+    if args.save:
+        upload_comparison_files_to_s3(
+            file_paths=[
+                report_path,
+                summary_path,
+                *(report_dir / name for name in (plot_files or {}).values()),
+            ],
+            local_authority=local_authority,
+            release_date=release_date_new,
+        )
 
     counts = generate_dict_count_delta(df_old=df_old, df_new=df_new)
     logging.info(
