@@ -56,6 +56,7 @@ import s3fs
 
 from asf_heat_pump_suitability import PROJECT_DIR, config
 from asf_heat_pump_suitability.getters import base_getters
+from asf_heat_pump_suitability.pipeline.transform.local_authority import make_str_slug
 from asf_heat_pump_suitability.utils import geo_utils, manifest_utils, save_utils
 
 UPRN_COL = "UPRN"
@@ -1864,7 +1865,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--local_authority",
         required=True,
-        help="Local authority slug as used in output paths, e.g. 'plymouth'.",
+        help="Local authority name or output-path slug, e.g. 'East Lothian' "
+        "or 'east_lothian'.",
     )
     parser.add_argument(
         "--old_release_date",
@@ -1907,9 +1909,10 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
-    # Output paths use lowercase LA slugs; lowercase like the sibling
-    # entrypoints (e.g. add_features) so "Plymouth" finds plymouth's outputs.
-    local_authority = args.local_authority.lower()
+    # Output paths use LA slugs; slugify like the sibling entrypoints (e.g.
+    # add_features) so "East Lothian", as pipeline.py passes it, finds
+    # east_lothian's outputs. A slug passes through unchanged.
+    local_authority = make_str_slug(args.local_authority)
     report_dir = Path(args.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
     if args.new_release_date is None:
