@@ -2225,6 +2225,13 @@ class TestUploadComparisonFilesToS3:
     def test_files_land_in_the_release_comparisons_folder(self, mocker, tmp_path):
         """Each file goes to outputs/data/{la}/{release_date}/comparisons/
         under its own name, next to the outputs it describes."""
+        # A fake folder template, so the test checks the key layout, not the
+        # bucket named in base.yaml.
+        mocker.patch.object(
+            compare_versions,
+            "COMPARISONS_DIR",
+            "s3://bucket/outputs/{local_authority}/{release_date}/comparisons",
+        )
         # Replace the S3 client so nothing is uploaded; no AWS calls.
         s3_client = mocker.patch("boto3.client").return_value
         report = tmp_path / "uprns_plymouth_20260601_vs_20260722.md"
@@ -2238,14 +2245,14 @@ class TestUploadComparisonFilesToS3:
         assert uploads == [
             (
                 str(report),
-                "asf-local-heat-planning-tool",
-                "outputs/data/plymouth/20260722/comparisons/"
+                "bucket",
+                "outputs/plymouth/20260722/comparisons/"
                 "uprns_plymouth_20260601_vs_20260722.md",
             ),
             (
                 str(summary),
-                "asf-local-heat-planning-tool",
-                "outputs/data/plymouth/20260722/comparisons/"
+                "bucket",
+                "outputs/plymouth/20260722/comparisons/"
                 "uprns_plymouth_20260601_vs_20260722.json",
             ),
         ], "each file must land in the new release's comparisons folder"
