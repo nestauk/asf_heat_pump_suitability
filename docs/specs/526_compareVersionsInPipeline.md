@@ -47,9 +47,9 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
    _Rationale:_ test runs and the first GB baseline do not pay for extra S3
    loads, or risk new failures, unless someone asks.
 
-3. **All five stages are compared:** uprns, add*features, decision_tree,
-   cluster, compute_contextual_features.
-   \_Rationale:* full coverage per LA. The cost is about 10 output loads per
+3. **All five stages are compared:** `uprns`, `add_features`,
+   `decision_tree`, `cluster`, `compute_contextual_features`.
+   _Rationale:_ full coverage per LA. The cost is about 10 output loads per
    LA, plus the geometry reloads for the cluster stages, until #488 reads
    each object once.
 
@@ -82,9 +82,12 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
    names keep the current stem, `{stage}_{la}_{old}_vs_{new}`; a baseline
    JSON uses `{stage}_{la}_{new}_baseline`. The folder is a new
    `compare_versions` config entry in `base.yaml`, not a hard-coded path.
-   The upload uses `save_utils.upload_file_to_s3`.
+   The upload uses `save_utils.upload_file_to_s3`. Following the repo
+   convention that scripts write to S3 only with `--save`, `compare_versions`
+   gets a `--save` flag and `pipeline.py` passes it. Without `--save`, the
+   report, plots and JSON go to the local `report_dir` only, as now.
    _Rationale:_ everything about one run lives in one folder, and is deleted
-   with it.
+   with it. `--save` keeps the hand-run CLI working on a laptop.
 
 8. **The JSON holds headline numbers only.** Keys: `stage`,
    `local_authority`, `release_date_old` (null for a baseline),
@@ -99,7 +102,9 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
 9. **A failed comparison never fails the LA or the run.** `pipeline.py` logs
    a comparison's non-zero exit code with the stage and LA, adds it to a
    separate "comparisons failed" list in the end-of-run summary, and goes
-   on. The LA still counts as succeeded.
+   on. The LA still counts as succeeded. Comparison failures are not added
+   to the stage-failure CSV that #521 writes to S3, so that file still means
+   "a stage failed".
    _Rationale:_ the comparison is a report, not a gate. In the two-tier
    validation design, gates belong in the stages (Tier 1) and the
    comparison is Tier 2.
@@ -159,9 +164,6 @@ when #521 merges.
 - How much does comparing five stages add to each LA's runtime on Orbit?
   Best guess: measure it on the sample-LA acceptance run and record it in the
   PR; if it is large, #488's single read is the fix, not fewer stages.
-- Should local copies of the reports stay in `report_dir` when running by
-  hand? Best guess: yes. Upload to S3 only when an S3 destination is asked
-  for, so the current CLI keeps working on a laptop.
 - `orbit_pipeline.py` launches chunks and does not wait for them, so nothing
   knows when all comparisons for a run are done. Best guess: the follow-up
   GB table is run by hand once the Orbit jobs finish.
