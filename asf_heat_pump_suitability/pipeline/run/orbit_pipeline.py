@@ -5,7 +5,7 @@ Splits the given local authorities into chunks and launches one `orbit` job per 
 remotely for that chunk's local authorities.
 
 Usage:
-    python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--size N [--number_of_chunks]] [--release_date YYYYMMDD] [--compare [--trigger TRIGGER]]
+    python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--size N [--is_number_of_chunks]] [--release_date YYYYMMDD] [--compare [--trigger TRIGGER]]
 
     e.g. to run for Great Britain in chunks of 20 local authorities each:
         python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities GB --size 20
