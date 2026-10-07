@@ -89,15 +89,19 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
    _Rationale:_ everything about one run lives in one folder, and is deleted
    with it. `--save` keeps the hand-run CLI working on a laptop.
 
-8. **The JSON holds headline numbers only.** Keys: `stage`,
-   `local_authority`, `release_date_old` (null for a baseline),
-   `release_date_new`, `trigger`, `status` (`compared` or `baseline`), row
-   counts and delta, UPRN churn (added, removed, retained and shares),
-   cluster count and total area deltas (geometry stages), and the list of
-   tolerance warnings. The values come from the same functions the report
-   already calls.
+8. **The JSON holds headline numbers only.** It has eleven keys:
+   `stage`, `local_authority`, `release_date_old` (null for a baseline),
+   `release_date_new`, `trigger`, `status` (`compared` or `baseline`),
+   `counts`, `uprn_churn`, `cluster_counts`, `total_area` and
+   `tolerance_warnings`. The four number keys hold the dicts the report
+   already builds (`generate_dict_count_delta`, `generate_dict_uprn_churn`,
+   `generate_dict_cluster_count_delta`, `generate_dict_total_area_delta`),
+   with the cluster keys on the clusters layer only. A key that does not
+   apply (a baseline, or cluster keys on a non-geometry stage) is null, not
+   missing, so every JSON has the same keys.
    _Rationale:_ enough for a GB table to sort and flag LAs, without the
-   check-results-as-data refactor in #488.
+   check-results-as-data refactor in #488. The same keys in every file let
+   the table read them all the same way.
 
 9. **A failed comparison never fails the LA or the run.** `pipeline.py` logs
    a comparison's non-zero exit code with the stage and LA, adds it to a
@@ -108,6 +112,13 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
    _Rationale:_ the comparison is a report, not a gate. In the two-tier
    validation design, gates belong in the stages (Tier 1) and the
    comparison is Tier 2.
+
+10. **`compare_versions` accepts an LA's official name as well as its slug.**
+    It turns `--local_authority` into a slug with
+    `local_authority.make_str_slug`, the helper the stages use, so "East
+    Lothian" and `east_lothian` find the same outputs. Found during
+    implementation: `pipeline.py` passes official names, and the old
+    lowercasing gave "east lothian", which matches no S3 path.
 
 ### Branch and stacking
 
@@ -137,6 +148,11 @@ when #521 merges.
   lists every LA for a run, which suits the later GB table, but the reports
   sit away from the outputs they describe. Rejected for (7); the GB table can
   list `outputs/data/*/{release_date}/comparisons/` instead.
+- **Always save to S3, with no `--save` flag.** One less flag, and no
+  report stays on a laptop by mistake. Rejected for (7) on 2026-10-07:
+  `pipeline.py` always passes `--save`, so the flag costs a pipeline run
+  nothing, and it stops exploratory hand runs from writing reports into a
+  release folder next to the official ones.
 - **The full GB summary table in this PR.** One PR delivers the whole loop,
   but it overlaps #488 and roughly doubles the PR. Deferred to a follow-up.
 - **Run comparisons in CI on pull requests.** A PR produces no outputs on
