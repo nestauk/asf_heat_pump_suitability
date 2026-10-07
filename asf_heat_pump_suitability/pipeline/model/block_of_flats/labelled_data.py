@@ -22,6 +22,7 @@ BLOCK_OF_FLATS_ARCHETYPES = [
     "AS",
     "IW",
     "NH",
+    "HN",
 ]
 
 NOT_BLOCKS_ARCHETYPES = [
@@ -36,10 +37,14 @@ NOT_BLOCKS_ARCHETYPES = [
     "MA",
     "MT",
     "OF",
-    "CO",
+    "FA",
 ]
 
-EXCLUDED_ARCHETYPES = ["DE", "UL"]
+EXCLUDED_ARCHETYPES = [
+    "DE",
+    "UL",
+    "CO",
+]
 
 
 def load_gdf_unprocessed_labelled_data() -> gpd.GeoDataFrame:
@@ -121,8 +126,15 @@ def compare_tuple_labellers(
         id_str (str): name of column containing building ID in `labelled_df` and `unlabelled_df`. Default 'building_id'.
 
     Returns:
-        tuple: (building IDs where labellers agree on the binary class, building IDs where labellers disagree)
+        tuple: (building IDs where labellers agree on the binary class, building IDs where labellers disagree).
+            Both lists are empty if no building has been labelled by more than one labeller.
     """
+    if not labelled_df[id_str].is_duplicated().any():
+        print(
+            "No buildings have been labelled by more than one labeller; skipping agreement assessment."
+        )
+        return [], []
+
     double_labelled_df = (
         # Join labellers onto labelled buildings
         labelled_df.join(
@@ -184,31 +196,31 @@ def print_labeller_agreement_matrix(df: pl.DataFrame) -> None:
         None
     """
     labellers = df["labeller"].unique().to_list()
+    if len(labellers) > 1:
+        agreement = []
 
-    agreement = []
+        for l1 in labellers:
+            labeller1_df = df.filter(pl.col("labeller") == l1)
+            labellers_2 = labeller1_df["secondary_labeller"].unique().to_list()
+            for l2 in labellers_2:
+                print(
+                    f"\n\nPrimary labeller: {l1}; secondary labeller: {l2};\nAgreement matrix:\n"
+                )
+                print(
+                    labeller1_df.filter(pl.col("secondary_labeller") == l2)[
+                        "agree_label"
+                    ].value_counts()
+                )
+                agreement_matrix = labeller1_df.filter(
+                    pl.col("secondary_labeller") == l2
+                )["agree_label"].value_counts(normalize=True)
+                agreement.append(
+                    agreement_matrix.filter(pl.col("agree_label"))["proportion"][0]
+                )
 
-    for l1 in labellers:
-        labeller1_df = df.filter(pl.col("labeller") == l1)
-        labellers_2 = labeller1_df["secondary_labeller"].unique().to_list()
-        for l2 in labellers_2:
-            print(
-                f"\n\nPrimary labeller: {l1}; secondary labeller: {l2};\nAgreement matrix:\n"
-            )
-            print(
-                labeller1_df.filter(pl.col("secondary_labeller") == l2)[
-                    "agree_label"
-                ].value_counts()
-            )
-            agreement_matrix = labeller1_df.filter(pl.col("secondary_labeller") == l2)[
-                "agree_label"
-            ].value_counts(normalize=True)
-            agreement.append(
-                agreement_matrix.filter(pl.col("agree_label"))["proportion"][0]
-            )
-
-    print(
-        f"\n\nAverage agreement between labellers: {round(np.mean(agreement) * 100, 2)}%"
-    )
+        print(
+            f"\n\nAverage agreement between labellers: {round(np.mean(agreement) * 100, 2)}%"
+        )
 
 
 def transform_df_labelled_data(
