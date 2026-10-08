@@ -96,8 +96,9 @@ def generate_gdf_clusters(
         id_col (str): building ID column. Default "ID".
 
     Returns:
-        gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster.
-        `anchor_ids` lists the anchors that caused buildings in the cluster to be reassigned; null for clusters with none.
+        gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster, and additional info including:
+             -`f"within_{radius}m_from_anchor_load"` flag flagging whether the cluster is within a certain radius from an anchor load
+             -`anchor_ids` listing the anchors that caused buildings in the cluster to be reassigned 'communal', where it applies; null for clusters with none.
     """
     gdfs = []
 
