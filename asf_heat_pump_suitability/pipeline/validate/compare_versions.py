@@ -4,7 +4,7 @@ Compare two dated versions of a pipeline stage output for one local authority.
 The report covers row and UPRN counts, schema changes, UPRN churn, per-tech
 counts and the tech transition matrix (decision tree stage), cluster count
 and area changes with distribution plots (cluster and contextual features
-stages), the UPRNs that are in no cluster (compute_contextual_features,
+stages), the count of UPRNs with no cluster assigned (compute_contextual_features,
 counted against the add_features output of the same release), and the
 commits that touched the stage's code between the two versions.
 Distribution plots are saved as PNGs next to the report.
