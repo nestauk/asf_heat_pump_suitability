@@ -100,11 +100,12 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    from pathlib import Path
     import polars as pl
     from tqdm import tqdm
     import subprocess
     from asf_heat_pump_suitability import config
-    from asf_heat_pump_suitability.utils import save_utils
+    from asf_heat_pump_suitability.utils import save_utils, s3_utils
 
     args = parse_arguments()
     local_authorities = args.local_authorities
@@ -224,3 +225,18 @@ if __name__ == "__main__":
                     release_date,
                 ]
             )
+
+    # Aggregate any error logs and save to a single file
+    dir_uri = Path(
+        config["output"]["log"]["pipeline_failure"].format(
+            release_date=release_date, local_authorities="REMOVE"
+        )
+    ).parent
+    failure_paths = s3_utils.list_files_s3_path(dir_uri=str(dir_uri))
+    if failure_paths:
+        failures = pl.concat([pl.read_csv(f) for f in failure_paths])
+        save_as = config["output"]["log"]["pipeline_failure"].format(
+            release_date=release_date, local_authorities="ORBIT_CONCAT"
+        )
+        failures.write_csv(save_as)
+        print(f"Pipeline failed for some local authorities. See logs at {save_as}")
