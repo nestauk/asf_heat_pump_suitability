@@ -1733,7 +1733,7 @@ class TestGenerateDictUprnsMissingClusters:
 @pytest.fixture(scope="module")
 def df_contextual():
     """Contextual-features output: two clusters holding three UPRNs, and a
-    ward row. As in the real geojson, n_UPRNs is a float and is null on the
+    row corresponding to a ward boundaries layer. As in the real geojson, n_UPRNs is a float and is null on the
     ward row."""
     return pl.DataFrame(
         {
