@@ -1006,24 +1006,53 @@ class TestReassignGdfAnchorProperties:
                 results[building]
             ), f"building {building} not reassigned to 'communal' must keep a null communal_origin"
 
-    def test_reassigned_buildings_record_anchor_id(self, tech_gdf, gdf_anchor_property):
-        """Test reassigned buildings record the reassigning anchor's ID and no other building gets one."""
+    def test_reassigned_buildings_record_anchor_ids(
+        self, tech_gdf, gdf_anchor_property
+    ):
+        """Test reassigned buildings list the anchor loads within the radius and no other building gets a list."""
         reassigned_gdf = reassign_gdf_near_anchor_properties(
             tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
         )
-        results = reassigned_gdf.set_index("building_id")["anchor_id"]
+        results = reassigned_gdf.set_index("building_id")["anchor_ids"]
         reassigned = ["B02", "B03", "B04"]
         for building in reassigned:
-            assert (
-                results[building] == "A1"
-            ), f"reassigned building {building} must record the anchor that reassigned it"
+            assert results[building] == [
+                "A1"
+            ], f"reassigned building {building} must list the anchor load that reassigned it"
         assert (
             results.drop(reassigned).isna().all()
-        ), "buildings the anchor did not reassign must have a null anchor_id, even inside the radius"
+        ), "buildings the anchor load did not reassign must have a null anchor_ids, even inside the radius"
+
+    def test_reassigned_building_lists_every_anchor_load_within_radius(
+        self, gdf_mixed_buildings
+    ):
+        """Test a building lists every anchor load within the radius, not only the nearest one."""
+        near_west = Polygon(
+            [(399980, 399995), (399990, 399995), (399990, 400005), (399980, 400005)]
+        )
+        far_east = Polygon(
+            [(400035, 399995), (400045, 399995), (400045, 400005), (400035, 400005)]
+        )
+        anchors_gdf = gpd.GeoDataFrame(
+            {"anchor_id": ["A2", "A1"], "geometry": [near_west, far_east]},
+            crs="EPSG:27700",
+        )
+        networked_gdf = gdf_mixed_buildings[
+            gdf_mixed_buildings["building_id"] == "B01"
+        ].assign(assigned_tech="Networked heat pump", communal_origin=None)
+
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=networked_gdf, combined_anchor_gdf=anchors_gdf, radius=30
+        )
+
+        assert reassigned_gdf["anchor_ids"].iloc[0] == [
+            "A1",
+            "A2",
+        ], "a building 10m from one anchor load and 25m from another must list both, not only the nearest"
 
     @pytest.fixture(scope="class")
     def gdf_equidistant_anchors(self):
-        """Two anchors 20m either side of B01 (x 400000-400010), listed with the higher ID first."""
+        """Two anchor loads 20m either side of B01 (x 400000-400010), listed with the higher ID first."""
         west = Polygon(
             [(399970, 399995), (399980, 399995), (399980, 400005), (399970, 400005)]
         )
@@ -1034,10 +1063,10 @@ class TestReassignGdfAnchorProperties:
             {"anchor_id": ["A2", "A1"], "geometry": [west, east]}, crs="EPSG:27700"
         )
 
-    def test_equidistant_anchors_give_one_row_per_building(
+    def test_equidistant_anchor_loads_give_one_row_per_building(
         self, gdf_mixed_buildings, gdf_equidistant_anchors
     ):
-        """Test a building equidistant from two anchors is kept once and linked to the lowest anchor ID."""
+        """Test a building equidistant from two anchor loads is kept once and linked to both, sorted."""
         networked_gdf = gdf_mixed_buildings[
             gdf_mixed_buildings["building_id"] == "B01"
         ].assign(assigned_tech="Networked heat pump", communal_origin=None)
@@ -1050,13 +1079,14 @@ class TestReassignGdfAnchorProperties:
 
         assert (
             len(reassigned_gdf) == 1
-        ), "a building equidistant from two anchors must not be duplicated"
-        assert (
-            reassigned_gdf["anchor_id"].iloc[0] == "A1"
-        ), "ties must break to the lowest anchor ID, whatever the anchors' row order"
+        ), "a building equidistant from two anchor loads must not be duplicated"
+        assert reassigned_gdf["anchor_ids"].iloc[0] == [
+            "A1",
+            "A2",
+        ], "a building within the radius of two anchor loads must list both, sorted, whatever the anchor loads' row order"
         assert (
             reassigned_gdf["assigned_tech"].iloc[0] == "Communal solution"
-        ), "the tied building must still be reassigned to communal"
+        ), "the building must still be reassigned to communal"
 
 
 class TestGenerateSeriesAnchorIds:
