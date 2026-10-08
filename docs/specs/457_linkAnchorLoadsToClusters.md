@@ -26,31 +26,31 @@ Thread anchor identity from the anchor list to the geojson, exposing both ends o
 
    **Per building: every anchor within the radius (amended in review on PR #525).** A building is reassigned if it is within 50 m of _any_ anchor, so each anchor within 50 m is a cause on its own. A reassigned building therefore lists every anchor within the radius, not only the nearest. On Plymouth, 84 of 228 reassigned buildings (37%) are within 50 m of two or more anchors; the nearest-only version hid at least one cause for each of them. This is different from the rejected "all anchors within 50 m" above: only _reassigned_ buildings carry IDs, so a block-of-flats cluster near a school still has no link. In dense centres a cluster can list many anchors (one Plymouth building is within 50 m of 15).
 
-   **Tension to keep visible — proximity is not causation.** A block of flats within 50 m of a school is communal because it is a block of flats, so it carries `communal_origin = "block of flats"`, `anchor_ids = null` and is _not_ highlighted when selected — even though `within_50m_from_anchor_load` is `True` for it. The link means "this anchor is why the cluster is communal", not "an anchor is nearby". The three states a communal cluster can be in:
+   **Tension to keep visible — proximity is not causation.** A block of flats within 50 m of a school is communal because it is a block of flats, so it carries `communal_origin = "block of flats"`, `reassigning_anchor_load_ids = null` and is _not_ highlighted when selected — even though `within_50m_from_anchor_load` is `True` for it. The link means "this anchor is why the cluster is communal", not "an anchor is nearby". The three states a communal cluster can be in:
 
-   | Cluster                          | `communal_origin` | `anchor_ids` | `within_50m_from_anchor_load` |
-   | -------------------------------- | ----------------- | ------------ | ----------------------------- |
-   | Homes reassigned by a school     | anchor proximity  | `["…"]`      | True                          |
-   | Flats that happen to be near one | block of flats    | null         | True                          |
-   | Flats nowhere near an anchor     | block of flats    | null         | False                         |
+   | Cluster                          | `communal_origin` | `reassigning_anchor_load_ids` | `within_50m_from_anchor_load` |
+   | -------------------------------- | ----------------- | ----------------------------- | ----------------------------- |
+   | Homes reassigned by a school     | anchor proximity  | `["…"]`                       | True                          |
+   | Flats that happen to be near one | block of flats    | null                          | True                          |
+   | Flats nowhere near an anchor     | block of flats    | null                          | False                         |
 
    The boolean flag is kept unchanged precisely so the frontend can give the middle row a weaker cue (for example a dotted outline) without a backend change, if the product view wants proximity shown.
 
-2. **Contract: enrich the existing single geojson.** Anchor-load features gain an `anchor_id` property; anchor-origin cluster features gain an anchor-ID list. No new layer or file — matches the frontend's "an ID could work" suggestion and their hesitancy about juggling layers. _Rejected: a standalone anchors file (adds a fetch and a layer)._
+2. **Contract: enrich the existing single geojson.** Anchor-load features gain an `anchor_load_id` property; anchor-origin cluster features gain an anchor-ID list, `reassigning_anchor_load_ids`. The names were `anchor_id` and `anchor_ids` until review on PR #525: the two looked too alike, so the cluster-side name now says why the anchor loads are listed, and both names say "anchor load" to match the `anchor_loads` layer. No new layer or file — matches the frontend's "an ID could work" suggestion and their hesitancy about juggling layers. _Rejected: a standalone anchors file (adds a fetch and a layer)._
 3. **Single source of anchor IDs: the cluster stage saves an anchors dataset** (id + geometry: all anchors in the LA, plus any just outside it that a cluster references) to the dated release directory; the contextual-features stage loads it for the `anchor_loads` layer instead of re-deriving anchors. The drawn polygons and the cluster links cannot disagree. _Rejected: deriving IDs independently in both stages (silent divergence if inputs differ)._
 4. **ID format: geometry-hash** — a short hex digest of the normalised footprint WKB. Stable across runs, releases and LAs while the footprint is unchanged. _Rejected: sequential per run (shuffles whenever the list changes); OS building IDs (mixed provenance across the two anchor sources; can change between OS releases)._
-5. **Layer content: all anchors ship, all with IDs.** The layer keeps its role as general context; clusters reference the subset that caused their buildings to be reassigned; the frontend filters by ID. Anchors just outside the local authority that a cluster references also ship (reassignment searches whole grid squares), so every ID in `anchor_ids` resolves; found in review. _Rejected: shipping only linked anchors (changes the layer's meaning silently)._
+5. **Layer content: all anchors ship, all with IDs.** The layer keeps its role as general context; clusters reference the subset that caused their buildings to be reassigned; the frontend filters by ID. Anchors just outside the local authority that a cluster references also ship (reassignment searches whole grid squares), so every ID in `reassigning_anchor_load_ids` resolves; found in review. _Rejected: shipping only linked anchors (changes the layer's meaning silently)._
 6. **Tests: fold in #392.** The reassignment function is rewritten to keep anchor identity, so it gets the tests #392 asked for, including the equidistant-anchor case. The rewrite also removes the latent duplication (`sjoin_nearest` returned one row per tied anchor and the pipeline never deduplicated): anchors are now collected into one list per building, so there is no tie to break.
 7. **Branch: stacked on `485_splitCommunalClustersByOrigin`.** Links are defined via `communal_origin`, which only exists post-split. Merges after #485.
 8. **Issue: re-scope #457** rather than open a new one, so the exploration and the sprint-review decision stay on one thread; #453 was closed by PR #462, which added the geometry-only `anchor_loads` layer; this work adds the IDs to it.
 
 Implementation sketch (pipeline only):
 
-- `load_transform_anchor_property_gdfs` assigns `anchor_id` after its normalise/dedupe step.
+- `load_transform_anchor_property_gdfs` assigns `anchor_load_id` after its normalise/dedupe step.
 - Cluster stage saves the anchors dataset (new `output.dataset` entry in `config/base.yaml`, saved via `save_utils`, manifest recorded) alongside `tech_clusters`.
-- `reassign_gdf_near_anchor_properties` finds every anchor within the radius of each building (a `dwithin` spatial join) and returns their sorted IDs as an `anchor_ids` list for reassigned buildings, one row per building.
+- `reassign_gdf_near_anchor_properties` finds every anchor within the radius of each building (a `dwithin` spatial join) and returns their sorted IDs as a `reassigning_anchor_load_ids` list for reassigned buildings, one row per building.
 - `generate_gdf_clusters` aggregates per cluster the sorted unique anchor IDs of its reassigned buildings; `tech_clusters` gains the list column (null for non-anchor-origin clusters).
-- `compute_contextual_features` loads the anchors dataset for the `anchor_loads` layer (now carrying `anchor_id`) and passes the cluster list column through; metadata descriptions cover both new properties. Existing properties, including `within_50m_from_anchor_load`, are unchanged.
+- `compute_contextual_features` loads the anchors dataset for the `anchor_loads` layer (now carrying `anchor_load_id`) and passes the cluster list column through; metadata descriptions cover both new properties. Existing properties, including `within_50m_from_anchor_load`, are unchanged.
 
 ## Alternatives considered
 
@@ -62,13 +62,12 @@ Implementation sketch (pipeline only):
 - Frontend implementation of the outline-on-select behaviour.
 - Any change to cluster geometry, block-of-flats clusters, or the anchor category list.
 - Retiring `within_50m_from_anchor_load` (it becomes derivable from the ID list, but removing it would break the current frontend contract).
-- Making the building-to-cluster join robust to floating-point rounding at cluster edges. A building fractionally outside its cluster's outline is not attached, so it is missing from the cluster's flag and `anchor_ids` (seen on Plymouth as `COM_99_plymouth`). This predates #457 and is tracked in [#524](https://github.com/nestauk/asf_heat_pump_suitability/issues/524).
+- Making the building-to-cluster join robust to floating-point rounding at cluster edges. A building fractionally outside its cluster's outline is not attached, so it is missing from the cluster's flag and `reassigning_anchor_load_ids` (seen on Plymouth as `COM_99_plymouth`). This predates #457 and is tracked in [#524](https://github.com/nestauk/asf_heat_pump_suitability/issues/524).
 
 ## Open questions
 
-- Should the UI give a weaker visual cue to communal clusters that are near an anchor without being caused by one (`within_50m_from_anchor_load` true, `anchor_ids` null)? The data supports it; the product call is the frontend's.
+- Should the UI give a weaker visual cue to communal clusters that are near an anchor without being caused by one (`within_50m_from_anchor_load` true, `reassigning_anchor_load_ids` null)? The data supports it; the product call is the frontend's.
 
-- Property name for the cluster-side list (proposed `anchor_ids`) — confirm with the frontend before the PR opens.
 - Serialisation of the list column: native list type in parquet and a JSON array in the geojson, versus a delimited string — decide at implementation with the frontend's parsing preference.
 - Whether the anchors dataset should carry a category/type column (school, hospital, …) for future UI labelling; the anchor sources expose it unevenly.
 - Asana task for this re-scoped work (frontmatter `asana: TBD`).
