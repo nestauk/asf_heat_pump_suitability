@@ -489,10 +489,11 @@ class TestGenerateGdfClusters:
         ), "non-communal clusters must have a null communal origin"
 
     @pytest.fixture(scope="class")
-    def gdf_two_anchors(self):
+    def gdf_two_anchor_loads(self):
         """
-        Two anchors: A9 west of B03 (10m from B03, 20m from B02, 25m from B04) and A1 east
-        of B04 (5m from B04, 20m from B03), so A9 causes B02 and B03 to be reassigned and A1 causes B04 to be.
+        Two anchor loads: A9 west of B03 (10m from B03, 20m from B02, 25m from B04) and A1 east
+        of B04 (5m from B04, 20m from B03). With a 30m radius, only A9 is in range of B02, and both
+        anchor loads are in range of B03 and B04.
         """
         west = Polygon(
             [(400040, 400000), (400050, 400000), (400050, 400010), (400040, 400010)]
@@ -510,16 +511,16 @@ class TestGenerateGdfClusters:
         gdf_enclosing_boundary,
         tech_gdf,
         empty_gdf,
-        gdf_two_anchors,
+        gdf_two_anchor_loads,
     ):
-        """Test anchor-origin clusters list the sorted unique IDs of the anchors that caused
+        """Test anchor-load origin clusters list the sorted unique IDs of the anchor loads that caused
         their buildings to be reassigned, and every other cluster carries no list."""
         results = generate_gdf_clusters(
             buildings_gdf=gdf_mixed_buildings,
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=tech_gdf,
             polygon_overlay_gdf=empty_gdf,
-            combined_anchor_gdf=gdf_two_anchors,
+            combined_anchor_gdf=gdf_two_anchor_loads,
             radius=30,
             id_col="building_id",
             local_authorities_slug="TEST",
@@ -537,7 +538,7 @@ class TestGenerateGdfClusters:
         assert anchor_ids[cluster_of["B04"]] == [
             "A1",
             "A9",
-        ], "a cluster whose buildings were reassigned by two anchors must list both, sorted"
+        ], "a cluster whose buildings were reassigned by two anchor loads must list both, sorted"
 
         anchor_origin = results["communal_origin"] == "anchor proximity"
         assert (
