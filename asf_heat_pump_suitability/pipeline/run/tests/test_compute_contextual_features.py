@@ -155,7 +155,7 @@ class TestCreateJsonContextualFeaturesMetadata:
         return grouped
 
     def test_cluster_features_carry_anchor_id_list(self, geojson, features_by_layer):
-        """Anchor-origin clusters carry a JSON array of anchor IDs; other clusters carry null; the metadata describes it."""
+        """Anchor-load origin clusters carry a JSON array of anchor IDs; other clusters carry null; the metadata describes it."""
         clusters = {
             props["cluster_id"]: props
             for props in features_by_layer["clusters_with_contextual_features"]
@@ -163,10 +163,10 @@ class TestCreateJsonContextualFeaturesMetadata:
         assert clusters["C01"]["anchor_ids"] == [
             "A1",
             "A2",
-        ], "an anchor-origin cluster must serialise its anchor IDs as a JSON array"
+        ], "an anchor-load origin cluster must serialise its anchor IDs as a JSON array"
         assert (
             clusters["C02"]["anchor_ids"] is None
-        ), "a cluster with no linked anchors must serialise a null anchor_ids"
+        ), "a cluster with no linked anchor loads must serialise a null anchor_ids"
         assert set(clusters["C01"]) == {
             "cluster_id",
             "assigned_tech",
