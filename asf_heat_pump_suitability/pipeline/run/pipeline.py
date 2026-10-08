@@ -158,13 +158,15 @@ if __name__ == "__main__":
         "local authorities."
     )
     if len(failed) > 0:
+        failure_fpath = config["output"]["log"]["pipeline_failure"].format(
+            release_date=release_date, local_authorities=args.local_authorities
+        )
         print(
-            f"Pipeline failed for the following Local Authorities at the specified stages:\n{failed}"
+            f"Pipeline failed for the following Local Authorities at the specified stages:\n{failed}."
+            f"\nSee which stage each failure occurred in: {failure_fpath}"
         )
         failed.to_csv(
-            config["output"]["log"]["pipeline_failure"].format(
-                release_date=release_date
-            ),
+            failure_fpath,
             mode="a",
             index=False,
             header=False,
