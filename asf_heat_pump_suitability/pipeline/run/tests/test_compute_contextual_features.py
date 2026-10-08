@@ -183,6 +183,14 @@ class TestCreateJsonContextualFeaturesMetadata:
         assert features_by_layer["anchor_loads"] == [
             {"anchor_id": "A1", "layer": "anchor_loads"}
         ], "each anchor-load feature must carry its anchor_id and layer tag"
+        anchor_geometries = [
+            feature["geometry"]
+            for feature in geojson["features"]
+            if feature["properties"]["layer"] == "anchor_loads"
+        ]
+        assert anchor_geometries == [
+            {"type": "Point", "coordinates": [-4.15, 50.37]}
+        ], "each anchor-load feature must carry its geometry"
         assert (
             "anchor_id" in geojson["metadata"]["Variable names and descriptions"]
         ), "the geojson metadata must describe the new `anchor_id` property"
