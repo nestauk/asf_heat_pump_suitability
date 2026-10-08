@@ -1352,9 +1352,10 @@ def _generate_str_uprns_missing_clusters_section(
     lines.extend(
         [
             "",
-            "UPRNs in: distinct UPRNs in the add_features output of the same "
-            f"release. UPRNs in clusters: sum of `{N_UPRNS_COL}` over the "
-            f"`{CLUSTER_LAYER}` layer. This count does not fail the run.",
+            '"UPRNs in" is the number of distinct UPRNs in the add_features '
+            'output of the same release. "UPRNs in clusters" is the sum of '
+            f"`{N_UPRNS_COL}` over the `{CLUSTER_LAYER}` layer. This count "
+            "does not fail the run.",
         ]
     )
     for label, counts in (("old", counts_old), ("new", counts_new)):
