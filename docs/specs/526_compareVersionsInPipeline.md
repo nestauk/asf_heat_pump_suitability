@@ -71,10 +71,14 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
 6. **The trigger is an optional pass-through.** `pipeline.py` and
    `orbit_pipeline.py` accept `--trigger` (`methodology_change` or
    `input_release`) and pass it to every comparison. Without it the reports
-   show the numbers with no tolerance warnings, as now.
+   show the numbers with no tolerance warnings, as now. `--trigger`
+   without `--compare` is an argument error in both launchers (review item
+   S4, 2026-10-08).
    _Rationale:_ the trigger is a fact only the person who starts the run
    knows, which is why the run manifest does not store it, and a test run
-   with `--compare` should not need to invent one.
+   with `--compare` should not need to invent one. Only the comparisons use
+   the trigger, so `--trigger` alone would give a run with no tolerance
+   checks and no message.
 
 7. **Results go to S3 in the new release's folder:**
    `outputs/data/{la}/{release_date}/comparisons/`. For each stage this holds
@@ -127,6 +131,15 @@ which adds `pipeline.py` and `orbit_pipeline.py`. It has
 `519_countUprnsMissingClusters` (#520) merged in, because this work edits
 `compare_versions.py` too. The PR is stacked on #521; retarget it to `dev`
 when #521 merges.
+
+### Change outside the main scope
+
+The branch also corrects the `make_str_slug` docstring in
+`pipeline/transform/local_authority.py`. The docstring said the function
+uses hyphens, but it uses underscores within a name and joins a list of
+names with hyphens. The fix is here because decision 10 makes
+`compare_versions` depend on this helper to find each LA's outputs, so a
+wrong description of it now affects this feature.
 
 ## Alternatives considered
 
