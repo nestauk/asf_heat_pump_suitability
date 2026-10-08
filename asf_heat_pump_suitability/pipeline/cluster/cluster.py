@@ -792,10 +792,10 @@ def filter_gdf_anchors_to_save(
     clusters_gdf: pd.DataFrame,
 ) -> gpd.GeoDataFrame:
     """
-    Select the anchors to save: every anchor in the local authority, plus any anchor outside it
+    Select the anchor loads to save: every anchor load in the local authority, plus any anchor load outside it
     that a cluster references.
 
-    Reassignment uses anchors from whole grid squares, so a building inside the local authority
+    Reassignment uses anchor loads from whole grid squares, so a building inside the local authority
     can be reassigned by an anchor just over the boundary; keeping those means every ID in
     `anchor_ids` resolves to a saved anchor.
 
