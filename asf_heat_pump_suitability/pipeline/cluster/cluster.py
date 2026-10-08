@@ -96,8 +96,9 @@ def generate_gdf_clusters(
 
     # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
     for boundary in boundary_gdf["geometry"].unique():
-        # This will retain buildings which straddle an LA boundary - i.e. they could appear in multiple different clusters
-        # across LAs
+        # This will retain buildings which straddle an LA boundary.
+        # The result is that these buildings can appear in one cluster in one LA, and a different cluster in a
+        # neighbouring LA, as clustering occurs at LA-level.
         bounded_tech_gdf = tech_gdf[tech_gdf.intersects(boundary)]
         voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
 
