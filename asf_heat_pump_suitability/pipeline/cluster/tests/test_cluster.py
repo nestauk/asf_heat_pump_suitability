@@ -1093,7 +1093,7 @@ class TestFilterGdfAnchorsToSave:
     """Tests for `filter_gdf_anchors_to_save`."""
 
     def test_keeps_la_anchors_and_referenced_outside_anchors(self):
-        """Anchors in the LA are kept whether linked or not; anchors outside it only if a cluster references them."""
+        """Anchor loads in the LA are kept whether linked or not; anchor loads outside it only if a cluster references them."""
 
         def square(x):
             return Polygon([(x, 0), (x + 10, 0), (x + 10, 10), (x, 10)])
@@ -1118,8 +1118,8 @@ class TestFilterGdfAnchorsToSave:
         assert set(kept["anchor_id"]) == {
             "INSIDE",
             "OUTSIDE_LINKED",
-        }, "every ID a cluster references must ship, and unlinked anchors outside the LA must not"
+        }, "every anchor load ID a cluster references must be saved, and unlinked anchor load IDs outside the LA must not"
         assert list(kept.columns) == [
             "anchor_id",
             "geometry",
-        ], "the saved anchors must carry only the ID and the footprint"
+        ], "the saved anchor loads dataframe must include only the `anchor_id` and the `geometry`"
