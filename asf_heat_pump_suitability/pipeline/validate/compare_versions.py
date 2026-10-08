@@ -193,7 +193,7 @@ def generate_dict_uprns_missing_clusters(
     df_uprns: pl.DataFrame, df_clusters: pl.DataFrame
 ) -> dict:
     """
-    Count the domestic UPRNs that are in no cluster, for one release.
+    Count the domestic UPRNs without an assigned cluster, for one release.
 
     Args:
         df_uprns (pl.DataFrame): the add_features output of the release, with
