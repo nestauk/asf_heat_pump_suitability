@@ -1716,7 +1716,7 @@ class TestGenerateDictUprnsMissingClusters:
             "uprns_in_clusters": 3,
             "uprns_missing": 2,
             "missing_share": 0.4,
-        }, "missing must be distinct UPRNs in minus the clusters layer's n_UPRNs sum"
+        }, "number of missing UPRN must be equivalent to distinct UPRNs in minus the clusters layer's n_UPRNs sum"
 
     def test_float_n_uprns_gives_whole_counts(self):
         """The real geojson loads n_UPRNs as a float with nulls; the counts
