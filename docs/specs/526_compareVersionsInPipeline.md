@@ -154,15 +154,15 @@ when #521 merges.
   nothing, and it stops exploratory hand runs from writing reports into a
   release folder next to the official ones.
 - **The full GB summary table in this PR.** One PR delivers the whole loop,
-  but it overlaps #488 and roughly doubles the PR. Deferred to a follow-up.
+  but it overlaps #488 and roughly doubles the PR. Deferred to #531.
 - **Run comparisons in CI on pull requests.** A PR produces no outputs on
   S3, and running the pipeline in CI needs AWS access from GitHub Actions
   and minutes of runtime. Out of scope.
 
 ## Out of scope
 
-- The GB-wide summary table built from the per-LA JSONs (follow-up issue,
-  alongside #488).
+- The GB-wide summary table built from the per-LA JSONs (#531, alongside
+  #488).
 - Running comparisons in CI or on pull requests.
 - Tier 1 pandera gates for stages 2 to 5.
 - Reading each S3 object once and separating checks from rendering (#488),
