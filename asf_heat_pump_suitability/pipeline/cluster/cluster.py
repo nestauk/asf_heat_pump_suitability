@@ -90,7 +90,7 @@ def generate_gdf_clusters(
         boundary_gdf (gpd.GeoDataFrame): boundaries of Local Authorities to generate clusters for.
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
-        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_id`
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_load_id`
         radius (float): radius in metres around anchor property within which communal solutions should be assigned
         local_authorities_slug (str): slug of local authority to generate clusters for. Used to create unique cluster IDs.
         id_col (str): building ID column. Default "ID".
@@ -98,7 +98,7 @@ def generate_gdf_clusters(
     Returns:
         gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster, and additional info including:
              -`f"within_{radius}m_from_anchor_load"` flag flagging whether the cluster is within a certain radius from an anchor load
-             -`anchor_ids` listing the anchors that caused buildings in the cluster to be reassigned 'communal', where it applies; null for clusters with none.
+             -`reassigning_anchor_load_ids` listing the anchors that caused buildings in the cluster to be reassigned 'communal', where it applies; null for clusters with none.
     """
     gdfs = []
 
@@ -173,17 +173,21 @@ def generate_gdf_clusters(
     # Join boolean flag and reassigning anchor IDs for each building contained in the cluster back to the cluster to aggregate
     clusters_gdf = clusters_gdf.sjoin(
         reassigned_gdf[
-            [f"within_{radius}m_from_anchor_load", "anchor_ids", "geometry"]
+            [
+                f"within_{radius}m_from_anchor_load",
+                "reassigning_anchor_load_ids",
+                "geometry",
+            ]
         ],
         how="left",
         predicate="contains",
     ).drop(columns="index_right")
 
     # Sorted unique IDs of the anchors that caused a building in the cluster to be reassigned; null when none did
-    anchor_ids = (
-        clusters_gdf.dropna(subset="anchor_ids")
-        .explode("anchor_ids")
-        .groupby("cluster_id")["anchor_ids"]
+    reassigning_anchor_load_ids = (
+        clusters_gdf.dropna(subset="reassigning_anchor_load_ids")
+        .explode("reassigning_anchor_load_ids")
+        .groupby("cluster_id")["reassigning_anchor_load_ids"]
         .agg(lambda ids: sorted(set(ids)))
     )
 
@@ -201,7 +205,7 @@ def generate_gdf_clusters(
                 f"within_{radius}m_from_anchor_load": "max",
             }
         )
-        .join(anchor_ids)
+        .join(reassigning_anchor_load_ids)
         .reset_index()
         .set_geometry(col="geometry", crs=clusters_gdf.crs)
     )
@@ -729,7 +733,7 @@ def load_transform_anchor_property_gdfs(
         anchor_categories (Optional[List[str]]): list of anchor properties to filter important buildings list by. Defaults to ANCHOR_CATEGORIES
 
     Returns:
-        gpd.GeoDataFrame: deduplicated anchor footprints with a geometry-derived `anchor_id` column.
+        gpd.GeoDataFrame: deduplicated anchor footprints with a geometry-derived `anchor_load_id` column.
     """
     # select anchors out of important building gdf using anchor_categories list
     # anchor categories list is defined at start of script
@@ -757,7 +761,7 @@ def load_transform_anchor_property_gdfs(
     )
     combined_anchor_gdf["geometry"] = combined_anchor_gdf.geometry.normalize()
     combined_anchor_gdf = combined_anchor_gdf.drop_duplicates(["geometry"])
-    combined_anchor_gdf["anchor_id"] = generate_series_anchor_ids(
+    combined_anchor_gdf["anchor_load_id"] = generate_series_anchor_ids(
         combined_anchor_gdf["geometry"]
     )
     return combined_anchor_gdf
@@ -799,20 +803,20 @@ def filter_gdf_anchors_to_save(
 
     Reassignment uses anchor loads from whole grid squares, so a building inside the local authority
     can be reassigned by an anchor just over the boundary; keeping those means every ID in
-    `anchor_ids` resolves to a saved anchor.
+    `reassigning_anchor_load_ids` resolves to a saved anchor.
 
     Args:
-        anchor_gdf (gpd.GeoDataFrame): anchor footprints with `anchor_id`.
+        anchor_gdf (gpd.GeoDataFrame): anchor footprints with `anchor_load_id`.
         boundary_gdf (gpd.GeoDataFrame): local authority boundaries.
-        clusters_gdf (pd.DataFrame): clusters with an `anchor_ids` list column.
+        clusters_gdf (pd.DataFrame): clusters with an `reassigning_anchor_load_ids` list column.
 
     Returns:
-        gpd.GeoDataFrame: `anchor_id` and `geometry` of the anchors to save.
+        gpd.GeoDataFrame: `anchor_load_id` and `geometry` of the anchors to save.
     """
-    referenced_ids = set(clusters_gdf["anchor_ids"].dropna().explode())
+    referenced_ids = set(clusters_gdf["reassigning_anchor_load_ids"].dropna().explode())
     in_la = anchor_gdf.intersects(boundary_gdf.union_all())
-    return anchor_gdf[in_la | anchor_gdf["anchor_id"].isin(referenced_ids)][
-        ["anchor_id", "geometry"]
+    return anchor_gdf[in_la | anchor_gdf["anchor_load_id"].isin(referenced_ids)][
+        ["anchor_load_id", "geometry"]
     ]
 
 
@@ -824,16 +828,16 @@ def reassign_gdf_near_anchor_properties(
     """
     Reassign building tech type to communal if within a given radius of an anchor load property, if assigned N-GSHP by the decision tree.
     Buildings getting their technology reassigned due to anchor-proximity get `communal_origin` updated to reflect that,
-    and `anchor_ids`: the sorted IDs of every anchor load within the radius, since each one alone would cause the
+    and `reassigning_anchor_load_ids`: the sorted IDs of every anchor load within the radius, since each one alone would cause the
     reassignment. Buildings already communal keep their original value of `communal_origin`.
 
     Args:
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types and `communal_origin`.
-        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_id`
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_load_id`
         radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' if they were assigned N-GSHP by the decision tree.
     Returns:
         gpd.GeoDataFrame: one row per building, with `assigned_tech` now reading communal if the building is in
-        radius of an anchor property and was assigned N-GSHP by the decision tree, and `anchor_ids` (null unless reassigned).
+        radius of an anchor property and was assigned N-GSHP by the decision tree, and `reassigning_anchor_load_ids` (null unless reassigned).
     """
     # Unique index, so the anchors found for each building map back to exactly one row
     tech_gdf = tech_gdf.reset_index(drop=True)
@@ -843,11 +847,11 @@ def reassign_gdf_near_anchor_properties(
     anchor_ids_within_radius = (
         tech_gdf[["geometry"]]
         .sjoin(
-            combined_anchor_gdf[["anchor_id", "geometry"]],
+            combined_anchor_gdf[["anchor_load_id", "geometry"]],
             predicate="dwithin",
             distance=radius,
         )
-        .groupby(level=0)["anchor_id"]
+        .groupby(level=0)["anchor_load_id"]
         .agg(lambda ids: sorted(set(ids)))
     )
     near_anchor = tech_gdf.index.isin(anchor_ids_within_radius.index)
@@ -866,9 +870,9 @@ def reassign_gdf_near_anchor_properties(
         tech_gdf["communal_origin"],
     )
     # Only reassigned buildings keep the anchors' identity
-    tech_gdf["anchor_ids"] = anchor_ids_within_radius.reindex(tech_gdf.index).where(
-        newly_communal
-    )
+    tech_gdf["reassigning_anchor_load_ids"] = anchor_ids_within_radius.reindex(
+        tech_gdf.index
+    ).where(newly_communal)
     # add column with True if near anchor, False if not
     tech_gdf[f"within_{radius}m_from_anchor_load"] = near_anchor
     return tech_gdf

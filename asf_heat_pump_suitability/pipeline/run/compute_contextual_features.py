@@ -463,11 +463,13 @@ def create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf, target_crs=target_crs
     )
     print("Adding metadata and converting to geojson format...")
-    # parquet and the polars round trip return anchor_ids cells as numpy arrays, which json
+    # parquet and the polars round trip return reassigning_anchor_load_ids cells as numpy arrays, which json
     # cannot serialise; convert them to lists so the geojson carries a JSON array
     clusters_with_contextual_features_gdf = (
         clusters_with_contextual_features_gdf.assign(
-            anchor_ids=clusters_with_contextual_features_gdf["anchor_ids"].map(
+            reassigning_anchor_load_ids=clusters_with_contextual_features_gdf[
+                "reassigning_anchor_load_ids"
+            ].map(
                 lambda ids: list(ids) if isinstance(ids, (list, np.ndarray)) else None
             )
         )
@@ -660,7 +662,7 @@ if __name__ == "__main__":
             check_exists=True,
             local_authorities=local_authority_dict["url_slug"],
         )
-    )[["anchor_id", "geometry"]].to_crs(epsg=4326)
+    )[["anchor_load_id", "geometry"]].to_crs(epsg=4326)
 
     print("Loading ward boundaries and transforming to EPSG:4326...")
     ward_boundaries_gdf = load_boundaries.load_gdf_ward_boundaries(

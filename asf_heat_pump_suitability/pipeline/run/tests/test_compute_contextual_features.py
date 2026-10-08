@@ -123,19 +123,23 @@ class TestCreateJsonContextualFeaturesMetadata:
     def geojson(self):
         """Run the function once on two clusters and one anchor load, in EPSG:4326.
 
-        `anchor_ids` cells are numpy arrays, as geoparquet returns list columns."""
+        `reassigning_anchor_load_ids` cells are numpy arrays, as geoparquet returns list columns.
+        """
         clusters_gdf = gpd.GeoDataFrame(
             {
                 "cluster_id": ["C01", "C02"],
                 "assigned_tech": [TECH_TYPES["communal"], TECH_TYPES["individual"]],
                 "communal_origin": [COMMUNAL_ORIGIN["anchor_proximity"], None],
-                "anchor_ids": [np.array(["A1", "A2"], dtype=object), None],
+                "reassigning_anchor_load_ids": [
+                    np.array(["A1", "A2"], dtype=object),
+                    None,
+                ],
             },
             geometry=[Point(-4.14, 50.37), Point(-4.13, 50.37)],
             crs="EPSG:4326",
         )
         anchors_gdf = gpd.GeoDataFrame(
-            {"anchor_id": ["A1"]}, geometry=[Point(-4.15, 50.37)], crs="EPSG:4326"
+            {"anchor_load_id": ["A1"]}, geometry=[Point(-4.15, 50.37)], crs="EPSG:4326"
         )
         return create_json_contextual_features_metadata(
             clusters_with_contextual_features_gdf=clusters_gdf,
@@ -160,29 +164,30 @@ class TestCreateJsonContextualFeaturesMetadata:
             props["cluster_id"]: props
             for props in features_by_layer["clusters_with_contextual_features"]
         }
-        assert clusters["C01"]["anchor_ids"] == [
+        assert clusters["C01"]["reassigning_anchor_load_ids"] == [
             "A1",
             "A2",
         ], "an anchor-load origin cluster must serialise its anchor IDs as a JSON array"
         assert (
-            clusters["C02"]["anchor_ids"] is None
-        ), "a cluster with no linked anchor loads must serialise a null anchor_ids"
+            clusters["C02"]["reassigning_anchor_load_ids"] is None
+        ), "a cluster with no linked anchor loads must serialise a null reassigning_anchor_load_ids"
         assert set(clusters["C01"]) == {
             "cluster_id",
             "assigned_tech",
             "communal_origin",
-            "anchor_ids",
+            "reassigning_anchor_load_ids",
             "layer",
         }, "existing cluster properties must pass through unchanged"
         assert (
-            "anchor_ids" in geojson["metadata"]["Variable names and descriptions"]
-        ), "the geojson metadata must describe the new `anchor_ids` property"
+            "reassigning_anchor_load_ids"
+            in geojson["metadata"]["Variable names and descriptions"]
+        ), "the geojson metadata must describe the new `reassigning_anchor_load_ids` property"
 
     def test_anchor_features_carry_anchor_id(self, geojson, features_by_layer):
-        """Anchor-load features keep their anchor_id and are tagged with the layer name."""
+        """Anchor-load features keep their anchor_load_id and are tagged with the layer name."""
         assert features_by_layer["anchor_loads"] == [
-            {"anchor_id": "A1", "layer": "anchor_loads"}
-        ], "each anchor-load feature must carry its anchor_id and layer tag"
+            {"anchor_load_id": "A1", "layer": "anchor_loads"}
+        ], "each anchor-load feature must carry its anchor_load_id and layer tag"
         anchor_geometries = [
             feature["geometry"]
             for feature in geojson["features"]
@@ -192,5 +197,5 @@ class TestCreateJsonContextualFeaturesMetadata:
             {"type": "Point", "coordinates": [-4.15, 50.37]}
         ], "each anchor-load feature must carry its geometry"
         assert (
-            "anchor_id" in geojson["metadata"]["Variable names and descriptions"]
-        ), "the geojson metadata must describe the new `anchor_id` property"
+            "anchor_load_id" in geojson["metadata"]["Variable names and descriptions"]
+        ), "the geojson metadata must describe the new `anchor_load_id` property"
