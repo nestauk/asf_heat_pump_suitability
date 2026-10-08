@@ -86,7 +86,10 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.trigger is not None and not args.compare:
+        parser.error("--trigger is used only by the comparisons; add --compare.")
+    return args
 
 
 def run_script(
