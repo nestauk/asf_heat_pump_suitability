@@ -765,8 +765,9 @@ def generate_series_anchor_ids(geometry: gpd.GeoSeries) -> pd.Series:
     """
     Generate a short hex ID for each anchor footprint from its normalised WKB.
 
-    Geometries are normalised here, so callers need not. The ID is stable across runs,
-    releases and local authorities for as long as the footprint geometry is unchanged.
+    This function normalises the geometries itself, so the input geometries do not need to be
+    normalised first. The ID is stable across runs, releases and local authorities for as long
+    as the footprint geometry is unchanged.
 
     Args:
         geometry (gpd.GeoSeries): anchor footprint geometries.
