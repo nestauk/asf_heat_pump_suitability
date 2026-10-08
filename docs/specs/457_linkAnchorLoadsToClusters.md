@@ -24,6 +24,8 @@ Thread anchor identity from the anchor list to the geojson, exposing both ends o
 
 1. **Link rule: a cluster references every anchor that flipped at least one of its buildings.** Causal and consistent with the logic trace; many-to-many is harmless now that nothing merges geometry. Only anchor-origin communal clusters carry links. _Rejected: all anchors within 50 m (overstates the anchor's role for clusters that were communal anyway — the PR #466 objection); nearest anchor only (hides real multi-anchor cases: 18 contested clusters in Plymouth)._
 
+   **Per building: every anchor within the radius (amended in review on PR #525).** A building is reassigned if it is within 50 m of _any_ anchor, so each anchor within 50 m is a cause on its own. A reassigned building therefore lists every anchor within the radius, not only the nearest. On Plymouth, 84 of 228 reassigned buildings (37%) are within 50 m of two or more anchors; the nearest-only version hid at least one cause for each of them. This is different from the rejected "all anchors within 50 m" above: only _reassigned_ buildings carry IDs, so a block-of-flats cluster near a school still has no link. In dense centres a cluster can list many anchors (one Plymouth building is within 50 m of 15).
+
    **Tension to keep visible — proximity is not causation.** A block of flats within 50 m of a school is communal because it is a block of flats, so it carries `communal_origin = "block of flats"`, `anchor_ids = null` and is _not_ highlighted when selected — even though `within_50m_from_anchor_load` is `True` for it. The link means "this anchor is why the cluster is communal", not "an anchor is nearby". The three states a communal cluster can be in:
 
    | Cluster                          | `communal_origin` | `anchor_ids` | `within_50m_from_anchor_load` |
@@ -38,7 +40,7 @@ Thread anchor identity from the anchor list to the geojson, exposing both ends o
 3. **Single source of anchor IDs: the cluster stage saves an anchors dataset** (id + geometry: all anchors in the LA, plus any just outside it that a cluster references) to the dated release directory; the contextual-features stage loads it for the `anchor_loads` layer instead of re-deriving anchors. The drawn polygons and the cluster links cannot disagree. _Rejected: deriving IDs independently in both stages (silent divergence if inputs differ)._
 4. **ID format: geometry-hash** — a short hex digest of the normalised footprint WKB. Stable across runs, releases and LAs while the footprint is unchanged. _Rejected: sequential per run (shuffles whenever the list changes); OS building IDs (mixed provenance across the two anchor sources; can change between OS releases)._
 5. **Layer content: all anchors ship, all with IDs.** The layer keeps its role as general context; clusters reference the subset that caused their buildings to be reassigned; the frontend filters by ID. Anchors just outside the local authority that a cluster references also ship (reassignment searches whole grid squares), so every ID in `anchor_ids` resolves; found in review. _Rejected: shipping only linked anchors (changes the layer's meaning silently)._
-6. **Tests: fold in #392.** The reassignment function is rewritten to keep anchor identity, so it gets the tests #392 asked for, including the equidistant-anchor case — which also fixes the latent duplication (`sjoin_nearest` returns one row per tied anchor and the pipeline never deduplicated).
+6. **Tests: fold in #392.** The reassignment function is rewritten to keep anchor identity, so it gets the tests #392 asked for, including the equidistant-anchor case. The rewrite also removes the latent duplication (`sjoin_nearest` returned one row per tied anchor and the pipeline never deduplicated): anchors are now collected into one list per building, so there is no tie to break.
 7. **Branch: stacked on `485_splitCommunalClustersByOrigin`.** Links are defined via `communal_origin`, which only exists post-split. Merges after #485.
 8. **Issue: re-scope #457** rather than open a new one, so the exploration and the sprint-review decision stay on one thread; #453 was closed by PR #462, which added the geometry-only `anchor_loads` layer; this work adds the IDs to it.
 
@@ -46,8 +48,8 @@ Implementation sketch (pipeline only):
 
 - `load_transform_anchor_property_gdfs` assigns `anchor_id` after its normalise/dedupe step.
 - Cluster stage saves the anchors dataset (new `output.dataset` entry in `config/base.yaml`, saved via `save_utils`, manifest recorded) alongside `tech_clusters`.
-- `reassign_gdf_near_anchor_properties` keeps the nearest anchor's ID for flipped buildings (deterministic tie-break, one row per building) and returns it as a column.
-- `generate_gdf_clusters` aggregates per cluster the sorted unique anchor IDs of its flipped buildings; `tech_clusters` gains the list column (null for non-anchor-origin clusters).
+- `reassign_gdf_near_anchor_properties` finds every anchor within the radius of each building (a `dwithin` spatial join) and returns their sorted IDs as an `anchor_ids` list for reassigned buildings, one row per building.
+- `generate_gdf_clusters` aggregates per cluster the sorted unique anchor IDs of its reassigned buildings; `tech_clusters` gains the list column (null for non-anchor-origin clusters).
 - `compute_contextual_features` loads the anchors dataset for the `anchor_loads` layer (now carrying `anchor_id`) and passes the cluster list column through; metadata descriptions cover both new properties. Existing properties, including `within_50m_from_anchor_load`, are unchanged.
 
 ## Alternatives considered
@@ -74,8 +76,8 @@ Implementation sketch (pipeline only):
 ## Verification
 
 - [ ] A per-LA anchors dataset with stable geometry-derived IDs is saved to the dated release directory and consumed by both the cluster and contextual-features stages
-- [ ] Reassignment records the reassigning anchor's ID for each reassigned building, with equidistant ties handled deterministically and no duplicated buildings
-- [ ] Each anchor-origin communal cluster lists the anchor IDs that flipped at least one of its buildings; non-anchor-origin clusters carry no list
+- [ ] Reassignment records the IDs of every anchor within the radius for each reassigned building, with no duplicated buildings
+- [ ] Each anchor-origin communal cluster lists the anchor IDs that caused at least one of its buildings to be reassigned; non-anchor-origin clusters carry no list
 - [ ] In the tool geojson, anchor-load features carry the anchor ID and anchor-origin cluster features carry the ID list; all existing properties and layers are unchanged
 - [ ] All anchors in the local authority ship in the anchor layer, not only linked ones
 - [ ] Tests cover the reassignment function, including the equidistant-anchor case (#392)
