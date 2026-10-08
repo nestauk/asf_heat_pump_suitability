@@ -1070,7 +1070,9 @@ class TestGenerateSeriesAnchorIds:
         )
 
     def test_id_identifies_the_footprint(self, square):
-        """The same footprint gets one ID however its ring is written; a different footprint gets another."""
+        """The anchor load ID depends only on the footprint shape: the same shape gives the same ID
+        whatever the order of the points in its polygon, and a different shape gives a different ID.
+        """
         rotated_start = Polygon(
             [(400010, 400010), (400000, 400010), (400000, 400000), (400010, 400000)]
         )
