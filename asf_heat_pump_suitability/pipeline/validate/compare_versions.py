@@ -203,7 +203,7 @@ def generate_dict_uprns_missing_clusters(
 
     Returns:
         dict: four keys:
-            - uprns_in (int): distinct UPRNs in `df_uprns`
+            - uprns_in (int): distinct number of UPRNs in `df_uprns`
             - uprns_in_clusters (int): sum of n_UPRNs over the clusters layer
             - uprns_missing (int): uprns_in minus uprns_in_clusters
             - missing_share (float): uprns_missing as a fraction of uprns_in
