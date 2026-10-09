@@ -2,9 +2,33 @@
 This file contains utility functions for interacting with Amazon S3.
 """
 
+import s3fs
 import boto3
 from typing import List
 from urllib.parse import urlparse
+
+
+def list_files_s3_path(dir_uri: str, file_type: str | List[str] = None) -> List[str]:
+    """
+    List all file paths found in an S3 directory.
+
+    Args:
+        dir_uri (str): S3 URI to directory.
+        file_type (str | List[str]): file type extension(s) to return. E.g. ".parquet", ".kml", ".geojson". Optional. Default `None` returns all files in directory.
+
+    Returns:
+        List[str]: list of all file paths found.
+    """
+    fs = s3fs.S3FileSystem()
+    if file_type is None:
+        return fs.glob(f"{dir_uri}*")
+    if isinstance(file_type, str):
+        file_type = [file_type]
+    paths = []
+    for ext in file_type:
+        ext = ext.lstrip(".")
+        paths.extend([f for f in fs.glob(f"{dir_uri}*.{ext}")])
+    return paths
 
 
 def fetch_list_file_paths_from_s3_folder(
