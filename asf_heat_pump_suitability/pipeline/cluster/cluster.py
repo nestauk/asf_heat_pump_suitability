@@ -170,7 +170,9 @@ def generate_gdf_clusters(
         + local_authorities_slug
     )
 
-    # Join boolean flag and reassigning anchor IDs for each building contained in the cluster back to the cluster to aggregate
+    # Join boolean flag and reassigning anchor IDs for each building contained in the cluster back to the cluster to aggregate.
+    # After this join, clusters_gdf has one row per building, not per cluster: each cluster's row repeats once for every
+    # building it contains. The groupby below collapses it back to one row per cluster.
     clusters_gdf = clusters_gdf.sjoin(
         reassigned_gdf[
             [
