@@ -36,6 +36,13 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--model_release",
+        help="Date of model training in YYYYMMDD format.",
+        type=int,
+        required=True,
+    )
+
+    parser.add_argument(
         "--save",
         help="If --save is set, it saves outputs to S3.",
         required=False,
@@ -45,6 +52,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--release_date",
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
+        required=False,
     )
 
     return parser.parse_args()
@@ -150,7 +158,9 @@ if __name__ == "__main__":
         config["data"]["processed"]["manually_labelled_block_of_flats"]
     )
     # Load trained block of flats classifier model
-    clf = base_getters.load_pickle(config["output"]["model"]["block_of_flats_model"])
+    clf = base_getters.load_pickle(
+        config["output"]["model"]["block_of_flats_model"]
+    ).format(release_date=args.model_release)
     features_df = train_model.extend_df_in_block_of_flats_label(
         uprns_df=features_df,
         mapping=uprn_building_id_dict,
