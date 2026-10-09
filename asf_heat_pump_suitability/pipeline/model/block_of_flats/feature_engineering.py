@@ -86,6 +86,32 @@ def _generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.Dat
     return agg_building_df
 
 
+def generate_df_nearest_neighbour_features(
+    gdf: gpd.GeoDataFrame, id_col: str
+) -> pl.DataFrame:
+    nearest_cols = [id_col, "n_flats", "geometry"]
+    nearest_neighbours = (
+        gdf[nearest_cols]
+        .sjoin_nearest(
+            gdf[nearest_cols],
+            how="left",
+            max_distance=30,
+            rsuffix="nearest",
+            distance_col="nn_distance_m",
+            exclusive=True,
+        )
+        .drop(columns="geometry")
+    )
+    fill_na_cols = ["n_flats_nearest", "nn_distance_m"]
+    nearest_neighbours[fill_na_cols] = nearest_neighbours[fill_na_cols].fillna(-100)
+
+    return (
+        pl.from_pandas(nearest_neighbours)
+        .rename({f"{id_col}_left": id_col})
+        .select([id_col, "n_flats_nearest", "nn_distance_m"])
+    )
+
+
 def _generate_df_stacked_uprn_features(
     gdf: gpd.GeoDataFrame, id_col: str
 ) -> pl.DataFrame:
@@ -114,6 +140,7 @@ def _generate_df_stacked_uprn_features(
     df = df.group_by(id_col).agg(
         pl.col("n_stacked_uprns").mean().alias("avg_n_stacked_uprns"),
         pl.col("n_stacked_uprns").std().alias("std_n_stacked_uprns"),
+        pl.col("n_stacked_uprns").max().alias("max_n_stacked_uprns"),
     )
 
     return df
