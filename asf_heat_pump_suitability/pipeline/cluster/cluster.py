@@ -871,12 +871,14 @@ def reassign_gdf_near_anchor_properties(
     # IDs of every anchor load within the radius of each building, nearest first (ties in ID
     # order), with their distances; buildings with none are absent
     anchors_within_radius = (
-        pairs_gdf.rename_axis("building")
-        .reset_index()
-        .sort_values(["building", "distance", "anchor_load_id"])
+        pairs_gdf.reset_index(names="building")
+        .sort_values(["distance", "anchor_load_id"])
         .drop_duplicates(["building", "anchor_load_id"])
-        .groupby("building")[["anchor_load_id", "distance"]]
-        .agg(list)
+        .groupby("building")
+        .agg(
+            reassigning_anchor_load_ids=("anchor_load_id", list),
+            reassigning_anchor_load_distances=("distance", list),
+        )
     )
     near_anchor = tech_gdf.index.isin(anchors_within_radius.index)
 
@@ -895,13 +897,8 @@ def reassign_gdf_near_anchor_properties(
     )
     # Only reassigned buildings keep the anchors' identity. The distances are only used to
     # order each cluster's list, and are not saved.
-    tech_gdf["reassigning_anchor_load_ids"] = (
-        anchors_within_radius["anchor_load_id"]
-        .reindex(tech_gdf.index)
-        .where(newly_communal)
-    )
-    tech_gdf["reassigning_anchor_load_distances"] = (
-        anchors_within_radius["distance"].reindex(tech_gdf.index).where(newly_communal)
+    tech_gdf = tech_gdf.join(
+        anchors_within_radius.reindex(tech_gdf.index[newly_communal])
     )
     # add column with True if near anchor, False if not
     tech_gdf[f"within_{radius}m_from_anchor_load"] = near_anchor
