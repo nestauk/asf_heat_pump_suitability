@@ -19,11 +19,10 @@ Pass the optional `save` parameter if saving to S3 is desired.
 
 import numpy as np
 import polars as pl
-from typing import Iterable, Type, List
+from typing import Type, List
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.experimental import enable_halving_search_cv  # noqa
 from sklearn.model_selection import (
-    train_test_split,
     HalvingRandomSearchCV,
     StratifiedKFold,
 )
@@ -107,14 +106,14 @@ def train_eval_rfc_block_of_flats_classifier(
     """
     # Sort model dataframe so that results are replicable
     pd_df = df.to_pandas().set_index(id_col).sort_values(id_col)
-    X = pd_df[features + ["split"]]
-    y = pd_df[[target, "split"]]
+    X = pd_df[features]
+    y = pd_df[target]
 
     # Keep a final hold out test set aside
-    X_train = X[X["split"] == "train"].drop(columns="split")
-    y_train = y[y["split"] == "train"][target]
-    X_test = X[X["split"] == "test"].drop(columns="split")
-    y_test = y[y["split"] == "test"][target]
+    is_train = pd_df["split"] == "train"
+    is_test = pd_df["split"] == "test"
+    X_train, y_train = X[is_train], y[is_train]
+    X_test, y_test = X[is_test], y[is_test]
 
     # Create cross-validation splitter and classifier
     cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
