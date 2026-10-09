@@ -24,7 +24,9 @@ Thread anchor identity from the anchor list to the geojson, exposing both ends o
 
 1. **Link rule: a cluster references every anchor that flipped at least one of its buildings.** Causal and consistent with the logic trace; many-to-many is harmless now that nothing merges geometry. Only anchor-origin communal clusters carry links. _Rejected: all anchors within 50 m (overstates the anchor's role for clusters that were communal anyway — the PR #466 objection); nearest anchor only (hides real multi-anchor cases: 18 contested clusters in Plymouth)._
 
-   **Per building: every anchor within the radius (amended in review on PR #525).** A building is reassigned if it is within 50 m of _any_ anchor, so each anchor within 50 m is a cause on its own. A reassigned building therefore lists every anchor within the radius, not only the nearest. On Plymouth, 84 of 228 reassigned buildings (37%) are within 50 m of two or more anchors; the nearest-only version hid at least one cause for each of them. This is different from the rejected "all anchors within 50 m" above: only _reassigned_ buildings carry IDs, so a block-of-flats cluster near a school still has no link. In dense centres a cluster can list many anchors (one Plymouth building is within 50 m of 15).
+   **Per building: every anchor within the radius (amended in review on PR #525).** A building is reassigned if it is within 50 m of _any_ anchor, so each anchor within 50 m is a cause on its own. A reassigned building therefore lists every anchor within the radius, not only the nearest. On Plymouth, 84 of 228 reassigned buildings (37%) are within 50 m of two or more anchors; the nearest-only version hid at least one cause for each of them. This is different from the rejected "all anchors within 50 m" above: only _reassigned_ buildings carry IDs, so a block-of-flats cluster near a school still has no link. In dense centres a cluster can list many anchors (one Plymouth building is within 50 m of 15). The team confirmed this on Slack (2026-10-09): all anchors within 50 m, not the closest only and not a fixed cap.
+
+   **List order: nearest first (added in review on PR #525).** Each list is ordered by distance, so the frontend can show only the first few if a dense area looks too busy, without a pipeline change. Per building, the order is the distance from the building to each anchor. Per cluster, each anchor is placed by its distance to the nearest building it reassigned in that cluster, not to the cluster outline: Voronoi cells often touch the anchor's own cell, so outline distances would mostly be 0. Ties go in ID order. The distances are not saved.
 
    **Tension to keep visible — proximity is not causation.** A block of flats within 50 m of a school is communal because it is a block of flats, so it carries `communal_origin = "block of flats"`, `reassigning_anchor_load_ids = null` and is _not_ highlighted when selected — even though `within_50m_from_anchor_load` is `True` for it. The link means "this anchor is why the cluster is communal", not "an anchor is nearby". The three states a communal cluster can be in:
 
@@ -48,8 +50,8 @@ Implementation sketch (pipeline only):
 
 - `load_transform_anchor_property_gdfs` assigns `anchor_load_id` after its normalise/dedupe step.
 - Cluster stage saves the anchors dataset (new `output.dataset` entry in `config/base.yaml`, saved via `save_utils`, manifest recorded) alongside `tech_clusters`.
-- `reassign_gdf_near_anchor_properties` finds every anchor within the radius of each building (a `dwithin` spatial join) and returns their sorted IDs as a `reassigning_anchor_load_ids` list for reassigned buildings, one row per building.
-- `generate_gdf_clusters` aggregates per cluster the sorted unique anchor IDs of its reassigned buildings; `tech_clusters` gains the list column (null for non-anchor-origin clusters).
+- `reassign_gdf_near_anchor_properties` finds every anchor within the radius of each building (a `dwithin` spatial join) and returns their IDs, nearest first, as a `reassigning_anchor_load_ids` list for reassigned buildings, one row per building. A matching `reassigning_anchor_load_distances` list is used only to order the cluster lists.
+- `generate_gdf_clusters` aggregates per cluster the unique anchor IDs of its reassigned buildings, nearest first; `tech_clusters` gains the list column (null for non-anchor-origin clusters).
 - `compute_contextual_features` loads the anchors dataset for the `anchor_loads` layer (now carrying `anchor_load_id`) and passes the cluster list column through; metadata descriptions cover both new properties. Existing properties, including `within_50m_from_anchor_load`, are unchanged.
 
 ## Alternatives considered
@@ -76,6 +78,7 @@ Implementation sketch (pipeline only):
 
 - [ ] A per-LA anchors dataset with stable geometry-derived IDs is saved to the dated release directory and consumed by both the cluster and contextual-features stages
 - [ ] Reassignment records the IDs of every anchor within the radius for each reassigned building, with no duplicated buildings
+- [ ] Building and cluster lists are ordered nearest first, ties in ID order
 - [ ] Each anchor-origin communal cluster lists the anchor IDs that caused at least one of its buildings to be reassigned; non-anchor-origin clusters carry no list
 - [ ] In the tool geojson, anchor-load features carry the anchor ID and anchor-origin cluster features carry the ID list; all existing properties and layers are unchanged
 - [ ] All anchors in the local authority ship in the anchor layer, not only linked ones
