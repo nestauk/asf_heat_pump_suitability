@@ -235,7 +235,7 @@ def extend_edges_gdf(
     """
     Creates Voronoi polygons around a set of input polygons by interpolating additional points along polygon edges
     to extend Voronoi polygons from.
-    Rewritten base logic based on fieldmaps/edge-extender.
+    Rewritten from fieldmaps/edge-extender base logic.
 
     Args:
         gdf (gpd.GeoDataFrame): polygons to create Voronoi polygons around.
