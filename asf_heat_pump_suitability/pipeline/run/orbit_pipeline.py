@@ -21,6 +21,8 @@ Pass `--local_authorities GB` to run for every local authority in GB, otherwise 
 chunks if `--is_number_of_chunks` is also passed (the number of batches to run in parallel). If `--size` is
 omitted, all local authorities are run in a single chunk.
 
+Pass `--prod` to push changes to production (i.e. staging area). This should only be used when running from `dev`.
+
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
 """
@@ -185,3 +187,5 @@ if __name__ == "__main__":
         )
         failures.write_csv(save_as)
         print(f"Pipeline failed for some local authorities. See logs at {save_as}")
+    else:
+        print("Pipeline finished for all Local Authorities successfully!")
