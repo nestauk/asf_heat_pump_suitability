@@ -266,6 +266,10 @@ def transform_df_labelled_data(
         .join(unlabelled_df.select([id_str, "split"]), how="left", on=id_str)
     )
 
+    assert (
+        labelled_df["split"].is_not_null().all()
+    ), "Some labelled buildings are not assigned to the train or test set."
+
     print(
         f"Final labelled sample for model training and testing contains {len(labelled_df)} samples."
         f"\nSplit of classes:\n{labelled_df['block_of_flats'].value_counts(normalize=True)}"
