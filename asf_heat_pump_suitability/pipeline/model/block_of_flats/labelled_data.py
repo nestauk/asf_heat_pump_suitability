@@ -2,7 +2,6 @@
 Functions to load and process manually labelled data and prepare it for use in binary classification model training.
 """
 
-import pathlib
 import s3fs
 import numpy as np
 import pandas as pd
@@ -266,6 +265,7 @@ def transform_df_labelled_data(
         .filter(
             # Remove buildings which are excluded from training data
             ~pl.col("label").is_in(EXCLUDED_ARCHETYPES),
+            pl.col("confidence") == 1,
             # Add train / test split label
         )
         .join(unlabelled_df.select([id_str, "split"]), how="left", on=id_str)
