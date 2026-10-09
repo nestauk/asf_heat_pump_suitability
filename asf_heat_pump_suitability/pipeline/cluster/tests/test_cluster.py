@@ -491,9 +491,10 @@ class TestGenerateGdfClusters:
     @pytest.fixture(scope="class")
     def gdf_two_anchor_loads(self):
         """
-        Two anchor loads: A9 west of B03 (10m from B03, 20m from B02, 25m from B04) and A1 east
-        of B04 (5m from B04, 20m from B03). With a 30m radius, only A9 is in range of B02, and both
-        anchor loads are in range of B03 and B04.
+        Two anchor loads: A1 west of B03 (10m from B03, 20m from B02, 25m from B04) and A9 east
+        of B04 (5m from B04, 20m from B03). With a 30m radius, only A1 is in range of B02, and both
+        anchor loads are in range of B03 and B04. The IDs run against the distances, so ID order and
+        nearest-first order differ.
         """
         west = Polygon(
             [(400040, 400000), (400050, 400000), (400050, 400010), (400040, 400010)]
@@ -502,7 +503,7 @@ class TestGenerateGdfClusters:
             [(400090, 399995), (400100, 399995), (400100, 400005), (400090, 400005)]
         )
         return gpd.GeoDataFrame(
-            {"anchor_load_id": ["A9", "A1"], "geometry": [west, east]}, crs="EPSG:27700"
+            {"anchor_load_id": ["A1", "A9"], "geometry": [west, east]}, crs="EPSG:27700"
         )
 
     def test_anchor_origin_clusters_list_reassigning_anchor_ids(
@@ -513,8 +514,9 @@ class TestGenerateGdfClusters:
         empty_gdf,
         gdf_two_anchor_loads,
     ):
-        """Test anchor-load origin clusters list the sorted unique IDs of the anchor loads that caused
-        their buildings to be reassigned, and every other cluster carries no list."""
+        """Test anchor-load origin clusters list the unique IDs of the anchor loads that caused
+        their buildings to be reassigned, nearest first, and every other cluster carries no list.
+        """
         results = generate_gdf_clusters(
             buildings_gdf=gdf_mixed_buildings,
             boundary_gdf=gdf_enclosing_boundary,
@@ -535,12 +537,12 @@ class TestGenerateGdfClusters:
         ]
 
         assert reassigning_anchor_load_ids[cluster_of["B02"]] == [
-            "A9"
+            "A1"
         ], "a cluster reassigned by one anchor must list just that anchor"
         assert reassigning_anchor_load_ids[cluster_of["B04"]] == [
-            "A1",
             "A9",
-        ], "a cluster whose buildings were reassigned by two anchor loads must list both, sorted"
+            "A1",
+        ], "a cluster whose buildings were reassigned by two anchor loads must list both, nearest first (A9 is 5m from B04, A1 is 10m from B03)"
 
         anchor_origin = results["communal_origin"] == "anchor proximity"
         assert (
@@ -1037,7 +1039,7 @@ class TestReassignGdfAnchorProperties:
     def test_reassigned_building_lists_every_anchor_load_within_radius(
         self, gdf_mixed_buildings
     ):
-        """Test a building lists every anchor load within the radius, not only the nearest one."""
+        """Test a building lists every anchor load within the radius, not only the nearest one, nearest first."""
         near_west = Polygon(
             [(399980, 399995), (399990, 399995), (399990, 400005), (399980, 400005)]
         )
@@ -1057,9 +1059,9 @@ class TestReassignGdfAnchorProperties:
         )
 
         assert reassigned_gdf["reassigning_anchor_load_ids"].iloc[0] == [
-            "A1",
             "A2",
-        ], "a building 10m from one anchor load and 25m from another must list both, not only the nearest"
+            "A1",
+        ], "a building 10m from A2 and 25m from A1 must list both, nearest first"
 
     @pytest.fixture(scope="class")
     def gdf_equidistant_anchors(self):
@@ -1077,7 +1079,7 @@ class TestReassignGdfAnchorProperties:
     def test_equidistant_anchor_loads_give_one_row_per_building(
         self, gdf_mixed_buildings, gdf_equidistant_anchors
     ):
-        """Test a building equidistant from two anchor loads is kept once and linked to both, sorted."""
+        """Test a building equidistant from two anchor loads is kept once and linked to both, in ID order."""
         networked_gdf = gdf_mixed_buildings[
             gdf_mixed_buildings["building_id"] == "B01"
         ].assign(assigned_tech="Networked heat pump", communal_origin=None)
@@ -1094,7 +1096,7 @@ class TestReassignGdfAnchorProperties:
         assert reassigned_gdf["reassigning_anchor_load_ids"].iloc[0] == [
             "A1",
             "A2",
-        ], "a building within the radius of two anchor loads must list both, sorted, whatever the anchor loads' row order"
+        ], "a building equidistant from two anchor loads must list both in ID order, whatever the anchor loads' row order"
         assert (
             reassigned_gdf["assigned_tech"].iloc[0] == "Communal solution"
         ), "the building must still be reassigned to communal"
