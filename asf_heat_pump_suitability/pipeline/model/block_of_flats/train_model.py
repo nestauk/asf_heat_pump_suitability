@@ -34,7 +34,7 @@ import argparse
 # Set random state int and RandomState instance
 # See more on controlling randomness in sklearn docs: https://scikit-learn.org/stable/common_pitfalls.html#controlling-randomness
 RANDOM_STATE = (
-    8  # used in cross-validation for consistency of repeated calls to split dataset
+    3  # used in cross-validation for consistency of repeated calls to split dataset
 )
 RNG = np.random.RandomState(
     RANDOM_STATE
@@ -67,6 +67,9 @@ FEATURES = [
     "flats_per_hull_area_m2",
     "avg_n_stacked_uprns",
     "std_n_stacked_uprns",
+    "max_n_stacked_uprns",
+    "n_flats_nearest",
+    "nn_distance_m",
 ]
 
 
@@ -379,6 +382,11 @@ if __name__ == "__main__":
             release_date=release_date,
         )
     )
+
+    nn_features_df = feature_engineering.generate_df_nearest_neighbour_features(
+        gdf=building_footprints_gdf, id_col="ID"
+    )
+
     building_footprints_gdf = building_footprints_gdf[
         building_footprints_gdf["building_id"].isin(labelled_df["building_id"])
     ]
@@ -405,13 +413,19 @@ if __name__ == "__main__":
         buildings_gdf=building_footprints_gdf,
         uprns_gdf=uprns_gdf,
         id_col="ID",
-    )
+    ).join(nn_features_df, how="left", on="ID")
 
     # ------------------------ #
     # TRAIN MODEL
     model_df = labelled_df.join(
         building_features_df, how="left", left_on="building_id", right_on="ID"
     ).rename({"building_id": "ID"})
+
+    # TODO remove before merge
+    from asf_heat_pump_suitability import PROJECT_DIR
+    import os
+
+    model_df.write_csv(os.path.join(PROJECT_DIR, "outputs/data/model_data.csv"))
 
     model = train_eval_rfc_block_of_flats_classifier(
         df=model_df,
