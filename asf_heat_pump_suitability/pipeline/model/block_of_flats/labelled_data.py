@@ -86,7 +86,7 @@ def extract_df_labelled_data(
 
     assert df.null_count().sum_horizontal()[0] == 0, (
         "There are unexpected null values in the processed labelled sample. Please that every sample has been labelled.\n"
-        f"{print(df.null_count())}."
+        f"{df.null_count()}."
     )
 
     all_labels = BLOCK_OF_FLATS_ARCHETYPES + NOT_BLOCKS_ARCHETYPES + EXCLUDED_ARCHETYPES
