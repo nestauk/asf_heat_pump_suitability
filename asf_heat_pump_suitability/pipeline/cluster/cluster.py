@@ -8,7 +8,7 @@ python asf_heat_pump_suitability/pipeline/cluster/cluster.py
 
 Required args:
 --local_authorities to specify which local authority / authorities to run the script for
---save - Set to save output GeoDataFrame to S3.
+--save - Set to save the clusters and anchor loads GeoDataFrames to S3.
 
 Set --release_date to specify the YYYYMMDD dated release directory to read inputs from and
 save outputs to. Defaults to running the pipeline using today's date. Multi-day runs
@@ -17,6 +17,7 @@ should pass the same --release_date to every stage.
 
 from typing import Optional, List
 import argparse
+import hashlib
 import geopandas as gpd
 import pandas as pd
 import numpy as np
@@ -31,6 +32,9 @@ from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
 ANCHOR_RADIUS = config["constant"]["anchor_radius"]
+
+# 6 bytes = 12 hex characters: short enough for the geojson, far beyond GB anchor counts
+ANCHOR_ID_DIGEST_BYTES = 6
 
 ANCHOR_CATEGORIES = [
     "Primary Education",
@@ -86,13 +90,15 @@ def generate_gdf_clusters(
         boundary_gdf (gpd.GeoDataFrame): boundaries of Local Authorities to generate clusters for.
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
         polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
-        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_load_id`
         radius (float): radius in metres around anchor property within which communal solutions should be assigned
         local_authorities_slug (str): slug of local authority to generate clusters for. Used to create unique cluster IDs.
         id_col (str): building ID column. Default "ID".
 
     Returns:
-        gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster
+        gpd.GeoDataFrame: clusters of building footprints with the same assigned technology, one row per cluster, and additional info including:
+             -`f"within_{radius}m_from_anchor_load"` flag flagging whether the cluster is within a certain radius from an anchor load
+             -`reassigning_anchor_load_ids` listing the anchors that caused buildings in the cluster to be reassigned 'communal', nearest first, where it applies; null for clusters with none.
     """
     gdfs = []
 
@@ -167,12 +173,40 @@ def generate_gdf_clusters(
         + local_authorities_slug
     )
 
-    # Join boolean flag for each building contained in the cluster back to the cluster to aggregate
+    # Join boolean flag and reassigning anchor IDs for each building contained in the cluster back to the cluster to aggregate.
+    # After this join, clusters_gdf has one row per building, not per cluster: each cluster's row repeats once for every
+    # building it contains. The groupby below collapses it back to one row per cluster.
     clusters_gdf = clusters_gdf.sjoin(
-        reassigned_gdf[[f"within_{radius}m_from_anchor_load", "geometry"]],
+        reassigned_gdf[
+            [
+                f"within_{radius}m_from_anchor_load",
+                "reassigning_anchor_load_ids",
+                "reassigning_anchor_load_distances",
+                "geometry",
+            ]
+        ],
         how="left",
         predicate="contains",
     ).drop(columns="index_right")
+
+    # Unique IDs of the anchors that caused a building in the cluster to be reassigned, nearest first: each anchor is
+    # placed by its distance to the nearest building it reassigned in the cluster, ties in ID order. Null when none did.
+    reassigning_anchor_load_ids = (
+        clusters_gdf.dropna(subset="reassigning_anchor_load_ids")[
+            [
+                "cluster_id",
+                "reassigning_anchor_load_ids",
+                "reassigning_anchor_load_distances",
+            ]
+        ]
+        .explode(["reassigning_anchor_load_ids", "reassigning_anchor_load_distances"])
+        .sort_values(
+            ["reassigning_anchor_load_distances", "reassigning_anchor_load_ids"]
+        )
+        .drop_duplicates(["cluster_id", "reassigning_anchor_load_ids"])
+        .groupby("cluster_id")["reassigning_anchor_load_ids"]
+        .agg(list)
+    )
 
     # At this point we have multiple rows of each cluster geometry with one row for every building within the cluster.
     # We need to flatten the cluster geometries to one row per cluster, aggregating the within_anchor_radius boolean flag.
@@ -188,6 +222,7 @@ def generate_gdf_clusters(
                 f"within_{radius}m_from_anchor_load": "max",
             }
         )
+        .join(reassigning_anchor_load_ids)
         .reset_index()
         .set_geometry(col="geometry", crs=clusters_gdf.crs)
     )
@@ -712,6 +747,9 @@ def load_transform_anchor_property_gdfs(
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
         Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
         anchor_categories (Optional[List[str]]): list of anchor properties to filter important buildings list by. Defaults to ANCHOR_CATEGORIES
+
+    Returns:
+        gpd.GeoDataFrame: deduplicated anchor footprints with a geometry-derived `anchor_load_id` column.
     """
     # select anchors out of important building gdf using anchor_categories list
     # anchor categories list is defined at start of script
@@ -739,7 +777,63 @@ def load_transform_anchor_property_gdfs(
     )
     combined_anchor_gdf["geometry"] = combined_anchor_gdf.geometry.normalize()
     combined_anchor_gdf = combined_anchor_gdf.drop_duplicates(["geometry"])
+    combined_anchor_gdf["anchor_load_id"] = generate_series_anchor_ids(
+        combined_anchor_gdf["geometry"]
+    )
     return combined_anchor_gdf
+
+
+def generate_series_anchor_ids(geometry: gpd.GeoSeries) -> pd.Series:
+    """
+    Generate a short hex ID for each anchor footprint from its normalised WKB.
+
+    This function normalises the geometries itself, so the input geometries do not need to be
+    normalised first. The ID is stable across runs, releases and local authorities for as long
+    as the footprint geometry is unchanged.
+
+    Args:
+        geometry (gpd.GeoSeries): anchor footprint geometries.
+
+    Returns:
+        pd.Series: anchor IDs, aligned to `geometry`.
+    """
+    return (
+        geometry.normalize()
+        .to_wkb()
+        .map(
+            lambda wkb: hashlib.blake2b(
+                wkb, digest_size=ANCHOR_ID_DIGEST_BYTES
+            ).hexdigest()
+        )
+    )
+
+
+def filter_gdf_anchors_to_save(
+    anchor_gdf: gpd.GeoDataFrame,
+    boundary_gdf: gpd.GeoDataFrame,
+    clusters_gdf: pd.DataFrame,
+) -> gpd.GeoDataFrame:
+    """
+    Select the anchor loads to save: every anchor load in the local authority, plus any anchor load outside it
+    that a cluster references.
+
+    Reassignment uses anchor loads from whole grid squares, so a building inside the local authority
+    can be reassigned by an anchor just over the boundary; keeping those means every ID in
+    `reassigning_anchor_load_ids` resolves to a saved anchor.
+
+    Args:
+        anchor_gdf (gpd.GeoDataFrame): anchor footprints with `anchor_load_id`.
+        boundary_gdf (gpd.GeoDataFrame): local authority boundaries.
+        clusters_gdf (pd.DataFrame): clusters with an `reassigning_anchor_load_ids` list column.
+
+    Returns:
+        gpd.GeoDataFrame: `anchor_load_id` and `geometry` of the anchors to save.
+    """
+    referenced_ids = set(clusters_gdf["reassigning_anchor_load_ids"].dropna().explode())
+    in_la = anchor_gdf.intersects(boundary_gdf.union_all())
+    return anchor_gdf[in_la | anchor_gdf["anchor_load_id"].isin(referenced_ids)][
+        ["anchor_load_id", "geometry"]
+    ]
 
 
 def reassign_gdf_near_anchor_properties(
@@ -749,33 +843,52 @@ def reassign_gdf_near_anchor_properties(
 ) -> gpd.GeoDataFrame:
     """
     Reassign building tech type to communal if within a given radius of an anchor load property, if assigned N-GSHP by the decision tree.
-    Buildings getting their technology reassigned due to anchor-proximity get `communal_origin` updated to reflect that; buildings already communal keep their original value of `communal_origin`.
+    Buildings getting their technology reassigned due to anchor-proximity get `communal_origin` updated to reflect that,
+    and `reassigning_anchor_load_ids`: the IDs of every anchor load within the radius, nearest first, since each one alone would
+    cause the reassignment. Buildings already communal keep their original value of `communal_origin`.
 
     Args:
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types and `communal_origin`.
-        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_load_id`
         radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' if they were assigned N-GSHP by the decision tree.
     Returns:
-        gpd.GeoDataFrame: dataframe with `assigned_tech` column now reading communal if property is in radius of an anchor property, and was assigned N-GSHP by the decision tree.
+        gpd.GeoDataFrame: one row per building, with `assigned_tech` now reading communal if the building is in
+        radius of an anchor property and was assigned N-GSHP by the decision tree, and `reassigning_anchor_load_ids` with matching
+        `reassigning_anchor_load_distances` in metres (both null unless reassigned).
     """
-    # Spatial join to find nearest anchor for every building
+    # Unique indexes, so the anchors found for each building map back to exactly one row
+    tech_gdf = tech_gdf.reset_index(drop=True)
+    anchors_gdf = combined_anchor_gdf[["anchor_load_id", "geometry"]].reset_index(
+        drop=True
+    )
 
-    tech_gdf = tech_gdf.sjoin_nearest(
-        combined_anchor_gdf[["geometry"]],
-        how="left",
-        max_distance=radius,
-        distance_col="distance_m",
-    ).drop("index_right", axis=1)
+    # One row per (building, anchor load) pair within the radius, with their distance
+    pairs_gdf = tech_gdf[["geometry"]].sjoin(
+        anchors_gdf, predicate="dwithin", distance=radius
+    )
+    pairs_gdf["distance"] = pairs_gdf.distance(
+        anchors_gdf.geometry.iloc[pairs_gdf["index_right"]], align=False
+    )
 
-    # distance_m column now reads a number (distance from anchor) for all buildings within radius of anchor, and NaN for all outside of that radius
-    # if distance column is not NaN (i.e. building is within the radius of an anchor), reassign tech type according to the map
+    # IDs of every anchor load within the radius of each building, nearest first (ties in ID
+    # order), with their distances; buildings with none are absent
+    anchors_within_radius = (
+        pairs_gdf.reset_index(names="building")
+        .sort_values(["distance", "anchor_load_id"])
+        .drop_duplicates(["building", "anchor_load_id"])
+        .groupby("building")
+        .agg(
+            reassigning_anchor_load_ids=("anchor_load_id", list),
+            reassigning_anchor_load_distances=("distance", list),
+        )
+    )
+    near_anchor = tech_gdf.index.isin(anchors_within_radius.index)
+
     # Flag the buildings reassigned to communal, before reassigning them.
     # Buildings that were already communal keep their decision-tree origin.
-    newly_communal = tech_gdf["distance_m"].notna() & (
-        tech_gdf["assigned_tech"] == NETWORKED
-    )
+    newly_communal = near_anchor & (tech_gdf["assigned_tech"] == NETWORKED)
     tech_gdf["assigned_tech"] = np.where(
-        tech_gdf["distance_m"].notna(),
+        near_anchor,
         tech_gdf["assigned_tech"].replace(ANCHOR_REASSIGNMENT_MAPPING),
         tech_gdf["assigned_tech"],
     )
@@ -784,11 +897,13 @@ def reassign_gdf_near_anchor_properties(
         COMMUNAL_ORIGIN["anchor_proximity"],
         tech_gdf["communal_origin"],
     )
-    # add column with True if near anchor, False if not
-    tech_gdf[f"within_{radius}m_from_anchor_load"] = np.where(
-        (tech_gdf["distance_m"]).notna(), True, False
+    # Only reassigned buildings keep the anchors' identity. The distances are only used to
+    # order each cluster's list, and are not saved.
+    tech_gdf = tech_gdf.join(
+        anchors_within_radius.reindex(tech_gdf.index[newly_communal])
     )
-    tech_gdf = tech_gdf.drop("distance_m", axis=1)
+    # add column with True if near anchor, False if not
+    tech_gdf[f"within_{radius}m_from_anchor_load"] = near_anchor
     return tech_gdf
 
 
@@ -845,7 +960,9 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--save", help="Set to save output GeoDataFrame to S3.", action="store_true"
+        "--save",
+        help="Set to save the clusters and anchor loads GeoDataFrames to S3.",
+        action="store_true",
     )
 
     parser.add_argument(
@@ -906,20 +1023,33 @@ if __name__ == "__main__":
         local_authorities_slug=local_authority_dict["url_slug"],
     )
 
+    # Saved so the contextual-features stage draws the same footprints and IDs that the
+    # clusters reference
+    anchors_gdf = filter_gdf_anchors_to_save(
+        anchor_gdf=combined_anchor_gdf,
+        boundary_gdf=boundary_gdf,
+        clusters_gdf=clusters_gdf,
+    )
+
     if args.save:
-        output_path = save_utils.get_str_output_path(
-            "tech_clusters",
-            release_date=release_date,
-            local_authorities=local_authority_dict["url_slug"],
-        )
-        save_utils.save_to_s3(clusters_gdf, output_path)
-        manifest_utils.generate_and_save_run_manifest_to_s3(
-            output_path,
-            stage="cluster",
-            local_authority=local_authority_dict["url_slug"],
-            row_count=len(clusters_gdf),
-            params={
-                "local_authorities": args.local_authorities,
-                "release_date": release_date,
-            },
-        )
+        run_params = {
+            "local_authorities": args.local_authorities,
+            "release_date": release_date,
+        }
+        for dataset, output_gdf in [
+            ("tech_clusters", clusters_gdf),
+            ("anchor_loads", anchors_gdf),
+        ]:
+            output_path = save_utils.get_str_output_path(
+                dataset=dataset,
+                release_date=release_date,
+                local_authorities=local_authority_dict["url_slug"],
+            )
+            save_utils.save_to_s3(df=output_gdf, path=output_path)
+            manifest_utils.generate_and_save_run_manifest_to_s3(
+                output_path=output_path,
+                stage="cluster",
+                local_authority=local_authority_dict["url_slug"],
+                row_count=len(output_gdf),
+                params=run_params,
+            )
