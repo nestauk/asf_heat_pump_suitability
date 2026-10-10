@@ -121,7 +121,7 @@ class TestCreateJsonContextualFeaturesMetadata:
 
     @pytest.fixture(scope="class")
     def geojson(self):
-        """Run the function once on two clusters and one anchor load, in EPSG:4326.
+        """Run the function once on two clusters, one anchor load, one ward and one heat network area, in EPSG:4326.
 
         `reassigning_anchor_load_ids` cells are numpy arrays, as geoparquet returns list columns.
         """
@@ -141,11 +141,21 @@ class TestCreateJsonContextualFeaturesMetadata:
         anchors_gdf = gpd.GeoDataFrame(
             {"anchor_load_id": ["A1"]}, geometry=[Point(-4.15, 50.37)], crs="EPSG:4326"
         )
+        wards_gdf = gpd.GeoDataFrame(geometry=[Point(-4.16, 50.37)], crs="EPSG:4326")
+        hn_potential_gdf = gpd.GeoDataFrame(
+            {"source_annotation": ["City centre areas"]},
+            geometry=[Point(-4.17, 50.37)],
+            crs="EPSG:4326",
+        )
         return create_json_contextual_features_metadata(
             clusters_with_contextual_features_gdf=clusters_gdf,
             local_authorities="Plymouth",
             release_date="20260901",
-            optional_data_layers={"anchor_loads": anchors_gdf},
+            optional_data_layers={
+                "anchor_loads": anchors_gdf,
+                "ward_boundaries": wards_gdf,
+                "areas_of_district_heat_network_potential": hn_potential_gdf,
+            },
         )
 
     @pytest.fixture(scope="class")
@@ -180,8 +190,10 @@ class TestCreateJsonContextualFeaturesMetadata:
         }, "existing cluster properties must pass through unchanged"
         assert (
             "reassigning_anchor_load_ids"
-            in geojson["metadata"]["Variable names and descriptions"]
-        ), "the geojson metadata must describe the new `reassigning_anchor_load_ids` property"
+            in geojson["metadata"]["Variable names and descriptions"][
+                "clusters_with_contextual_features"
+            ]
+        ), "the geojson metadata must describe `reassigning_anchor_load_ids` under the cluster layer"
 
     def test_anchor_features_carry_anchor_id(self, geojson, features_by_layer):
         """Anchor-load features keep their anchor_load_id and are tagged with the layer name."""
@@ -197,5 +209,24 @@ class TestCreateJsonContextualFeaturesMetadata:
             {"type": "Point", "coordinates": [-4.15, 50.37]}
         ], "each anchor-load feature must carry its geometry"
         assert (
-            "anchor_load_id" in geojson["metadata"]["Variable names and descriptions"]
-        ), "the geojson metadata must describe the new `anchor_load_id` property"
+            "anchor_load_id"
+            in geojson["metadata"]["Variable names and descriptions"]["anchor_loads"]
+        ), "the geojson metadata must describe `anchor_load_id` under the anchor_loads layer"
+
+    def test_metadata_describes_each_layers_properties(
+        self, geojson, features_by_layer
+    ):
+        """Every feature property, and the geometry, is described under the feature's own layer."""
+        descriptions = geojson["metadata"]["Variable names and descriptions"]
+        assert set(descriptions) == set(
+            features_by_layer
+        ), "the metadata must have one group of descriptions for each layer in the geojson, and no other groups"
+        for layer, features in features_by_layer.items():
+            properties = {key for props in features for key in props} - {"layer"}
+            undescribed = properties - set(descriptions[layer])
+            assert (
+                not undescribed
+            ), f"properties {undescribed} on `{layer}` features must be described under the `{layer}` group"
+            assert (
+                "geometry" in descriptions[layer]
+            ), f"the `{layer}` group must describe its geometry"

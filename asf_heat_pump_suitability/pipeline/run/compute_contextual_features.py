@@ -22,6 +22,7 @@ should pass the same --release_date to every stage.
 """
 
 import argparse
+import copy
 import polars as pl
 import geopandas as gpd
 import numpy as np
@@ -454,7 +455,7 @@ def create_json_contextual_features_metadata(
         optional_data_layers (dict): dictionary of optional data layers with layer name as key and geodataframe as value
 
     Returns:
-       json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
+       json: geojson file with metadata in the `metadata` key (variable descriptions grouped by layer) and cluster level data in geojson format in the `features` key
 
     """
     target_crs = "EPSG:4326"
@@ -494,21 +495,21 @@ def create_json_contextual_features_metadata(
         "Local authority": local_authorities,
     }
 
-    # append metadata from config base.yaml
-    metadata.update(config["metadata"])
-    metadata["Variable names and descriptions"][
-        f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"
-    ] = (
-        metadata["Variable names and descriptions"]
+    # append metadata from config base.yaml; a deep copy, so the pops below leave the config intact
+    metadata.update(copy.deepcopy(config["metadata"]))
+    # Descriptions are grouped by layer; the thresholds are only in cluster variable names
+    cluster_descriptions = metadata["Variable names and descriptions"][
+        "clusters_with_contextual_features"
+    ]
+    cluster_descriptions[f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"] = (
+        cluster_descriptions
         # Pop deletes the original key and returns the value
         .pop("within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline").format(
             COASTLINE_DISTANCE_THRESHOLD_M=COASTLINE_DISTANCE_THRESHOLD_M
         )
     )
-    metadata["Variable names and descriptions"][
-        f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
-    ] = (
-        metadata["Variable names and descriptions"]
+    cluster_descriptions[f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"] = (
+        cluster_descriptions
         # Pop deletes the original key and returns the value
         .pop("within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load").format(
             ANCHOR_LOAD_RADIUS=ANCHOR_LOAD_RADIUS
