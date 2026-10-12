@@ -42,6 +42,12 @@ RNG = np.random.RandomState(
 # Number of splits for StratifiedKFold cross-val strategy in parameter search
 N_SPLITS = 5
 
+# Halving search settings. The first round fits every candidate on a random (unstratified) subsample of the training
+# set of this fraction, so it must be large enough to reliably contain both classes
+MIN_RESOURCES_FRACTION = 0.2
+# Number of candidates in the first round
+N_CANDIDATES = 50
+
 # Create param distributions for hyperparameter search
 PARAM_DISTRIBUTIONS = {
     "n_estimators": list(range(100, 1001, 10)),
@@ -131,6 +137,8 @@ def train_eval_rfc_block_of_flats_classifier(
             estimator=estimator,
             param_distributions=PARAM_DISTRIBUTIONS,
             factor=2,  # Reduce halving aggressiveness
+            min_resources=int(MIN_RESOURCES_FRACTION * len(X_train)),
+            n_candidates=N_CANDIDATES,
             random_state=RANDOM_STATE,
             cv=cv,  # Defaults to use StratifiedKFold splitter with 5 folds because model is binary classifier
             scoring=scoring,  # Use F1 scoring metric for optimisation
@@ -403,6 +411,7 @@ if __name__ == "__main__":
     building_features_df = feature_engineering.generate_df_features(
         buildings_gdf=building_footprints_gdf,
         uprns_gdf=uprns_gdf,
+        mapping_df=uprn_to_building_mapping.rename({"building_id": "ID"}).to_pandas(),
         id_col="ID",
     )
 
