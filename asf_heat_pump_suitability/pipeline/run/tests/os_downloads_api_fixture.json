@@ -1,0 +1,311 @@
+{
+  "OpenMapLocal": {
+    "product": {
+      "id": "OpenMapLocal",
+      "version": "2026-04",
+      "areas": [
+        "GB",
+        "HP",
+        "HT",
+        "HU",
+        "HW",
+        "HX",
+        "HY",
+        "HZ",
+        "NA",
+        "NB",
+        "NC",
+        "ND",
+        "NF",
+        "NG",
+        "NH",
+        "NJ",
+        "NK",
+        "NL",
+        "NM",
+        "NN",
+        "NO",
+        "NR",
+        "NS",
+        "NT",
+        "NU",
+        "NW",
+        "NX",
+        "NY",
+        "NZ",
+        "OV",
+        "SD",
+        "SE",
+        "SH",
+        "SJ",
+        "SK",
+        "SM",
+        "SN",
+        "SO",
+        "SP",
+        "SR",
+        "SS",
+        "ST",
+        "SU",
+        "SV",
+        "SW",
+        "SX",
+        "SY",
+        "SZ",
+        "TA",
+        "TF",
+        "TG",
+        "TL",
+        "TM",
+        "TQ",
+        "TR",
+        "TV"
+      ]
+    },
+    "downloads": [
+      {
+        "md5": "41be982438f32b4f213324ff6266c539",
+        "size": 110350,
+        "url": "https://api.os.uk/downloads/v1/products/OpenMapLocal/downloads?area=HT&format=ESRI%C2%AE+Shapefile&redirect",
+        "format": "ESRI\u00ae Shapefile",
+        "area": "HT",
+        "fileName": "opmplc_essh_ht.zip"
+      },
+      {
+        "md5": "f00a0ec646ed48da127beb73526569d7",
+        "size": 64587,
+        "url": "https://api.os.uk/downloads/v1/products/OpenMapLocal/downloads?area=HW&format=ESRI%C2%AE+Shapefile&redirect",
+        "format": "ESRI\u00ae Shapefile",
+        "area": "HW",
+        "fileName": "opmplc_essh_hw.zip"
+      },
+      {
+        "md5": "461b5652d8da4fac8211b0de8d9d473f",
+        "size": 94171,
+        "url": "https://api.os.uk/downloads/v1/products/OpenMapLocal/downloads?area=HT&format=GML&subformat=3&redirect",
+        "format": "GML",
+        "subformat": "3",
+        "area": "HT",
+        "fileName": "opmplc_gml3_ht.zip"
+      },
+      {
+        "md5": "3429592beb4f576c24a21203faaddbbe",
+        "size": 53974,
+        "url": "https://api.os.uk/downloads/v1/products/OpenMapLocal/downloads?area=HW&format=GML&subformat=3&redirect",
+        "format": "GML",
+        "subformat": "3",
+        "area": "HW",
+        "fileName": "opmplc_gml3_hw.zip"
+      },
+      {
+        "md5": "14627c2886146a6754c590b01275112c",
+        "size": 588501,
+        "url": "https://api.os.uk/downloads/v1/products/OpenMapLocal/downloads?area=HT&format=GeoTIFF&subformat=Full+Colour&redirect",
+        "format": "GeoTIFF",
+        "subformat": "Full Colour",
+        "area": "HT",
+        "fileName": "omlras_gtfc_ht.zip"
+      },
+      {
+        "md5": "b25b64b27f1a0f7b9161889f88ab1a71",
+        "size": 173433,
+        "url": "https://api.os.uk/downloads/v1/products/OpenMapLocal/downloads?area=HW&format=GeoTIFF&subformat=Full+Colour&redirect",
+        "format": "GeoTIFF",
+        "subformat": "Full Colour",
+        "area": "HW",
+        "fileName": "omlras_gtfc_hw.zip"
+      },
+      {
+        "md5": "d255239a55763ab13f99f31f5d64d495",
+        "size": 2455061187,
+        "url": "https://api.os.uk/downloads/v1/products/OpenMapLocal/downloads?area=GB&format=ESRI%C2%AE+Shapefile&redirect",
+        "format": "ESRI\u00ae Shapefile",
+        "area": "GB",
+        "fileName": "opmplc_essh_gb.zip"
+      },
+      {
+        "md5": "4c4bd1995ccd2d2aa2e91ab6b014c5b6",
+        "size": 2387077472,
+        "url": "https://api.os.uk/downloads/v1/products/OpenMapLocal/downloads?area=GB&format=GML&subformat=3&redirect",
+        "format": "GML",
+        "subformat": "3",
+        "area": "GB",
+        "fileName": "opmplc_gml3_gb.zip"
+      },
+      {
+        "md5": "be1253db44765069a4dd82e36bb39e95",
+        "size": 15417686725,
+        "url": "https://api.os.uk/downloads/v1/products/OpenMapLocal/downloads?area=GB&format=GeoTIFF&subformat=Full+Colour&redirect",
+        "format": "GeoTIFF",
+        "subformat": "Full Colour",
+        "area": "GB",
+        "fileName": "omlras_gtfc_gb.zip"
+      },
+      {
+        "md5": "e511aaef242640c5c3d8bb9f0aa06c29",
+        "size": 3517973251,
+        "url": "https://api.os.uk/downloads/v1/products/OpenMapLocal/downloads?area=GB&format=GeoPackage&redirect",
+        "format": "GeoPackage",
+        "area": "GB",
+        "fileName": "opmplc_gpkg_gb.zip"
+      }
+    ]
+  },
+  "OpenRoads": {
+    "product": {
+      "id": "OpenRoads",
+      "version": "2026-04",
+      "areas": ["GB"]
+    },
+    "downloads": [
+      {
+        "md5": "8c6e66a255f79e3e31845307cefee298",
+        "size": 606145264,
+        "url": "https://api.os.uk/downloads/v1/products/OpenRoads/downloads?area=GB&format=ESRI%C2%AE+Shapefile&redirect",
+        "format": "ESRI\u00ae Shapefile",
+        "area": "GB",
+        "fileName": "oproad_essh_gb.zip"
+      },
+      {
+        "md5": "673304090bd51f8e89abcc84b145ba73",
+        "size": 608511751,
+        "url": "https://api.os.uk/downloads/v1/products/OpenRoads/downloads?area=GB&format=GML&subformat=3&redirect",
+        "format": "GML",
+        "subformat": "3",
+        "area": "GB",
+        "fileName": "oproad_gml3_gb.zip"
+      },
+      {
+        "md5": "2ee5d30899c4a44df321e5e1a66989ac",
+        "size": 1016021285,
+        "url": "https://api.os.uk/downloads/v1/products/OpenRoads/downloads?area=GB&format=GeoPackage&redirect",
+        "format": "GeoPackage",
+        "area": "GB",
+        "fileName": "oproad_gpkg_gb.zip"
+      },
+      {
+        "md5": "1a648fb1c7b88560d286a5260687e1bc",
+        "size": 1346941248,
+        "url": "https://api.os.uk/downloads/v1/products/OpenRoads/downloads?area=GB&format=Vector+Tiles&subformat=%28MBTiles%29&redirect",
+        "format": "Vector Tiles",
+        "subformat": "(MBTiles)",
+        "area": "GB",
+        "fileName": "oproad_mbtiles_gb.zip"
+      }
+    ]
+  },
+  "OpenGreenspace": {
+    "product": {
+      "id": "OpenGreenspace",
+      "version": "2026-04",
+      "areas": [
+        "GB",
+        "HP",
+        "HT",
+        "HU",
+        "HY",
+        "HZ",
+        "NA",
+        "NB",
+        "NC",
+        "ND",
+        "NF",
+        "NG",
+        "NH",
+        "NJ",
+        "NK",
+        "NL",
+        "NM",
+        "NN",
+        "NO",
+        "NR",
+        "NS",
+        "NT",
+        "NU",
+        "NW",
+        "NX",
+        "NY",
+        "NZ",
+        "SD",
+        "SE",
+        "SH",
+        "SJ",
+        "SK",
+        "SM",
+        "SN",
+        "SO",
+        "SP",
+        "SR",
+        "SS",
+        "ST",
+        "SU",
+        "SV",
+        "SW",
+        "SX",
+        "SY",
+        "SZ",
+        "TA",
+        "TF",
+        "TG",
+        "TL",
+        "TM",
+        "TQ",
+        "TR",
+        "TV"
+      ]
+    },
+    "downloads": [
+      {
+        "md5": "41d02f594f91d41520386ea71567f619",
+        "size": 4102,
+        "url": "https://api.os.uk/downloads/v1/products/OpenGreenspace/downloads?area=HT&format=ESRI%C2%AE+Shapefile&redirect",
+        "format": "ESRI\u00ae Shapefile",
+        "area": "HT",
+        "fileName": "opgrsp_essh_ht.zip"
+      },
+      {
+        "md5": "c1763386b44bd3ae97bbfd1a88144d71",
+        "size": 2202,
+        "url": "https://api.os.uk/downloads/v1/products/OpenGreenspace/downloads?area=HT&format=GML&subformat=3&redirect",
+        "format": "GML",
+        "subformat": "3",
+        "area": "HT",
+        "fileName": "opgrsp_gml3_ht.zip"
+      },
+      {
+        "md5": "00dc5a7e6367acfe22df0546355f3ddc",
+        "size": 39508821,
+        "url": "https://api.os.uk/downloads/v1/products/OpenGreenspace/downloads?area=GB&format=ESRI%C2%AE+Shapefile&redirect",
+        "format": "ESRI\u00ae Shapefile",
+        "area": "GB",
+        "fileName": "opgrsp_essh_gb.zip"
+      },
+      {
+        "md5": "e8126b8771f2a61eac9263c793ed52b1",
+        "size": 39945639,
+        "url": "https://api.os.uk/downloads/v1/products/OpenGreenspace/downloads?area=GB&format=GML&subformat=3&redirect",
+        "format": "GML",
+        "subformat": "3",
+        "area": "GB",
+        "fileName": "opgrsp_gml3_gb.zip"
+      },
+      {
+        "md5": "3d57cf0afc70b0104fa6f657d0560fdf",
+        "size": 59489052,
+        "url": "https://api.os.uk/downloads/v1/products/OpenGreenspace/downloads?area=GB&format=GeoPackage&redirect",
+        "format": "GeoPackage",
+        "area": "GB",
+        "fileName": "opgrsp_gpkg_gb.zip"
+      },
+      {
+        "md5": "3bd1d6894031b8a4557de1005312c796",
+        "size": 86274986,
+        "url": "https://api.os.uk/downloads/v1/products/OpenGreenspace/downloads?area=GB&format=Vector+Tiles&subformat=%28MBTiles%29&redirect",
+        "format": "Vector Tiles",
+        "subformat": "(MBTiles)",
+        "area": "GB",
+        "fileName": "opgrsp_mbtiles_gb.zip"
+      }
+    ]
+  }
+}
