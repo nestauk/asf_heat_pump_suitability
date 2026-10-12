@@ -3,7 +3,6 @@ Functions to load and process manually labelled data and prepare it for use in b
 """
 
 import s3fs
-import numpy as np
 import pandas as pd
 import geopandas as gpd
 import polars as pl
