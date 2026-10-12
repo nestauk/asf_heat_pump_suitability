@@ -159,8 +159,10 @@ if __name__ == "__main__":
     )
     # Load trained block of flats classifier model
     clf = base_getters.load_pickle(
-        config["output"]["model"]["block_of_flats_model"]
-    ).format(release_date=args.model_release)
+        config["output"]["model"]["block_of_flats_model"].format(
+            release_date=args.model_release
+        )
+    )
     features_df = train_model.extend_df_in_block_of_flats_label(
         uprns_df=features_df,
         mapping=uprn_building_id_dict,
