@@ -103,7 +103,11 @@ def parse_arguments() -> argparse.Namespace:
             parser.error(
                 "--old_release_date is used only by the comparisons; add --compare."
             )
-        if args.old_release_date >= save_utils.get_str_release_date(args.release_date):
+        try:
+            release_date = save_utils.get_str_release_date(args.release_date)
+        except ValueError as error:
+            parser.error(str(error))
+        if args.old_release_date >= release_date:
             parser.error("--old_release_date must be earlier than the release date.")
     return args
 
