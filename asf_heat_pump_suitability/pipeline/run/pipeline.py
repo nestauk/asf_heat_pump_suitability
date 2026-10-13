@@ -3,15 +3,17 @@ Runs the entire pipeline for a list of local authorities. Executes each of the f
 authority, and checks for errors after each stage.
 
 Usage:
-    python asf_heat_pump_suitability/pipeline/run/pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--release_date YYYYMMDD] [--compare [--trigger TRIGGER]]
+    python asf_heat_pump_suitability/pipeline/run/pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--release_date YYYYMMDD] [--compare [--trigger TRIGGER] [--old_release_date YYYYMMDD]]
 
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
 
 With `--compare`, each local authority whose stages all succeed then gets a cross-version comparison of each stage's
 output against its latest earlier version, saved to S3 (see `pipeline/validate/compare_versions.py`). `--trigger`
-(`methodology_change` or `input_release`) is passed to every comparison. A failed comparison is listed at the end of
-the run but does not fail the local authority.
+(`methodology_change` or `input_release`) is passed to every comparison. `--old_release_date` makes every comparison
+use that release instead, for example the last production run when test runs were saved after it. A stage with no
+output at that date fails its comparison; there is no fallback to another date. A failed comparison is listed at the
+end of the run but does not fail the local authority.
 """
 
 import argparse
@@ -86,9 +88,23 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
     )
 
+    parser.add_argument(
+        "--old_release_date",
+        help="Compare every stage against this release, e.g. 20260901, instead of each stage's latest earlier one.",
+        type=save_utils.get_str_release_date,
+        default=None,
+    )
+
     args = parser.parse_args()
     if args.trigger is not None and not args.compare:
         parser.error("--trigger is used only by the comparisons; add --compare.")
+    if args.old_release_date is not None:
+        if not args.compare:
+            parser.error(
+                "--old_release_date is used only by the comparisons; add --compare."
+            )
+        if args.old_release_date >= save_utils.get_str_release_date(args.release_date):
+            parser.error("--old_release_date must be earlier than the release date.")
     return args
 
 
@@ -124,21 +140,27 @@ def run_script(
 
 
 def run_comparison(
-    stage: str, local_authority: str, release_date: str, trigger: str | None = None
+    stage: str,
+    local_authority: str,
+    release_date: str,
+    trigger: str | None = None,
+    old_release_date: str | None = None,
 ) -> int:
     """
-    Compare one stage's output for one local authority with its latest earlier version, and save the results to S3.
+    Compare one stage's output for one local authority with an earlier version, and save the results to S3.
 
     Args:
         stage (str): stage name as used by `compare_versions.py`, e.g. "decision_tree".
         local_authority (str): local authority name to compare outputs for.
         release_date (str): release date of the new outputs.
         trigger (str | None): why the run is made, passed on as `--trigger`. Default None for no tolerance checks.
+        old_release_date (str | None): release to compare against. Default None for the stage's latest earlier one.
 
     Returns:
         int: the comparison's process exit code (0 on success, including when there is no earlier version).
     """
     trigger_flags = ["--trigger", trigger] if trigger else []
+    old_flags = ["--old_release_date", old_release_date] if old_release_date else []
     result = subprocess.run(
         [
             sys.executable,
@@ -151,6 +173,7 @@ def run_comparison(
             release_date,
             "--save",
             *trigger_flags,
+            *old_flags,
         ]
     )
     return result.returncode
@@ -220,6 +243,7 @@ if __name__ == "__main__":
                     local_authority=la,
                     release_date=release_date,
                     trigger=args.trigger,
+                    old_release_date=args.old_release_date,
                 )
                 if returncode != 0:
                     print(

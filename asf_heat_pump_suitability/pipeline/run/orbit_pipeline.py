@@ -5,7 +5,7 @@ Splits the given local authorities into chunks and launches one `orbit` job per 
 remotely for that chunk's local authorities.
 
 Usage:
-    python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--size N [--is_number_of_chunks]] [--release_date YYYYMMDD] [--compare [--trigger TRIGGER]]
+    python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--size N [--is_number_of_chunks]] [--release_date YYYYMMDD] [--compare [--trigger TRIGGER] [--old_release_date YYYYMMDD]]
 
     e.g. to run for Great Britain in chunks of 20 local authorities each:
         python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities GB --size 20
@@ -26,8 +26,9 @@ Pass `--prod` to push changes to production (i.e. staging area). This should onl
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
 
-`--compare` and `--trigger` are passed to every chunk's `pipeline.py` run, which then compares each local authority's
-stage outputs with their latest earlier versions (see `pipeline.py`).
+`--compare`, `--trigger` and `--old_release_date` are passed to every chunk's `pipeline.py` run, which then compares
+each local authority's stage outputs with their latest earlier versions, or with `--old_release_date` when given (see
+`pipeline.py`).
 """
 
 import math
@@ -36,6 +37,7 @@ import argparse
 from typing import List
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.utils import save_utils
 
 
 def chunk_list_strings(arr: np.array, n: int, size: bool) -> List[List[str]]:
@@ -117,9 +119,23 @@ def parse_arguments() -> argparse.Namespace:
         default=None,
     )
 
+    parser.add_argument(
+        "--old_release_date",
+        help="Passed to every chunk: compare every stage against this release instead of each stage's latest earlier one.",
+        type=save_utils.get_str_release_date,
+        default=None,
+    )
+
     args = parser.parse_args()
     if args.trigger is not None and not args.compare:
         parser.error("--trigger is used only by the comparisons; add --compare.")
+    if args.old_release_date is not None:
+        if not args.compare:
+            parser.error(
+                "--old_release_date is used only by the comparisons; add --compare."
+            )
+        if args.old_release_date >= save_utils.get_str_release_date(args.release_date):
+            parser.error("--old_release_date must be earlier than the release date.")
     return args
 
 
@@ -128,7 +144,7 @@ if __name__ == "__main__":
     import polars as pl
     from tqdm import tqdm
     import subprocess
-    from asf_heat_pump_suitability.utils import save_utils, s3_utils
+    from asf_heat_pump_suitability.utils import s3_utils
 
     args = parse_arguments()
     local_authorities = args.local_authorities
@@ -147,6 +163,8 @@ if __name__ == "__main__":
     compare_flags = ["--compare"] if args.compare else []
     if args.trigger:
         compare_flags += ["--trigger", args.trigger]
+    if args.old_release_date:
+        compare_flags += ["--old_release_date", args.old_release_date]
 
     for chunk in tqdm(chunks):
         print(f"Running chunk: {chunk}")
