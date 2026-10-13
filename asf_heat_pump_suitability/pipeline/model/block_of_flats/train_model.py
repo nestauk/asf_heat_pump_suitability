@@ -19,16 +19,15 @@ Pass the optional `save` parameter if saving to S3 is desired.
 
 import numpy as np
 import polars as pl
-from typing import Iterable, Type
+from typing import Type, List
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.experimental import enable_halving_search_cv  # noqa
 from sklearn.model_selection import (
-    train_test_split,
     HalvingRandomSearchCV,
     StratifiedKFold,
 )
 from sklearn.model_selection._search import BaseSearchCV
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, classification_report, confusion_matrix
 import argparse
 
 # Set random state int and RandomState instance
@@ -43,8 +42,11 @@ RNG = np.random.RandomState(
 # Number of splits for StratifiedKFold cross-val strategy in parameter search
 N_SPLITS = 5
 
-# Size (proportion) of test set
-TEST_SIZE = 0.2
+# Halving search settings. The first round fits every candidate on a random (unstratified) subsample of the training
+# set of this fraction, so it must be large enough to reliably contain both classes
+MIN_RESOURCES_FRACTION = 0.2
+# Number of candidates in the first round
+N_CANDIDATES = 50
 
 # Create param distributions for hyperparameter search
 PARAM_DISTRIBUTIONS = {
@@ -54,15 +56,18 @@ PARAM_DISTRIBUTIONS = {
     "min_samples_leaf": list(range(1, 11, 1)),
     "max_features": ["sqrt", "log2"],
     "criterion": ["gini"],
+    "class_weight": [None, "balanced", "balanced_subsample"],
 }
 
 # Model features
 FEATURES = [
     "n_UPRNs",
     "n_flats",
+    "n_domestic_uprns",
     "building_area_m2",
     "building_perimeter_m",
     "proportion_flats",
+    "domestic_proportion_flats",
     "UPRNs_per_building_m2",
     "concave_hull_area_m2",
     "uprns_per_hull_area_m2",
@@ -75,29 +80,34 @@ FEATURES = [
 def train_eval_rfc_block_of_flats_classifier(
     df: pl.DataFrame,
     id_col: str,
-    features: Iterable[str],
+    features: List[str],
     target: str,
     param_search: Type[BaseSearchCV] = "default",
     scoring: str = "f1",
     **kwargs,
 ) -> RandomForestClassifier:
     """
-    Train and evaluate RandomForestClassifier in binary classification to predict whether a building is a block of flats or not. Uses a search cross-validator to identify best
-    hyperparameters and conduct cross validation. Model training and cross-validation is performed on 80% of the data in
-    `df` with stratification. A final round of training is performed on the full 80% of training data using the best
-    hyperparameters identified, and the model is tested on the 20% hold-out test set.
+    Train and evaluate RandomForestClassifier in binary classification to predict whether a building footprint is a block
+    of flats or not. Uses a search cross-validator to identify best hyperparameters (including `class_weight`, to
+    address class imbalance in `target`) and conduct cross validation. Model training and cross-validation is
+    performed on the data in `df` labelled `train`. The search's best estimator, already refit on the full set of
+    training data using the best hyperparameters identified, is tested on the remaining hold-out test set.
 
     Args:
-        df (pl.DataFrame): engineered features with labelled target variable
+        df (pl.DataFrame): engineered features with labelled target variable and `split` column containing `train` and
+        `test` labels for each sample.
         id_col (str): name of building ID column
-        features (Iterable[str]): features used to train the model
+        features (List[str]): features used to train the model
         target (str): name of target variable
-        param_search (Type[BaseSearchCV]): a class (not an instance) of `BaseSearchCV`, e.g. `HalvingRandomSearchCV` or `HalvingGridSearchCV` etc.
-        Defaults to using `HalvingRandomSearchCV` which will create an instance of this class with selected custom arguments for `param_distributions`, `factor`, `cv`,
-        and `n_jobs`, using F1 `scoring` metric. If using something other than the default option, kwargs for the selected `BaseSearchCV` class must be given, including param_distributions.
-        However, note that `estimator` and `random_state` args will always default to RandomForestClassifier and global RANDOM_STATE, respectively, for consistency.
+        param_search (Type[BaseSearchCV]): a class (not an instance) of `BaseSearchCV`, e.g. `HalvingRandomSearchCV` or
+        `HalvingGridSearchCV` etc. Defaults to using `HalvingRandomSearchCV` which will create an instance of this class
+        with selected custom arguments for `param_distributions`, `factor`, `cv`, and `n_jobs`, using F1 `scoring`
+        metric. If using something other than the default option, kwargs for the selected `BaseSearchCV` class must be
+        given, including param_distributions. However, note that `estimator` and `random_state` args will always default
+        to RandomForestClassifier and global RANDOM_STATE, respectively, for consistency.
         scoring (str): `param_search` scoring metric used to evaluate predictions on the test set. Default "f1".
-        **kwargs for selected `BaseSearchCV` if `param_search` not set to `default`. Note that any kwargs here will be ignored if `param_search` set to `default`.
+        **kwargs for selected `BaseSearchCV` if `param_search` not set to `default`. Note that any kwargs here will be
+        ignored if `param_search` set to `default`.
 
     Returns:
         RandomForestClassifier: trained binary classifier model
@@ -108,12 +118,15 @@ def train_eval_rfc_block_of_flats_classifier(
     y = pd_df[target]
 
     # Keep a final hold out test set aside
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
-    )
+    is_train = pd_df["split"] == "train"
+    is_test = pd_df["split"] == "test"
+    X_train, y_train = X[is_train], y[is_train]
+    X_test, y_test = X[is_test], y[is_test]
 
     # Create cross-validation splitter and classifier
     cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
+    # `class_weight` is included in PARAM_DISTRIBUTIONS so the search can select the best strategy for
+    # addressing class imbalance in `target`, rather than fixing it here
     estimator = RandomForestClassifier(random_state=RNG)
     random_state = RANDOM_STATE
     print(
@@ -126,6 +139,8 @@ def train_eval_rfc_block_of_flats_classifier(
             estimator=estimator,
             param_distributions=PARAM_DISTRIBUTIONS,
             factor=2,  # Reduce halving aggressiveness
+            min_resources=int(MIN_RESOURCES_FRACTION * len(X_train)),
+            n_candidates=N_CANDIDATES,
             random_state=RANDOM_STATE,
             cv=cv,  # Defaults to use StratifiedKFold splitter with 5 folds because model is binary classifier
             scoring=scoring,  # Use F1 scoring metric for optimisation
@@ -144,14 +159,33 @@ def train_eval_rfc_block_of_flats_classifier(
     )
     print(f"Best params: {search.best_params_}")
 
-    # Train final classifier model on full training set with the selected hyperparameters
-    final_model = RandomForestClassifier(**search.best_params_, random_state=RNG)
-    final_model.fit(X_train, y_train)
+    # Spread of the winning candidate's score across individual CV folds, to gauge how much fold-to-fold
+    # variance is expected (and so whether the hold-out test score is within that normal range)
+    best_fold_scores = [
+        search.cv_results_[f"split{i}_test_score"][search.best_index_]
+        for i in range(N_SPLITS)
+    ]
+    print(
+        f"Per-fold {scoring} scores for best candidate during cross-validation: {best_fold_scores}\n"
+        f"(mean: {np.mean(best_fold_scores):.3f}, std: {np.std(best_fold_scores):.3f})"
+    )
+
+    # `search.best_estimator_` is already refit on the full training set with the best hyperparameters
+    # (including `class_weight`) found during the search
+    final_model = search.best_estimator_
 
     # Evaluate final model on hold out test set
     y_pred = final_model.predict(X_test)
     score = f1_score(y_test, y_pred)
-    print(f"{scoring} score on hold out test set: {score}")
+    print(
+        f"{scoring} score on hold out test set: {score}\n"
+        f"(cross-validation {scoring} score during search: {search.best_score_})"
+    )
+    print(f"Hold out test set class distribution:\n{y_test.value_counts()}")
+    print(
+        f"Classification report on hold out test set:\n{classification_report(y_test, y_pred)}"
+    )
+    print(f"Confusion matrix on hold out test set:\n{confusion_matrix(y_test, y_pred)}")
 
     return final_model
 
@@ -277,17 +311,25 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--uprns",
-        help="Path to domestic UPRN dataset with X and Y coordinates in parquet.",
+        "--local_authorities",
+        help="Local authority or authorities (case insensitive) e.g. -- 'plymouth' to run for Plymouth or --'glasgow city' 'south lanarkshire' to run for both Glasgow City and South Lanarkshire.",
         type=str,
+        nargs="+",
         required=True,
     )
 
     parser.add_argument(
-        "--labelled_data",
-        help="Path to labelled data to train binary classification model on in parquet file format. Building ID column required.",
+        "--model_release",
+        help="Release date in YYYYMMDD format used for the model sample and for dated input and output directories. Defaults to today's date.",
         type=str,
-        required=True,
+        required=False,
+    )
+
+    parser.add_argument(
+        "--uprn_release",
+        help="Release date in YYYYMMDD format used to generate domestic UPRN data and for dated input and output directories. Defaults to today's date.",
+        type=str,
+        required=False,
     )
 
     parser.add_argument(
@@ -301,52 +343,115 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    import geopandas as gpd
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.getters import load_geodata
-    from asf_heat_pump_suitability.pipeline.transform import uprns
+    from asf_heat_pump_suitability.pipeline.transform import uprns, local_authority
     from asf_heat_pump_suitability.pipeline.impute import property_type
     from asf_heat_pump_suitability.pipeline.model.block_of_flats import (
         feature_engineering,
+        labelled_data,
     )
     from asf_heat_pump_suitability.utils import save_utils
 
     args = parse_arguments()
+    local_authorities = [la.lower() for la in args.local_authorities]
+    local_authority_dict = local_authority.get_dict_la_data(local_authorities)
+    model_release = save_utils.get_str_release_date(args.model_release)
+    uprn_release = save_utils.get_str_release_date(args.uprn_release)
 
     # ------------------------ #
-    # LOAD DATA
-    # Load UPRN data
-    print(f"Loading domestic UPRNs from: {args.uprns}")
-    uprns_df = pl.read_parquet(
-        args.uprns, columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"]
+    # LOAD LABELLED DATA
+    # ------------------------ #
+    unlabelled_df = pl.read_parquet(
+        config["output"]["model"]["training_data"][
+            "sample_for_block_of_flats_model"
+        ].format(release_date=model_release, l=3005, seed=7)
     )
+    labelled_gdf = labelled_data.load_gdf_unprocessed_labelled_data()
+    labelled_df = labelled_data.extract_df_labelled_data(labelled_gdf)
+    labelled_df = labelled_data.transform_df_labelled_data(
+        labelled_df=labelled_df, unlabelled_df=unlabelled_df
+    )
+
+    # ------------------------ #
+    # LOAD UPRN AND BUILDING DATA
+    # ------------------------ #
+    uprns_path = save_utils.get_str_output_path(
+        "domestic_uprns",
+        release_date=args.uprn_release,
+        check_exists=True,
+        local_authority=local_authority_dict["url_slug"],
+    )
+    print(f"Loading domestic UPRNs from: {uprns_path}")
+    domestic_uprns = pl.read_parquet(
+        uprns_path,
+        columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
+    )["UPRN"].to_list()
+
+    uprn_to_building_mapping = (
+        pl.read_parquet(
+            config["data"]["processed"]["uprn_to_building_id_mapping"].format(
+                local_authorities=local_authority_dict["url_slug"],
+                release_date=model_release,
+            )
+            # Filter to UPRNs in buildings in the sample
+        )
+        .rename({"building_ID": "building_id"})
+        .join(labelled_df, how="semi", on="building_id")
+    )
+
+    # Load building footprint data for buildings containing flats
+    building_footprints_gdf = gpd.read_parquet(
+        config["output"]["model"]["training_data"][
+            "enriched_buildings_with_geoms"
+        ].format(
+            local_authorities=local_authority_dict["url_slug"],
+            release_date=model_release,
+        )
+    )
+    building_footprints_gdf = building_footprints_gdf[
+        building_footprints_gdf["building_id"].isin(labelled_df["building_id"])
+    ]
+
+    print(f"Loading UPRNs...")
+    uprns_df = (
+        load_geodata.load_df_osopen_uprn(
+            grid_squares=local_authority_dict["grid_squares"],
+            columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
+            # Filter to UPRNs in buildings in the sample
+        )
+        .join(uprn_to_building_mapping, how="semi", on="UPRN")
+        .with_columns(
+            pl.col("UPRN").is_in(domestic_uprns).alias("is_domestic"),
+        )
+    )
+
     # Get geopoints of UPRNs
     uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
-
-    # Load building footprint data
-    # TODO scale beyond sampling areas
-    building_footprints_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="building",
-        grid_squares=config["constant"]["sampling_areas"]["grid_squares"],
-    )
 
     # ------------------------ #
     # IMPUTE PROPERTY TYPE FLAT
     # Create boolean column called `property_type_flat` to identify flats
     flat_uprns = property_type.impute_set_flat_properties(uprns_gdf=uprns_gdf)
-    uprns_gdf["property_type_flat"] = uprns_gdf["UPRN"].isin(flat_uprns)
+    uprns_gdf["property_type_flat"] = (uprns_gdf["UPRN"].isin(flat_uprns)) & (
+        uprns_gdf["is_domestic"]
+    )
 
     # ------------------------ #
     # FEATURE ENGINEERING
     building_features_df = feature_engineering.generate_df_features(
         buildings_gdf=building_footprints_gdf,
         uprns_gdf=uprns_gdf,
+        mapping_df=uprn_to_building_mapping.rename({"building_id": "ID"}).to_pandas(),
         id_col="ID",
     )
 
     # ------------------------ #
     # TRAIN MODEL
-    labelled_df = pl.read_parquet(args.labelled_data)
-    model_df = labelled_df.join(building_features_df, how="left", on="ID")
+    model_df = labelled_df.join(
+        building_features_df, how="left", left_on="building_id", right_on="ID"
+    ).rename({"building_id": "ID"})
 
     model = train_eval_rfc_block_of_flats_classifier(
         df=model_df,
@@ -357,5 +462,12 @@ if __name__ == "__main__":
     )
 
     if args.save:
-        save_as = config["output"]["model"]["block_of_flats_model"]
+        save_as = config["data"]["processed"][
+            "manually_labelled_block_of_flats"
+        ].format(release_date=model_release)
+        save_utils.save_to_s3(labelled_df, path=save_as)
+
+        save_as = config["output"]["model"]["block_of_flats_model"].format(
+            release_date=model_release
+        )
         save_utils.save_model_to_pkl_s3(model, save_as)
