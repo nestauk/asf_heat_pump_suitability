@@ -63,9 +63,11 @@ PARAM_DISTRIBUTIONS = {
 FEATURES = [
     "n_UPRNs",
     "n_flats",
+    "n_domestic_uprns",
     "building_area_m2",
     "building_perimeter_m",
     "proportion_flats",
+    "domestic_proportion_flats",
     "UPRNs_per_building_m2",
     "concave_hull_area_m2",
     "uprns_per_hull_area_m2",
@@ -317,8 +319,17 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--release_date",
-        help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
+        "--model_release",
+        help="Release date in YYYYMMDD format used for the model sample and for dated input and output directories. Defaults to today's date.",
+        type=str,
+        required=False,
+    )
+
+    parser.add_argument(
+        "--uprn_release",
+        help="Release date in YYYYMMDD format used to generate domestic UPRN data and for dated input and output directories. Defaults to today's date.",
+        type=str,
+        required=False,
     )
 
     parser.add_argument(
@@ -346,7 +357,8 @@ if __name__ == "__main__":
     args = parse_arguments()
     local_authorities = [la.lower() for la in args.local_authorities]
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
-    release_date = save_utils.get_str_release_date(args.release_date)
+    model_release = save_utils.get_str_release_date(args.model_release)
+    uprn_release = save_utils.get_str_release_date(args.uprn_release)
 
     # ------------------------ #
     # LOAD LABELLED DATA
@@ -354,7 +366,7 @@ if __name__ == "__main__":
     unlabelled_df = pl.read_parquet(
         config["output"]["model"]["training_data"][
             "sample_for_block_of_flats_model"
-        ].format(release_date=release_date, l=3005, seed=7)
+        ].format(release_date=model_release, l=3005, seed=7)
     )
     labelled_gdf = labelled_data.load_gdf_unprocessed_labelled_data()
     labelled_df = labelled_data.extract_df_labelled_data(labelled_gdf)
@@ -365,11 +377,23 @@ if __name__ == "__main__":
     # ------------------------ #
     # LOAD UPRN AND BUILDING DATA
     # ------------------------ #
+    uprns_path = save_utils.get_str_output_path(
+        "domestic_uprns",
+        release_date=args.uprn_release,
+        check_exists=True,
+        local_authority=local_authority_dict["url_slug"],
+    )
+    print(f"Loading domestic UPRNs from: {uprns_path}")
+    domestic_uprns = pl.read_parquet(
+        uprns_path,
+        columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
+    )["UPRN"].to_list()
+
     uprn_to_building_mapping = (
         pl.read_parquet(
             config["data"]["processed"]["uprn_to_building_id_mapping"].format(
                 local_authorities=local_authority_dict["url_slug"],
-                release_date=release_date,
+                release_date=model_release,
             )
             # Filter to UPRNs in buildings in the sample
         )
@@ -383,7 +407,7 @@ if __name__ == "__main__":
             "enriched_buildings_with_geoms"
         ].format(
             local_authorities=local_authority_dict["url_slug"],
-            release_date=release_date,
+            release_date=model_release,
         )
     )
     building_footprints_gdf = building_footprints_gdf[
@@ -391,11 +415,17 @@ if __name__ == "__main__":
     ]
 
     print(f"Loading UPRNs...")
-    uprns_df = load_geodata.load_df_osopen_uprn(
-        grid_squares=local_authority_dict["grid_squares"],
-        columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
-        # Filter to UPRNs in buildings in the sample
-    ).join(uprn_to_building_mapping, how="semi", on="UPRN")
+    uprns_df = (
+        load_geodata.load_df_osopen_uprn(
+            grid_squares=local_authority_dict["grid_squares"],
+            columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
+            # Filter to UPRNs in buildings in the sample
+        )
+        .join(uprn_to_building_mapping, how="semi", on="UPRN")
+        .with_columns(
+            pl.col("UPRN").is_in(domestic_uprns).alias("is_domestic"),
+        )
+    )
 
     # Get geopoints of UPRNs
     uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
@@ -404,7 +434,9 @@ if __name__ == "__main__":
     # IMPUTE PROPERTY TYPE FLAT
     # Create boolean column called `property_type_flat` to identify flats
     flat_uprns = property_type.impute_set_flat_properties(uprns_gdf=uprns_gdf)
-    uprns_gdf["property_type_flat"] = uprns_gdf["UPRN"].isin(flat_uprns)
+    uprns_gdf["property_type_flat"] = (uprns_gdf["UPRN"].isin(flat_uprns)) & (
+        uprns_gdf["is_domestic"]
+    )
 
     # ------------------------ #
     # FEATURE ENGINEERING
@@ -431,6 +463,6 @@ if __name__ == "__main__":
 
     if args.save:
         save_as = config["output"]["model"]["block_of_flats_model"].format(
-            release_date=release_date
+            release_date=model_release
         )
         save_utils.save_model_to_pkl_s3(model, save_as)

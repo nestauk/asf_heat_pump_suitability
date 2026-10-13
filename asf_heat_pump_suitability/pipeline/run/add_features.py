@@ -145,11 +145,18 @@ if __name__ == "__main__":
         uprns_gdf=uprns_gdf, buildings_gdf=buildings_gdf, id_col="ID"
     )
 
-    uprns_gdf["property_type_flat"] = uprns_gdf["UPRN"].isin(flat_uprns)
+    all_uprns_df = load_geodata.load_df_osopen_uprn(
+        grid_squares=local_authority_dict["grid_squares"]
+    ).with_columns(
+        pl.col("UPRN").is_in(uprns_df["UPRN"]).alias("is_domestic"),
+        pl.col("UPRN").is_in(flat_uprns).alias("property_type_flat"),
+    )
+    all_uprns_gdf = uprns.generate_gdf_uprn_coords(df=all_uprns_df)
+
     # Generate features for block of flats classification model
     building_features_df = feature_engineering.generate_df_features(
         buildings_gdf=buildings_gdf,
-        uprns_gdf=uprns_gdf,
+        uprns_gdf=all_uprns_gdf,
         id_col="ID",
     )
 
