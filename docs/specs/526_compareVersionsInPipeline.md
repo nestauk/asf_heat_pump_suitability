@@ -223,11 +223,12 @@ wrong description of it now affects this feature.
 - Does the Orbit image have a `git` binary? `.orbitignore` does not exclude
   `.git`, but without `git` the run manifest records `git_commit: unknown`
   and the report's commit-log section is reduced to a note. Best guess:
-  check on the first Orbit run with `--compare`; fixing the image is a
-  separate issue.
+  check on the first real Orbit run with `--compare`; fixing the image is a
+  separate issue. Still open: no Orbit run was made for this PR.
 - How much does comparing five stages add to each LA's runtime on Orbit?
-  Best guess: measure it on the sample-LA acceptance run and record it in the
-  PR; if it is large, #488's single read is the fix, not fewer stages.
+  Best guess: measure it on the first real Orbit run with `--compare`; if it
+  is large, #488's single read is the fix, not fewer stages. Still open: no
+  Orbit run was made for this PR.
 - `orbit_pipeline.py` launches chunks and does not wait for them, so nothing
   knows when all comparisons for a run are done. Best guess: the follow-up
   GB table is run by hand once the Orbit jobs finish.
@@ -252,8 +253,11 @@ From the issue's acceptance criteria:
 - [ ] `--old_release_date` reaches every comparison in both launchers; it
       is an argument error without `--compare` or when not earlier than the
       release date; a stage with no output at that date fails its comparison
-- [ ] An Orbit run over the sample LAs with `--compare` leaves the expected
-      reports and JSONs on S3
+- [ ] ~~An Orbit run over the sample LAs with `--compare` leaves the expected
+      reports and JSONs on S3~~ Not run (2026-10-13). `orbit_pipeline.py`
+      only passes the flags on to `pipeline.py`, and a `pipeline.py --compare` run for East Lothian wrote all five stages' reports and
+      JSONs to `east_lothian/20261013/comparisons/`. A real Orbit run was
+      judged overkill
 
 Tests follow the high-signal rule: the old-date choice (including baseline)
 and the JSON content get unit tests; the subprocess wiring in `pipeline.py`
