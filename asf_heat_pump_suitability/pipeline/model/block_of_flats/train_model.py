@@ -462,6 +462,11 @@ if __name__ == "__main__":
     )
 
     if args.save:
+        save_as = config["data"]["processed"][
+            "manually_labelled_block_of_flats"
+        ].format(release_date=model_release)
+        save_utils.save_to_s3(labelled_df, path=save_as)
+
         save_as = config["output"]["model"]["block_of_flats_model"].format(
             release_date=model_release
         )
