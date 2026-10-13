@@ -65,6 +65,8 @@ COMMUNAL_ORIGIN = config["constant"]["communal_origin"]
 
 ANCHOR_REASSIGNMENT_MAPPING = {NETWORKED: COMMUNAL}
 
+ROAD_TYPES = ["A Road", "B Road", "Motorway", "Minor Road"]
+
 
 def generate_gdf_clusters(
     buildings_gdf: gpd.GeoDataFrame,
@@ -822,7 +824,7 @@ if __name__ == "__main__":
 
     # Load and transform physical barriers for clusters
     polygon_overlay_gdf = barriers.load_transform_gdf_polygon_barriers(
-        local_authority_dict["grid_squares"]
+        local_authority_dict["grid_squares"], road_types=ROAD_TYPES
     )
 
     combined_anchor_gdf = load_transform_anchor_property_gdfs(

@@ -1,3 +1,5 @@
+"""Functions to transform barrier data for clustering and other usages."""
+
 from typing import Optional, List
 
 import pandas as pd
@@ -8,6 +10,7 @@ from asf_heat_pump_suitability.getters import load_geodata
 
 def load_transform_gdf_polygon_barriers(
     grid_squares: Optional[List[str]],
+    road_types: Optional[List[str]] = None,
 ) -> gpd.GeoDataFrame:
     """
     Load physical barriers with (Multi)Polygon geometries for the specified grid squares, these include:
@@ -23,6 +26,15 @@ def load_transform_gdf_polygon_barriers(
     Args:
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
         Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
+        road_types (Optional[List[str]]): names of road type(s) which should act as barriers. Default to using all road types. Options:
+        - Motorway
+        - A Road
+        - B Road
+        - Minor Road
+        - Local Road
+        - Local Access Road
+        - Restricted Local Access Road
+        - Secondary Access Road
 
     Returns:
         gpd.GeoDataFrame: physical barriers with (Multi)Polygon geometries
@@ -45,9 +57,12 @@ def load_transform_gdf_polygon_barriers(
     )
 
     # Linestrings
-    roads_gdf = load_geodata.load_gdf_os_openroad(grid_squares=grid_squares)
-    barrier_road_types = ["A Road", "B Road", "Motorway", "Minor Road"]
-    barrier_roads_gdf = roads_gdf[roads_gdf["function"].isin(barrier_road_types)]
+    barrier_roads_gdf = load_geodata.load_gdf_os_openroad(grid_squares=grid_squares)
+    if road_types:
+        road_types = [road_type.lower() for road_type in road_types]
+        barrier_roads_gdf = barrier_roads_gdf[
+            barrier_roads_gdf["function"].str.lower().isin(road_types)
+        ]
 
     railways_gdf = load_geodata.load_gdf_os_openmap_layer(
         layer="railway_track", grid_squares=grid_squares
