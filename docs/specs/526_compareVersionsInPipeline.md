@@ -1,8 +1,8 @@
 ---
 title: Run the cross-version comparison as part of a pipeline run
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/526
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/534
 asana:
 created: 2026-10-01
 ---
