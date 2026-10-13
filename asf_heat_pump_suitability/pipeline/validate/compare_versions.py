@@ -4,7 +4,7 @@ Compare two dated versions of a pipeline stage output for one local authority.
 The report covers row and UPRN counts, schema changes, UPRN churn, per-tech
 counts and the tech transition matrix (decision tree stage), cluster count
 and area changes with distribution plots (cluster and contextual features
-stages), the UPRNs that are in no cluster (compute_contextual_features,
+stages), the count of UPRNs with no cluster assigned (compute_contextual_features,
 counted against the add_features output of the same release), and the
 commits that touched the stage's code between the two versions.
 Distribution plots are saved as PNGs next to the report.
@@ -182,7 +182,7 @@ def generate_dict_uprns_missing_clusters(
     df_uprns: pl.DataFrame, df_clusters: pl.DataFrame
 ) -> dict:
     """
-    Count the domestic UPRNs that are in no cluster, for one release.
+    Count the domestic UPRNs without an assigned cluster, for one release.
 
     Args:
         df_uprns (pl.DataFrame): the add_features output of the release, with
@@ -192,7 +192,7 @@ def generate_dict_uprns_missing_clusters(
 
     Returns:
         dict: four keys:
-            - uprns_in (int): distinct UPRNs in `df_uprns`
+            - uprns_in (int): distinct number of UPRNs in `df_uprns`
             - uprns_in_clusters (int): sum of n_UPRNs over the clusters layer
             - uprns_missing (int): uprns_in minus uprns_in_clusters
             - missing_share (float): uprns_missing as a fraction of uprns_in
@@ -1370,9 +1370,10 @@ def _generate_str_uprns_missing_clusters_section(
     lines.extend(
         [
             "",
-            "UPRNs in: distinct UPRNs in the add_features output of the same "
-            f"release. UPRNs in clusters: sum of `{N_UPRNS_COL}` over the "
-            f"`{CLUSTER_LAYER}` layer. This count does not fail the run.",
+            '"UPRNs in" is the number of distinct UPRNs in the add_features '
+            'output of the same release. "UPRNs in clusters" is the sum of '
+            f"`{N_UPRNS_COL}` over the `{CLUSTER_LAYER}` layer. This count "
+            "does not fail the run.",
         ]
     )
     for label, counts in (("old", counts_old), ("new", counts_new)):

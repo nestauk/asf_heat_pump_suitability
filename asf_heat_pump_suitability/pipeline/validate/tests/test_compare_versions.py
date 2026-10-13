@@ -1664,11 +1664,11 @@ class TestGenerateDictUprnsMissingClusters:
     def test_counts_uprns_in_minus_uprns_in_clusters(self):
         """Five distinct UPRNs go in and three are in clusters, so two are
         missing a cluster. A repeated UPRN row counts once, and the
-        anchor_loads row is not a cluster, so its n_UPRNs is not counted."""
+        anchor_loads row has a null n_UPRNs, as in the real output."""
         df_uprns = pl.DataFrame({"UPRN": [1, 2, 3, 4, 5, 5]})
         df_clusters = pl.DataFrame(
             {
-                "n_UPRNs": [2, 1, 50],
+                "n_UPRNs": [2, 1, None],
                 "layer": [
                     compare_versions.CLUSTER_LAYER,
                     compare_versions.CLUSTER_LAYER,
@@ -1684,7 +1684,7 @@ class TestGenerateDictUprnsMissingClusters:
             "uprns_in_clusters": 3,
             "uprns_missing": 2,
             "missing_share": 0.4,
-        }, "missing must be distinct UPRNs in minus the clusters layer's n_UPRNs sum"
+        }, "number of missing UPRN must be equivalent to distinct UPRNs in minus the clusters layer's n_UPRNs sum"
 
     def test_float_n_uprns_gives_whole_counts(self):
         """The real geojson loads n_UPRNs as a float with nulls; the counts
@@ -1701,7 +1701,7 @@ class TestGenerateDictUprnsMissingClusters:
 @pytest.fixture(scope="module")
 def df_contextual():
     """Contextual-features output: two clusters holding three UPRNs, and a
-    ward row. As in the real geojson, n_UPRNs is a float and is null on the
+    row corresponding to a ward boundaries layer. As in the real geojson, n_UPRNs is a float and is null on the
     ward row."""
     return pl.DataFrame(
         {
