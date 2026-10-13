@@ -77,6 +77,9 @@ STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
 BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"]
 COMPARISONS_DIR = config["compare_versions"]["comparisons_dir"]
+# Key layout of the comparison JSON. Raise it when keys are added, renamed or
+# removed, so a reader of saved JSONs can tell the layouts apart.
+SUMMARY_SCHEMA_VERSION = 1
 DISTRIBUTION_COLUMNS = config["compare_versions"]["distribution_columns"]
 TOLERANCES = config["compare_versions"]["tolerances"]
 SIMPLIFY_TOLERANCE_M = config["constant"]["clustering"]["tolerance_m"]
@@ -1770,7 +1773,8 @@ def generate_dict_comparison_summary(
             (geometry stages), or None
 
     Returns:
-        dict: eleven keys:
+        dict: twelve keys:
+            - schema_version (int): the key layout, `SUMMARY_SCHEMA_VERSION`
             - stage, local_authority, trigger (str | None): as passed in
             - release_date_old (str | None), release_date_new (str): the two
               versions compared
@@ -1787,6 +1791,7 @@ def generate_dict_comparison_summary(
               report; empty without a trigger
     """
     summary = {
+        "schema_version": SUMMARY_SCHEMA_VERSION,
         "stage": stage,
         "local_authority": local_authority,
         "release_date_old": release_date_old,

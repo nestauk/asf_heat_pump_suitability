@@ -2217,6 +2217,9 @@ class TestGenerateDictComparisonSummary:
         assert (
             summary.keys() == compared_keys
         ), "baseline and comparison JSONs must share keys, so one table holds both"
+        assert (
+            summary["schema_version"] == 1
+        ), "every JSON, a baseline too, must say which key layout it uses"
 
 
 class TestUploadComparisonFilesToS3:
