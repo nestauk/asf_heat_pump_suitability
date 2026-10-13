@@ -2179,6 +2179,9 @@ class TestGenerateDictComparisonSummary:
             },
         ], "decision_tree must list each tech's UPRN counts, as the report does"
         assert (
+            summary["uprns_missing_clusters"] is None
+        ), "only compute_contextual_features counts UPRNs without a cluster"
+        assert (
             json.loads(json.dumps(summary)) == summary
         ), "the summary must save to JSON and read back unchanged"
 
@@ -2204,10 +2207,26 @@ class TestGenerateDictComparisonSummary:
             df_new=df_new,
             df_areas_old=df_areas_old,
             df_areas_new=df_areas_new,
+            df_uprns_old=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
+            df_uprns_new=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
         )
         assert (
             summary["cluster_counts"]["clusters_delta"] == -1
         ), "the ward row must not count as a cluster"
+        assert summary["uprns_missing_clusters"] == {
+            "old": {
+                "uprns_in": 4,
+                "uprns_in_clusters": 3,
+                "uprns_missing": 1,
+                "missing_share": 0.25,
+            },
+            "new": {
+                "uprns_in": 4,
+                "uprns_in_clusters": 2,
+                "uprns_missing": 2,
+                "missing_share": 0.5,
+            },
+        }, "each version must count its UPRNs without a cluster, as the report does"
         assert (
             summary["total_area"]["area_m2_old"] == 150.0
             and summary["total_area"]["area_m2_delta"] == -50.0
@@ -2218,6 +2237,21 @@ class TestGenerateDictComparisonSummary:
         assert (
             summary["tech_counts"] is None
         ), "only decision_tree has tech counts in its summary"
+        no_new_uprns = compare_versions.generate_dict_comparison_summary(
+            stage="compute_contextual_features",
+            local_authority="plymouth",
+            trigger=None,
+            release_date_new="20260722",
+            release_date_old="20260601",
+            df_old=df_contextual,
+            df_new=df_new,
+            df_uprns_old=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
+            df_uprns_new=None,
+        )
+        assert (
+            no_new_uprns["uprns_missing_clusters"]["old"]["uprns_missing"] == 1
+            and no_new_uprns["uprns_missing_clusters"]["new"] is None
+        ), "a version without an add_features output must be null, not stop the other"
 
     def test_baseline_summary_has_no_old_date_or_numbers(self):
         """A baseline has no earlier version, so its old date and numbers

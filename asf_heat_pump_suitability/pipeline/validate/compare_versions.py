@@ -1748,6 +1748,8 @@ def generate_dict_comparison_summary(
     df_new: pl.DataFrame | None = None,
     df_areas_old: pl.DataFrame | None = None,
     df_areas_new: pl.DataFrame | None = None,
+    df_uprns_old: pl.DataFrame | None = None,
+    df_uprns_new: pl.DataFrame | None = None,
 ) -> dict:
     """
     Collect a comparison's headline numbers, to save as JSON next to the report.
@@ -1771,9 +1773,13 @@ def generate_dict_comparison_summary(
             (geometry stages), or None
         df_areas_new (pl.DataFrame | None): newer version's per-cluster areas
             (geometry stages), or None
+        df_uprns_old (pl.DataFrame | None): older version's add_features
+            UPRNs (compute_contextual_features), or None
+        df_uprns_new (pl.DataFrame | None): newer version's add_features
+            UPRNs (compute_contextual_features), or None
 
     Returns:
-        dict: thirteen keys:
+        dict: fourteen keys:
             - schema_version (int): the key layout, `SUMMARY_SCHEMA_VERSION`
             - stage, local_authority, trigger (str | None): as passed in
             - release_date_old (str | None), release_date_new (str): the two
@@ -1790,6 +1796,10 @@ def generate_dict_comparison_summary(
               geometry stages only
             - total_area (dict | None): from `generate_dict_total_area_delta`,
               clusters layer only; geometry stages only
+            - uprns_missing_clusters (dict | None): keys old and new, each
+              from `generate_dict_uprns_missing_clusters`, or None when that
+              version's add_features output is missing;
+              compute_contextual_features only
             - tolerance_warnings (list[str]): the churn warnings shown in the
               report; empty without a trigger
     """
@@ -1806,6 +1816,7 @@ def generate_dict_comparison_summary(
         "tech_counts": None,
         "cluster_counts": None,
         "total_area": None,
+        "uprns_missing_clusters": None,
         "tolerance_warnings": [],
     }
     if release_date_old is None:
@@ -1826,6 +1837,20 @@ def generate_dict_comparison_summary(
                 df_areas_old=filter_df_clusters_layer(df=df_areas_old),
                 df_areas_new=filter_df_clusters_layer(df=df_areas_new),
             )
+    if stage == "compute_contextual_features":
+        summary["uprns_missing_clusters"] = {
+            version: (
+                generate_dict_uprns_missing_clusters(
+                    df_uprns=df_uprns, df_clusters=df_clusters
+                )
+                if df_uprns is not None
+                else None
+            )
+            for version, df_uprns, df_clusters in (
+                ("old", df_uprns_old, df_old),
+                ("new", df_uprns_new, df_new),
+            )
+        }
     if trigger is not None and summary["uprn_churn"] is not None:
         summary["tolerance_warnings"] = _generate_list_churn_notes(
             churn=summary["uprn_churn"], tolerances=TOLERANCES[trigger]
@@ -2056,6 +2081,8 @@ if __name__ == "__main__":
         df_new=df_new,
         df_areas_old=df_areas_old,
         df_areas_new=df_areas_new,
+        df_uprns_old=df_uprns_old,
+        df_uprns_new=df_uprns_new,
     )
     summary_path = report_dir / f"{report_stem}.json"
     summary_path.write_text(json.dumps(summary, indent=2))
