@@ -15,9 +15,9 @@ the version before it. Today it runs only by hand, for one stage and one local
 authority (LA) at a time:
 
 - Without dates, it compares the latest two release dates on S3. In a
-  script, "latest two" can be wrong: if a stage failed for an LA, or a run
-  was repeated on the same day, the latest two are not this run and the one
-  before it.
+  script, "latest two" can be wrong: a run of an older release date
+  (`--release_date` set to the past) or another run that writes a later
+  date folder means the latest two are not this run and the one before it.
 - With fewer than two versions it raises `FileNotFoundError`. On the first
   GB run, about 350 LAs have no earlier version.
 - It writes the report and plots to a local `report_dir`. #521 runs the
@@ -124,6 +124,19 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
     implementation: `pipeline.py` passes official names, and the old
     lowercasing gave "east lothian", which matches no S3 path.
 
+11. **An optional `--old_release_date` pins every comparison to one
+    release.** `pipeline.py` and `orbit_pipeline.py` accept it and pass it
+    to every comparison. It needs `--compare` and must be earlier than the
+    run's release date; both launchers stop with an argument error
+    otherwise. A stage with no output at that date fails its comparison and
+    goes into the "comparisons failed" list; there is no fallback to
+    another date. Without the flag, decision 4 applies. Decided 2026-10-13.
+    _Rationale:_ a test run saved after the last production run moves each
+    stage's latest earlier date, so the next production run would compare
+    against the test run. A fixed old date also gives release-to-release
+    reports across all LAs. A silent fallback would label a comparison with
+    a date the user did not ask for.
+
 ### Branch and stacking
 
 The branch `526_compareVersionsInPipeline` is off `515_loop_pipeline` (#521),
@@ -161,6 +174,14 @@ wrong description of it now affects this feature.
   lists every LA for a run, which suits the later GB table, but the reports
   sit away from the outputs they describe. Rejected for (7); the GB table can
   list `outputs/data/*/{release_date}/comparisons/` instead.
+- **Rename `pipeline.py`'s `--release_date` to `--new_release_date`.** It
+  would match `compare_versions`. Rejected for (11): the pipeline writes
+  one release, every stage script takes `--release_date`, and #521 owns and
+  documents that interface. `run_comparison` maps the one name to the other
+  in one place.
+- **Fall back to the latest earlier date when `--old_release_date` has no
+  output for a stage.** Every stage would get a report, but some would
+  compare against a date the user did not ask for. Rejected for (11).
 - **Always save to S3, with no `--save` flag.** One less flag, and no
   report stays on a laptop by mistake. Rejected for (7) on 2026-10-07:
   `pipeline.py` always passes `--save`, so the flag costs a pipeline run
@@ -214,6 +235,9 @@ From the issue's acceptance criteria:
 - [ ] A comparison that exits non-zero is logged, and the LA still counts as
       succeeded
 - [ ] `orbit_pipeline.py` passes `--compare` and `--trigger` to every chunk
+- [ ] `--old_release_date` reaches every comparison in both launchers; it
+      is an argument error without `--compare` or when not earlier than the
+      release date; a stage with no output at that date fails its comparison
 - [ ] An Orbit run over the sample LAs with `--compare` leaves the expected
       reports and JSONs on S3
 
