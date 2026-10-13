@@ -214,6 +214,44 @@ def generate_dict_uprns_missing_clusters(
     }
 
 
+def generate_dict_uprns_missing_clusters_by_version(
+    df_uprns_old: pl.DataFrame | None,
+    df_uprns_new: pl.DataFrame | None,
+    df_clusters_old: pl.DataFrame,
+    df_clusters_new: pl.DataFrame,
+) -> dict:
+    """
+    Count the UPRNs without a cluster for both versions, for the report and the JSON.
+
+    Args:
+        df_uprns_old (pl.DataFrame | None): older version's add_features
+            UPRNs, or None when that output is missing
+        df_uprns_new (pl.DataFrame | None): newer version's add_features
+            UPRNs, or None when that output is missing
+        df_clusters_old (pl.DataFrame): older compute_contextual_features
+            output
+        df_clusters_new (pl.DataFrame): newer compute_contextual_features
+            output
+
+    Returns:
+        dict: keys old and new, each from `generate_dict_uprns_missing_clusters`,
+            or None for a version without its add_features output
+    """
+    return {
+        version: (
+            generate_dict_uprns_missing_clusters(
+                df_uprns=df_uprns, df_clusters=df_clusters
+            )
+            if df_uprns is not None
+            else None
+        )
+        for version, df_uprns, df_clusters in (
+            ("old", df_uprns_old, df_clusters_old),
+            ("new", df_uprns_new, df_clusters_new),
+        )
+    }
+
+
 def generate_dict_distribution_stats(df: pl.DataFrame, column: str) -> dict | None:
     """
     Summarise one column's distribution: both quartiles, min, max and mean.
@@ -1700,22 +1738,15 @@ def generate_str_report(
             for column, (frame_old, frame_new) in frames.items()
         )
     if stage == "compute_contextual_features":
-        counts_old, counts_new = (
-            (
-                generate_dict_uprns_missing_clusters(
-                    df_uprns=df_uprns, df_clusters=df_clusters
-                )
-                if df_uprns is not None
-                else None
-            )
-            for df_uprns, df_clusters in (
-                (df_uprns_old, df_old),
-                (df_uprns_new, df_new),
-            )
+        counts = generate_dict_uprns_missing_clusters_by_version(
+            df_uprns_old=df_uprns_old,
+            df_uprns_new=df_uprns_new,
+            df_clusters_old=df_old,
+            df_clusters_new=df_new,
         )
         sections.append(
             _generate_str_uprns_missing_clusters_section(
-                counts_old=counts_old, counts_new=counts_new
+                counts_old=counts["old"], counts_new=counts["new"]
             )
         )
     if stage == "decision_tree":
@@ -1859,19 +1890,14 @@ def generate_dict_comparison_summary(
                 df_areas_new=filter_df_clusters_layer(df=df_areas_new),
             )
     if stage == "compute_contextual_features":
-        summary["uprns_missing_clusters"] = {
-            version: (
-                generate_dict_uprns_missing_clusters(
-                    df_uprns=df_uprns, df_clusters=df_clusters
-                )
-                if df_uprns is not None
-                else None
+        summary["uprns_missing_clusters"] = (
+            generate_dict_uprns_missing_clusters_by_version(
+                df_uprns_old=df_uprns_old,
+                df_uprns_new=df_uprns_new,
+                df_clusters_old=df_old,
+                df_clusters_new=df_new,
             )
-            for version, df_uprns, df_clusters in (
-                ("old", df_uprns_old, df_old),
-                ("new", df_uprns_new, df_new),
-            )
-        }
+        )
     if trigger is not None and summary["uprn_churn"] is not None:
         summary["tolerance_warnings"] = _generate_list_churn_notes(
             churn=summary["uprn_churn"], tolerances=TOLERANCES[trigger]
