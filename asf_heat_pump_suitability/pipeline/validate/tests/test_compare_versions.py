@@ -2152,6 +2152,32 @@ class TestGenerateDictComparisonSummary:
         assert (
             summary["cluster_counts"] is None and summary["total_area"] is None
         ), "a stage without geometry has no cluster or area numbers"
+        assert summary["tech_counts"] == [
+            {
+                "assigned_tech": "Communal solution",
+                "n_old": 1,
+                "n_new": 0,
+                "n_delta": -1,
+            },
+            {
+                "assigned_tech": "District heat network",
+                "n_old": 1,
+                "n_new": 0,
+                "n_delta": -1,
+            },
+            {
+                "assigned_tech": "Individual solution",
+                "n_old": 2,
+                "n_new": 3,
+                "n_delta": 1,
+            },
+            {
+                "assigned_tech": "Networked heat pump",
+                "n_old": 0,
+                "n_new": 2,
+                "n_delta": 2,
+            },
+        ], "decision_tree must list each tech's UPRN counts, as the report does"
         assert (
             json.loads(json.dumps(summary)) == summary
         ), "the summary must save to JSON and read back unchanged"
@@ -2189,6 +2215,9 @@ class TestGenerateDictComparisonSummary:
         assert (
             summary["tolerance_warnings"] == []
         ), "no trigger means no tolerance warnings"
+        assert (
+            summary["tech_counts"] is None
+        ), "only decision_tree has tech counts in its summary"
 
     def test_baseline_summary_has_no_old_date_or_numbers(self):
         """A baseline has no earlier version, so its old date and numbers

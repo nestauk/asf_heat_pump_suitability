@@ -1773,7 +1773,7 @@ def generate_dict_comparison_summary(
             (geometry stages), or None
 
     Returns:
-        dict: twelve keys:
+        dict: thirteen keys:
             - schema_version (int): the key layout, `SUMMARY_SCHEMA_VERSION`
             - stage, local_authority, trigger (str | None): as passed in
             - release_date_old (str | None), release_date_new (str): the two
@@ -1782,6 +1782,9 @@ def generate_dict_comparison_summary(
               version
             - counts (dict | None): from `generate_dict_count_delta`
             - uprn_churn (dict | None): from `generate_dict_uprn_churn`
+            - tech_counts (list[dict] | None): one dict per tech with keys
+              assigned_tech, n_old, n_new and n_delta, from
+              `generate_df_tech_counts`; UPRN level, decision_tree only
             - cluster_counts (dict | None): from
               `generate_dict_cluster_count_delta`, clusters layer only;
               geometry stages only
@@ -1800,6 +1803,7 @@ def generate_dict_comparison_summary(
         "status": "baseline" if release_date_old is None else "compared",
         "counts": None,
         "uprn_churn": None,
+        "tech_counts": None,
         "cluster_counts": None,
         "total_area": None,
         "tolerance_warnings": [],
@@ -1808,6 +1812,10 @@ def generate_dict_comparison_summary(
         return summary
     summary["counts"] = generate_dict_count_delta(df_old=df_old, df_new=df_new)
     summary["uprn_churn"] = generate_dict_uprn_churn(df_old=df_old, df_new=df_new)
+    if stage == "decision_tree":
+        df_tech_counts = generate_df_tech_counts(df_old=df_old, df_new=df_new)
+        if df_tech_counts is not None:
+            summary["tech_counts"] = df_tech_counts.to_dicts()
     if stage in GEOMETRY_STAGES:
         summary["cluster_counts"] = generate_dict_cluster_count_delta(
             df_old=filter_df_clusters_layer(df=df_old),
