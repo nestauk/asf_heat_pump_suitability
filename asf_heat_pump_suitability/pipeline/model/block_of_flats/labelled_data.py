@@ -83,7 +83,7 @@ def extract_df_labelled_data(
     df = pl.from_pandas(gdf[cols])
 
     assert df.null_count().sum_horizontal()[0] == 0, (
-        "There are unexpected null values in the processed labelled sample. Please that every sample has been labelled.\n"
+        "There are unexpected null values in the processed labelled sample. Please check that every sample has been labelled.\n"
         f"{df.null_count()}."
     )
 
