@@ -132,7 +132,11 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
     `local_authority.make_str_slug`, the helper the stages use, so "East
     Lothian" and `east_lothian` find the same outputs. Found during
     implementation: `pipeline.py` passes official names, and the old
-    lowercasing gave "east lothian", which matches no S3 path.
+    lowercasing gave "east lothian", which matches no S3 path. A value that
+    is already a slug (only lowercase letters, digits, `_` and `-`) stays
+    unchanged, because `make_str_slug` would turn the hyphen in a multi-LA
+    slug such as `glasgow-midlothian` into an underscore (code review,
+    2026-10-13).
 
 11. **An optional `--old_release_date` pins every comparison to one
     release.** `pipeline.py` and `orbit_pipeline.py` accept it and pass it
