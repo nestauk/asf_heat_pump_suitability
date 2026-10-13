@@ -2093,6 +2093,24 @@ class TestParseArguments:
         ), "a new date on its own must parse, with no old date"
 
 
+class TestGetStrLocalAuthoritySlug:
+    """Tests for `get_str_local_authority_slug`."""
+
+    def test_names_become_slugs_and_slugs_stay_unchanged(self):
+        """pipeline.py passes official names; a hand run may pass the slug
+        from the output path, including a hyphen-joined multi-LA slug."""
+        cases = {
+            "East Lothian": "east_lothian",
+            "east_lothian": "east_lothian",
+            "glasgow-midlothian": "glasgow-midlothian",
+        }
+        for given, expected in cases.items():
+            assert (
+                compare_versions.get_str_local_authority_slug(local_authority=given)
+                == expected
+            ), f"{given!r} must find the outputs saved under {expected!r}"
+
+
 class TestGetStrPreviousReleaseDate:
     """Tests for `get_str_previous_release_date`."""
 
