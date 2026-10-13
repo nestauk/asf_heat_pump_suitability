@@ -28,6 +28,11 @@ sync:
 	uv sync --extra dev
 	@direnv reload
 
+.PHONY: install-orbit
+## Nesta staff only: needs GitHub SSH access to nestauk/orbit
+install-orbit:
+	uv tool install --upgrade git+ssh://git@github.com/nestauk/arm_orbit.git
+
 .PHONY: check-bucket-path
 check-bucket-path:
 	@test ${S3_INPUT_PATH} || (echo 'Please set a S3_INPUT_PATH environment variable (e.g. in .envrc) documenting the S3 path to your inputs/ - e.g. s3://nesta-ds-projects/your-mission/project-name' && exit 1)
@@ -59,7 +64,6 @@ docs-open:
 clean:
 	find . -type f -name "*.py[co]" -delete
 	find . -type d -name "__pycache__" -delete
-
 
 #################################################################################
 # Self Documenting Commands (no need to explicitly document)                    #

@@ -36,6 +36,7 @@ OUTDOOR_SPACE_THRESHOLD_M2 = config["constant"]["threshold"][
     "outdoor_space_threshold_m2"
 ]
 TECH_TYPES = config["constant"]["tech_types"]
+COMMUNAL_ORIGIN = config["constant"]["communal_origin"]
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -134,7 +135,8 @@ def identify_df_building_most_suitable_tech(
     id_col (str): The name of the column in `tech_gdf` that contains the unique identifier for the building footprint (e.g. "ID").
 
     Returns:
-        pd.DataFrame: Buildings with a single assigned technology.
+        pd.DataFrame: Buildings with a single assigned technology and its communal origin (null for
+        non-communal buildings).
 
     Raises:
         ValueError: If `tech_gdf` is missing any of the required columns.
@@ -211,6 +213,14 @@ def identify_df_building_most_suitable_tech(
         [buildings_with_multiple_solutions_df, buildings_with_single_solution_df]
     )
 
+    # Blocks of flats are the only route to communal in the decision tree, so every
+    # communal building gets that origin. Anchor proximity is added later in cluster.py.
+    solutions_per_footprint_df = solutions_per_footprint_df.with_columns(
+        communal_origin=pl.when(pl.col("assigned_tech") == TECH_TYPES["communal"])
+        .then(pl.lit(COMMUNAL_ORIGIN["block_of_flats"]))
+        .otherwise(pl.lit(None, dtype=pl.String))
+    )
+
     # Convert back to Pandas df to be merged to GeoDataFrames in the next steps of the pipeline
     solutions_per_footprint_df = solutions_per_footprint_df.to_pandas()
 
@@ -260,7 +270,7 @@ def assign_df_unique_solution(solutions_per_footprint_df: pl.DataFrame) -> pl.Da
                 .otherwise(pl.lit(TECH_TYPES["individual_or_networked"]))
             )
             .otherwise(pl.lit("Unexpected combination"))
-        )
+        ),
     )
 
     return solutions_per_footprint_df

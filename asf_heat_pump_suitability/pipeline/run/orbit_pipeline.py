@@ -21,6 +21,8 @@ Pass `--local_authorities GB` to run for every local authority in GB, otherwise 
 chunks if `--is_number_of_chunks` is also passed (the number of batches to run in parallel). If `--size` is
 omitted, all local authorities are run in a single chunk.
 
+Pass `--prod` to push changes to production (i.e. staging area). This should only be used when running from `dev`.
+
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
 
@@ -122,10 +124,11 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    from pathlib import Path
     import polars as pl
     from tqdm import tqdm
     import subprocess
-    from asf_heat_pump_suitability.utils import save_utils
+    from asf_heat_pump_suitability.utils import save_utils, s3_utils
 
     args = parse_arguments()
     local_authorities = args.local_authorities
@@ -136,61 +139,6 @@ if __name__ == "__main__":
         local_authorities = pl.read_csv(config["data"]["processed"]["valid_la_names"])[
             "LAD23NM"
         ].to_list()
-
-    # TODO remove later - temporary list for testing
-    if local_authorities == ["test"]:
-        print("Running for test LAs...")
-        local_authorities = [
-            "Hartlepool",
-            "Middlesbrough",
-            "Redcar and Cleveland",
-            "Stockton-on-Tees",
-            "Darlington",
-            "Halton",
-            "Warrington",
-            "Blackburn with Darwen",
-            "Blackpool",
-            "Kingston upon Hull, City of",
-            "East Riding of Yorkshire",
-            "North East Lincolnshire",
-            "North Lincolnshire",
-            "York",
-            "Derby",
-            "Leicester",
-            "Rutland",
-            "Nottingham",
-            "Herefordshire, County of",
-            "Telford and Wrekin",
-            "Stoke-on-Trent",
-            "Bath and North East Somerset",
-            "Bristol, City of",
-            "North Somerset",
-            "South Gloucestershire",
-            "Torbay",
-            "Swindon",
-            "Peterborough",
-            "Luton",
-            "Southend-on-Sea",
-            "Thurrock",
-            "Medway",
-            "Bracknell Forest",
-            "West Berkshire",
-            "Reading",
-            "Slough",
-            "Windsor and Maidenhead",
-            "Wokingham",
-            "Milton Keynes",
-            "Brighton and Hove",
-            "Portsmouth",
-            "Southampton",
-            "Isle of Wight",
-            "County Durham",
-            "Cheshire East",
-            "Cheshire West and Chester",
-            "Shropshire",
-            "Cornwall",
-            "Isles of Scilly",
-        ]
 
     chunks = chunk_list_strings(
         np.asarray(local_authorities), n=args.size, size=args.is_number_of_chunks
@@ -251,3 +199,20 @@ if __name__ == "__main__":
                     *compare_flags,
                 ]
             )
+
+    # Aggregate any error logs and save to a single file
+    dir_uri = Path(
+        config["output"]["log"]["pipeline_failure"].format(
+            release_date=release_date, local_authorities="REMOVE"
+        )
+    ).parent
+    failure_paths = s3_utils.list_files_s3_path(dir_uri=str(dir_uri))
+    if failure_paths:
+        failures = pl.concat([pl.read_csv(f) for f in failure_paths])
+        save_as = config["output"]["log"]["pipeline_failure"].format(
+            release_date=release_date, local_authorities="ORBIT_CONCAT"
+        )
+        failures.write_csv(save_as)
+        print(f"Pipeline failed for some local authorities. See logs at {save_as}")
+    else:
+        print("Pipeline finished for all Local Authorities successfully!")
