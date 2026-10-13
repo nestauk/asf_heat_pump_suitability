@@ -47,6 +47,59 @@ COMPARE_SCRIPT = "asf_heat_pump_suitability/pipeline/validate/compare_versions.p
 COMPARE_STAGES = list(config["compare_versions"]["stage_output_datasets"])
 
 
+def add_compare_arguments(parser: argparse.ArgumentParser) -> None:
+    """
+    Add the comparison flags. `orbit_pipeline.py` uses them too and passes them on to every chunk.
+
+    Args:
+        parser (argparse.ArgumentParser): the launcher's argument parser
+    """
+    parser.add_argument(
+        "--compare",
+        help="Compare each stage's output with its latest earlier version once a local authority's stages succeed.",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--trigger",
+        help="Why the run is made; passed to every comparison to check its tolerances. Omit to show the numbers only.",
+        choices=sorted(config["compare_versions"]["tolerances"]),
+        default=None,
+    )
+    parser.add_argument(
+        "--old_release_date",
+        help="Compare every stage against this release, e.g. 20260901, instead of each stage's latest earlier one.",
+        type=save_utils.get_str_release_date,
+        default=None,
+    )
+
+
+def check_compare_arguments(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    """
+    Stop with a usage error when the comparison flags do not fit together.
+
+    Args:
+        parser (argparse.ArgumentParser): the launcher's argument parser
+        args (argparse.Namespace): the parsed arguments, with `release_date`
+            and the flags from `add_compare_arguments`
+    """
+    if args.trigger is not None and not args.compare:
+        parser.error("--trigger is used only by the comparisons; add --compare.")
+    if args.old_release_date is not None:
+        if not args.compare:
+            parser.error(
+                "--old_release_date is used only by the comparisons; add --compare."
+            )
+        try:
+            release_date = save_utils.get_str_release_date(args.release_date)
+        except ValueError as error:
+            parser.error(str(error))
+        if args.old_release_date >= release_date:
+            parser.error("--old_release_date must be earlier than the release date.")
+
+
 def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser()
@@ -74,41 +127,10 @@ def parse_arguments() -> argparse.Namespace:
         default=False,
     )
 
-    parser.add_argument(
-        "--compare",
-        help="Compare each stage's output with its latest earlier version once a local authority's stages succeed.",
-        action="store_true",
-        default=False,
-    )
-
-    parser.add_argument(
-        "--trigger",
-        help="Why the run is made; passed to every comparison to check its tolerances. Omit to show the numbers only.",
-        choices=sorted(config["compare_versions"]["tolerances"]),
-        default=None,
-    )
-
-    parser.add_argument(
-        "--old_release_date",
-        help="Compare every stage against this release, e.g. 20260901, instead of each stage's latest earlier one.",
-        type=save_utils.get_str_release_date,
-        default=None,
-    )
+    add_compare_arguments(parser=parser)
 
     args = parser.parse_args()
-    if args.trigger is not None and not args.compare:
-        parser.error("--trigger is used only by the comparisons; add --compare.")
-    if args.old_release_date is not None:
-        if not args.compare:
-            parser.error(
-                "--old_release_date is used only by the comparisons; add --compare."
-            )
-        try:
-            release_date = save_utils.get_str_release_date(args.release_date)
-        except ValueError as error:
-            parser.error(str(error))
-        if args.old_release_date >= release_date:
-            parser.error("--old_release_date must be earlier than the release date.")
+    check_compare_arguments(parser=parser, args=args)
     return args
 
 

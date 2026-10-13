@@ -37,6 +37,10 @@ import argparse
 from typing import List
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.pipeline.run.pipeline import (
+    add_compare_arguments,
+    check_compare_arguments,
+)
 from asf_heat_pump_suitability.utils import save_utils
 
 
@@ -105,41 +109,13 @@ def parse_arguments() -> argparse.Namespace:
         default=False,
     )
 
-    parser.add_argument(
-        "--compare",
-        help="Pass `--compare` to every chunk, to compare each stage's output with its latest earlier version.",
-        action="store_true",
-        default=False,
-    )
-
-    parser.add_argument(
-        "--trigger",
-        help="Why the run is made; passed to every chunk's comparisons to check their tolerances.",
-        choices=sorted(config["compare_versions"]["tolerances"]),
-        default=None,
-    )
-
-    parser.add_argument(
-        "--old_release_date",
-        help="Passed to every chunk: compare every stage against this release instead of each stage's latest earlier one.",
-        type=save_utils.get_str_release_date,
-        default=None,
-    )
+    # The comparison flags and their checks are shared with pipeline.py, so
+    # the rules are written once. They are checked here too, so a bad flag
+    # stops before any Orbit job starts.
+    add_compare_arguments(parser=parser)
 
     args = parser.parse_args()
-    if args.trigger is not None and not args.compare:
-        parser.error("--trigger is used only by the comparisons; add --compare.")
-    if args.old_release_date is not None:
-        if not args.compare:
-            parser.error(
-                "--old_release_date is used only by the comparisons; add --compare."
-            )
-        try:
-            release_date = save_utils.get_str_release_date(args.release_date)
-        except ValueError as error:
-            parser.error(str(error))
-        if args.old_release_date >= release_date:
-            parser.error("--old_release_date must be earlier than the release date.")
+    check_compare_arguments(parser=parser, args=args)
     return args
 
 
