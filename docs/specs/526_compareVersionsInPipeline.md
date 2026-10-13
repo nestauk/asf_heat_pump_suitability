@@ -93,19 +93,29 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
    _Rationale:_ everything about one run lives in one folder, and is deleted
    with it. `--save` keeps the hand-run CLI working on a laptop.
 
-8. **The JSON holds headline numbers only.** It has eleven keys:
-   `stage`, `local_authority`, `release_date_old` (null for a baseline),
-   `release_date_new`, `trigger`, `status` (`compared` or `baseline`),
-   `counts`, `uprn_churn`, `cluster_counts`, `total_area` and
-   `tolerance_warnings`. The four number keys hold the dicts the report
-   already builds (`generate_dict_count_delta`, `generate_dict_uprn_churn`,
-   `generate_dict_cluster_count_delta`, `generate_dict_total_area_delta`),
-   with the cluster keys on the clusters layer only. A key that does not
-   apply (a baseline, or cluster keys on a non-geometry stage) is null, not
-   missing, so every JSON has the same keys.
-   _Rationale:_ enough for a GB table to sort and flag LAs, without the
-   check-results-as-data refactor in #488. The same keys in every file let
-   the table read them all the same way.
+8. **The JSON holds headline numbers only.** It has fourteen keys:
+   `schema_version` (1), `stage`, `local_authority`, `release_date_old`
+   (null for a baseline), `release_date_new`, `trigger`, `status`
+   (`compared` or `baseline`), `counts`, `uprn_churn`, `tech_counts`,
+   `cluster_counts`, `total_area`, `uprns_missing_clusters` and
+   `tolerance_warnings`. The number keys hold what the report already
+   builds: `generate_dict_count_delta`, `generate_dict_uprn_churn`,
+   `generate_df_tech_counts` as a list of rows (UPRN level,
+   `decision_tree` only), `generate_dict_cluster_count_delta` and
+   `generate_dict_total_area_delta` (clusters layer only), and
+   `generate_dict_uprns_missing_clusters` for each version under `old` and
+   `new` (`compute_contextual_features` only, a version is null when its
+   add*features output is missing). A key that does not apply (a baseline,
+   or a key for another stage) is null, not missing, so every JSON has the
+   same keys. `schema_version` is raised whenever keys change; a JSON
+   without it counts as version 0.
+   \_Rationale:* read by the GB table in #531, which sorts and flags LAs from
+   these files without loading the outputs again. The keys copy only
+   numbers the script already computes from data it already loads.
+   Baseline numbers and cross-LA peer checks are #535, and the
+   check-results-as-data refactor is #488. The same keys in every file let
+   the table read them all the same way. Keys added 2026-10-13, agreed in
+   the #531 kickoff, before any production run wrote a JSON.
 
 9. **A failed comparison never fails the LA or the run.** `pipeline.py` logs
    a comparison's non-zero exit code with the stage and LA, adds it to a
