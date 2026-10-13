@@ -170,9 +170,9 @@ def filter_gdf_domestic_uprns(
     print("Filtering to residential UPRNs...")
     # Find UPRNs which are in the non-residential buildings
     non_residential_uprns = set(
-        uprn_gdf.sjoin(non_residential_buildings_gdf, how="inner", predicate="within")[
-            "UPRN"
-        ]
+        uprn_gdf.sjoin(
+            non_residential_buildings_gdf, how="inner", predicate="intersects"
+        )["UPRN"]
     )
 
     # Get valid non-residential EPC UPRNs
@@ -484,7 +484,7 @@ if __name__ == "__main__":
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
     del uprns_df
 
-    # Reduce UPRNs to only those within the LA boundaries and join LA code and name for later use
+    # Reduce UPRNs to only those intersecting the LA boundaries and join LA code and name for later use
     uprns_gdf = uprns_gdf.sjoin(
         la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
         how="inner",

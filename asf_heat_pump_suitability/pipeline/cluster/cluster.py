@@ -61,6 +61,8 @@ TECH_CODES = {
 NETWORKED = TECH_TYPES["networked"]
 COMMUNAL = TECH_TYPES["communal"]
 
+COMMUNAL_ORIGIN = config["constant"]["communal_origin"]
+
 ANCHOR_REASSIGNMENT_MAPPING = {NETWORKED: COMMUNAL}
 
 
@@ -76,7 +78,7 @@ def generate_gdf_clusters(
 ) -> gpd.GeoDataFrame:
     """
     Generate clusters of building footprints, where one cluster:
-    - Contains buildings which are assigned the same tech type
+    - Contains buildings which are assigned the same tech type, and for communal buildings the same `communal_origin`
     - Contains buildings which are not separated by physical environmental barriers
     - Buildings within a given radius of an anchor are assigned a tech type of 'Communal solutions', if they were assigned N-GSHP by the decision tree
 
@@ -97,7 +99,10 @@ def generate_gdf_clusters(
 
     # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
     for boundary in boundary_gdf["geometry"].unique():
-        bounded_tech_gdf = tech_gdf[tech_gdf.within(boundary)]
+        # This will retain buildings which straddle an LA boundary.
+        # The result is that these buildings can appear in one cluster in one LA, and a different cluster in a
+        # neighbouring LA, as clustering occurs at LA-level.
+        bounded_tech_gdf = tech_gdf[tech_gdf.intersects(boundary)]
         voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
 
         # One cell per building
@@ -134,15 +139,21 @@ def generate_gdf_clusters(
         radius=radius,
     )
 
+    reassigned_lookup = reassigned_gdf.set_index(id_col).to_dict()
     cells_gdf["assigned_tech"] = cells_gdf[id_col].map(
-        reassigned_gdf.set_index(id_col).to_dict()["assigned_tech"]
+        reassigned_lookup["assigned_tech"]
+    )
+    cells_gdf["communal_origin"] = cells_gdf[id_col].map(
+        reassigned_lookup["communal_origin"]
     )
 
-    # Create cluster geometries
+    # Create cluster geometries. Dissolving on (assigned_tech, communal_origin) keeps
+    # communal clusters with different origins separate; dropna=False retains the
+    # non-communal cells, whose communal_origin is null.
     clusters_gdf = (
-        cells_gdf.dissolve(by="assigned_tech")
+        cells_gdf.dissolve(by=["assigned_tech", "communal_origin"], dropna=False)
         .explode()
-        .reset_index()[["assigned_tech", "geometry"]]
+        .reset_index()[["assigned_tech", "communal_origin", "geometry"]]
     )
 
     # Create an ID for each geometry that starts with the tech code and ends with a unique number
@@ -174,6 +185,7 @@ def generate_gdf_clusters(
             {
                 "geometry": "first",
                 "assigned_tech": "first",
+                "communal_origin": "first",
                 f"within_{radius}m_from_anchor_load": "max",
             }
         )
@@ -233,7 +245,7 @@ def extend_edges_gdf(
     """
     Creates Voronoi polygons around a set of input polygons by interpolating additional points along polygon edges
     to extend Voronoi polygons from.
-    Rewritten logic based on fieldmaps/edge-extender.
+    Rewritten from fieldmaps/edge-extender base logic.
 
     Args:
         gdf (gpd.GeoDataFrame): polygons to create Voronoi polygons around.
@@ -244,9 +256,8 @@ def extend_edges_gdf(
     Returns:
         gpd.GeoDataFrame: Voronoi polygons around the original input polygons. One row per original polygon.
     """
-    # TODO deal with buildings that cross boundaries
-    # Ensure all buildings are within the boundary
-    gdf = gdf[gdf.within(boundary)]
+    # Buildings that cross boundaries can appear in multiple clusters across multiple LAs
+    gdf = gdf[gdf.intersects(boundary)]
 
     # Add an internal unique ID to each building
     building_id_col = "_internal_building_id"
@@ -284,7 +295,7 @@ def extend_edges_gdf(
     # Extract a flat (N, 2) float64 array of all point coordinates
     coords_arr = shapely.get_coordinates(np.array(all_points))
 
-    # ordered=True requires every input coordinate to be unique — GEOS raises GEOSException otherwise.
+    # ordered=True (below) requires every input coordinate to be unique — GEOS raises GEOSException otherwise.
     # Buildings can (rarely) share corner coordinates (e.g. shared walls), so duplicates can exist.
     # To combat this we jitter duplicates by a 0.1mm x-offset so both buildings keep their seed points.
 
@@ -671,10 +682,11 @@ def reassign_gdf_near_anchor_properties(
     radius: float,
 ) -> gpd.GeoDataFrame:
     """
-    Reassign building tech type to communal if within a given radius of an anchor load property, if assigned N-GSHP by the decision tree
+    Reassign building tech type to communal if within a given radius of an anchor load property, if assigned N-GSHP by the decision tree.
+    Buildings getting their technology reassigned due to anchor-proximity get `communal_origin` updated to reflect that; buildings already communal keep their original value of `communal_origin`.
 
     Args:
-        tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
+        tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types and `communal_origin`.
         combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints
         radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' if they were assigned N-GSHP by the decision tree.
     Returns:
@@ -691,10 +703,20 @@ def reassign_gdf_near_anchor_properties(
 
     # distance_m column now reads a number (distance from anchor) for all buildings within radius of anchor, and NaN for all outside of that radius
     # if distance column is not NaN (i.e. building is within the radius of an anchor), reassign tech type according to the map
+    # Flag the buildings reassigned to communal, before reassigning them.
+    # Buildings that were already communal keep their decision-tree origin.
+    newly_communal = tech_gdf["distance_m"].notna() & (
+        tech_gdf["assigned_tech"] == NETWORKED
+    )
     tech_gdf["assigned_tech"] = np.where(
         tech_gdf["distance_m"].notna(),
         tech_gdf["assigned_tech"].replace(ANCHOR_REASSIGNMENT_MAPPING),
         tech_gdf["assigned_tech"],
+    )
+    tech_gdf["communal_origin"] = np.where(
+        newly_communal,
+        COMMUNAL_ORIGIN["anchor_proximity"],
+        tech_gdf["communal_origin"],
     )
     # add column with True if near anchor, False if not
     tech_gdf[f"within_{radius}m_from_anchor_load"] = np.where(
@@ -730,7 +752,9 @@ def map_df_uprns_to_clusters(
         "cluster_id"
     ].to_dict()
     uprns_df = uprns_df.with_columns(
-        pl.col(building_id).replace_strict(building_cluster_mapping).alias("cluster_id")
+        pl.col(building_id)
+        # TODO: investigate why some building IDs are not mapping to clusters.
+        .replace_strict(building_cluster_mapping, default=None).alias("cluster_id")
     )
 
     return uprns_df

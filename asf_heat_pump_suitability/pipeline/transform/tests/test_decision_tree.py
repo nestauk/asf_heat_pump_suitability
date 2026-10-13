@@ -6,10 +6,17 @@ pytest asf_heat_pump_suitability/pipeline/transform/tests/test_decision_tree.py
 """
 
 import geopandas as gpd
+import pandas as pd
+import polars as pl
 import pytest
 from shapely.geometry import Point, Polygon
 
+from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.pipeline.transform import decision_tree
+
+TECH_TYPES = config["constant"]["tech_types"]
+COMMUNAL_ORIGIN = config["constant"]["communal_origin"]
+BUILDING_ID = config["constant"]["id"]["building"]
 
 
 @pytest.fixture(scope="module")
@@ -109,3 +116,108 @@ class TestIdentifyGdfTupleMostSuitableTechUprnAndBuilding:
             f"Buildings with more than one assigned tech: "
             f"{techs_per_building[techs_per_building > 1].index.tolist()}"
         )
+
+
+@pytest.fixture(scope="module")
+def tech_gdf():
+    """
+    Generate UPRN-level decision tree outputs for four buildings:
+    - B_FLATS: multiple UPRNs assigned 'communal' because they are in a block of flats
+    - B_FLATS_MIX: one UPRN assigned 'communal' and one UPRN assigned 'networked'
+    - B_NET: one UPRN assigned 'networked'
+    - B_IND_NET: one UPRN assigned 'individual' and one UPRN assigned 'networked'
+    Each row contains the following information:
+    - UPRN
+    - Most suitable tech
+    - Building ID
+    - Outdoor space
+    """
+    rows = [
+        ("U01", TECH_TYPES["communal"], "B_FLATS", None),
+        ("U02", TECH_TYPES["communal"], "B_FLATS", None),
+        ("U03", TECH_TYPES["communal"], "B_FLATS_MIX", None),
+        ("U04", TECH_TYPES["networked"], "B_FLATS_MIX", 10.0),
+        ("U05", TECH_TYPES["networked"], "B_NET", 12.0),
+        ("U06", TECH_TYPES["individual"], "B_IND_NET", 45.0),
+        ("U07", TECH_TYPES["networked"], "B_IND_NET", 5.0),
+    ]
+    return gpd.GeoDataFrame(
+        {
+            "UPRN": [row[0] for row in rows],
+            "assigned_tech": [row[1] for row in rows],
+            BUILDING_ID: [row[2] for row in rows],
+            "max_contiguous_outdoor_space_area_m2": [row[3] for row in rows],
+        },
+        # Points stand in for the UPRN locations: this test does not check geometry
+        geometry=[Point(400000 + i, 400000) for i in range(len(rows))],
+        crs="EPSG:27700",
+    )
+
+
+class TestIdentifyDfBuildingMostSuitableTech:
+    """Tests for `identify_df_building_most_suitable_tech`."""
+
+    @pytest.fixture(scope="class")
+    def solutions_df(self, tech_gdf):
+        """Run the function once and index the result by building ID."""
+        return decision_tree.identify_df_building_most_suitable_tech(
+            tech_gdf, id_col=BUILDING_ID
+        ).set_index(BUILDING_ID)
+
+    def test_all_communal_building_gets_block_of_flats_origin(self, solutions_df):
+        """A building with UPRNs assigned to 'communal' resolves to 'communal' with block-of-flats origin."""
+        assert (
+            solutions_df.loc["B_FLATS", "assigned_tech"] == TECH_TYPES["communal"]
+        ), "a building whose UPRNs are all assigned 'communal' must resolve to communal"
+        assert (
+            solutions_df.loc["B_FLATS", "communal_origin"]
+            == COMMUNAL_ORIGIN["block_of_flats"]
+        ), "a building assigned 'communal' must carry the block-of-flats origin"
+
+    def test_mixed_building_containing_communal_gets_block_of_flats_origin(
+        self, solutions_df
+    ):
+        """A building with UPRNs assigned to a mix of 'communal' and 'networked' solutions resolves to 'communal' with block-of-flats origin."""
+        assert (
+            solutions_df.loc["B_FLATS_MIX", "assigned_tech"] == TECH_TYPES["communal"]
+        ), "communal must take precedence in a building with a mix of 'communal'- and 'networked'-assigned UPRNs"
+        assert (
+            solutions_df.loc["B_FLATS_MIX", "communal_origin"]
+            == COMMUNAL_ORIGIN["block_of_flats"]
+        ), "a building resolved to 'communal' because it is a block of flats must carry the block-of-flats origin"
+
+    def test_non_communal_buildings_have_null_origin(self, solutions_df):
+        """Buildings not resolved to 'communal' have a null communal origin."""
+        for building in ["B_NET", "B_IND_NET"]:
+            assert pd.isna(
+                solutions_df.loc[building, "communal_origin"]
+            ), f"non-communal building {building} must have a null communal origin"
+
+
+class TestAssignDfUniqueSolution:
+    """Tests for `assign_df_unique_solution`."""
+
+    @pytest.fixture(scope="class")
+    def result_df(self):
+        """Resolve one building containing communal and one without."""
+        solutions_per_footprint_df = pl.DataFrame(
+            {
+                BUILDING_ID: ["B1", "B2"],
+                "assigned_tech": [
+                    [TECH_TYPES["communal"], TECH_TYPES["networked"]],
+                    [TECH_TYPES["networked"], TECH_TYPES["individual"]],
+                ],
+                "median_contiguous_outdoor_space_area_m2": [None, 10.0],
+            }
+        )
+        return decision_tree.assign_df_unique_solution(solutions_per_footprint_df)
+
+    def test_most_collaborative_tech_takes_precedence(self, result_df):
+        """A solution set containing more than one tech resolves to the most collaborative solution."""
+        resolved = dict(zip(result_df[BUILDING_ID], result_df["assigned_tech"]))
+        assert (
+            resolved["B1"] == TECH_TYPES["communal"]
+        ), "'communal' must take precedence over 'networked'"
+        assert (
+            resolved["B2"] == TECH_TYPES["networked"]
+        ), "'networked' must take precedence over 'individual'"
