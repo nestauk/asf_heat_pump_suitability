@@ -96,7 +96,7 @@ if __name__ == "__main__":
     local_authority_dict = local_authority.get_dict_la_data(local_authorities)
 
     release_date = save_utils.get_str_release_date(args.release_date)
-    uprns_path = save_utils.get_str_output_path(
+    domestic_uprns_path = save_utils.get_str_output_path(
         "domestic_uprns",
         release_date=release_date,
         check_exists=True,
@@ -104,9 +104,9 @@ if __name__ == "__main__":
     )
 
     # Load UPRN data
-    print(f"Loading domestic UPRNs from: {uprns_path}")
-    uprns_df = pl.read_parquet(
-        uprns_path,
+    print(f"Loading domestic UPRNs from: {domestic_uprns_path}")
+    domestic_uprns_df = pl.read_parquet(
+        domestic_uprns_path,
         columns=["UPRN", "X_COORDINATE", "Y_COORDINATE"],
     )
 
@@ -116,19 +116,19 @@ if __name__ == "__main__":
         columns=["UPRN", "PCDS", "ctry25cd"],
     )
     uprn_lookup_df = lookups.transform_df_uprn_lookup(uprn_lookup_df)
-    uprns_df = uprns_df.join(
+    domestic_uprns_df = domestic_uprns_df.join(
         uprn_lookup_df.select(["UPRN", "postcode", "country"]), how="left", on="UPRN"
     )
     del uprn_lookup_df
 
     # Get geopoints of UPRNs
-    uprns_gdf = uprns.generate_gdf_uprn_coords(df=uprns_df)
+    domestic_uprns_gdf = uprns.generate_gdf_uprn_coords(df=domestic_uprns_df)
 
     # ------------------------ #
     # IMPUTE PROPERTY TYPE FLAT
     # Create boolean column called `property_type_flat` to identify flats
-    flat_uprns = property_type.impute_set_flat_properties(uprns_gdf=uprns_gdf)
-    features_df = uprns_df.with_columns(
+    flat_uprns = property_type.impute_set_flat_properties(uprns_gdf=domestic_uprns_gdf)
+    features_df = domestic_uprns_df.with_columns(
         pl.col("UPRN").is_in(flat_uprns).alias("property_type_flat")
     )
 
@@ -140,23 +140,28 @@ if __name__ == "__main__":
         layer="building", grid_squares=local_authority_dict["grid_squares"]
     )
 
-    # Map UPRNs to the ID of the building they're in
-    uprn_building_id_dict = uprns.map_dict_uprns_to_building_id(
-        uprns_gdf=uprns_gdf, buildings_gdf=buildings_gdf, id_col="ID"
-    )
-
     all_uprns_df = load_geodata.load_df_osopen_uprn(
         grid_squares=local_authority_dict["grid_squares"]
     ).with_columns(
-        pl.col("UPRN").is_in(uprns_df["UPRN"]).alias("is_domestic"),
+        pl.col("UPRN").is_in(domestic_uprns_df["UPRN"]).alias("is_domestic"),
         pl.col("UPRN").is_in(flat_uprns).alias("property_type_flat"),
     )
     all_uprns_gdf = uprns.generate_gdf_uprn_coords(df=all_uprns_df)
+
+    # Map UPRNs to the ID of the building they're in
+    uprn_building_id_df = uprns.map_dict_uprns_to_building_id(
+        uprns_gdf=all_uprns_gdf,
+        buildings_gdf=buildings_gdf,
+        id_col="ID",
+        as_dict=False,
+    )
+    uprn_building_id_dict = uprn_building_id_df.to_pandas().to_dict()["ID"]
 
     # Generate features for block of flats classification model
     building_features_df = feature_engineering.generate_df_features(
         buildings_gdf=buildings_gdf,
         uprns_gdf=all_uprns_gdf,
+        mapping_df=uprn_building_id_df,
         id_col="ID",
     )
 
@@ -182,7 +187,15 @@ if __name__ == "__main__":
         id_col="ID",
     )
 
-    del uprn_building_id_dict, building_features_df, labelled_df, clf
+    del (
+        all_uprns_df,
+        all_uprns_gdf,
+        uprn_building_id_df,
+        uprn_building_id_dict,
+        building_features_df,
+        labelled_df,
+        clf,
+    )
 
     # ------------------------ #
     # ESTIMATE OUTDOOR SPACE
@@ -194,7 +207,7 @@ if __name__ == "__main__":
 
     # Get file names of INSPIRE files which intersect with UPRNs
     inspire_file_names = inspire_file_gdf.sjoin(
-        uprns_gdf, how="inner", predicate="intersects"
+        domestic_uprns_gdf, how="inner", predicate="intersects"
     )["inspire_file_name"].unique()
 
     land_parcels_gdf = pd.concat(
@@ -222,7 +235,7 @@ if __name__ == "__main__":
         building_intersections_gdf=intersection_gdf, land_parcels_gdf=land_parcels_gdf
     )
     uprns_space_df = outdoor_space.sjoin_df_uprn_to_outdoor_space(
-        uprns_gdf=uprns_gdf, outdoor_space_gdf=outdoor_space_gdf
+        uprns_gdf=domestic_uprns_gdf, outdoor_space_gdf=outdoor_space_gdf
     )
     uprns_space_df = outdoor_space.deduplicate_df_outdoor_space(uprns_space_df)
 
@@ -297,7 +310,7 @@ if __name__ == "__main__":
 
     features_df = listed_buildings.extend_df_listed_building_bool(
         features_df=features_df,
-        uprns_gdf=uprns_gdf,
+        uprns_gdf=domestic_uprns_gdf,
         buildings_gdf=buildings_gdf,
         listed_buildings_gdf=listed_buildings_gdf,
     )
@@ -329,7 +342,7 @@ if __name__ == "__main__":
 
     features_df = coast.extend_df_near_coastline_bool(
         features_df=features_df,
-        uprns_gdf=uprns_gdf,
+        uprns_gdf=domestic_uprns_gdf,
         coast_gdf=coast_gdf,
         distance_threshold_m=config["constant"]["coastline"][
             "distance_from_coastline_threshold_m"
@@ -341,7 +354,7 @@ if __name__ == "__main__":
 
     # Add conservation area boolean flag
     uprns_protected_areas_df = protected_areas.load_transform_df_uprn_in_protected_area(
-        gdf=uprns_gdf
+        gdf=domestic_uprns_gdf
     )
 
     features_df = protected_areas.extend_df_protected_area_bool(
