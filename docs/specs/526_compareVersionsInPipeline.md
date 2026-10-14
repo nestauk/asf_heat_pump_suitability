@@ -156,8 +156,9 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
 The branch `526_compareVersionsInPipeline` is off `515_loop_pipeline` (#521),
 which adds `pipeline.py` and `orbit_pipeline.py`. It has
 `519_countUprnsMissingClusters` (#520) merged in, because this work edits
-`compare_versions.py` too. The PR is stacked on #521; retarget it to `dev`
-when #521 merges.
+`compare_versions.py` too. The PR was stacked on #521. #520 merged on
+2026-10-09 and #521 on 2026-10-14, so the PR now targets `dev`, with `dev`
+merged in.
 
 ### Change outside the main scope
 
@@ -224,7 +225,9 @@ wrong description of it now affects this feature.
   `.git`, but without `git` the run manifest records `git_commit: unknown`
   and the report's commit-log section is reduced to a note. Best guess:
   check on the first real Orbit run with `--compare`; fixing the image is a
-  separate issue. Still open: no Orbit run was made for this PR.
+  separate issue. Answered 2026-10-14: the East Lothian Orbit run logged
+  "Could not read git commit hash", so Orbit manifests and report commit
+  logs say "unknown". Fixing the image is a separate issue.
 - How much does comparing five stages add to each LA's runtime on Orbit?
   Best guess: measure it on the first real Orbit run with `--compare`; if it
   is large, #488's single read is the fix, not fewer stages. Still open: no
