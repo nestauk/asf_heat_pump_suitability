@@ -121,6 +121,23 @@ records the design decisions and why we made them.
     _Rationale:_ one place for each release, apart from the 350 LA folders.
     It has the same shape as `outputs/logs/pipeline_failure/{release_date}/`.
 
+11. **The file names say which LAs the summary covers.** The files are
+    `comparison_summary_{scope}.parquet` and `.md`. The first rule that
+    matches gives `{scope}`:
+
+    - the full GB list gives `gb`
+    - 1 to 3 LAs give their slugs, sorted and joined with `__`, for example
+      `east_lothian__glasgow_city`
+    - more than 3 LAs give the count and the first and last slug, sorted,
+      for example `12_las_barnet_to_westminster`
+
+    The markdown lists every LA of the run at the top. A run with the same
+    LAs replaces its own files. There is no `--label` flag.
+    _Rationale:_ a release date is fixed for each run, so two subset runs, or
+    a subset run and a GB run, on the same date would overwrite one summary.
+    The name must be readable, so a hash of the LA list was rejected. Sorting
+    makes the name the same for any order of the LAs.
+
 ### Branch and stacking
 
 The branch `531_gbComparisonSummary` is made from
@@ -147,6 +164,12 @@ retargeted when #534 merges.
   after two GB runs.
 - **Use the JSON with the latest old date, or keep a row for each JSON.**
   See decision 8.
+- **Other file-name rules** (decision 11). A short hash of the sorted
+  slugs is unique but not readable. A time in the name never overwrites,
+  but files pile up when a run is repeated. One summary for each release
+  over every LA found on S3 cannot show an LA that wrote nothing. A
+  `--label` flag and a `sample` name for the six sample LAs were not added
+  for now.
 - **Baseline numbers and the extra JSON keys in #534 itself.** Baseline
   numbers need a new loading path in `compare_versions.py`, which is not
   the integration job of #534. They moved to #535, together with the
@@ -184,6 +207,10 @@ retargeted when #534 merges.
 - **The newest file needs the S3 write time.** `s3_utils.list_files_s3_path`
   gives paths only. Best guess: a small boto3 listing that also returns
   `LastModified`, in `s3_utils`.
+- **Two sets of more than 3 LAs can get the same file name** when they
+  have the same count and the same first and last slug (decision 11). The
+  second summary then overwrites the first. Best guess: rare, and the
+  markdown lists the LAs. If it happens, add a short hash or a `--label`.
 
 ## Verification
 
@@ -200,6 +227,8 @@ https://github.com/nestauk/asf_heat_pump_suitability/issues/531:
       the newest is used
 - [ ] A version 0 JSON and a version 1 JSON are both read
 - [ ] The markdown summary gives run-health counts and the top changes
+- [ ] A subset run writes files named for its LAs and does not overwrite
+      the GB summary of the same release
 - [ ] With `--save` the parquet and markdown are in
       `outputs/comparisons/{release_date}/` (writes to S3, ask Aidan first)
 - [ ] A run over the sample LAs gives the expected rows
