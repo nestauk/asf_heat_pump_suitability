@@ -895,8 +895,9 @@ def reassign_gdf_near_anchor_properties(
         COMMUNAL_ORIGIN["anchor_proximity"],
         tech_gdf["communal_origin"],
     )
-    # Only reassigned buildings keep the anchors' identity. The distances are only used to
-    # order each cluster's list, and are not saved.
+    # Only reassigned buildings keep the anchors' identifiers, with the distance to each one.
+    # generate_gdf_clusters uses the distances to put each cluster's anchor IDs nearest first,
+    # then drops them: the distances are not in the saved outputs.
     tech_gdf = tech_gdf.join(
         anchors_within_radius.reindex(tech_gdf.index[newly_communal])
     )
