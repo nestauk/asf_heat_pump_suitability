@@ -174,11 +174,11 @@ if __name__ == "__main__":
             )
 
     # Aggregate any error logs and save to a single file
-    dir_uri = Path(
+    dir_uri = (
         config["output"]["log"]["pipeline_failure"].format(
             release_date=release_date, local_authorities="REMOVE"
         )
-    ).parent
+    ).rsplit("/", 1)[0]
     failure_paths = s3_utils.list_files_s3_path(dir_uri=str(dir_uri))
     if failure_paths:
         failures = pl.concat([pl.read_csv(f) for f in failure_paths])
