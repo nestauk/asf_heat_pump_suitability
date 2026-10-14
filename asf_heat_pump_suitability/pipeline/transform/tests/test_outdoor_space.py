@@ -10,12 +10,12 @@ import pytest
 from shapely.geometry import box
 
 from asf_heat_pump_suitability.pipeline.transform.outdoor_space import (
-    clip_gdf_land_parcels,
+    clip_gdf_land_parcels_to_barriers,
 )
 
 
 class TestClipGdfLandParcels:
-    """Tests for `clip_gdf_land_parcels`."""
+    """Tests for `clip_gdf_land_parcels_to_barriers`."""
 
     @pytest.fixture(scope="class")
     def land_parcels_gdf(self):
@@ -55,7 +55,7 @@ class TestClipGdfLandParcels:
     ):
         """Test that only the land parcel fragment touching a building intersection is retained, and the fragment
         on the other side of the barrier (with no building) is discarded."""
-        results = clip_gdf_land_parcels(
+        results = clip_gdf_land_parcels_to_barriers(
             land_parcels_gdf, intersection_gdf, polygon_overlay_gdf
         ).set_index("NATIONALCADASTRALREFERENCE")
 
@@ -76,7 +76,7 @@ class TestClipGdfLandParcels:
     ):
         """Test the returned GeoDataFrame is dissolved by the land parcel ID with one row per
         parcel."""
-        results = clip_gdf_land_parcels(
+        results = clip_gdf_land_parcels_to_barriers(
             land_parcels_gdf, intersection_gdf, polygon_overlay_gdf
         )
 
