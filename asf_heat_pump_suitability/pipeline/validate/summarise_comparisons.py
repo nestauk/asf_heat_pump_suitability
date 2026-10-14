@@ -343,22 +343,17 @@ def generate_df_comparison_summary(rows: list[dict]) -> pl.DataFrame:
         pl.DataFrame: one row for each LA and stage, with the columns of
             `SUMMARY_SCHEMA`
     """
-    return (
-        pl.DataFrame(rows, schema=SUMMARY_SCHEMA)
-        .with_columns(
-            status_order=pl.col("status").replace_strict(
-                STATUSES, list(range(len(STATUSES)))
-            ),
-            stage_order=pl.col("stage").replace_strict(
-                STAGES, list(range(len(STAGES)))
-            ),
-        )
-        .sort(
-            ["status_order", "max_rel_change", "local_authority", "stage_order"],
-            descending=[False, True, False, False],
-            nulls_last=True,
-        )
-        .drop("status_order", "stage_order")
+    # An Enum sorts in the order of its categories, so statuses and stages
+    # sort in list order, not alphabetically.
+    return pl.DataFrame(rows, schema=SUMMARY_SCHEMA).sort(
+        [
+            pl.col("status").cast(pl.Enum(STATUSES)),
+            "max_rel_change",
+            "local_authority",
+            pl.col("stage").cast(pl.Enum(STAGES)),
+        ],
+        descending=[False, True, False, False],
+        nulls_last=True,
     )
 
 
