@@ -219,6 +219,8 @@ output:
     buildings_most_suitable_tech: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_buildings_most_suitable_tech.parquet"
     # Buildings containing domestic UPRNs aggregated into groups of neighbouring clusters of the same tech type
     tech_clusters: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_clustered_tech_polygons.parquet"
+    # Anchor load footprints in the local authority with their geometry-derived anchor_load_id; the IDs referenced by tech_clusters.reassigning_anchor_load_ids
+    anchor_loads: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_anchor_loads.parquet"
     # Opportunity areas with most suitable tech, cluster ID, contextual data
     clusters_tech_contextual_info: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_clusters_contextual_features_{tolerance_m}m.geojson"
   model:
@@ -241,7 +243,9 @@ metadata:
     "cluster_id": "Unique identifier for each cluster."
     "assigned_tech": "Assigned low-carbon heating technology category. Categories are: `Individual solution`, `Networked heat pump`, `Communal solution`, `District heat network`. Can additionally contain `DESNZ_HNZ` values (if the local authority was part of the DESNZ heat network zoning pilot)."
     "communal_origin": "Route by which a `Communal solution` cluster was assigned: `block of flats` (the cluster contains blocks of flats) or `anchor proximity` (buildings near an anchor load such as a school or hospital). Null for non-communal clusters."
-    "geometry": "Polygon geometry of the cluster"
+    "reassigning_anchor_load_ids": "List of `anchor_load_id` values of the anchor loads that caused at least one building in the cluster to be reassigned to a `Communal solution`, nearest first: each anchor load is placed by its distance to the nearest building it reassigned in the cluster. Only set for clusters with `communal_origin` of `anchor proximity`; null otherwise, including for block-of-flats clusters that sit within the anchor radius. Variable present for features in `clusters_with_contextual_features` layer only."
+    "anchor_load_id": "Unique identifier of an anchor load, derived from its footprint geometry. Referenced by the `reassigning_anchor_load_ids` of clusters. Variable present for features in `anchor_loads` layer only."
+    "geometry": "Polygon geometry of the feature. Depends on the layer: the cluster for `clusters_with_contextual_features`, the anchor load's footprint for `anchor_loads`, the ward for `ward_boundaries` and the area for `areas_of_district_heat_network_potential`."
     "n_UPRNs": "Number of domestic UPRNs (properties) within the cluster"
     "n_uprns_in_listed_building": "Number of UPRNs (properties) within the cluster that are in listed buildings"
     "n_uprns_solar_pv": "Number of UPRNs (properties) within the cluster that have solar PV"
