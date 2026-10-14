@@ -35,7 +35,7 @@ Source code for v1.0.0 is available under [Releases](https://github.com/nestauk/
 - To update the environment after changing dependencies in `pyproject.toml`, run `make sync`
 - Instructions to run pipeline scripts can be found in [asf_heat_pump_suitability/pipeline/README.md](https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/pipeline#readme)
 
-\*Nesta staff only: to run the pipeline with `orbit`, you will need to set up an environment with it. Run `make install install-orbit`. Continue with virtual environment set up.
+\*Nesta staff only: to run the pipeline with `orbit`, you will need to set up an environment with it. Run `make install install-orbit`. This defaults to using `ssh` protocol. Set `ORBIT_PROTOCOL=https` to install with `https` protocol. Continue with virtual environment set up.
 
 ## Repository structure
 

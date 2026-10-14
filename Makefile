@@ -28,10 +28,20 @@ sync:
 	uv sync --extra dev
 	@direnv reload
 
+# Protocol used to install orbit: ssh (default) or https
+ORBIT_PROTOCOL ?= ssh
+ifeq ($(ORBIT_PROTOCOL),ssh)
+	ORBIT_URL = git+ssh://git@github.com/nestauk/arm_orbit.git
+else ifeq ($(ORBIT_PROTOCOL),https)
+	ORBIT_URL = git+https://github.com/nestauk/arm_orbit.git
+else
+$(error ORBIT_PROTOCOL must be 'ssh' or 'https', got '$(ORBIT_PROTOCOL)')
+endif
+
 .PHONY: install-orbit
-## Nesta staff only: needs GitHub SSH access to nestauk/orbit
+## Nesta staff only: needs GitHub access to nestauk/arm_orbit. Defaults to SSH, use ORBIT_PROTOCOL=https for HTTPS
 install-orbit:
-	uv tool install --upgrade git+ssh://git@github.com/nestauk/arm_orbit.git
+	uv tool install --upgrade $(ORBIT_URL)
 
 .PHONY: check-bucket-path
 check-bucket-path:
