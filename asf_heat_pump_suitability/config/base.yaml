@@ -506,6 +506,12 @@ compare_versions:
   # Where --save uploads each comparison's report, plots and JSON: the new
   # release's own folder, so they are deleted together with it.
   comparisons_dir: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{release_date}/comparisons"
+  # Where summarise_comparisons --save uploads the summary table and markdown
+  # of all the LAs' comparisons for one release.
+  summary_dir: "s3://asf-local-heat-planning-tool/outputs/comparisons/{release_date}"
+  # Number of LA and stage rows in the "top changes" list of the summary
+  # markdown. A first value: change it after the first GB run.
+  summary_n_top_changes: 20
   # The `layer` value carrying the clusters in the multi-layer front-end
   # geojson; the cluster checks filter to it. Versions without a `layer`
   # column (pre-August-2026 outputs) are treated as all-clusters.
