@@ -199,14 +199,13 @@ retargeted when #534 merges.
   does not depend on it.
 - **How many top changes does the markdown show?** Best guess: 20, as a
   config value. Change it after the first GB run.
-- **Is one S3 listing for each LA fast enough?** About 350 listings for a
-  GB run. Best guess: yes (seconds). If it is slow, list in parallel or
-  list the `outputs/data/` prefix once with a filter.
+- ~~**Is one S3 listing for each LA fast enough?**~~ Answered: yes. A GB
+  summary (361 LAs) took 128 s on 2026-10-14.
 - **Does the `(null)` tech count in the sort?** Best guess: yes. A large
   change in UPRNs with no tech is a signal.
-- **The newest file needs the S3 write time.** `s3_utils.list_files_s3_path`
-  gives paths only. Best guess: a small boto3 listing that also returns
-  `LastModified`, in `s3_utils`.
+- ~~**The newest file needs the S3 write time.**~~ Answered:
+  `s3fs.S3FileSystem().ls(dir, detail=True)` returns `LastModified`, so no
+  new helper in `s3_utils` is necessary.
 - **Two sets of more than 3 LAs can get the same file name** when they
   have the same count and the same first and last slug (decision 11). The
   second summary then overwrites the first. Best guess: rare, and the
