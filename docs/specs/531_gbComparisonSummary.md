@@ -32,7 +32,8 @@ records the design decisions and why we made them.
    (`arm_orbit/cli/launch.py` prints the job ID and exits). So
    `orbit_pipeline.py` cannot know when the comparisons are done, and the
    summary cannot be its last step. This was already an open question in
-   the #526 spec.
+   the #526 spec. An optional `--wait` on `orbit_pipeline.py` that polls the
+   jobs and then runs this summary is issue #536.
 
 2. **The expected rows are the expected LAs x the five comparison stages.**
    The LAs come from `config["data"]["processed"]["valid_la_names"]`
@@ -162,6 +163,7 @@ retargeted when #534 merges.
 - Running the comparisons (#526)
 - Splitting or refactoring `compare_versions.py` (#474, #488)
 - Fixing the failure-log code of #521
+- Running the summary automatically after the Orbit jobs (#536)
 - Alerts or notifications
 
 ## Open questions
