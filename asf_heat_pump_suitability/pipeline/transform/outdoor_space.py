@@ -53,17 +53,21 @@ def clip_gdf_land_parcels_to_barriers(
     Returns:
          gpd.GeoDataFrame: land parcels clipped to barriers
     """
-    # Remove barrier polygons from land parcels
-    land_fragments_gdf = land_parcels_gdf.overlay(
-        barriers_gdf, how="difference"
-    ).explode()
+    # Remove barrier polygons from land parcels which have an intersecting building
+    land_fragments_gdf = (
+        land_parcels_gdf[
+            land_parcels_gdf[land_parcel_id].isin(intersection_gdf[land_parcel_id])
+        ]
+        .overlay(barriers_gdf, how="difference")
+        .explode()
+    )
 
     # Retain only land parcel fragments which touch a building intersection
     land_fragments_gdf = land_fragments_gdf.sjoin(
         intersection_gdf[["geometry"]],
         how="inner",
         predicate="intersects",
-    )
+    ).drop_duplicates(subset="geometry")
 
     # Clean fragments to avoid bleeding geometries creating neighbour 'swallowing' effects during dissolve.
     # e.g. building A swallows building B's cell due to microscopic overlaps in a cell fragment.
