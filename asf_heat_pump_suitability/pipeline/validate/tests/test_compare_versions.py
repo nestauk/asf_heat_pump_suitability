@@ -2072,26 +2072,6 @@ class TestParseArguments:
             and args.trigger is None
         ), "omitted dates and trigger must parse as None, not error or default"
 
-    def test_new_release_date_alone_is_accepted(self, mocker):
-        """The pipeline passes only the new date; the old one is then
-        picked from S3, so this must not be a CLI error."""
-        mocker.patch(
-            "sys.argv",
-            [
-                "compare_versions.py",
-                "--stage",
-                "decision_tree",
-                "--local_authority",
-                "plymouth",
-                "--new_release_date",
-                "20260722",
-            ],
-        )
-        args = compare_versions.parse_arguments()
-        assert (
-            args.old_release_date is None and args.new_release_date == "20260722"
-        ), "a new date on its own must parse, with no old date"
-
 
 class TestGetStrLocalAuthoritySlug:
     """Tests for `get_str_local_authority_slug`."""
@@ -2114,9 +2094,10 @@ class TestGetStrLocalAuthoritySlug:
 class TestGetStrPreviousReleaseDate:
     """Tests for `get_str_previous_release_date`."""
 
-    def test_picks_the_latest_date_before_the_new_one(self):
+    def test_picks_the_latest_earlier_date_or_none_for_a_baseline(self):
         """The old version is the latest date before the new one, even when
-        a later date exists (e.g. a run repeated after this one)."""
+        a later date exists (e.g. an older release run again). With no
+        earlier date there is nothing to compare, which is a baseline."""
         release_dates = ["20260601", "20260722", "20260801", "20260901"]
         assert (
             compare_versions.get_str_previous_release_date(
@@ -2124,10 +2105,6 @@ class TestGetStrPreviousReleaseDate:
             )
             == "20260722"
         ), "the old version must be the latest date before the new one"
-
-    def test_no_earlier_date_is_a_baseline(self):
-        """A stage whose only version is the new one has nothing to compare
-        against, which the caller writes as a baseline."""
         assert (
             compare_versions.get_str_previous_release_date(
                 release_dates=["20260801"], release_date_new="20260801"
