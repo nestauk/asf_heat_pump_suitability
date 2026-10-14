@@ -310,9 +310,8 @@ def test_upload_summary_files_to_s3_writes_to_release_folder(mocker):
         release_date=RELEASE_DATE,
     )
     kwargs = upload.call_args.kwargs
+    expected_dir = summarise_comparisons.SUMMARY_DIR.format(release_date=RELEASE_DATE)
     assert (
         f"s3://{kwargs['s3_bucket']}/{kwargs['s3_key_dir']}{kwargs['subfolder']}/"
-        f"{kwargs['filename']}"
-        == "s3://asf-local-heat-planning-tool/outputs/comparisons/20261014/"
-        "comparison_summary_gb.parquet"
+        f"{kwargs['filename']}" == f"{expected_dir}/comparison_summary_gb.parquet"
     ), "The summary should be uploaded to the release's comparisons folder"
