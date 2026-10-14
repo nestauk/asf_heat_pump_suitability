@@ -495,9 +495,11 @@ def create_json_contextual_features_metadata(
         "Local authority": local_authorities,
     }
 
-    # append metadata from config base.yaml; a deep copy, so the pops below leave the config intact
+    # append metadata from config base.yaml
+    # Copy it first: the .pop() calls below would otherwise also remove keys from the config
     metadata.update(copy.deepcopy(config["metadata"]))
-    # Descriptions are grouped by layer; the thresholds are only in cluster variable names
+    # Fill in the distance thresholds in two cluster variable names
+    # (only the cluster layer has variable names with a threshold)
     cluster_descriptions = metadata["Variable names and descriptions"][
         "clusters_with_contextual_features"
     ]
