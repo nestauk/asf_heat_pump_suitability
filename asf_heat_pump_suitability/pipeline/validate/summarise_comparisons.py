@@ -467,7 +467,7 @@ def generate_str_summary_markdown(
         metric = (
             "-"
             if row["max_rel_change_metric"] is None
-            else (_generate_str_metric_cell(row=row))
+            else _generate_str_metric_cell(row=row)
         )
         report_path = row["json_path"].removesuffix(".json") + ".md"
         lines.append(
