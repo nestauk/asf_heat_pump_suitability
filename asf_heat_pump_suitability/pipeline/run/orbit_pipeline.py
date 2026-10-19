@@ -122,11 +122,9 @@ if __name__ == "__main__":
         missing = [name for name in front_end_vars if not os.environ.get(name)]
         if missing:
             sys.exit(f"--prod needs {', '.join(missing)} in your .env file.")
-        front_end_env_args = [
-            arg
-            for name in front_end_vars
-            for arg in ("-e", f"{name}={os.environ[name]}")
-        ]
+        front_end_env_args = []
+        for name in front_end_vars:
+            front_end_env_args += ["-e", f"{name}={os.environ[name]}"]
     local_authorities = args.local_authorities
     release_date = save_utils.get_str_release_date(args.release_date)
     print(f"Release date pinned to: {release_date}")
