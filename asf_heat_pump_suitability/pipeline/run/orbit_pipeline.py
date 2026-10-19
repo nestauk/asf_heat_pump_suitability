@@ -22,8 +22,8 @@ chunks if `--is_number_of_chunks` is also passed (the number of batches to run i
 omitted, all local authorities are run in a single chunk.
 
 Pass `--prod` to push changes to production (i.e. staging area). This should only be used when running from `dev`.
-The jobs need `front_end_s3_bucket` and `front_end_staging_s3_path` from `.env`, so load them into your shell first:
-    set -a; source .env; set +a
+With `--prod`, the launcher reads `front_end_s3_bucket` and `front_end_staging_s3_path` from `.env` and passes them
+to the jobs.
 
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
@@ -110,20 +110,23 @@ if __name__ == "__main__":
     import polars as pl
     from tqdm import tqdm
     import subprocess
+    from dotenv import load_dotenv
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils, s3_utils
 
     args = parse_arguments()
     if args.prod:
-        missing = [
-            name
-            for name in ("front_end_s3_bucket", "front_end_staging_s3_path")
-            if not os.environ.get(name)
-        ]
+        # .env is not uploaded to orbit, so pass the front-end S3 location to the jobs explicitly
+        load_dotenv()
+        front_end_vars = ("front_end_s3_bucket", "front_end_staging_s3_path")
+        missing = [name for name in front_end_vars if not os.environ.get(name)]
         if missing:
-            sys.exit(
-                f"--prod needs {missing} in your shell. Run `set -a; source .env; set +a` first."
-            )
+            sys.exit(f"--prod needs {missing} in your .env file.")
+        front_end_env_args = [
+            arg
+            for name in front_end_vars
+            for arg in ("-e", f"{name}={os.environ[name]}")
+        ]
     local_authorities = args.local_authorities
     release_date = save_utils.get_str_release_date(args.release_date)
     print(f"Release date pinned to: {release_date}")
@@ -156,11 +159,7 @@ if __name__ == "__main__":
                     "60gb",
                     "-e",
                     "PYTHONPATH=/app",  # Install repository in docker image
-                    # Name only: orbit forwards the value from your shell (.env is not uploaded)
-                    "-e",
-                    "front_end_s3_bucket",
-                    "-e",
-                    "front_end_staging_s3_path",
+                    *front_end_env_args,
                     "--local_authorities",
                     *chunk,
                     "--release_date",
