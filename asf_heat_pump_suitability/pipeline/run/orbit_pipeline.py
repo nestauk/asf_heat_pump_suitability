@@ -121,7 +121,7 @@ if __name__ == "__main__":
         front_end_vars = ("front_end_s3_bucket", "front_end_staging_s3_path")
         missing = [name for name in front_end_vars if not os.environ.get(name)]
         if missing:
-            sys.exit(f"--prod needs {missing} in your .env file.")
+            sys.exit(f"--prod needs {', '.join(missing)} in your .env file.")
         front_end_env_args = [
             arg
             for name in front_end_vars
