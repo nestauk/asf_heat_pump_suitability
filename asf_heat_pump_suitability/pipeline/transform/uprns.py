@@ -325,13 +325,11 @@ def map_dict_uprns_to_building_id(
     uprns_building_df = (
         (pd.concat([uprns_inside_buildings, nearest_buildings_uprns]))
         # Handle edge cases reproducibly where UPRNs on the edge of multiple buildings get joined to more than one building
-        .sort_values(by=id_col, ascending=True)
-        .drop_duplicates(subset="UPRN")
-        .set_index("UPRN")
+        .sort_values(by=id_col, ascending=True).drop_duplicates(subset="UPRN")
     )
 
     if as_dict:
-        return uprns_building_df.to_dict()[id_col]
+        return uprns_building_df.set_index("UPRN").to_dict()[id_col]
     else:
         return pl.from_pandas(uprns_building_df[["UPRN", id_col]])
 
