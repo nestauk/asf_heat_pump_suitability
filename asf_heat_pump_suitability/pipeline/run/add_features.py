@@ -169,7 +169,9 @@ if __name__ == "__main__":
 
     # TODO make this robust by automatically loading same labelled data used to train model
     labelled_df = pl.read_parquet(
-        config["data"]["processed"]["manually_labelled_block_of_flats"]
+        config["data"]["processed"]["manually_labelled_block_of_flats"].format(
+            release_date=release_date
+        )
     )
     # Load trained block of flats classifier model
     clf = base_getters.load_pickle(
