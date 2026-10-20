@@ -90,13 +90,9 @@ def extract_df_labelled_data(
     all_labels = BLOCK_OF_FLATS_ARCHETYPES + NOT_BLOCKS_ARCHETYPES + EXCLUDED_ARCHETYPES
     unexpected = set(df["label"]).difference(set(all_labels))
 
-    # TODO remove this temporary code lines
-    print(f"Removing unexpected labels: {unexpected}")
-    df = df.filter(~pl.col("label").is_in(unexpected))
-    # TODO uncomment below before merging
-    # assert (
-    #     not unexpected
-    # ), f"There are unexpected archetype labels in the labelled sample: {unexpected}."
+    assert (
+        not unexpected
+    ), f"There are unexpected archetype labels in the labelled sample: {unexpected}."
 
     return df.with_columns(
         pl.when(pl.col("label") == "UL")
