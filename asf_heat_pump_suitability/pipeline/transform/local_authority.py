@@ -84,6 +84,8 @@ def make_str_slug(name: str | list[str]) -> str:
         item = re.sub(r"[^a-z0-9]+", "_", item)
         cleaned = item.strip("_")
         if cleaned:  # Avoid adding empty strings to the final slug
+            if cleaned == "gb":
+                cleaned = "GB"
             slug_parts.append(cleaned)
 
     return "-".join(slug_parts)

@@ -3,40 +3,44 @@ Functions to generate features for random forest binary classifier model which c
 or not. Features are generated per building from building footprint and UPRN geodata.
 """
 
+import pandas as pd
 import polars as pl
 import geopandas as gpd
 
 
 def generate_df_features(
-    buildings_gdf: gpd.GeoDataFrame, uprns_gdf: gpd.GeoDataFrame, id_col: str
+    buildings_gdf: gpd.GeoDataFrame,
+    uprns_gdf: gpd.GeoDataFrame,
+    mapping_df: pd.DataFrame,
+    id_col: str,
 ) -> pl.DataFrame:
     """
     Generate all features required to train block of flats random forest binary classifier.
 
     Args:
         buildings_gdf (gpd.GeoDataFrame): building footprints of buildings containing at least one domestic property.
-        uprns_gdf (gpd.GeoDataFrame): all UPRNs (both domestic and non-domestic) located within the footprints in `buildings_gdf` with corresponding geospatial points and `property_type_flat` boolean column.
+        uprns_gdf (gpd.GeoDataFrame): all UPRNs (both domestic and non-domestic) located within the footprints in `buildings_gdf` with corresponding geospatial points and `property_type_flat` and `is_domestic` boolean columns.
+        mapping_df (pd.DataFrame): all UPRNs (both domestic and non-domestic) mapped to their building IDs. Contains `UPRN` and id_col column.
         id_col (str): name of building ID column
 
     Return:
         pl.DataFrame: all features for each building ID (per id_col)
     """
     print("Generating features required for block of flats classifier...")
-    # Join UPRNs to the building footprints they intersect with and retain building geometry
-    buildings_w_uprns_gdf = buildings_gdf.sjoin(
-        uprns_gdf, how="inner", predicate="intersects"
-    ).dropna(subset=id_col)
-
     # Join buildings to the UPRNs they contain and retain UPRN geometry
-    uprns_w_buildings_gdf = uprns_gdf.sjoin(
-        buildings_gdf, how="inner", predicate="intersects"
-    ).dropna(subset="UPRN")
+    uprns_gdf = uprns_gdf.merge(mapping_df, how="inner", on="UPRN")
+
+    # Join UPRNs to the building footprints they intersect with and retain building geometry
+    cols = ["UPRN", id_col, "property_type_flat", "is_domestic"]
+    buildings_gdf = buildings_gdf.merge(
+        uprns_gdf[cols], how="inner", on=id_col
+    ).set_geometry("geometry")
 
     features_dfs = [
         # Generate features per building footprint
-        _generate_df_building_features(buildings_w_uprns_gdf, id_col),
-        _generate_df_stacked_uprn_features(uprns_w_buildings_gdf, id_col),
-        _generate_df_concave_hull_features(uprns_w_buildings_gdf, id_col),
+        _generate_df_building_features(buildings_gdf, id_col),
+        _generate_df_stacked_uprn_features(uprns_gdf, id_col),
+        _generate_df_concave_hull_features(uprns_gdf, id_col),
     ]
 
     features_dfs = pl.align_frames(*features_dfs, on=id_col, how="left")
@@ -49,13 +53,14 @@ def _generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.Dat
     Generate select features from building footprints with UPRNs joined to them:
     - n_UPRNs (per building)
     - n_flats (per building)
+    - n_domestic_uprns (per building)
     - building_area_m2
     - building_perimeter_m
     - proportion_flats (proportion of UPRNs which are flats)
     - UPRNs_per_building_m2 (UPRN density per m2 of building footprint)
 
     Args:
-        gdf (gpd.GeoDataFrame): building footprints with UPRNs joined to them. UPRNs must have `property_type_flat` boolean column.
+        gdf (gpd.GeoDataFrame): building footprints with UPRNs joined to them. UPRNs must have `property_type_flat` and `is_domestic` boolean columns.
         id_col (str): name of building ID column
 
     Returns:
@@ -72,11 +77,15 @@ def _generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.Dat
         .agg(
             pl.col("UPRN").count().alias("n_UPRNs"),
             pl.col("property_type_flat").sum().alias("n_flats"),
+            pl.col("is_domestic").sum().alias("n_domestic_uprns"),
             pl.col("building_area_m2").first().name.keep(),
             pl.col("building_perimeter_m").first().name.keep(),
         )
         .with_columns(
             (pl.col("n_flats") / pl.col("n_UPRNs")).alias("proportion_flats"),
+            (pl.col("n_flats") / pl.col("n_domestic_uprns")).alias(
+                "domestic_proportion_flats"
+            ),
             (pl.col("n_UPRNs") / pl.col("building_area_m2")).alias(
                 "UPRNs_per_building_m2"
             ),

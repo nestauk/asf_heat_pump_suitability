@@ -1658,6 +1658,116 @@ class TestFilterDfClustersLayer:
         ), "base.yaml must set compare_versions.cluster_layer"
 
 
+class TestGenerateDictUprnsMissingClusters:
+    """Tests for `generate_dict_uprns_missing_clusters`."""
+
+    def test_counts_uprns_in_minus_uprns_in_clusters(self):
+        """Five distinct UPRNs go in and three are in clusters, so two are
+        missing a cluster. A repeated UPRN row counts once, and the
+        anchor_loads row has a null n_UPRNs, as in the real output."""
+        df_uprns = pl.DataFrame({"UPRN": [1, 2, 3, 4, 5, 5]})
+        df_clusters = pl.DataFrame(
+            {
+                "n_UPRNs": [2, 1, None],
+                "layer": [
+                    compare_versions.CLUSTER_LAYER,
+                    compare_versions.CLUSTER_LAYER,
+                    "anchor_loads",
+                ],
+            }
+        )
+        counts = compare_versions.generate_dict_uprns_missing_clusters(
+            df_uprns=df_uprns, df_clusters=df_clusters
+        )
+        assert counts == {
+            "uprns_in": 5,
+            "uprns_in_clusters": 3,
+            "uprns_missing": 2,
+            "missing_share": 0.4,
+        }, "number of missing UPRN must be equivalent to distinct UPRNs in minus the clusters layer's n_UPRNs sum"
+
+    def test_float_n_uprns_gives_whole_counts(self):
+        """The real geojson loads n_UPRNs as a float with nulls; the counts
+        must still be whole numbers."""
+        counts = compare_versions.generate_dict_uprns_missing_clusters(
+            df_uprns=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
+            df_clusters=pl.DataFrame({"n_UPRNs": [2.0, 1.0, None]}),
+        )
+        assert counts["uprns_in_clusters"] == 3 and isinstance(
+            counts["uprns_in_clusters"], int
+        ), "a float n_UPRNs sum must become a whole count, skipping nulls"
+
+
+@pytest.fixture(scope="module")
+def df_contextual():
+    """Contextual-features output: two clusters holding three UPRNs, and a
+    row corresponding to a ward boundaries layer. As in the real geojson, n_UPRNs is a float and is null on the
+    ward row."""
+    return pl.DataFrame(
+        {
+            "cluster_id": ["HP_1", "HP_2", None],
+            "n_UPRNs": [2.0, 1.0, None],
+            "layer": [
+                compare_versions.CLUSTER_LAYER,
+                compare_versions.CLUSTER_LAYER,
+                "ward_boundaries",
+            ],
+        }
+    )
+
+
+class TestGenerateStrReportUprnsMissingClusters:
+    """Tests for `generate_str_report`'s UPRNs-missing-clusters section."""
+
+    def test_gives_each_version_and_the_change(self, df_contextual):
+        """The section gives each version's counts and share, and the change
+        in the missing count."""
+        report = generate_report(
+            df_old=df_contextual,
+            df_new=df_contextual,
+            manifest_old=None,
+            manifest_new=None,
+            stage="compute_contextual_features",
+            trigger=None,
+            df_uprns_old=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
+            df_uprns_new=pl.DataFrame({"UPRN": [1, 2, 3, 4, 5]}),
+        )
+        assert "UPRNs missing clusters" in report, "the section must appear"
+        assert (
+            "| UPRNs in | 4 | 5 | +1 |" in report
+        ), "the section must give the UPRNs going in for each version"
+        assert (
+            "| UPRNs in clusters | 3 | 3 | +0 |" in report
+        ), "the section must give the UPRNs in clusters for each version"
+        assert (
+            "| UPRNs missing a cluster | 1 | 2 | +1 |" in report
+        ), "the section must give the missing count and its change"
+        assert (
+            "| Missing share | 25.0% | 40.0% | +15.0 pp |" in report
+        ), "the section must give the missing share and its change"
+
+    def test_missing_add_features_output_is_noted(self, df_contextual):
+        """A version with no add_features output gets a note, not an error,
+        and the rest of the report still renders."""
+        report = generate_report(
+            df_old=df_contextual,
+            df_new=df_contextual,
+            manifest_old=None,
+            manifest_new=None,
+            stage="compute_contextual_features",
+            trigger=None,
+            df_uprns_old=None,
+            df_uprns_new=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
+        )
+        assert (
+            "| UPRNs missing a cluster | n/a | 1 | n/a |" in report
+        ), "the version without add_features output must show n/a"
+        assert (
+            "Count unavailable for the old version" in report
+        ), "the section must say which version has no add_features output"
+        assert "Lineage" in report, "the rest of the report must still render"
+
+
 class TestGenerateDictDistributionStats:
     """Tests for `generate_dict_distribution_stats`."""
 

@@ -3,7 +3,6 @@ Functions to load and process manually labelled data and prepare it for use in b
 """
 
 import s3fs
-import numpy as np
 import pandas as pd
 import geopandas as gpd
 import polars as pl
@@ -21,7 +20,6 @@ BLOCK_OF_FLATS_ARCHETYPES = [
     "AS",
     "IW",
     "NH",
-    "HN",
 ]
 
 NOT_BLOCKS_ARCHETYPES = [
@@ -36,7 +34,6 @@ NOT_BLOCKS_ARCHETYPES = [
     "MA",
     "MT",
     "OF",
-    "FA",
 ]
 
 EXCLUDED_ARCHETYPES = [
@@ -84,32 +81,22 @@ def extract_df_labelled_data(
     df = pl.from_pandas(gdf[cols])
 
     assert df.null_count().sum_horizontal()[0] == 0, (
-        "There are unexpected null values in the processed labelled sample. Please that every sample has been labelled.\n"
-        f"{print(df.null_count())}."
+        "There are unexpected null values in the processed labelled sample. Please check that every sample has been labelled.\n"
+        f"{df.null_count()}."
     )
 
     all_labels = BLOCK_OF_FLATS_ARCHETYPES + NOT_BLOCKS_ARCHETYPES + EXCLUDED_ARCHETYPES
     unexpected = set(df["label"]).difference(set(all_labels))
 
-    # TODO remove this temporary code lines
-    print(f"Removing unexpected labels: {unexpected}")
-    df = df.filter(~pl.col("label").is_in(unexpected))
-    # TODO uncomment below before merging
-    # assert (
-    #     not unexpected
-    # ), f"There are unexpected archetype labels in the labelled sample: {unexpected}."
+    assert (
+        not unexpected
+    ), f"There are unexpected archetype labels in the labelled sample: {unexpected}."
 
     return df.with_columns(
         pl.when(pl.col("label") == "UL")
         .then(pl.lit(None))
         .otherwise(pl.col("confidence"))
-        .alias("confidence"),
-        pl.when(pl.col("label").is_in(BLOCK_OF_FLATS_ARCHETYPES))
-        .then(True)
-        .when(pl.col("label").is_in(NOT_BLOCKS_ARCHETYPES))
-        .then(False)
-        .otherwise(None)
-        .alias("block_of_flats"),
+        .alias("confidence")
     )
 
 
@@ -196,29 +183,16 @@ def print_labeller_agreement_matrix(df: pl.DataFrame) -> None:
     """
     labellers = df["labeller"].unique().to_list()
     if len(labellers) > 1:
-        agreement = []
-
-        for l1 in labellers:
-            labeller1_df = df.filter(pl.col("labeller") == l1)
-            labellers_2 = labeller1_df["secondary_labeller"].unique().to_list()
-            for l2 in labellers_2:
-                print(
-                    f"\n\nPrimary labeller: {l1}; secondary labeller: {l2};\nAgreement matrix:\n"
-                )
-                print(
-                    labeller1_df.filter(pl.col("secondary_labeller") == l2)[
-                        "agree_label"
-                    ].value_counts()
-                )
-                agreement_matrix = labeller1_df.filter(
-                    pl.col("secondary_labeller") == l2
-                )["agree_label"].value_counts(normalize=True)
-                agreement.append(
-                    agreement_matrix.filter(pl.col("agree_label"))["proportion"][0]
-                )
-
+        pairs_df = df.group_by(
+            "labeller", "secondary_labeller", maintain_order=True
+        ).agg(
+            n_samples=pl.len(),
+            n_agree=pl.col("agree_label").sum(),
+            agreement=pl.col("agree_label").mean(),
+        )
+        print(f"\n\nAgreement per labeller pair:\n{pairs_df}")
         print(
-            f"\n\nAverage agreement between labellers: {round(np.mean(agreement) * 100, 2)}%"
+            f"\n\nAverage agreement between labellers: {round(pairs_df['agreement'].mean() * 100, 2)}%"
         )
 
 
@@ -238,6 +212,15 @@ def transform_df_labelled_data(
     Returns:
         pl.DataFrame: labelled data ready for training binary classifier
     """
+    labelled_df = labelled_df.with_columns(
+        pl.when(pl.col("label").is_in(BLOCK_OF_FLATS_ARCHETYPES))
+        .then(pl.lit("block"))
+        .when(pl.col("label").is_in(NOT_BLOCKS_ARCHETYPES))
+        .then(pl.lit("not"))
+        .otherwise(pl.lit("exclude"))
+        .alias("block_of_flats"),
+    )
+
     agree_ids, disagree_ids = compare_tuple_labellers(
         labelled_df=labelled_df, unlabelled_df=unlabelled_df, id_str=id_str
     )
@@ -252,7 +235,13 @@ def transform_df_labelled_data(
             pl.when(pl.col(id_str).is_in(agree_ids))
             .then(pl.lit("1"))
             .otherwise(pl.col("confidence"))
-            .alias("confidence")
+            .alias("confidence"),
+            pl.when(pl.col("label").is_in(BLOCK_OF_FLATS_ARCHETYPES))
+            .then(pl.lit(True))
+            .when(pl.col("label").is_in(NOT_BLOCKS_ARCHETYPES))
+            .then(pl.lit(False))
+            .otherwise(pl.lit(None))
+            .alias("block_of_flats"),
         )
         .with_columns(
             pl.col("confidence")
@@ -270,6 +259,10 @@ def transform_df_labelled_data(
         )
         .join(unlabelled_df.select([id_str, "split"]), how="left", on=id_str)
     )
+
+    assert (
+        labelled_df["split"].is_not_null().all()
+    ), "Some labelled buildings are not assigned to the train or test set."
 
     print(
         f"Final labelled sample for model training and testing contains {len(labelled_df)} samples."

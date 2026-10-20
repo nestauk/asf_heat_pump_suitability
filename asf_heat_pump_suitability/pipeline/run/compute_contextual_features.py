@@ -42,6 +42,8 @@ from asf_heat_pump_suitability.utils import geo_utils
 load_dotenv()
 
 ANCHOR_LOAD_RADIUS = config["constant"]["anchor_radius"]
+TECH_TYPES = config["constant"]["tech_types"]
+COMMUNAL_ORIGIN = config["constant"]["communal_origin"]
 COASTLINE_DISTANCE_THRESHOLD_M = config["constant"]["coastline"][
     "distance_from_coastline_threshold_m"
 ]
@@ -286,52 +288,49 @@ def extend_gdf_logic_trace(
     """
     Add logic trace for each cluster explaining why the assigned technology was chosen.
 
+    Communal explanations are keyed on the cluster's `communal_origin`. Clusters matching no rule
+    get "Not accounted for in logic trace.".
+
     Args:
-        clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, in_hn_zone, in_city_centre, within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load, and assigned_tech features for each cluster
+        clusters_with_contextual_features_gdf (gpd.GeoDataFrame): geodataframe with cluster_id, in_hn_zone, in_city_centre, assigned_tech and communal_origin features for each cluster
     Returns:
         gpd.GeoDataFrame: geodataframe with logic_trace feature added for each cluster
     """
 
     assigned_tech = clusters_with_contextual_features_gdf["assigned_tech"]
-    tech_types = config["constant"]["tech_types"]
-
+    communal_origin = clusters_with_contextual_features_gdf["communal_origin"]
     dhn_potential = (clusters_with_contextual_features_gdf["in_hn_zone"] == "Yes") | (
         clusters_with_contextual_features_gdf["in_city_centre"] == "Yes"
     )
 
-    near_anchor_load = (
-        clusters_with_contextual_features_gdf[
-            f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
-        ]
-        == "Yes"
-    )
-
-    is_communal = assigned_tech == tech_types["communal"]
-    is_networked = assigned_tech == tech_types["networked"]
-    is_ind_or_net = assigned_tech == tech_types["individual_or_networked"]
-    is_individual = assigned_tech == tech_types["individual"]
+    is_communal = assigned_tech == TECH_TYPES["communal"]
+    is_networked = assigned_tech == TECH_TYPES["networked"]
+    is_ind_or_net = assigned_tech == TECH_TYPES["individual_or_networked"]
+    is_individual = assigned_tech == TECH_TYPES["individual"]
 
     logic_trace = [
-        # 1) Communal solution + near anchor load + DHN potential
-        # TODO: remove sentence about blocks of flats once we separate clusters that are communal due to blocks of flats from those that are communal due to anchor load proximity
+        # 1) Communal solution (anchor proximity) + DHN potential
         (
-            is_communal & near_anchor_load & dhn_potential,
-            f"This cluster:\n- is in an area of 'district heat network' potential,\n- contains homes that have no or little outdoor space (up to 30m2),\n and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school),\n so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed. \n A 'communal solution' could be considered as an alternative solution because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school). This 'communal solution' could be integrated into a 'district heat newtork' in the future.\n There might also be one or multiple blocks of flats in the cluster.\n",
+            is_communal
+            & (communal_origin == COMMUNAL_ORIGIN["anchor_proximity"])
+            & dhn_potential,
+            f"This cluster:\n- is in an area of 'district heat network' potential,\n- contains homes that have no or little outdoor space (up to 30m2),\n and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school),\n so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed. \n A 'communal solution' could be considered as an alternative solution because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school). This 'communal solution' could be integrated into a 'district heat network' in the future.\n",
         ),
-        # 2) Communal solution + near anchor load
-        # TODO: remove sentence about blocks of flats once we separate clusters that are communal due to blocks of flats from those that are communal due to anchor load proximity
+        # 2) Communal solution (anchor proximity)
         (
-            is_communal & near_anchor_load,
-            f"This cluster is assigned 'communal solution' because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school).\n There might also be one or multiple blocks of flats in the cluster.",
+            is_communal & (communal_origin == COMMUNAL_ORIGIN["anchor_proximity"]),
+            f"This cluster is assigned 'communal solution' because the homes have no or little outdoor space (up to 30m2) and it is within {ANCHOR_LOAD_RADIUS}m of an anchor load (e.g. a hospital or school).",
         ),
-        # 3) Communal solution (blocks of flats)+ DHN potential
+        # 3) Communal solution (blocks of flats) + DHN potential
         (
-            is_communal & dhn_potential,
-            "This cluster is in an area of 'district heat network' potential and it contains one or multiple blocks of flats, so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed.\n A ‘communal solution’ could also be considered as an alternative solution, because it contains one or multiple blocks of flats. This 'communal solution' could be integrated into a 'district heat network' in the future.",
+            is_communal
+            & (communal_origin == COMMUNAL_ORIGIN["block_of_flats"])
+            & dhn_potential,
+            "This cluster is in an area of 'district heat network' potential and it contains one or multiple blocks of flats, so homes are most suitable for a 'district heat network' connection when/if a district heat network is constructed.\n A 'communal solution' could also be considered as an alternative solution, because it contains one or multiple blocks of flats. This 'communal solution' could be integrated into a 'district heat network' in the future.",
         ),
         # 4) Communal solution (blocks of flats)
         (
-            is_communal,
+            is_communal & (communal_origin == COMMUNAL_ORIGIN["block_of_flats"]),
             "This cluster is assigned 'communal solution' because it contains one or multiple blocks of flats.",
         ),
         # 5) Networked heat pump + DHN potential
@@ -464,6 +463,17 @@ def create_json_contextual_features_metadata(
         clusters_with_contextual_features_gdf, target_crs=target_crs
     )
     print("Adding metadata and converting to geojson format...")
+    # parquet and the polars round trip return reassigning_anchor_load_ids cells as numpy arrays, which json
+    # cannot serialise; convert them to lists so the geojson carries a JSON array
+    clusters_with_contextual_features_gdf = (
+        clusters_with_contextual_features_gdf.assign(
+            reassigning_anchor_load_ids=clusters_with_contextual_features_gdf[
+                "reassigning_anchor_load_ids"
+            ].map(
+                lambda ids: list(ids) if isinstance(ids, (list, np.ndarray)) else None
+            )
+        )
+    )
     # Convert to geojson format and add metadata
     clusters_json = json.loads(
         clusters_with_contextual_features_gdf.to_json(drop_id=True)
@@ -642,14 +652,17 @@ if __name__ == "__main__":
             {"source_annotation": [], "geometry": []}, crs="EPSG:4326"
         )
 
-    print("Loading anchor property geodataframes and transforming to EPSG:4326...")
-    combined_anchor_gdf = cluster.load_transform_anchor_property_gdfs(
-        buildings_gdf=buildings_gdf, grid_squares=local_authority_dict["grid_squares"]
-    )[["geometry"]]
-
-    combined_anchor_gdf = combined_anchor_gdf[
-        combined_anchor_gdf["geometry"].intersects(boundary_gdf.union_all())
-    ].to_crs(epsg=4326)
+    print(
+        "Loading anchor loads saved by the cluster stage and transforming to EPSG:4326..."
+    )
+    anchor_loads_gdf = gpd.read_parquet(
+        save_utils.get_str_output_path(
+            dataset="anchor_loads",
+            release_date=release_date,
+            check_exists=True,
+            local_authorities=local_authority_dict["url_slug"],
+        )
+    )[["anchor_load_id", "geometry"]].to_crs(epsg=4326)
 
     print("Loading ward boundaries and transforming to EPSG:4326...")
     ward_boundaries_gdf = load_boundaries.load_gdf_ward_boundaries(
@@ -658,7 +671,7 @@ if __name__ == "__main__":
 
     optional_data_layers = {
         "ward_boundaries": ward_boundaries_gdf,
-        "anchor_loads": combined_anchor_gdf,
+        "anchor_loads": anchor_loads_gdf,
         "areas_of_district_heat_network_potential": hn_potential,
     }
 

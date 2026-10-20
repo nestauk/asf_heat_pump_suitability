@@ -28,6 +28,21 @@ sync:
 	uv sync --extra dev
 	@direnv reload
 
+# Protocol used to install orbit: ssh (default) or https
+ORBIT_PROTOCOL ?= ssh
+ifeq ($(ORBIT_PROTOCOL),ssh)
+	ORBIT_URL = git+ssh://git@github.com/nestauk/arm_orbit.git
+else ifeq ($(ORBIT_PROTOCOL),https)
+	ORBIT_URL = git+https://github.com/nestauk/arm_orbit.git
+else
+$(error ORBIT_PROTOCOL must be 'ssh' or 'https', got '$(ORBIT_PROTOCOL)')
+endif
+
+.PHONY: install-orbit
+## Nesta staff only: needs GitHub access to nestauk/arm_orbit. Defaults to SSH, use ORBIT_PROTOCOL=https for HTTPS
+install-orbit:
+	uv tool install --upgrade $(ORBIT_URL)
+
 .PHONY: check-bucket-path
 check-bucket-path:
 	@test ${S3_INPUT_PATH} || (echo 'Please set a S3_INPUT_PATH environment variable (e.g. in .envrc) documenting the S3 path to your inputs/ - e.g. s3://nesta-ds-projects/your-mission/project-name' && exit 1)
@@ -59,7 +74,6 @@ docs-open:
 clean:
 	find . -type f -name "*.py[co]" -delete
 	find . -type d -name "__pycache__" -delete
-
 
 #################################################################################
 # Self Documenting Commands (no need to explicitly document)                    #
