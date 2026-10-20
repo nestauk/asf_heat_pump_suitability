@@ -20,7 +20,6 @@ BLOCK_OF_FLATS_ARCHETYPES = [
     "AS",
     "IW",
     "NH",
-    "HN",
 ]
 
 NOT_BLOCKS_ARCHETYPES = [
@@ -35,7 +34,6 @@ NOT_BLOCKS_ARCHETYPES = [
     "MA",
     "MT",
     "OF",
-    "FA",
 ]
 
 EXCLUDED_ARCHETYPES = [
