@@ -379,7 +379,7 @@ if __name__ == "__main__":
     # ------------------------ #
     uprns_path = save_utils.get_str_output_path(
         "domestic_uprns",
-        release_date=args.uprn_release,
+        release_date=uprn_release,
         check_exists=True,
         local_authority=local_authority_dict["url_slug"],
     )

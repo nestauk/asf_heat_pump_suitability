@@ -155,13 +155,15 @@ if __name__ == "__main__":
         id_col="ID",
         as_dict=False,
     )
-    uprn_building_id_dict = uprn_building_id_df.to_pandas().to_dict()["ID"]
+    uprn_building_id_dict = dict(
+        zip(uprn_building_id_df["UPRN"], uprn_building_id_df["ID"])
+    )
 
     # Generate features for block of flats classification model
     building_features_df = feature_engineering.generate_df_features(
         buildings_gdf=buildings_gdf,
         uprns_gdf=all_uprns_gdf,
-        mapping_df=uprn_building_id_df,
+        mapping_df=uprn_building_id_df.to_pandas(),
         id_col="ID",
     )
 
