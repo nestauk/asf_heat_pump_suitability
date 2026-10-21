@@ -37,6 +37,7 @@ branch and PR, and updates this spec.
    it reads (see decision 6):
    - `add_features`: remove `geodata.gb_code_points`,
      `geodata.heat_network_zones.desnz_files`,
+     `geodata.heat_network_zones.desnz_polygons`,
      `geodata.gb_spatial_signatures.full` and
      `geodata.gb_spatial_signatures.simplified`. This stage does not read them.
    - `cluster`: remove `geodata.heat_network_zones.desnz_polygons`. No module
@@ -75,6 +76,11 @@ branch and PR, and updates this spec.
    place. Each phase stays a small PR.
 2. **Fix `clip_inputs.py`, do not delete it.** It is a recent testing tool
    (June 2026). It broke when the UPRN keys were renamed in July and August 2026. The fix is three small edits.
+   Update during implementation: the script has 3 more bugs (an argparse
+   argument that Python 3.12 rejects, a second wrong function name, and
+   `os.join`). It probably never ran to the end. Phase 1 keeps the 3 config
+   and call fixes. The other bugs, and the choice to repair or delete the
+   script, move to #540.
 3. **No guard test for dead keys.** Code reads many keys dynamically
    (f-strings, dataset-name strings, loops over key names). A grep-based test
    would give false alarms and need an allow-list. Phase 2's structural test
@@ -160,12 +166,13 @@ Phase 1:
 - [ ] `uv run pytest` passes
 - [ ] The input preflight (`check_inputs.py`) passes
 - [ ] `run_manifest.stage_input_keys.add_features` does not list
-      `gb_code_points`, `desnz_files` or the spatial signatures
+      `gb_code_points`, `desnz_files`, `desnz_polygons` or the spatial
+      signatures
 - [ ] `run_manifest.stage_input_keys.cluster` does not list `desnz_polygons`
 - [ ] `run_manifest.stage_input_keys.compute_contextual_features` lists
       `desnz_polygons`, `lhees_files` and both spatial signature files
 - [ ] The comment on `desnz_polygons` says how to rebuild the parquet
-- [ ] `clip_inputs.py --local_authorities Plymouth` runs to the end without
-      `--save`
+- [ ] Every config key that `clip_inputs.py` reads exists in `base.yaml`
+      (a full run moved to #540)
 
 Phases 2 to 4: see the acceptance criteria in the issue.

@@ -352,7 +352,6 @@ run_manifest:
       - "geodata.grid_square_os_openmap_local"
       - "processed.valid_la_names"
       - "processed.manually_labelled_block_of_flats"
-      - "geodata.heat_network_zones.desnz_polygons"
       - "processed.inspire_file_names"
       - "epc.domestic"
       - "geodata.gb_coast_boundaries"
