@@ -1,8 +1,8 @@
 ---
 title: Build a GB summary table from the comparison JSON files
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/531
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/539
 asana:
 created: 2026-10-14
 ---
