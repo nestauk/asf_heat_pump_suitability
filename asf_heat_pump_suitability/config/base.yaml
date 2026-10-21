@@ -38,7 +38,8 @@ data:
       UK_ons_ward_boundaries: "s3://asf-local-heat-planning-tool/inputs/geodata/boundaries/wards/20260817_ons_ward_boundaries_uk.gpkg"
 
     heat_network_zones:
-      desnz_files: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_network_desnz_data/"
+      # All DESNZ heat network zones in one file. To rebuild it, concatenate the per-city
+      # .gpkg files in the same folder with geo_utils.concat_gdfs(dir_path=<folder>, save_as=<this path>)
       desnz_polygons: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_network_desnz_data/heat_network_zones_all.parquet"
       lhees_files: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_networks_lhees/" # scotland
       wales_files: "s3://asf-local-heat-planning-tool/inputs/geodata/heat_networks_wales/" # wales
@@ -351,13 +352,9 @@ run_manifest:
       - "geodata.grid_square_os_openmap_local"
       - "processed.valid_la_names"
       - "processed.manually_labelled_block_of_flats"
-      - "geodata.heat_network_zones.desnz_files"
       - "geodata.heat_network_zones.desnz_polygons"
-      - "geodata.gb_spatial_signatures.full"
-      - "geodata.gb_spatial_signatures.simplified"
       - "processed.inspire_file_names"
       - "epc.domestic"
-      - "geodata.gb_code_points"
       - "geodata.gb_coast_boundaries"
       - "geodata.gb_uprn_lookup_partitioned"
     decision_tree:
@@ -370,12 +367,15 @@ run_manifest:
       - "geodata.grid_square_os_openmap_greenspace"
       - "geodata.grid_square_os_openroad"
       - "processed.poi_anchor_properties"
-      - "geodata.heat_network_zones.desnz_polygons"
       - "processed.valid_la_names"
     compute_contextual_features:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
       - "processed.valid_la_names"
+      - "geodata.heat_network_zones.desnz_polygons"
+      - "geodata.heat_network_zones.lhees_files"
+      - "geodata.gb_spatial_signatures.full"
+      - "geodata.gb_spatial_signatures.simplified"
 
 compare_versions:
   stage_output_datasets:
