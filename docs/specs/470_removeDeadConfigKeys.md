@@ -28,7 +28,6 @@ branch and PR, and updates this spec.
    - top-level `features`
    - top-level `tech_types`
    - `constant.ID`
-   - `constant.sampling_areas.la_names`
    - `data.geodata.heat_network_zones.desnz_files`. Add a comment on
      `desnz_polygons` that says how to rebuild it: concatenate the per-city
      `.gpkg` files in the same folder with `geo_utils.concat_gdfs` (see
@@ -101,6 +100,10 @@ branch and PR, and updates this spec.
    when the NSUL lookup replaced it for UPRN-to-postcode matching.
    `load_gdf_code_points` in `getters/load_geodata.py` has no caller, but
    it stays with the key.
+8. **Keep `constant.sampling_areas.la_names` for now.** No code reads it.
+   It names the 6 sampling LAs that `sampling_areas.grid_squares` covers,
+   and `grid_squares` is live (`train_model.py`). Ask the reviewers in the
+   Phase 1 PR (see Open questions).
 
 ## Alternatives considered
 
@@ -132,6 +135,12 @@ branch and PR, and updates this spec.
   follow-up issue)
 
 ## Open questions
+
+- Phase 1 PR, for the reviewers: remove `constant.sampling_areas.la_names`
+  and keep the 6 LA names as a comment on `grid_squares`, or keep the key?
+  No code reads it. The research script `sample_buildings_for_labelling.py`
+  was its reader, but that script still uses the config shape from before
+  January 2026 (`f60dfd05`), so it is broken.
 
 - Phase 3: do research-only keys go into the research scripts, or into a
   small research config file? The #434 spec allows both ("script or
