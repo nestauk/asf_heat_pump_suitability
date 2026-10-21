@@ -177,6 +177,12 @@ def train_eval_rfc_block_of_flats_classifier(
     # (including `class_weight`) found during the search
     final_model = search.best_estimator_
 
+    importances = pl.DataFrame(
+        {"feature": FEATURES, "importance": final_model.feature_importances_}
+    ).sort("importance", descending=True)
+    print("Feature importance:")
+    print(importances)
+
     # Evaluate final model on hold out test set
     y_pred = final_model.predict(X_test)
     score = f1_score(y_test, y_pred)
