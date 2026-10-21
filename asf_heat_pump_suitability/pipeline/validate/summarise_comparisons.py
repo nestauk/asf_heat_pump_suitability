@@ -456,8 +456,12 @@ def generate_str_summary_markdown(
         "|---|---|---|---|---|---|",
     ]
     for row in df_top.iter_rows(named=True):
+        # Significant figures, not fixed decimals, so a small real change
+        # (e.g. 4 of 87,822 UPRNs) does not show as 0.
         change = (
-            "-" if row["max_rel_change"] is None else f"{row['max_rel_change']:.2%}"
+            "-"
+            if row["max_rel_change"] is None
+            else f"{row['max_rel_change'] * 100:.3g}%"
         )
         metric = (
             "-"

@@ -290,9 +290,10 @@ def test_summary_markdown_gives_run_health_and_top_changes(df_summary):
     for line in expected_lines:
         assert line in markdown, f"The markdown should contain the line {line!r}"
     assert (
-        "tech:Individual or Networked heat pump (9,831 -> 9,833)" in markdown
+        "| 0.0203% | tech:Individual or Networked heat pump (9,831 -> 9,833)"
+        in markdown
         and f"{EL_DIR}/decision_tree_east_lothian_20261013_vs_20261014.md" in markdown
-    ), "The top change should show the tech counts and the per-LA report path"
+    ), "The top change should show its size to 3 significant figures, the tech counts and the per-LA report path"
     assert (
         markdown.count("| east_lothian | ") == 3
     ), "Only n_top_changes rows should be listed as top changes"
