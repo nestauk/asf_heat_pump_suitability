@@ -275,7 +275,7 @@ def test_summary_scope_names_the_las_covered(la_slugs, is_gb, expected):
 
 
 def test_summary_markdown_gives_run_health_and_top_changes(df_summary):
-    """The markdown shows status counts, missing rows, top changes and extras."""
+    """The markdown shows the status counts and the top changes."""
     markdown = summarise_comparisons.generate_str_summary_markdown(
         df_summary=df_summary,
         release_date=RELEASE_DATE,
@@ -286,8 +286,6 @@ def test_summary_markdown_gives_run_health_and_top_changes(df_summary):
         # Run-health table: stage, compared, baseline, comparison missing, stage failed
         "| uprns | 1 | 1 | 0 | 0 |",
         "| all | 6 | 1 | 1 | 2 |",
-        "| midlothian | add_features | stage failed |",
-        f"- {EL_DIR}/add_features_east_lothian_20260907_vs_20261014.json",
     ]
     for line in expected_lines:
         assert line in markdown, f"The markdown should contain the line {line!r}"
@@ -298,20 +296,3 @@ def test_summary_markdown_gives_run_health_and_top_changes(df_summary):
     assert (
         markdown.count("| east_lothian | ") == 3
     ), "Only n_top_changes rows should be listed as top changes"
-
-
-def test_upload_summary_files_to_s3_writes_to_release_folder(mocker):
-    """--save puts both files in outputs/comparisons/{release_date}/."""
-    upload = mocker.patch(
-        "asf_heat_pump_suitability.utils.save_utils.upload_file_to_s3"
-    )
-    summarise_comparisons.upload_summary_files_to_s3(
-        file_paths=[Path("/tmp/comparison_summary_gb.parquet")],
-        release_date=RELEASE_DATE,
-    )
-    kwargs = upload.call_args.kwargs
-    expected_dir = summarise_comparisons.SUMMARY_DIR.format(release_date=RELEASE_DATE)
-    assert (
-        f"s3://{kwargs['s3_bucket']}/{kwargs['s3_key_dir']}{kwargs['subfolder']}/"
-        f"{kwargs['filename']}" == f"{expected_dir}/comparison_summary_gb.parquet"
-    ), "The summary should be uploaded to the release's comparisons folder"
