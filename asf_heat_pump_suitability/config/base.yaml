@@ -375,6 +375,7 @@ run_manifest:
       - "geodata.heat_network_zones.lhees_files"
       - "geodata.gb_spatial_signatures.full"
       - "geodata.gb_spatial_signatures.simplified"
+      - "geodata.boundaries.UK_ons_ward_boundaries"
 
 compare_versions:
   stage_output_datasets:

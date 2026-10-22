@@ -47,7 +47,9 @@ branch and PR, and updates this spec.
      `geodata.heat_network_zones.lhees_files`,
      `geodata.gb_spatial_signatures.full` and
      `geodata.gb_spatial_signatures.simplified`. The stage reads both
-     signature files, because `--detail` selects one of them.
+     signature files, because `--detail` selects one of them. Also add
+     `geodata.boundaries.UK_ons_ward_boundaries` (found in review: the
+     ward boundaries layer from #525 reads it).
 3. Keep `data.geodata.gb_code_points`. `clip_inputs.py` reads it (see decision 2).
 4. Fix `pipeline/transform/clip_inputs.py`:
    - `geodata.uk_osopen_uprn` becomes `geodata.uk_osopen_uprn_raw`. The script
@@ -170,7 +172,8 @@ Phase 1:
       signatures
 - [ ] `run_manifest.stage_input_keys.cluster` does not list `desnz_polygons`
 - [ ] `run_manifest.stage_input_keys.compute_contextual_features` lists
-      `desnz_polygons`, `lhees_files` and both spatial signature files
+      `desnz_polygons`, `lhees_files`, both spatial signature files and
+      `UK_ons_ward_boundaries`
 - [ ] The comment on `desnz_polygons` says how to rebuild the parquet
 - [ ] Every config key that `clip_inputs.py` reads exists in `base.yaml`
       (a full run moved to #540)
