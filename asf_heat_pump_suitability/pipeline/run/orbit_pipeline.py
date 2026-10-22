@@ -5,7 +5,7 @@ Splits the given local authorities into chunks and launches one `orbit` job per 
 remotely for that chunk's local authorities.
 
 Usage:
-    python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--size N [--number_of_chunks]] [--release_date YYYYMMDD]
+    python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--size N [--is_number_of_chunks]] [--release_date YYYYMMDD] [--compare [--trigger TRIGGER] [--old_release_date YYYYMMDD]]
 
     e.g. to run for Great Britain in chunks of 20 local authorities each:
         python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities GB --size 20
@@ -25,12 +25,23 @@ Pass `--prod` to push changes to production (i.e. staging area). This should onl
 
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
+
+`--compare`, `--trigger` and `--old_release_date` are passed to every chunk's `pipeline.py` run, which then compares
+each local authority's stage outputs with their latest earlier versions, or with `--old_release_date` when given (see
+`pipeline.py`).
 """
 
 import math
 import numpy as np
 import argparse
 from typing import List
+
+from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.pipeline.run.pipeline import (
+    add_compare_arguments,
+    check_compare_arguments,
+)
+from asf_heat_pump_suitability.utils import save_utils
 
 
 def chunk_list_strings(arr: np.array, n: int, size: bool) -> List[List[str]]:
@@ -98,7 +109,13 @@ def parse_arguments() -> argparse.Namespace:
         default=False,
     )
 
-    return parser.parse_args()
+    # The comparison flags are checked here, so a bad flag
+    # stops before any Orbit job starts.
+    add_compare_arguments(parser=parser)
+
+    args = parser.parse_args()
+    check_compare_arguments(parser=parser, args=args)
+    return args
 
 
 if __name__ == "__main__":
@@ -106,8 +123,7 @@ if __name__ == "__main__":
     import polars as pl
     from tqdm import tqdm
     import subprocess
-    from asf_heat_pump_suitability import config
-    from asf_heat_pump_suitability.utils import save_utils, s3_utils
+    from asf_heat_pump_suitability.utils import s3_utils
 
     args = parse_arguments()
     local_authorities = args.local_authorities
@@ -122,6 +138,12 @@ if __name__ == "__main__":
     chunks = chunk_list_strings(
         np.asarray(local_authorities), n=args.size, size=args.is_number_of_chunks
     )
+
+    compare_flags = ["--compare"] if args.compare else []
+    if args.trigger:
+        compare_flags += ["--trigger", args.trigger]
+    if args.old_release_date:
+        compare_flags += ["--old_release_date", args.old_release_date]
 
     for chunk in tqdm(chunks):
         print(f"Running chunk: {chunk}")
@@ -147,6 +169,7 @@ if __name__ == "__main__":
                     "--release_date",
                     release_date,
                     "--prod",
+                    *compare_flags,
                 ]
             )
         else:
@@ -170,6 +193,7 @@ if __name__ == "__main__":
                     *chunk,
                     "--release_date",
                     release_date,
+                    *compare_flags,
                 ]
             )
 
