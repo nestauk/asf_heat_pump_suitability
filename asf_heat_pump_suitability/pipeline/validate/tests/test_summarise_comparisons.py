@@ -254,6 +254,7 @@ def test_summary_markdown_gives_run_health_and_top_changes(df_summary):
         release_date=RELEASE_DATE,
         la_slugs=["east_lothian", "midlothian"],
         n_top_changes=3,
+        min_rel_change=0.5,
     )
     expected_lines = [
         # Run-health table: stage, compared, comparison missing, stage failed
@@ -267,6 +268,30 @@ def test_summary_markdown_gives_run_health_and_top_changes(df_summary):
         in markdown
         and f"{EL_DIR}/decision_tree_east_lothian_20261013_vs_20261014.md" in markdown
     ), "The top change should show its size to 3 significant figures, the tech counts and the per-LA report path"
-    assert (
-        markdown.count("| east_lothian | ") == 3
-    ), "Only n_top_changes rows should be listed as top changes"
+
+
+@pytest.mark.parametrize(
+    "n_top_changes, min_rel_change, expected_rows",
+    [
+        # East Lothian's changes: 0.0203%, 0.0186%, 0.0092%, 0, 0.
+        # Two rows reach 0.01%, so both are listed although the floor is 1.
+        (1, 0.0001, 2),
+        # No row reaches 50%, so the floor of 3 rows still applies.
+        (3, 0.5, 3),
+    ],
+)
+def test_top_changes_list_every_row_over_the_limit_and_at_least_n(
+    df_summary, n_top_changes, min_rel_change, expected_rows
+):
+    """Top changes have no cap above the limit, and a floor of rows below it."""
+    markdown = summarise_comparisons.generate_str_summary_markdown(
+        df_summary=df_summary,
+        release_date=RELEASE_DATE,
+        la_slugs=["east_lothian", "midlothian"],
+        n_top_changes=n_top_changes,
+        min_rel_change=min_rel_change,
+    )
+    assert markdown.count("| east_lothian | ") == expected_rows, (
+        f"Expected {expected_rows} top-change rows: every row at or over "
+        f"{min_rel_change:.2%}, and at least {n_top_changes}"
+    )

@@ -48,6 +48,7 @@ from asf_heat_pump_suitability.utils import save_utils
 STAGES = list(STAGE_OUTPUT_DATASETS)
 SUMMARY_DIR = config["output"]["compare_versions_summary"]
 N_TOP_CHANGES = config["compare_versions"]["summary_n_top_changes"]
+MIN_REL_CHANGE = config["compare_versions"]["summary_min_rel_change"]
 # Sort order of the statuses: compared rows first, then the rows with no JSON.
 STATUSES = ["compared", "comparison missing", "stage failed"]
 # Up to this many LAs, the file name lists every LA slug.
@@ -402,16 +403,23 @@ def generate_str_summary_markdown(
     release_date: str,
     la_slugs: list[str],
     n_top_changes: int,
+    min_rel_change: float,
 ) -> str:
     """
     Write the summary table as a short markdown report for people.
+
+    The top changes list every compared row whose max_rel_change is at least
+    `min_rel_change`, with no cap, and at least `n_top_changes` rows.
 
     Args:
         df_summary (pl.DataFrame): summary table, as from
             `generate_df_comparison_summary`
         release_date (str): release date, YYYYMMDD
         la_slugs (list[str]): slugs of every LA in the run
-        n_top_changes (int): number of compared rows to list as top changes
+        n_top_changes (int): least number of compared rows to list as top
+            changes
+        min_rel_change (float): max_rel_change, as a share, at or over which
+            every compared row is listed
 
     Returns:
         str: the markdown report
@@ -446,13 +454,18 @@ def generate_str_summary_markdown(
             for row in df_missing.iter_rows(named=True)
         ]
 
-    df_top = df_summary.filter(pl.col("status") == "compared").head(n_top_changes)
+    df_compared = df_summary.filter(pl.col("status") == "compared")
+    # The rows are sorted by max_rel_change, so the rows over the limit are the
+    # first n_over rows.
+    n_over = (df_compared["max_rel_change"] >= min_rel_change).sum()
+    df_top = df_compared.head(max(n_top_changes, n_over))
     lines += [
         "",
         "## Top changes",
         "",
-        f"The {len(df_top)} compared rows with the largest relative change "
-        "since the older release.",
+        f"{n_over} compared rows have a change of {min_rel_change * 100:.3g}% "
+        f"or more since the older release. All are listed, and at least "
+        f"{n_top_changes} rows.",
         "",
         "| LA | stage | releases | change | metric | report |",
         "|---|---|---|---|---|---|",
@@ -596,6 +609,7 @@ if __name__ == "__main__":
             release_date=release_date,
             la_slugs=la_slugs,
             n_top_changes=N_TOP_CHANGES,
+            min_rel_change=MIN_REL_CHANGE,
         )
     )
     logging.info("Summary written to %s and %s", parquet_path, markdown_path)
