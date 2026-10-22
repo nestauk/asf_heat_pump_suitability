@@ -84,7 +84,10 @@ def check_compare_arguments(
     parser: argparse.ArgumentParser, args: argparse.Namespace
 ) -> None:
     """
-    Stop with a usage error when the comparison flags do not fit together.
+    Stop with a usage error when a comparison flag is used wrongly.
+
+    `--trigger` and `--old_release_date` need `--compare`, and
+    `--old_release_date` must be earlier than the release date.
 
     Args:
         parser (argparse.ArgumentParser): the launcher's argument parser
