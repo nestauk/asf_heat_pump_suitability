@@ -22,6 +22,8 @@ chunks if `--is_number_of_chunks` is also passed (the number of batches to run i
 omitted, all local authorities are run in a single chunk.
 
 Pass `--prod` to push changes to production (i.e. staging area). This should only be used when running from `dev`.
+With `--prod`, the launcher reads `front_end_s3_bucket` and `front_end_staging_s3_path` from `.env` and passes them
+to the jobs.
 
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
@@ -109,13 +111,26 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    import os
+    import sys
     import polars as pl
     from tqdm import tqdm
     import subprocess
+    from dotenv import load_dotenv
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils, s3_utils
 
     args = parse_arguments()
+    additional_flags = ["--prod"] if args.prod else []
+    if args.prod:
+        # .env is not uploaded to orbit, so pass the front-end S3 location to the jobs explicitly
+        load_dotenv()
+        front_end_vars = ("front_end_s3_bucket", "front_end_staging_s3_path")
+        missing = [name for name in front_end_vars if not os.environ.get(name)]
+        if missing:
+            sys.exit(f"--prod needs {', '.join(missing)} in your .env file.")
+        for name in front_end_vars:
+            additional_flags += ["-e", f"{name}={os.environ[name]}"]
     local_authorities = args.local_authorities
     release_date = save_utils.get_str_release_date(args.release_date)
     print(f"Release date pinned to: {release_date}")
@@ -131,7 +146,6 @@ if __name__ == "__main__":
 
     for chunk in tqdm(chunks):
         print(f"Running chunk: {chunk}")
-        flags = ["--prod"] if args.prod else []
         subprocess.run(
             [
                 "orbit",
@@ -154,7 +168,7 @@ if __name__ == "__main__":
                 args.model_release,
                 "--release_date",
                 release_date,
-                *flags,
+                *additional_flags,
             ]
         )
 
