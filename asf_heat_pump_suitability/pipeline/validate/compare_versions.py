@@ -42,7 +42,6 @@ python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
 import argparse
 import json
 import logging
-import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -915,26 +914,6 @@ def get_tuple_default_release_dates(
             "compare. Pass --old_release_date and --new_release_date explicitly."
         )
     return release_dates[-2], release_dates[-1]
-
-
-def get_str_local_authority_slug(local_authority: str) -> str:
-    """
-    Turn an LA name into the slug used in output paths; a slug stays unchanged.
-
-    `make_str_slug` would turn the hyphen in a multi-LA slug such as
-    "glasgow-midlothian" into an underscore, so a value that is already a
-    slug is not passed through it.
-
-    Args:
-        local_authority (str): official LA name (e.g. "East Lothian") or an
-            output-path slug (e.g. "east_lothian", "glasgow-midlothian")
-
-    Returns:
-        str: the output-path slug
-    """
-    if re.fullmatch(r"[a-z0-9_-]+", local_authority):
-        return local_authority
-    return make_str_slug(local_authority)
 
 
 def get_str_previous_release_date(
@@ -1953,8 +1932,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--local_authority",
         required=True,
-        help="Local authority name or output-path slug, e.g. 'East Lothian' "
-        "or 'east_lothian'.",
+        help="Local authority name, e.g. 'East Lothian' or 'east_lothian'.",
     )
     parser.add_argument(
         "--old_release_date",
@@ -1997,10 +1975,9 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
-    # Output paths use LA slugs; slugify like the sibling entrypoints (e.g.
-    # add_features) so "East Lothian", as pipeline.py passes it, finds
-    # east_lothian's outputs. A slug passes through unchanged.
-    local_authority = get_str_local_authority_slug(local_authority=args.local_authority)
+    # Output folders are named with the slug that every stage makes from the
+    # LA name, e.g. "East Lothian" -> "east_lothian", so the same slug finds them.
+    local_authority = make_str_slug(args.local_authority)
     report_dir = Path(args.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
     if args.new_release_date is None:
