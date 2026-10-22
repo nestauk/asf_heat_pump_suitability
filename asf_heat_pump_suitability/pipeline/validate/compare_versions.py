@@ -224,33 +224,34 @@ def generate_dict_uprns_missing_clusters_by_version(
     """
     Count the UPRNs without a cluster for both versions, for the report and the JSON.
 
+    `load_tuple_df_add_features_uprns` gives None for a version whose
+    add_features file it cannot read, so that version has no count.
+
     Args:
-        df_uprns_old (pl.DataFrame | None): older version's add_features
-            UPRNs, or None when that output is missing
-        df_uprns_new (pl.DataFrame | None): newer version's add_features
-            UPRNs, or None when that output is missing
+        df_uprns_old (pl.DataFrame | None): UPRN column of the older
+            add_features output, or None
+        df_uprns_new (pl.DataFrame | None): UPRN column of the newer
+            add_features output, or None
         df_clusters_old (pl.DataFrame): older compute_contextual_features
             output
         df_clusters_new (pl.DataFrame): newer compute_contextual_features
             output
 
     Returns:
-        dict: keys old and new, each from `generate_dict_uprns_missing_clusters`,
-            or None for a version without its add_features output
+        dict: two keys, "old" and "new". Each holds that version's counts
+            from `generate_dict_uprns_missing_clusters`, or None
     """
-    return {
-        version: (
-            generate_dict_uprns_missing_clusters(
-                df_uprns=df_uprns, df_clusters=df_clusters
-            )
-            if df_uprns is not None
-            else None
+    counts_old = None
+    if df_uprns_old is not None:
+        counts_old = generate_dict_uprns_missing_clusters(
+            df_uprns=df_uprns_old, df_clusters=df_clusters_old
         )
-        for version, df_uprns, df_clusters in (
-            ("old", df_uprns_old, df_clusters_old),
-            ("new", df_uprns_new, df_clusters_new),
+    counts_new = None
+    if df_uprns_new is not None:
+        counts_new = generate_dict_uprns_missing_clusters(
+            df_uprns=df_uprns_new, df_clusters=df_clusters_new
         )
-    }
+    return {"old": counts_old, "new": counts_new}
 
 
 def generate_dict_distribution_stats(df: pl.DataFrame, column: str) -> dict | None:
