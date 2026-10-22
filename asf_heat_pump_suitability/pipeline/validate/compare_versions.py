@@ -13,7 +13,7 @@ Pass --trigger methodology_change or --trigger input_release to check the
 numbers against that trigger's tolerances. Leave it out to get the numbers
 with no judgement applied. Writes a local markdown report, a JSON of the
 headline numbers, and logs a console summary. Pass --save to also upload the
-report, plots and JSON to the new release's `comparisons/` folder on S3.
+report, plots and JSON to the new release's `compare_versions/` folder on S3.
 
 Pass --new_release_date alone to compare it against the latest earlier
 version of the same stage. If there is no earlier version, only a JSON with
@@ -1909,7 +1909,7 @@ def upload_comparison_files_to_s3(
     file_paths: list[Path], local_authority: str, release_date: str
 ) -> None:
     """
-    Upload a comparison's local files to the new release's comparisons folder.
+    Upload a comparison's local files to the new release's compare_versions folder.
 
     Args:
         file_paths (list[Path]): local report, plot and JSON files
@@ -1980,7 +1980,7 @@ def parse_arguments() -> argparse.Namespace:
         "--save",
         action="store_true",
         help="Also upload the report, plots and JSON to the new release's "
-        "comparisons folder on S3.",
+        "compare_versions folder on S3.",
     )
     args = parser.parse_args()
     if args.old_release_date is not None and args.new_release_date is None:
