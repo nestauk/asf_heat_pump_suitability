@@ -2076,10 +2076,10 @@ class TestParseArguments:
 class TestGetStrPreviousReleaseDate:
     """Tests for `get_str_previous_release_date`."""
 
-    def test_picks_the_latest_earlier_date_or_none_for_a_baseline(self):
+    def test_picks_the_latest_earlier_date_or_none(self):
         """The old version is the latest date before the new one, even when
         a later date exists (e.g. an older release run again). With no
-        earlier date there is nothing to compare, which is a baseline."""
+        earlier date there is nothing to compare."""
         release_dates = ["20260601", "20260722", "20260801", "20260901"]
         assert (
             compare_versions.get_str_previous_release_date(
@@ -2089,10 +2089,10 @@ class TestGetStrPreviousReleaseDate:
         ), "the old version must be the latest date before the new one"
         assert (
             compare_versions.get_str_previous_release_date(
-                release_dates=["20260801"], release_date_new="20260801"
+                release_dates=release_dates, release_date_new="20260601"
             )
             is None
-        ), "no date before the new one must return None (baseline)"
+        ), "no date before the new one must return None (nothing to compare)"
 
 
 # Keys that every comparison JSON has, whatever the stage. If you change these
