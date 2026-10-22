@@ -109,8 +109,7 @@ def parse_arguments() -> argparse.Namespace:
         default=False,
     )
 
-    # The comparison flags and their checks are shared with pipeline.py, so
-    # the rules are written once. They are checked here too, so a bad flag
+    # The comparison flags are checked here, so a bad flag
     # stops before any Orbit job starts.
     add_compare_arguments(parser=parser)
 

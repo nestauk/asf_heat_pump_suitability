@@ -232,6 +232,9 @@ output:
       first_labelling: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/first_round_confident_LABELLED_buildings_containing_flats_sample_n806.parquet"
   log:
     pipeline_failure: "s3://asf-local-heat-planning-tool/outputs/logs/pipeline_failure/{release_date}/{local_authorities}_pipeline_failures.csv"
+  # Where compare_versions.py --save uploads each comparison's report, plots
+  # and JSON: the new release's own folder, so they are deleted together.
+  compare_versions: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{release_date}/compare_versions"
 
 # Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of proprerties and contextual information about properties within the clusters and surrounding neighbourhood
 metadata:
@@ -503,9 +506,6 @@ compare_versions:
     cluster: "tech_clusters"
     compute_contextual_features: "clusters_tech_contextual_info"
   decision_tree_buildings_dataset: "buildings_most_suitable_tech"
-  # Where --save uploads each comparison's report, plots and JSON: the new
-  # release's own folder, so they are deleted together with it.
-  comparisons_dir: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{release_date}/comparisons"
   # Where summarise_comparisons --save uploads the summary table and markdown
   # of all the LAs' comparisons for one release.
   summary_dir: "s3://asf-local-heat-planning-tool/outputs/comparisons/{release_date}"

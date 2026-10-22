@@ -13,11 +13,11 @@ Pass --trigger methodology_change or --trigger input_release to check the
 numbers against that trigger's tolerances. Leave it out to get the numbers
 with no judgement applied. Writes a local markdown report, a JSON of the
 headline numbers, and logs a console summary. Pass --save to also upload the
-report, plots and JSON to the new release's `comparisons/` folder on S3.
+report, plots and JSON to the new release's `compare_versions/` folder on S3.
 
 Pass --new_release_date alone to compare it against the latest earlier
-version of the same stage. If there is no earlier version, only a JSON with
-`status: baseline` is written, and the script exits without error.
+version of the same stage. If there is no earlier version, the script logs it,
+writes nothing, and exits without error.
 
 Usage (compare the latest two versions, no tolerance checks):
 python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
@@ -42,7 +42,6 @@ python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
 import argparse
 import json
 import logging
-import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -77,10 +76,11 @@ CLUSTER_LAYER = config["compare_versions"]["cluster_layer"]
 STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
 BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"]
-COMPARISONS_DIR = config["compare_versions"]["comparisons_dir"]
-# Key layout of the comparison JSON. Raise it when keys are added, renamed or
-# removed, so a reader of saved JSONs can tell the layouts apart.
-SUMMARY_SCHEMA_VERSION = 1
+COMPARISONS_DIR = config["output"]["compare_versions"]
+# Every comparison JSON stores this number as "schema_version", so code that
+# reads saved JSONs knows which keys to expect.
+# Add 1 to it whenever you add, rename or remove a key in the JSON.
+SUMMARY_SCHEMA_VERSION = 2
 DISTRIBUTION_COLUMNS = config["compare_versions"]["distribution_columns"]
 TOLERANCES = config["compare_versions"]["tolerances"]
 SIMPLIFY_TOLERANCE_M = config["constant"]["clustering"]["tolerance_m"]
@@ -223,33 +223,34 @@ def generate_dict_uprns_missing_clusters_by_version(
     """
     Count the UPRNs without a cluster for both versions, for the report and the JSON.
 
+    `load_tuple_df_add_features_uprns` gives None for a version whose
+    add_features file it cannot read, so that version has no count.
+
     Args:
-        df_uprns_old (pl.DataFrame | None): older version's add_features
-            UPRNs, or None when that output is missing
-        df_uprns_new (pl.DataFrame | None): newer version's add_features
-            UPRNs, or None when that output is missing
+        df_uprns_old (pl.DataFrame | None): the UPRNs in the older release's
+            add_features output (a single UPRN column), or None if that file
+            could not be read
+        df_uprns_new (pl.DataFrame | None): the same for the newer release.
         df_clusters_old (pl.DataFrame): older compute_contextual_features
             output
         df_clusters_new (pl.DataFrame): newer compute_contextual_features
             output
 
     Returns:
-        dict: keys old and new, each from `generate_dict_uprns_missing_clusters`,
-            or None for a version without its add_features output
+        dict: two keys, "old" and "new". Each holds that version's counts
+            from `generate_dict_uprns_missing_clusters`, or None
     """
-    return {
-        version: (
-            generate_dict_uprns_missing_clusters(
-                df_uprns=df_uprns, df_clusters=df_clusters
-            )
-            if df_uprns is not None
-            else None
+    counts_old = None
+    if df_uprns_old is not None:
+        counts_old = generate_dict_uprns_missing_clusters(
+            df_uprns=df_uprns_old, df_clusters=df_clusters_old
         )
-        for version, df_uprns, df_clusters in (
-            ("old", df_uprns_old, df_clusters_old),
-            ("new", df_uprns_new, df_clusters_new),
+    counts_new = None
+    if df_uprns_new is not None:
+        counts_new = generate_dict_uprns_missing_clusters(
+            df_uprns=df_uprns_new, df_clusters=df_clusters_new
         )
-    }
+    return {"old": counts_old, "new": counts_new}
 
 
 def generate_dict_distribution_stats(df: pl.DataFrame, column: str) -> dict | None:
@@ -913,26 +914,6 @@ def get_tuple_default_release_dates(
             "compare. Pass --old_release_date and --new_release_date explicitly."
         )
     return release_dates[-2], release_dates[-1]
-
-
-def get_str_local_authority_slug(local_authority: str) -> str:
-    """
-    Turn an LA name into the slug used in output paths; a slug stays unchanged.
-
-    `make_str_slug` would turn the hyphen in a multi-LA slug such as
-    "glasgow-midlothian" into an underscore, so a value that is already a
-    slug is not passed through it.
-
-    Args:
-        local_authority (str): official LA name (e.g. "East Lothian") or an
-            output-path slug (e.g. "east_lothian", "glasgow-midlothian")
-
-    Returns:
-        str: the output-path slug
-    """
-    if re.fullmatch(r"[a-z0-9_-]+", local_authority):
-        return local_authority
-    return make_str_slug(local_authority)
 
 
 def get_str_previous_release_date(
@@ -1657,12 +1638,13 @@ def generate_str_report(
         plot_files (dict[str, str] | None): for each compared column (see
             `get_dict_distribution_frames`), the file name of its saved
             plot, shown in the report; None shows no plots
-        df_uprns_old (pl.DataFrame | None): older version's add_features
-            UPRNs, used only when comparing compute_contextual_features
-            outputs; None when missing, and the report then says its count is
-            unavailable
-        df_uprns_new (pl.DataFrame | None): newer version's add_features
-            UPRNs, or None
+        df_uprns_old (pl.DataFrame | None): the UPRNs in the older release's
+            add_features output (a single UPRN column). Only used for the
+            compute_contextual_features stage, to count how many UPRNs did
+            not end up in any cluster. None for the other stages, or if the
+            file could not be read; the report then says the count is
+            unavailable.
+        df_uprns_new (pl.DataFrame | None): the same for the newer release.
 
     Returns:
         str: markdown report; lineage sections are replaced by a note when a
@@ -1794,10 +1776,10 @@ def generate_dict_comparison_summary(
     stage: str,
     local_authority: str,
     trigger: str | None,
+    release_date_old: str,
     release_date_new: str,
-    release_date_old: str | None = None,
-    df_old: pl.DataFrame | None = None,
-    df_new: pl.DataFrame | None = None,
+    df_old: pl.DataFrame,
+    df_new: pl.DataFrame,
     df_areas_old: pl.DataFrame | None = None,
     df_areas_new: pl.DataFrame | None = None,
     df_uprns_old: pl.DataFrame | None = None,
@@ -1806,54 +1788,48 @@ def generate_dict_comparison_summary(
     """
     Collect a comparison's headline numbers, to save as JSON next to the report.
 
-    With no old release date the summary is a baseline: the number keys are
-    there, but null.
+    The JSON has only the keys that apply to the stage.
 
     Args:
         stage (str): pipeline stage the outputs belong to
         local_authority (str): local authority slug the outputs cover
         trigger (str | None): why the comparison is run, or None for no
             tolerance checks
+        release_date_old (str): release date of the older output, YYYYMMDD
         release_date_new (str): release date of the newer output, YYYYMMDD
-        release_date_old (str | None): release date of the older output, or
-            None for a baseline
-        df_old (pl.DataFrame | None): older version of the stage output, or
-            None for a baseline
-        df_new (pl.DataFrame | None): newer version of the stage output, or
-            None for a baseline
-        df_areas_old (pl.DataFrame | None): older version's per-cluster areas
-            (geometry stages), or None
-        df_areas_new (pl.DataFrame | None): newer version's per-cluster areas
-            (geometry stages), or None
-        df_uprns_old (pl.DataFrame | None): older version's add_features
-            UPRNs (compute_contextual_features), or None
-        df_uprns_new (pl.DataFrame | None): newer version's add_features
-            UPRNs (compute_contextual_features), or None
+        df_old (pl.DataFrame): older version of the stage output
+        df_new (pl.DataFrame): newer version of the stage output
+        df_areas_old (pl.DataFrame | None): area in m² of each shape in the
+            older output, from `load_df_cluster_areas`; geometry stages only
+        df_areas_new (pl.DataFrame | None): area in m² of each shape in the
+            newer output, from `load_df_cluster_areas`; geometry stages only
+        df_uprns_old (pl.DataFrame | None): the UPRNs in the older release's
+            add_features output (a single UPRN column). Only used for the
+            compute_contextual_features stage, to count how many UPRNs did
+            not end up in any cluster. None for the other stages.
+        df_uprns_new (pl.DataFrame | None): the same for the newer release.
 
     Returns:
-        dict: fourteen keys:
+        dict: these keys for every stage:
             - schema_version (int): the key layout, `SUMMARY_SCHEMA_VERSION`
-            - stage, local_authority, trigger (str | None): as passed in
-            - release_date_old (str | None), release_date_new (str): the two
-              versions compared
-            - status (str): "compared", or "baseline" when there is no old
-              version
-            - counts (dict | None): from `generate_dict_count_delta`
-            - uprn_churn (dict | None): from `generate_dict_uprn_churn`
-            - tech_counts (list[dict] | None): one dict per tech with keys
-              assigned_tech, n_old, n_new and n_delta, from
-              `generate_df_tech_counts`; UPRN level, decision_tree only
-            - cluster_counts (dict | None): from
-              `generate_dict_cluster_count_delta`, clusters layer only;
-              geometry stages only
-            - total_area (dict | None): from `generate_dict_total_area_delta`,
-              clusters layer only; geometry stages only
-            - uprns_missing_clusters (dict | None): keys old and new, each
-              from `generate_dict_uprns_missing_clusters`, or None when that
-              version's add_features output is missing;
-              compute_contextual_features only
+            - stage, local_authority (str), trigger (str | None): as passed in
+            - release_date_old, release_date_new (str): the two versions
+            - counts (dict): from `generate_dict_count_delta`
             - tolerance_warnings (list[str]): the churn warnings shown in the
               report; empty without a trigger
+          and these keys only for the stages they apply to:
+            - uprn_churn (dict): from `generate_dict_uprn_churn`; stages whose
+              output has a UPRN column
+            - tech_counts (list[dict]): from `generate_df_tech_counts`, one
+              dict per tech with keys assigned_tech, n_old, n_new, n_delta;
+              decision_tree
+            - cluster_counts (dict), total_area (dict): from
+              `generate_dict_cluster_count_delta` and
+              `generate_dict_total_area_delta`, clusters layer only; cluster
+              and compute_contextual_features
+            - uprns_missing_clusters (dict): from
+              `generate_dict_uprns_missing_clusters_by_version`;
+              compute_contextual_features
     """
     summary = {
         "schema_version": SUMMARY_SCHEMA_VERSION,
@@ -1862,33 +1838,29 @@ def generate_dict_comparison_summary(
         "release_date_old": release_date_old,
         "release_date_new": release_date_new,
         "trigger": trigger,
-        "status": "baseline" if release_date_old is None else "compared",
-        "counts": None,
-        "uprn_churn": None,
-        "tech_counts": None,
-        "cluster_counts": None,
-        "total_area": None,
-        "uprns_missing_clusters": None,
+        "counts": generate_dict_count_delta(df_old=df_old, df_new=df_new),
         "tolerance_warnings": [],
     }
-    if release_date_old is None:
-        return summary
-    summary["counts"] = generate_dict_count_delta(df_old=df_old, df_new=df_new)
-    summary["uprn_churn"] = generate_dict_uprn_churn(df_old=df_old, df_new=df_new)
+    churn = generate_dict_uprn_churn(df_old=df_old, df_new=df_new)
+    if churn is not None:
+        summary["uprn_churn"] = churn
+        if trigger is not None:
+            summary["tolerance_warnings"] = _generate_list_churn_notes(
+                churn=churn, tolerances=TOLERANCES[trigger]
+            )
     if stage == "decision_tree":
-        df_tech_counts = generate_df_tech_counts(df_old=df_old, df_new=df_new)
-        if df_tech_counts is not None:
-            summary["tech_counts"] = df_tech_counts.to_dicts()
+        summary["tech_counts"] = generate_df_tech_counts(
+            df_old=df_old, df_new=df_new
+        ).to_dicts()
     if stage in GEOMETRY_STAGES:
         summary["cluster_counts"] = generate_dict_cluster_count_delta(
             df_old=filter_df_clusters_layer(df=df_old),
             df_new=filter_df_clusters_layer(df=df_new),
         )
-        if df_areas_old is not None and df_areas_new is not None:
-            summary["total_area"] = generate_dict_total_area_delta(
-                df_areas_old=filter_df_clusters_layer(df=df_areas_old),
-                df_areas_new=filter_df_clusters_layer(df=df_areas_new),
-            )
+        summary["total_area"] = generate_dict_total_area_delta(
+            df_areas_old=filter_df_clusters_layer(df=df_areas_old),
+            df_areas_new=filter_df_clusters_layer(df=df_areas_new),
+        )
     if stage == "compute_contextual_features":
         summary["uprns_missing_clusters"] = (
             generate_dict_uprns_missing_clusters_by_version(
@@ -1898,10 +1870,6 @@ def generate_dict_comparison_summary(
                 df_clusters_new=df_new,
             )
         )
-    if trigger is not None and summary["uprn_churn"] is not None:
-        summary["tolerance_warnings"] = _generate_list_churn_notes(
-            churn=summary["uprn_churn"], tolerances=TOLERANCES[trigger]
-        )
     return summary
 
 
@@ -1909,7 +1877,7 @@ def upload_comparison_files_to_s3(
     file_paths: list[Path], local_authority: str, release_date: str
 ) -> None:
     """
-    Upload a comparison's local files to the new release's comparisons folder.
+    Upload a comparison's local files to the new release's compare_versions folder.
 
     Args:
         file_paths (list[Path]): local report, plot and JSON files
@@ -1951,8 +1919,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--local_authority",
         required=True,
-        help="Local authority name or output-path slug, e.g. 'East Lothian' "
-        "or 'east_lothian'.",
+        help="Local authority name, e.g. 'East Lothian' or 'east_lothian'.",
     )
     parser.add_argument(
         "--old_release_date",
@@ -1979,8 +1946,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--save",
         action="store_true",
-        help="Also upload the report, plots and JSON to the new release's "
-        "comparisons folder on S3.",
+        help="Upload the report, plots and JSON to the new release's "
+        "compare_versions folder on S3.",
     )
     args = parser.parse_args()
     if args.old_release_date is not None and args.new_release_date is None:
@@ -1995,10 +1962,9 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
-    # Output paths use LA slugs; slugify like the sibling entrypoints (e.g.
-    # add_features) so "East Lothian", as pipeline.py passes it, finds
-    # east_lothian's outputs. A slug passes through unchanged.
-    local_authority = get_str_local_authority_slug(local_authority=args.local_authority)
+    # Turn the LA name into its folder name on S3, e.g. "East Lothian" ->
+    # "east_lothian". The pipeline stages name their output folders the same way.
+    local_authority = make_str_slug(args.local_authority)
     report_dir = Path(args.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
     if args.new_release_date is None:
@@ -2024,30 +1990,13 @@ if __name__ == "__main__":
         release_date_new = save_utils.get_str_release_date(args.new_release_date)
 
     if release_date_old is None:
+        # Exit 0, so pipeline.py does not list this stage as a failed comparison.
         logging.info(
-            "No %s version before %s for %s: baseline, nothing to compare.",
+            "No %s version before %s for %s: nothing to compare.",
             args.stage,
             release_date_new,
             local_authority,
         )
-        summary = generate_dict_comparison_summary(
-            stage=args.stage,
-            local_authority=local_authority,
-            trigger=args.trigger,
-            release_date_new=release_date_new,
-        )
-        summary_path = (
-            report_dir
-            / f"{args.stage}_{local_authority}_{release_date_new}_baseline.json"
-        )
-        summary_path.write_text(json.dumps(summary, indent=2))
-        logging.info("Baseline summary written to %s", summary_path)
-        if args.save:
-            upload_comparison_files_to_s3(
-                file_paths=[summary_path],
-                local_authority=local_authority,
-                release_date=release_date_new,
-            )
         sys.exit(0)
 
     path_old = get_str_stage_output_path(
@@ -2152,7 +2101,7 @@ if __name__ == "__main__":
         counts["rows_new"],
         counts["rows_delta"],
     )
-    churn = summary["uprn_churn"]
+    churn = summary.get("uprn_churn")
     if churn:
         logging.info(
             "UPRN churn: %d added, %d removed, %d retained",
