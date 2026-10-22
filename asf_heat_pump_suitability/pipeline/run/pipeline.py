@@ -62,18 +62,21 @@ def add_compare_arguments(parser: argparse.ArgumentParser) -> None:
         help="Compare each stage's output with its latest earlier version once a local authority's stages succeed.",
         action="store_true",
         default=False,
+        required=False,
     )
     parser.add_argument(
         "--trigger",
         help="Why the run is made; passed to every comparison to check its tolerances. Omit to show the numbers only.",
         choices=sorted(config["compare_versions"]["tolerances"]),
         default=None,
+        required=False,
     )
     parser.add_argument(
         "--old_release_date",
         help="Compare every stage against this release, e.g. 20260901, instead of each stage's latest earlier one.",
         type=save_utils.get_str_release_date,
         default=None,
+        required=False,
     )
 
 
