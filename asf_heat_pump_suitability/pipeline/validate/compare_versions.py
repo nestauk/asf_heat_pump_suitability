@@ -16,8 +16,8 @@ headline numbers, and logs a console summary. Pass --save to also upload the
 report, plots and JSON to the new release's `compare_versions/` folder on S3.
 
 Pass --new_release_date alone to compare it against the latest earlier
-version of the same stage. If there is no earlier version, only a JSON with
-`status: baseline` is written, and the script exits without error.
+version of the same stage. If there is no earlier version, the script logs it,
+writes nothing, and exits without error.
 
 Usage (compare the latest two versions, no tolerance checks):
 python -m asf_heat_pump_suitability.pipeline.validate.compare_versions \
@@ -2003,30 +2003,13 @@ if __name__ == "__main__":
         release_date_new = save_utils.get_str_release_date(args.new_release_date)
 
     if release_date_old is None:
+        # Exit 0, so pipeline.py does not list this stage as a failed comparison.
         logging.info(
-            "No %s version before %s for %s: baseline, nothing to compare.",
+            "No %s version before %s for %s: nothing to compare.",
             args.stage,
             release_date_new,
             local_authority,
         )
-        summary = generate_dict_comparison_summary(
-            stage=args.stage,
-            local_authority=local_authority,
-            trigger=args.trigger,
-            release_date_new=release_date_new,
-        )
-        summary_path = (
-            report_dir
-            / f"{args.stage}_{local_authority}_{release_date_new}_baseline.json"
-        )
-        summary_path.write_text(json.dumps(summary, indent=2))
-        logging.info("Baseline summary written to %s", summary_path)
-        if args.save:
-            upload_comparison_files_to_s3(
-                file_paths=[summary_path],
-                local_authority=local_authority,
-                release_date=release_date_new,
-            )
         sys.exit(0)
 
     path_old = get_str_stage_output_path(
