@@ -95,11 +95,13 @@ def check_compare_arguments(
             and the flags from `add_compare_arguments`
     """
     if args.trigger is not None and not args.compare:
-        parser.error("--trigger is used only by the comparisons; add --compare.")
+        parser.error(
+            "--trigger is used only by the comparisons; add --compare to run with comparison."
+        )
     if args.old_release_date is not None:
         if not args.compare:
             parser.error(
-                "--old_release_date is used only by the comparisons; add --compare."
+                "--old_release_date is used only by the comparisons; add --compare to run with comparison."
             )
         try:
             release_date = save_utils.get_str_release_date(args.release_date)
