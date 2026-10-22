@@ -190,7 +190,8 @@ def run_comparison(
         stage (str): stage name as used by `compare_versions.py`, e.g. "decision_tree".
         local_authority (str): local authority name to compare outputs for.
         release_date (str): release date of the new outputs.
-        trigger (str | None): why the run is made, passed on as `--trigger`. Default None for no tolerance checks.
+        trigger (str | None): why the run is made, passed on as `--trigger`: "methodology_change" or
+            "input_release". Default None for no tolerance checks.
         old_release_date (str | None): release to compare against. Default None for the stage's latest earlier one.
 
     Returns:
