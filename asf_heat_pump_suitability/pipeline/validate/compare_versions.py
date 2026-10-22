@@ -77,9 +77,11 @@ STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
 BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"]
 COMPARISONS_DIR = config["output"]["compare_versions"]
-# SUMMARY_SCHEMA_VERSION is the version of the comparison JSON's key layout.
-# Raise it by one when a key is added, renamed or removed, so a reader of
-# older saved JSONs can tell which layout each file has.
+# Every comparison JSON stores this number as "schema_version", so code that
+# reads saved JSONs (e.g. the GB summary, #531) knows which keys to expect.
+# Add 1 to it whenever you add, rename or remove a key in the JSON.
+# History: no schema_version = version 0; 1 = every key present, null where it
+# did not apply; 2 = only the keys that apply to the stage.
 SUMMARY_SCHEMA_VERSION = 2
 DISTRIBUTION_COLUMNS = config["compare_versions"]["distribution_columns"]
 TOLERANCES = config["compare_versions"]["tolerances"]

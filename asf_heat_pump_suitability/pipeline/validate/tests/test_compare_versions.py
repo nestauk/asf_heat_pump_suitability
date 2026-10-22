@@ -2095,7 +2095,9 @@ class TestGetStrPreviousReleaseDate:
         ), "no date before the new one must return None (baseline)"
 
 
-# Keys every comparison JSON has, whatever the stage.
+# Keys that every comparison JSON has, whatever the stage. If you change these
+# or a stage's own keys in the tests below, also add 1 to
+# SUMMARY_SCHEMA_VERSION in compare_versions.py.
 SUMMARY_COMMON_KEYS = {
     "schema_version",
     "stage",
