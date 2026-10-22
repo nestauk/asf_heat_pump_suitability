@@ -14,7 +14,7 @@ says why the run is made, and is passed to every comparison to pick its toleranc
 - `methodology_change`: the code or the method changed, and the inputs did not.
 - `input_release`: a new release of an input dataset, and the code did not change.
 `--old_release_date` makes every comparison
-use that release instead, for example the last production run when test runs were saved after it. A stage with no
+use that release instead, for example if you wanted to test against an earlier version than the most recent run. A stage with no
 output at that date fails its comparison; there is no fallback to another date. A failed comparison is listed at the
 end of the run but does not fail the local authority.
 """
