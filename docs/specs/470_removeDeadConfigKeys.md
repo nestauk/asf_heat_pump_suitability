@@ -1,8 +1,8 @@
 ---
 title: Clean up base.yaml (dead keys, stages block, research split, v1 inputs)
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/470
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/541
 asana:
 created: 2026-10-14
 ---
