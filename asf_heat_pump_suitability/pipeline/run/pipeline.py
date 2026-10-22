@@ -46,7 +46,7 @@ STAGES = [
 ]
 
 COMPARE_SCRIPT = "asf_heat_pump_suitability/pipeline/validate/compare_versions.py"
-# The stages compare_versions can compare, in run order
+# The stages that compare_versions.py should compare, in run order
 COMPARE_STAGES = list(config["compare_versions"]["stage_output_datasets"])
 
 
