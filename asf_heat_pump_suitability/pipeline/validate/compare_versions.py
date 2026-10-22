@@ -77,7 +77,7 @@ CLUSTER_LAYER = config["compare_versions"]["cluster_layer"]
 STAGE_MODULE_PATHS = config["compare_versions"]["stage_module_paths"]
 STAGE_OUTPUT_DATASETS = config["compare_versions"]["stage_output_datasets"]
 BUILDINGS_DATASET = config["compare_versions"]["decision_tree_buildings_dataset"]
-COMPARISONS_DIR = config["compare_versions"]["comparisons_dir"]
+COMPARISONS_DIR = config["output"]["compare_versions"]
 # Key layout of the comparison JSON. Raise it when keys are added, renamed or
 # removed, so a reader of saved JSONs can tell the layouts apart.
 SUMMARY_SCHEMA_VERSION = 1
