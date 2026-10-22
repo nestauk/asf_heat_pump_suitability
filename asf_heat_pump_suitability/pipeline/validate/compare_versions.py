@@ -1980,7 +1980,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--save",
         action="store_true",
-        help="Also upload the report, plots and JSON to the new release's "
+        help="Upload the report, plots and JSON to the new release's "
         "compare_versions folder on S3.",
     )
     args = parser.parse_args()
