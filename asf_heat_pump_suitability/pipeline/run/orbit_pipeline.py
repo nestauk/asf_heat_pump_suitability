@@ -87,6 +87,13 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--model_release",
+        help="Date of model training in YYYYMMDD format.",
+        type=str,
+        required=True,
+    )
+
+    parser.add_argument(
         "--release_date",
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
     )
@@ -102,7 +109,6 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    from pathlib import Path
     import polars as pl
     from tqdm import tqdm
     import subprocess
@@ -125,53 +131,32 @@ if __name__ == "__main__":
 
     for chunk in tqdm(chunks):
         print(f"Running chunk: {chunk}")
-        if args.prod:
-            subprocess.run(
-                [
-                    "orbit",
-                    "launch",
-                    "--script",
-                    "asf_heat_pump_suitability/pipeline/run/pipeline.py",
-                    "--team",
-                    "asf",
-                    "--project",
-                    "local_heat_planning_tool",
-                    "--cpu",
-                    "8",
-                    "--memory",
-                    "60gb",
-                    "-e",
-                    "PYTHONPATH=/app",  # Install repository in docker image
-                    "--local_authorities",
-                    *chunk,
-                    "--release_date",
-                    release_date,
-                    "--prod",
-                ]
-            )
-        else:
-            subprocess.run(
-                [
-                    "orbit",
-                    "launch",
-                    "--script",
-                    "asf_heat_pump_suitability/pipeline/run/pipeline.py",
-                    "--team",
-                    "asf",
-                    "--project",
-                    "local_heat_planning_tool",
-                    "--cpu",
-                    "8",
-                    "--memory",
-                    "60gb",
-                    "-e",
-                    "PYTHONPATH=/app",
-                    "--local_authorities",
-                    *chunk,
-                    "--release_date",
-                    release_date,
-                ]
-            )
+        flags = ["--prod"] if args.prod else []
+        subprocess.run(
+            [
+                "orbit",
+                "launch",
+                "--script",
+                "asf_heat_pump_suitability/pipeline/run/pipeline.py",
+                "--team",
+                "asf",
+                "--project",
+                "local_heat_planning_tool",
+                "--cpu",
+                "8",
+                "--memory",
+                "60gb",
+                "-e",
+                "PYTHONPATH=/app",  # Install repository in docker image
+                "--local_authorities",
+                *chunk,
+                "--model_release",
+                args.model_release,
+                "--release_date",
+                release_date,
+                *flags,
+            ]
+        )
 
     # Aggregate any error logs and save to a single file
     dir_uri = (
