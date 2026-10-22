@@ -11,7 +11,7 @@ created: 2026-10-14
 
 With `--compare`, each pipeline run (#526, PR #534) writes one comparison
 JSON for each local authority (LA) and stage to
-`outputs/data/{la}/{release_date}/comparisons/`. A GB run gives about 1,750
+`outputs/data/{la}/{release_date}/compare_versions/`. A GB run gives about 1,750
 files (about 350 LAs x 5 stages). Nothing reads them together, so there is no
 quick answer to two questions after a GB run:
 
@@ -44,27 +44,34 @@ records the design decisions and why we made them.
    _Rationale:_ the table must show an LA that has no files at all. A list
    of the files found cannot show that.
 
-3. **Each row gets one status: `compared`, `baseline`, `stage failed` or
-   `comparison missing`.** `compared` and `baseline` come from the JSON.
-   When there is no JSON, the reader checks if the stage output exists for
-   the release (`get_str_stage_output_path` from `compare_versions`). No
-   output gives `stage failed`. Output with no JSON gives
-   `comparison missing` (the comparison failed, or `--compare` was off).
+3. **Each row gets one status: `compared`, `comparison missing` or
+   `stage failed`.** A JSON gives `compared`, because `compare_versions`
+   writes a JSON only for a real comparison (#534 removed the baseline JSON
+   on 2026-10-22). When there is no JSON, the reader checks if the stage
+   output exists for the release (`get_str_stage_output_path` from
+   `compare_versions`). No output gives `stage failed`. Output with no JSON
+   gives `comparison missing`: the comparison failed, `--compare` was off,
+   or there was no older release to compare with.
    _Rationale:_ the pipeline failure CSVs from #521 are never written now
    (see Open questions), and a check of the output shows what really
    happened for this release, also after an LA is run again by hand. The
-   extra S3 lookup is needed only for the rows with no JSON.
+   extra S3 lookup is needed only for the rows with no JSON. The cost of
+   no baseline status: an LA's first release looks the same as a comparison
+   that did not run. Aidan accepted this on 2026-10-22, to match #534.
 
-4. **The JSON contract is the 14 keys of #534, with `schema_version` 1.**
-   A JSON without `schema_version` is version 0 (the 11 keys before
-   2026-10-13). The reader fills the keys that version 0 does not have with
-   null. The three keys added in #534 (`schema_version`, `tech_counts`,
+4. **The reader reads `schema_version` 2 JSONs only.** In version 2 (#534,
+   2026-10-22) a JSON has no `status` key and has only the keys that apply
+   to its stage. `schema_version`, `stage`, `local_authority`, both release
+   dates, `trigger`, `counts` and `tolerance_warnings` are always there. The
+   columns of the keys that a stage does not have are null. The three keys
+   added in #534 (`schema_version`, `tech_counts`,
    `uprns_missing_clusters`) were agreed in this kickoff. They copy only
    numbers that the comparison already computes from data that it already
    loads.
-   _Rationale:_ test files of version 0 are on S3 already (East Lothian,
-   20261013). The version number lets the reader handle a later layout
-   change without guessing from the keys.
+   _Rationale:_ version 0 and 1 files exist only in the old `comparisons/`
+   test folders, which the reader does not read. Support for them would be
+   code for test data only. The version number lets a later reader handle
+   the next layout change without a guess from the keys.
 
 5. **The table is long: one row for each LA and stage.** Fixed-shape keys
    are flattened into columns: `counts` (`rows_old`, `rows_new`,
@@ -85,14 +92,15 @@ records the design decisions and why we made them.
    `removed_share` and `added_share`, and `|n_delta| / n_old` for each
    tech. `max_rel_change_metric` names the metric, for example
    `tech:Networked heat pump`. A value with `old` = 0 is not used.
-   `uprns_missing_clusters` is shown but not used in the sort. Baselines
-   and rows with no JSON come after all compared rows.
+   `uprns_missing_clusters` is shown but not used in the sort. Rows with
+   no JSON come after all compared rows.
    _Rationale:_ a relative change makes LAs of different sizes comparable.
    Churn shares find "same total, different UPRNs", which a net delta
    hides. Small missing-cluster counts give large, unstable percentages.
 
-7. **No new thresholds.** The table shows the existing
-   `tolerance_warnings` from the JSON and sorts. It does not flag rows.
+7. **No new flag thresholds.** The table shows the existing
+   `tolerance_warnings` from the JSON and sorts. It does not flag rows. The
+   display limit of decision 9 only chooses what the markdown lists.
    _Rationale:_ limits chosen before two GB runs would be guesses. The
    known result: the cluster-level stages still never get a flag (their
    JSON has no `uprn_churn`). A person reads the sorted list.
@@ -107,16 +115,25 @@ records the design decisions and why we made them.
 
 9. **The output is a parquet table and a short markdown summary.** The
    markdown has the run-health counts by status and stage, the rows that
-   are not `compared` or `baseline`, the top changes (with the tech line for
-   rows where a tech moved most), the tolerance warnings, the extra JSON
-   files, and the S3 path of each per-LA report it names. The number of top
-   changes is a config value.
+   are not `compared`, the top changes (with the tech line for rows where a
+   tech moved most), the tolerance warnings, the extra JSON files, and the
+   S3 path of each per-LA report it names. The top changes list **every**
+   compared row whose `max_rel_change` is at least
+   `compare_versions.summary_min_rel_change` (0.01, so 1%), with no cap,
+   and at least `compare_versions.summary_n_top_changes` rows (10).
    _Rationale:_ the parquet is for analysis in polars. The markdown is the
-   view for people, so they do not need to open the nested column.
+   view for people, so they do not need to open the nested column. A fixed
+   top N (20 at first) cut by rank: it hid a large change at rank 21 and
+   showed tiny changes on a quiet run. A size limit lists every row that
+   needs a look, and the floor keeps a quiet run useful. 1% is well over
+   the change between re-runs with the same method (under 0.01% in the
+   2026-10-21 sample run) and well under a method change (Glasgow City
+   `decision_tree`, 6.05%). Changed on 2026-10-22.
 
 10. **`--save` writes both files to
-    `s3://asf-local-heat-planning-tool/outputs/comparisons/{release_date}/`.**
-    The path is a new key in `base.yaml` under `compare_versions`. Without
+    `s3://asf-local-heat-planning-tool/outputs/compare_versions/{release_date}/`.**
+    The path is `output.compare_versions_summary` in `base.yaml`, next to
+    the per-LA `output.compare_versions` key that #534 added. Without
     `--save`, the files go to `--report_dir` only.
     _Rationale:_ one place for each release, apart from the 350 LA folders.
     It has the same shape as `outputs/logs/pipeline_failure/{release_date}/`.
@@ -162,6 +179,16 @@ retargeted when #534 merges.
 - **Relative-change thresholds in `base.yaml` for rows, UPRNs, clusters,
   area and tech share.** Rejected for now (decision 7). It can come back
   after two GB runs.
+- **Other ways to choose the top changes** (decision 9). A fixed top N
+  hides large changes below the cut. Top N for each stage still cuts by
+  rank. Top N with a count of the rows over a limit still hides rows. A
+  limit from this run's own spread (median and MAD for each stage and
+  metric) adapts to each run, but it belongs with the peer checks of #535.
+- **A `baseline` status, or a "no earlier release" status from a listing
+  of the LA's release folders** (decision 3). Not kept, to match #534.
+- **Also read the old `comparisons/` folders and JSON versions 0 and 1**
+  (decision 4). Only test data is in them. The three sample LAs are run
+  again with the new code instead.
 - **Use the JSON with the latest old date, or keep a row for each JSON.**
   See decision 8.
 - **Other file-name rules** (decision 11). A short hash of the sorted
@@ -197,8 +224,16 @@ retargeted when #534 merges.
   `outputs/logs/pipeline_failure/` is empty. Best guess: report it in the
   "Found while testing" section of PR #534 for the #521 author. Decision 3
   does not depend on it.
-- **How many top changes does the markdown show?** Best guess: 20, as a
-  config value. Change it after the first GB run.
+- ~~**How many top changes does the markdown show?**~~ Answered on
+  2026-10-22 (decision 9): every row over 1%, and at least 10.
+- **Should the 1% display limit become a limit from the run's own spread?**
+  When a method change moves every LA, most rows pass 1% and the list is
+  long. Best guess: tune 1% after two GB runs, and move to median and MAD
+  for each stage and metric with the peer checks of #535.
+- **A per-stage roll-up in the markdown** (rows compared, rows over the
+  limit, median and largest change) would show a method change that
+  moves every LA at once. Best guess: add it if the first GB run with
+  `--compare` gives a long list.
 - ~~**Is one S3 listing for each LA fast enough?**~~ Answered: yes. A GB
   summary (361 LAs) took 128 s on 2026-10-14.
 - **Does the `(null)` tech count in the sort?** Best guess: yes. A large
@@ -217,21 +252,25 @@ From the acceptance criteria of
 https://github.com/nestauk/asf_heat_pump_suitability/issues/531:
 
 - [ ] The table has one row for each expected LA and stage in the release
-- [ ] A baseline shows as `baseline`, not as a change
 - [ ] A missing JSON for a stage with no output shows as `stage failed`
 - [ ] A missing JSON for a stage with output shows as `comparison missing`
 - [ ] Rows are sorted by the largest relative change, and each row names
       that metric
 - [ ] A second JSON for the same LA and stage is counted and listed, and
       the newest is used
-- [ ] A version 0 JSON and a version 1 JSON are both read
+- [ ] A version 2 JSON is read, with null columns for the keys its stage
+      does not have
 - [ ] The markdown summary gives run-health counts and the top changes
+- [ ] The top changes list every compared row at or over the limit, and at
+      least the floor number of rows
 - [ ] A subset run writes files named for its LAs and does not overwrite
       the GB summary of the same release
 - [ ] With `--save` the parquet and markdown are in
-      `outputs/comparisons/{release_date}/` (writes to S3, ask Aidan first)
+      `outputs/compare_versions/{release_date}/` (writes to S3, ask Aidan
+      first)
 - [ ] A run over the sample LAs gives the expected rows
 
-Unit tests cover the status logic, the flattening (version 0 and 1), the
-sort key and the duplicate rule, with JSON fixtures copied from the real
-East Lothian files. The S3 listing and lookups are mocked.
+Unit tests cover the status logic, the flattening, the sort key, the
+duplicate rule and the top-changes limit, with the real East Lothian JSONs
+of 20261014 converted to the version 2 layout. The S3 listing and lookups
+are mocked.
