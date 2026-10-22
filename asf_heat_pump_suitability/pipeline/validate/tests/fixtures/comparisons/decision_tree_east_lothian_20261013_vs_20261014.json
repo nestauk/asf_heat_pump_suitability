@@ -1,11 +1,10 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "stage": "decision_tree",
   "local_authority": "east_lothian",
   "release_date_old": "20261013",
   "release_date_new": "20261014",
   "trigger": null,
-  "status": "compared",
   "counts": {
     "rows_old": 58674,
     "rows_new": 58674,
@@ -55,8 +54,5 @@
       "n_delta": 0
     }
   ],
-  "cluster_counts": null,
-  "total_area": null,
-  "uprns_missing_clusters": null,
   "tolerance_warnings": []
 }

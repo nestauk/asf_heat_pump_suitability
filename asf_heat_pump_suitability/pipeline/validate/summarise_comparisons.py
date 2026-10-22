@@ -2,12 +2,12 @@
 Summarise the comparison JSON files of many local authorities for one release.
 
 `pipeline.py --compare` writes one comparison JSON for each LA and stage to
-`outputs/data/{la}/{release_date}/comparisons/`. This script reads them for
-the given LAs and gives one row for each LA and stage, with a status:
+`outputs/data/{la}/{release_date}/compare_versions/`. This script reads them
+for the given LAs and gives one row for each LA and stage, with a status:
 
-- compared: the JSON compares the release with an older one
-- baseline: the JSON has no older release to compare with
-- comparison missing: no JSON, but the stage output for the release exists
+- compared: a JSON compares the release with an older one
+- comparison missing: no JSON, but the stage output for the release exists.
+  The comparison failed, did not run, or had no older release to compare with
 - stage failed: no JSON and no stage output for the release
 
 Compared rows are sorted by their largest relative change since the older
@@ -48,8 +48,8 @@ from asf_heat_pump_suitability.utils import save_utils
 STAGES = list(STAGE_OUTPUT_DATASETS)
 SUMMARY_DIR = config["compare_versions"]["summary_dir"]
 N_TOP_CHANGES = config["compare_versions"]["summary_n_top_changes"]
-# Sort order of the statuses: compared rows first, then the rows with no change.
-STATUSES = ["compared", "baseline", "comparison missing", "stage failed"]
+# Sort order of the statuses: compared rows first, then the rows with no JSON.
+STATUSES = ["compared", "comparison missing", "stage failed"]
 # Up to this many LAs, the file name lists every LA slug.
 MAX_LAS_NAMED_IN_SCOPE = 3
 
@@ -101,7 +101,7 @@ FLOAT_COLUMNS = {
     "missing_share_new",
 }
 # The columns of the summary table. They are fixed, so a run with only
-# baselines or missing rows still has every column.
+# missing rows still has every column.
 SUMMARY_SCHEMA = {
     "local_authority": pl.String,
     "stage": pl.String,
@@ -250,8 +250,8 @@ def _generate_dict_flat_summary(summary: dict) -> dict:
     """
     Flatten one comparison JSON into the columns of the summary table.
 
-    A version 0 JSON has no schema_version, tech_counts or
-    uprns_missing_clusters; those columns are null.
+    A JSON has only the keys that apply to its stage. The columns of the
+    other keys are null.
 
     Args:
         summary (dict): content of one comparison JSON
@@ -261,10 +261,9 @@ def _generate_dict_flat_summary(summary: dict) -> dict:
     """
     max_rel_change, metric = generate_tuple_max_rel_change(summary=summary)
     row = {
-        "status": summary["status"],
         "max_rel_change": max_rel_change,
         "max_rel_change_metric": metric,
-        "schema_version": summary.get("schema_version", 0),
+        "schema_version": summary["schema_version"],
         "release_date_old": summary["release_date_old"],
         "release_date_new": summary["release_date_new"],
         "trigger": summary["trigger"],
@@ -317,6 +316,9 @@ def generate_list_dict_la_rows(
             "unused_json_paths": [file["path"] for file in stage_files[1:]],
         }
         if stage_files:
+            # Every JSON is a real comparison: compare_versions writes none
+            # when there is no older release.
+            row["status"] = "compared"
             row["json_path"] = stage_files[0]["path"]
             row.update(_generate_dict_flat_summary(summary=stage_files[0]["summary"]))
         elif get_bool_stage_output_exists(
@@ -333,8 +335,8 @@ def generate_df_comparison_summary(rows: list[dict]) -> pl.DataFrame:
     """
     Make the summary table, sorted by the largest relative change.
 
-    Compared rows come first, largest change first. Baselines and rows with
-    no JSON come after them.
+    Compared rows come first, largest change first. Rows with no JSON come
+    after them.
 
     Args:
         rows (list[dict]): summary rows, as from `generate_list_dict_la_rows`

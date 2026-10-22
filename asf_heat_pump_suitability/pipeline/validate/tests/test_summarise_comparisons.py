@@ -1,9 +1,9 @@
 """
 Tests for asf_heat_pump_suitability.pipeline.validate.summarise_comparisons.
 
-The JSON fixtures are copies of the real East Lothian comparison files:
-version 1 (release 20261014, all five stages) and version 0 (release
-20261013, decision_tree only).
+The JSON fixtures are the real East Lothian comparison files of release
+20261014 (all five stages), in the version 2 layout: no status key, and
+only the keys that apply to each stage.
 
 Run:
 pytest asf_heat_pump_suitability/pipeline/validate/tests/test_summarise_comparisons.py
@@ -24,8 +24,7 @@ from asf_heat_pump_suitability.pipeline.validate import (
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "comparisons"
 RELEASE_DATE = "20261014"
-EL_DIR = "s3://bucket/outputs/data/east_lothian/20261014/comparisons"
-ML_DIR = "s3://bucket/outputs/data/midlothian/20261014/comparisons"
+EL_DIR = "s3://bucket/outputs/data/east_lothian/20261014/compare_versions"
 
 
 def _load_fixture(name: str) -> dict:
@@ -65,10 +64,9 @@ def df_summary(mocker):
     """
     Summary table for two LAs.
 
-    East Lothian has the five real version 1 JSONs, plus an older second
-    add_features JSON. Midlothian has the real version 0 decision_tree JSON,
-    a baseline uprns JSON and no JSON for the other stages; of those, only
-    the cluster output exists.
+    East Lothian has the five real JSONs, plus an older second add_features
+    JSON. Midlothian has no JSON; of its stage outputs, only the cluster
+    output exists.
     """
     el_files = [
         _comparison_file(
@@ -89,25 +87,6 @@ def df_summary(mocker):
             minute=5,
         )
     )
-    decision_tree_v0 = _load_fixture(
-        "decision_tree_east_lothian_20260907_vs_20261013.json"
-    )
-    decision_tree_v0["local_authority"] = "midlothian"
-    ml_files = [
-        _comparison_file(
-            path=f"{ML_DIR}/decision_tree_v0.json", summary=decision_tree_v0, minute=1
-        ),
-        _comparison_file(
-            path=f"{ML_DIR}/uprns_baseline.json",
-            summary=compare_versions.generate_dict_comparison_summary(
-                stage="uprns",
-                local_authority="midlothian",
-                trigger=None,
-                release_date_new=RELEASE_DATE,
-            ),
-            minute=1,
-        ),
-    ]
     mocker.patch.object(
         summarise_comparisons,
         "get_bool_stage_output_exists",
@@ -116,7 +95,7 @@ def df_summary(mocker):
     rows = []
     for local_authority, files in [
         ("east_lothian", el_files),
-        ("midlothian", ml_files),
+        ("midlothian", []),
     ]:
         rows += summarise_comparisons.generate_list_dict_la_rows(
             local_authority=local_authority,
@@ -157,10 +136,7 @@ def test_summary_has_one_row_per_expected_la_and_stage_with_its_status(df_summar
     }, "There should be exactly one row for each LA and stage"
     assert all(
         statuses[("east_lothian", stage)] == "compared" for stage in stages
-    ), "Every East Lothian stage has a JSON with status compared"
-    assert (
-        statuses[("midlothian", "uprns")] == "baseline"
-    ), "A baseline JSON should show as baseline, not as a change"
+    ), "Every East Lothian stage has a JSON, so every stage is compared"
     assert (
         statuses[("midlothian", "cluster")] == "comparison missing"
     ), "No JSON but a stage output should show as comparison missing"
@@ -169,21 +145,18 @@ def test_summary_has_one_row_per_expected_la_and_stage_with_its_status(df_summar
     ), "No JSON and no stage output should show as stage failed"
 
 
-def test_summary_flattens_version_0_and_version_1_json(df_summary):
-    """Both JSON versions are read; keys version 0 does not have are null."""
-    v0 = _row(df_summary, "midlothian", "decision_tree")
-    assert (v0["schema_version"], v0["rows_old"], v0["tech_counts"]) == (
-        0,
-        58674,
-        None,
-    ), "A JSON with no schema_version is version 0 and has no tech counts"
-
-    v1 = _row(df_summary, "east_lothian", "compute_contextual_features")
+def test_summary_flattens_the_keys_each_stage_has(df_summary):
+    """Each JSON key becomes columns; a key the stage does not have is null."""
+    row = _row(df_summary, "east_lothian", "compute_contextual_features")
     assert (
-        v1["clusters_new"],
-        v1["uprns_missing_new"],
-        v1["n_added"],
-    ) == (5346, 292, None), "Fixed-shape keys should be flattened into columns"
+        row["schema_version"],
+        row["clusters_new"],
+        row["uprns_missing_new"],
+        row["n_added"],
+    ) == (2, 5346, 292, None), (
+        "Fixed-shape keys should be flattened into columns, and uprn_churn, "
+        "which this stage has not, should give null columns"
+    )
 
     techs = (
         df_summary.filter(pl.col("stage") == "decision_tree")
@@ -213,9 +186,9 @@ def test_summary_uses_the_newest_of_two_json_files(df_summary):
 def test_summary_is_sorted_by_largest_relative_change(df_summary):
     """Compared rows come first, largest change first; the rest come after."""
     assert (
-        df_summary["status"].to_list()[:6] == ["compared"] * 6
-    ), "All compared rows should come before baselines and missing rows"
-    changes = df_summary["max_rel_change"].to_list()[:6]
+        df_summary["status"].to_list()[:5] == ["compared"] * 5
+    ), "All compared rows should come before the rows with no JSON"
+    changes = df_summary["max_rel_change"].to_list()[:5]
     assert changes == sorted(
         changes, reverse=True
     ), "Compared rows should be sorted by max_rel_change, largest first"
@@ -283,9 +256,9 @@ def test_summary_markdown_gives_run_health_and_top_changes(df_summary):
         n_top_changes=3,
     )
     expected_lines = [
-        # Run-health table: stage, compared, baseline, comparison missing, stage failed
-        "| uprns | 1 | 1 | 0 | 0 |",
-        "| all | 6 | 1 | 1 | 2 |",
+        # Run-health table: stage, compared, comparison missing, stage failed
+        "| uprns | 1 | 0 | 1 |",
+        "| all | 5 | 1 | 4 |",
     ]
     for line in expected_lines:
         assert line in markdown, f"The markdown should contain the line {line!r}"

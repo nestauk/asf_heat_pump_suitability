@@ -1,11 +1,10 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "stage": "cluster",
   "local_authority": "east_lothian",
   "release_date_old": "20261013",
   "release_date_new": "20261014",
   "trigger": null,
-  "status": "compared",
   "counts": {
     "rows_old": 5368,
     "rows_new": 5367,
@@ -14,8 +13,6 @@
     "uprns_new": null,
     "uprns_delta": null
   },
-  "uprn_churn": null,
-  "tech_counts": null,
   "cluster_counts": {
     "clusters_old": 5368,
     "clusters_new": 5367,
@@ -26,6 +23,5 @@
     "area_m2_new": 26221168.349482268,
     "area_m2_delta": 1.4901161193847656e-8
   },
-  "uprns_missing_clusters": null,
   "tolerance_warnings": []
 }

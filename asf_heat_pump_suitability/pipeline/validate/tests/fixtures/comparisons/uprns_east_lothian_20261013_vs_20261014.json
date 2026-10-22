@@ -1,11 +1,10 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "stage": "uprns",
   "local_authority": "east_lothian",
   "release_date_old": "20261013",
   "release_date_new": "20261014",
   "trigger": null,
-  "status": "compared",
   "counts": {
     "rows_old": 58674,
     "rows_new": 58674,
@@ -23,9 +22,5 @@
     "n_null_old": 0,
     "n_null_new": 0
   },
-  "tech_counts": null,
-  "cluster_counts": null,
-  "total_area": null,
-  "uprns_missing_clusters": null,
   "tolerance_warnings": []
 }
