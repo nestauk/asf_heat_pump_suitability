@@ -13,7 +13,7 @@ for the given LAs and gives one row for each LA and stage, with a status:
 Compared rows are sorted by their largest relative change since the older
 release. The script writes a parquet table and a markdown summary named for
 the LAs they cover, `comparison_summary_{scope}.parquet` and `.md`. Pass
---save to also upload both to `outputs/comparisons/{release_date}/` on S3.
+--save to also upload both to `outputs/compare_versions/{release_date}/` on S3.
 
 Run it by hand after the Orbit jobs of a release finish.
 
@@ -46,7 +46,7 @@ from asf_heat_pump_suitability.pipeline.validate.compare_versions import (
 from asf_heat_pump_suitability.utils import save_utils
 
 STAGES = list(STAGE_OUTPUT_DATASETS)
-SUMMARY_DIR = config["compare_versions"]["summary_dir"]
+SUMMARY_DIR = config["output"]["compare_versions_summary"]
 N_TOP_CHANGES = config["compare_versions"]["summary_n_top_changes"]
 # Sort order of the statuses: compared rows first, then the rows with no JSON.
 STATUSES = ["compared", "comparison missing", "stage failed"]

@@ -235,6 +235,9 @@ output:
   # Where compare_versions.py --save uploads each comparison's report, plots
   # and JSON: the new release's own folder, so they are deleted together.
   compare_versions: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{release_date}/compare_versions"
+  # Where summarise_comparisons.py --save uploads the summary table and
+  # markdown of all the LAs' comparisons for one release.
+  compare_versions_summary: "s3://asf-local-heat-planning-tool/outputs/compare_versions/{release_date}"
 
 # Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of proprerties and contextual information about properties within the clusters and surrounding neighbourhood
 metadata:
@@ -506,9 +509,6 @@ compare_versions:
     cluster: "tech_clusters"
     compute_contextual_features: "clusters_tech_contextual_info"
   decision_tree_buildings_dataset: "buildings_most_suitable_tech"
-  # Where summarise_comparisons --save uploads the summary table and markdown
-  # of all the LAs' comparisons for one release.
-  summary_dir: "s3://asf-local-heat-planning-tool/outputs/comparisons/{release_date}"
   # Number of LA and stage rows in the "top changes" list of the summary
   # markdown. A first value: change it after the first GB run.
   summary_n_top_changes: 20
