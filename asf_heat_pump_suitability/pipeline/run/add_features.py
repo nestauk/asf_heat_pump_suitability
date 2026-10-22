@@ -6,7 +6,10 @@ Script to add features to UPRNs:
 - EPC-derived features of tenure; attachment type of property; and current energy rating, solar PV info, estimated current energy consumption.
 
 Run:
-python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES
+python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES --model_release YYYYMMDD
+
+Set --model_release to the YYYYMMDD date of the block of flats model training run. This is used to load the trained
+block of flats classifier and the manually labelled data it was trained on from the corresponding dated directory.
 
 To save outputs to S3, add --save flag.
 
@@ -38,7 +41,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--model_release",
         help="Date of model training in YYYYMMDD format.",
-        type=int,
+        type=str,
         required=True,
     )
 
