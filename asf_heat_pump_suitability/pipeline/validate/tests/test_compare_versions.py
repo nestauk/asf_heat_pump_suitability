@@ -2095,6 +2095,19 @@ class TestGetStrPreviousReleaseDate:
         ), "no date before the new one must return None (baseline)"
 
 
+# Keys every comparison JSON has, whatever the stage.
+SUMMARY_COMMON_KEYS = {
+    "schema_version",
+    "stage",
+    "local_authority",
+    "release_date_old",
+    "release_date_new",
+    "trigger",
+    "counts",
+    "tolerance_warnings",
+}
+
+
 class TestGenerateDictComparisonSummary:
     """Tests for `generate_dict_comparison_summary`."""
 
@@ -2112,10 +2125,13 @@ class TestGenerateDictComparisonSummary:
             df_old=df_old,
             df_new=df_new_churned,
         )
+        assert set(summary) == SUMMARY_COMMON_KEYS | {
+            "uprn_churn",
+            "tech_counts",
+        }, "a decision_tree JSON holds the common keys, churn and tech counts only"
         assert (
-            summary["status"] == "compared"
-            and summary["release_date_old"] == "20260601"
-        ), "a comparison must say it compared, and against which old date"
+            summary["schema_version"] == 2 and summary["release_date_old"] == "20260601"
+        ), "the JSON must give its key layout and the old date it compared"
         assert (
             summary["counts"]["rows_delta"] == 1
         ), "the row delta must match the report's counts"
@@ -2126,9 +2142,6 @@ class TestGenerateDictComparisonSummary:
         assert (
             len(summary["tolerance_warnings"]) == 2
         ), "25% removed and 50% added are both above the 5% tolerances"
-        assert (
-            summary["cluster_counts"] is None and summary["total_area"] is None
-        ), "a stage without geometry has no cluster or area numbers"
         assert summary["tech_counts"] == [
             {
                 "assigned_tech": "Communal solution",
@@ -2155,9 +2168,6 @@ class TestGenerateDictComparisonSummary:
                 "n_delta": 2,
             },
         ], "decision_tree must list each tech's UPRN counts, as the report does"
-        assert (
-            summary["uprns_missing_clusters"] is None
-        ), "only compute_contextual_features counts UPRNs without a cluster"
         assert (
             json.loads(json.dumps(summary)) == summary
         ), "the summary must save to JSON and read back unchanged"
@@ -2187,6 +2197,11 @@ class TestGenerateDictComparisonSummary:
             df_uprns_old=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
             df_uprns_new=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
         )
+        assert set(summary) == SUMMARY_COMMON_KEYS | {
+            "cluster_counts",
+            "total_area",
+            "uprns_missing_clusters",
+        }, "a final-stage JSON holds the common keys and its cluster keys only"
         assert (
             summary["cluster_counts"]["clusters_delta"] == -1
         ), "the ward row must not count as a cluster"
@@ -2211,9 +2226,6 @@ class TestGenerateDictComparisonSummary:
         assert (
             summary["tolerance_warnings"] == []
         ), "no trigger means no tolerance warnings"
-        assert (
-            summary["tech_counts"] is None
-        ), "only decision_tree has tech counts in its summary"
         no_new_uprns = compare_versions.generate_dict_comparison_summary(
             stage="compute_contextual_features",
             local_authority="plymouth",
@@ -2222,6 +2234,8 @@ class TestGenerateDictComparisonSummary:
             release_date_old="20260601",
             df_old=df_contextual,
             df_new=df_new,
+            df_areas_old=df_areas_old,
+            df_areas_new=df_areas_new,
             df_uprns_old=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
             df_uprns_new=None,
         )
@@ -2229,37 +2243,6 @@ class TestGenerateDictComparisonSummary:
             no_new_uprns["uprns_missing_clusters"]["old"]["uprns_missing"] == 1
             and no_new_uprns["uprns_missing_clusters"]["new"] is None
         ), "a version without an add_features output must be null, not stop the other"
-
-    def test_baseline_summary_has_no_old_date_or_numbers(self):
-        """A baseline has no earlier version, so its old date and numbers
-        are null, while its keys match a comparison's keys."""
-        summary = compare_versions.generate_dict_comparison_summary(
-            stage="uprns",
-            local_authority="plymouth",
-            trigger="input_release",
-            release_date_new="20260722",
-        )
-        compared_keys = compare_versions.generate_dict_comparison_summary(
-            stage="uprns",
-            local_authority="plymouth",
-            trigger=None,
-            release_date_new="20260722",
-            release_date_old="20260601",
-            df_old=pl.DataFrame({"UPRN": [1]}),
-            df_new=pl.DataFrame({"UPRN": [1]}),
-        ).keys()
-        assert (
-            summary["status"] == "baseline" and summary["release_date_old"] is None
-        ), "a baseline must say so and have no old date"
-        assert (
-            summary["counts"] is None and summary["uprn_churn"] is None
-        ), "a baseline has nothing to count against"
-        assert (
-            summary.keys() == compared_keys
-        ), "baseline and comparison JSONs must share keys, so one table holds both"
-        assert (
-            summary["schema_version"] == 1
-        ), "every JSON, a baseline too, must say which key layout it uses"
 
 
 class TestUploadComparisonFilesToS3:
