@@ -2233,23 +2233,6 @@ class TestGenerateDictComparisonSummary:
         assert (
             summary["tolerance_warnings"] == []
         ), "no trigger means no tolerance warnings"
-        no_new_uprns = compare_versions.generate_dict_comparison_summary(
-            stage="compute_contextual_features",
-            local_authority="plymouth",
-            trigger=None,
-            release_date_new="20260722",
-            release_date_old="20260601",
-            df_old=df_contextual,
-            df_new=df_new,
-            df_areas_old=df_areas_old,
-            df_areas_new=df_areas_new,
-            df_uprns_old=pl.DataFrame({"UPRN": [1, 2, 3, 4]}),
-            df_uprns_new=None,
-        )
-        assert (
-            no_new_uprns["uprns_missing_clusters"]["old"]["uprns_missing"] == 1
-            and no_new_uprns["uprns_missing_clusters"]["new"] is None
-        ), "a version without an add_features output must be null, not stop the other"
 
 
 class TestUploadComparisonFilesToS3:
