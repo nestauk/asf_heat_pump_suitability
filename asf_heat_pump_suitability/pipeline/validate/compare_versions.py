@@ -1802,11 +1802,11 @@ def generate_dict_comparison_summary(
             older output, from `load_df_cluster_areas`; geometry stages only
         df_areas_new (pl.DataFrame | None): area in m² of each shape in the
             newer output, from `load_df_cluster_areas`; geometry stages only
-        df_uprns_old (pl.DataFrame | None): UPRN column of the older
-            add_features output, used to count the UPRNs without a cluster;
-            compute_contextual_features only
-        df_uprns_new (pl.DataFrame | None): UPRN column of the newer
-            add_features output; compute_contextual_features only
+        df_uprns_old (pl.DataFrame | None): the UPRNs in the older release's
+            add_features output (a single UPRN column). Only used for the
+            compute_contextual_features stage, to count how many UPRNs did
+            not end up in any cluster. None for the other stages.
+        df_uprns_new (pl.DataFrame | None): the same for the newer release.
 
     Returns:
         dict: these keys for every stage:
