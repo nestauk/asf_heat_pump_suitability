@@ -62,11 +62,14 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
    last good version. One LA's five reports can therefore compare against
    different old dates; each report and JSON states its old date.
 
-5. **No earlier version means baseline, not error.** When a stage has no
-   release date before the new one, `compare_versions` logs "baseline,
-   nothing to compare", writes a JSON with `status: baseline`, and exits 0.
-   _Rationale:_ the later GB table can then tell "no earlier version" apart
-   from "comparison never ran or failed".
+5. **No earlier version means nothing to compare, not an error.** When a
+   stage has no release date before the new one, `compare_versions` logs
+   "nothing to compare", writes no file, and exits 0.
+   _Rationale:_ exit 0 keeps `pipeline.py` from listing the stage as a failed
+   comparison. A baseline JSON was first planned so the GB table could tell
+   "no earlier version" from "never ran". The review on PR #534
+   (2026-10-22) found it added code and files for little value, so the GB
+   table (#531) shows such a stage as "comparison missing".
 
 6. **The trigger is an optional pass-through.** `pipeline.py` and
    `orbit_pipeline.py` accept `--trigger` (`methodology_change` or
@@ -81,11 +84,12 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
    checks and no message.
 
 7. **Results go to S3 in the new release's folder:**
-   `outputs/data/{la}/{release_date}/comparisons/`. For each stage this holds
-   the markdown report, its plots, and a JSON of headline numbers. File
-   names keep the current stem, `{stage}_{la}_{old}_vs_{new}`; a baseline
-   JSON uses `{stage}_{la}_{new}_baseline`. The folder is a new
-   `compare_versions` config entry in `base.yaml`, not a hard-coded path.
+   `outputs/data/{la}/{release_date}/compare_versions/`. For each stage this
+   holds the markdown report, its plots, and a JSON of headline numbers.
+   File names keep the current stem, `{stage}_{la}_{old}_vs_{new}`. The
+   folder is the `output.compare_versions` entry in `base.yaml`, next to the
+   other output paths, not a hard-coded path. The review on PR #534 renamed
+   the folder from `comparisons/` so its name says which script wrote it.
    The upload uses `save_utils.upload_file_to_s3`. Following the repo
    convention that scripts write to S3 only with `--save`, `compare_versions`
    gets a `--save` flag and `pipeline.py` passes it. Without `--save`, the
@@ -93,29 +97,27 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
    _Rationale:_ everything about one run lives in one folder, and is deleted
    with it. `--save` keeps the hand-run CLI working on a laptop.
 
-8. **The JSON holds headline numbers only.** It has fourteen keys:
-   `schema_version` (1), `stage`, `local_authority`, `release_date_old`
-   (null for a baseline), `release_date_new`, `trigger`, `status`
-   (`compared` or `baseline`), `counts`, `uprn_churn`, `tech_counts`,
-   `cluster_counts`, `total_area`, `uprns_missing_clusters` and
-   `tolerance_warnings`. The number keys hold what the report already
-   builds: `generate_dict_count_delta`, `generate_dict_uprn_churn`,
-   `generate_df_tech_counts` as a list of rows (UPRN level,
-   `decision_tree` only), `generate_dict_cluster_count_delta` and
-   `generate_dict_total_area_delta` (clusters layer only), and
-   `generate_dict_uprns_missing_clusters` for each version under `old` and
-   `new` (`compute_contextual_features` only, a version is null when its
-   add*features output is missing). A key that does not apply (a baseline,
-   or a key for another stage) is null, not missing, so every JSON has the
-   same keys. `schema_version` is raised whenever keys change; a JSON
-   without it counts as version 0.
-   \_Rationale:* read by the GB table in #531, which sorts and flags LAs from
+8. **The JSON holds headline numbers only, and only the keys that apply.**
+   Every JSON has `schema_version` (2), `stage`, `local_authority`,
+   `release_date_old`, `release_date_new`, `trigger`, `counts` and
+   `tolerance_warnings`. A stage adds only its own keys: `uprn_churn`
+   (outputs with a UPRN column), `tech_counts` (`decision_tree`, a list of
+   rows from `generate_df_tech_counts`), `cluster_counts` and `total_area`
+   (`cluster` and `compute_contextual_features`, clusters layer only) and
+   `uprns_missing_clusters` (`compute_contextual_features`, the counts for
+   `old` and `new`, a version is null when its `add_features` output cannot
+   be read). The values come from the functions the report already calls.
+   `schema_version` is raised whenever keys change; a JSON without it
+   counts as version 0, and version 1 had every key with null placeholders
+   and a `status` key.
+   _Rationale:_ read by the GB table in #531, which sorts and flags LAs from
    these files without loading the outputs again. The keys copy only
    numbers the script already computes from data it already loads.
    Baseline numbers and cross-LA peer checks are #535, and the
-   check-results-as-data refactor is #488. The same keys in every file let
-   the table read them all the same way. Keys added 2026-10-13, agreed in
-   the #531 kickoff, before any production run wrote a JSON.
+   check-results-as-data refactor is #488. The review on PR #534
+   (2026-10-22) found that null placeholders made a file look as if
+   something failed. The GB table already reads keys with `.get()`, so a
+   fixed key list in the files is not needed.
 
 9. **A failed comparison never fails the LA or the run.** `pipeline.py` logs
    a comparison's non-zero exit code with the stage and LA, adds it to a
@@ -132,11 +134,11 @@ Each decision below was settled in the kickoff interview on 2026-10-01.
     `local_authority.make_str_slug`, the helper the stages use, so "East
     Lothian" and `east_lothian` find the same outputs. Found during
     implementation: `pipeline.py` passes official names, and the old
-    lowercasing gave "east lothian", which matches no S3 path. A value that
-    is already a slug (only lowercase letters, digits, `_` and `-`) stays
-    unchanged, because `make_str_slug` would turn the hyphen in a multi-LA
-    slug such as `glasgow-midlothian` into an underscore (code review,
-    2026-10-13).
+    lowercasing gave "east lothian", which matches no S3 path. A separate
+    helper that kept hyphenated multi-LA slugs unchanged was added on
+    2026-10-13 and removed after the review on PR #534 (2026-10-22): no
+    hyphenated multi-LA folder exists on S3, and `pipeline.py` passes
+    official names.
 
 11. **An optional `--old_release_date` pins every comparison to one
     release.** `pipeline.py` and `orbit_pipeline.py` accept it and pass it
@@ -181,14 +183,23 @@ wrong description of it now affects this feature.
 - **One shared old date for all five stages.** The five reports always line
   up, but an LA with a partial earlier run gets no comparison at all.
   Rejected for (4).
-- **Skip baselines silently in `pipeline.py`.** Less code, but a missing JSON
-  then means either baseline or failure. Rejected for (5).
+- **Write a baseline JSON when there is no earlier version.** It let the GB
+  table tell "no earlier version" from "never ran". First chosen, then
+  rejected for (5) after the review on PR #534: it added code and files for
+  little value.
+- **Keep every key in every JSON, with null placeholders.** One fixed layout
+  for every file. Rejected for (8) after the review on PR #534: the nulls
+  look like failures, and the reader already copes with absent keys.
+- **Move the "already a slug" check into `make_str_slug`.** Suggested in the
+  review. Rejected for (10): `get_dict_la_data` uses that function to name
+  every stage's output folder, so a lowercase hyphenated name such as
+  `stockton-on-tees` would get a different folder.
 - **`--trigger` required with `--compare`.** Every automated report gets
   tolerance warnings, but test runs must invent a reason. Rejected for (6).
 - **A separate tree, `outputs/comparisons/{release_date}/{la}/`.** One prefix
   lists every LA for a run, which suits the later GB table, but the reports
   sit away from the outputs they describe. Rejected for (7); the GB table can
-  list `outputs/data/*/{release_date}/comparisons/` instead.
+  list `outputs/data/*/{release_date}/compare_versions/` instead.
 - **Rename `pipeline.py`'s `--release_date` to `--new_release_date`.** It
   would match `compare_versions`. Rejected for (11): the pipeline writes
   one release, every stage script takes `--release_date`, and #521 owns and
@@ -244,10 +255,10 @@ From the issue's acceptance criteria:
 - [ ] With `--compare`, each successful LA gets one comparison for each of
       the five stages
 - [ ] Each comparison picks the latest earlier release date for its own stage
-- [ ] A stage with no earlier version writes a JSON with `status: baseline`
-      and exits 0
+- [ ] A stage with no earlier version logs "nothing to compare", writes no
+      file and exits 0
 - [ ] The report, plots and JSON for each comparison are on S3 under
-      `outputs/data/{la}/{release_date}/comparisons/`
+      `outputs/data/{la}/{release_date}/compare_versions/`
 - [ ] `--trigger`, when given, reaches every comparison, and its tolerance
       warnings appear in the report and in the JSON
 - [ ] A comparison that exits non-zero is logged, and the LA still counts as
@@ -262,6 +273,6 @@ From the issue's acceptance criteria:
       JSONs to `east_lothian/20261013/comparisons/`. A real Orbit run was
       judged overkill
 
-Tests follow the high-signal rule: the old-date choice (including baseline)
+Tests follow the high-signal rule: the old-date choice (including no earlier date)
 and the JSON content get unit tests; the subprocess wiring in `pipeline.py`
 is checked by the acceptance run, not by mock-heavy tests.
