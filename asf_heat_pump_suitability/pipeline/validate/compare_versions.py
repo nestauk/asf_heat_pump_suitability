@@ -1962,8 +1962,8 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
-    # Output folders are named with the slug that every stage makes from the
-    # LA name, e.g. "East Lothian" -> "east_lothian", so the same slug finds them.
+    # Turn the LA name into its folder name on S3, e.g. "East Lothian" ->
+    # "east_lothian". The pipeline stages name their output folders the same way.
     local_authority = make_str_slug(args.local_authority)
     report_dir = Path(args.report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
