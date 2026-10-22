@@ -2177,6 +2177,7 @@ class TestGenerateDictComparisonSummary:
     def test_geometry_stage_summary_covers_the_clusters_layer_only(self, df_contextual):
         """Cluster count and area deltas skip non-cluster layers, as the
         report does. With no trigger there are no warnings."""
+        # The new version loses cluster HP_2, so it has one cluster fewer.
         df_new = df_contextual.filter(pl.col("cluster_id") != "HP_2")
         # The third row is the ward, with a large area that must not count.
         df_areas_old = pl.DataFrame(
@@ -2185,6 +2186,7 @@ class TestGenerateDictComparisonSummary:
                 "layer": df_contextual["layer"],
             }
         )
+        # HP_2's area (50 m²) goes with it, so the cluster area drops by 50 m².
         df_areas_new = df_areas_old.filter(pl.col("area_m2") != 50.0)
         summary = compare_versions.generate_dict_comparison_summary(
             stage="compute_contextual_features",
@@ -2207,6 +2209,9 @@ class TestGenerateDictComparisonSummary:
         assert (
             summary["cluster_counts"]["clusters_delta"] == -1
         ), "the ward row must not count as a cluster"
+        # uprns_in is the number of UPRNs in the add_features output: 4 here.
+        # The old clusters hold 3 of them (2 + 1), so 1 is missing a cluster.
+        # The new clusters hold 2 (HP_2 is gone), so 2 are missing.
         assert summary["uprns_missing_clusters"] == {
             "old": {
                 "uprns_in": 4,
