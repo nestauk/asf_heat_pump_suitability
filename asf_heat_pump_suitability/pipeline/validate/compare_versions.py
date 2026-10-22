@@ -227,10 +227,10 @@ def generate_dict_uprns_missing_clusters_by_version(
     add_features file it cannot read, so that version has no count.
 
     Args:
-        df_uprns_old (pl.DataFrame | None): UPRN column of the older
-            add_features output, or None
-        df_uprns_new (pl.DataFrame | None): UPRN column of the newer
-            add_features output, or None
+        df_uprns_old (pl.DataFrame | None): the UPRNs in the older release's
+            add_features output (a single UPRN column), or None if that file
+            could not be read
+        df_uprns_new (pl.DataFrame | None): the same for the newer release.
         df_clusters_old (pl.DataFrame): older compute_contextual_features
             output
         df_clusters_new (pl.DataFrame): newer compute_contextual_features
@@ -1638,12 +1638,13 @@ def generate_str_report(
         plot_files (dict[str, str] | None): for each compared column (see
             `get_dict_distribution_frames`), the file name of its saved
             plot, shown in the report; None shows no plots
-        df_uprns_old (pl.DataFrame | None): older version's add_features
-            UPRNs, used only when comparing compute_contextual_features
-            outputs; None when missing, and the report then says its count is
-            unavailable
-        df_uprns_new (pl.DataFrame | None): newer version's add_features
-            UPRNs, or None
+        df_uprns_old (pl.DataFrame | None): the UPRNs in the older release's
+            add_features output (a single UPRN column). Only used for the
+            compute_contextual_features stage, to count how many UPRNs did
+            not end up in any cluster. None for the other stages, or if the
+            file could not be read; the report then says the count is
+            unavailable.
+        df_uprns_new (pl.DataFrame | None): the same for the newer release.
 
     Returns:
         str: markdown report; lineage sections are replaced by a note when a
