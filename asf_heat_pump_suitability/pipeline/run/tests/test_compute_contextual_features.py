@@ -125,6 +125,7 @@ class TestCreateJsonContextualFeaturesMetadata:
 
         `reassigning_anchor_load_ids` cells are numpy arrays, as geoparquet returns list columns.
         """
+        # Points keep the fixture simple; the real layers are polygons, not point locations
         clusters_gdf = gpd.GeoDataFrame(
             {
                 "cluster_id": ["C01", "C02"],
