@@ -81,6 +81,7 @@ if __name__ == "__main__":
         train_model,
     )
     from asf_heat_pump_suitability.pipeline.transform import (
+        barriers,
         uprns,
         outdoor_space,
         epc,
@@ -236,6 +237,16 @@ if __name__ == "__main__":
     intersection_gdf = outdoor_space.generate_gdf_building_intersections(
         land_parcels_gdf=land_parcels_gdf,
         buildings_gdf=buildings_gdf,
+    )
+
+    # Clip land parcels to barriers
+    clipping_gdf = barriers.load_transform_gdf_polygon_barriers(
+        grid_squares=local_authority_dict["grid_squares"]
+    )
+    land_parcels_gdf = outdoor_space.clip_gdf_land_parcels_to_barriers(
+        land_parcels_gdf=land_parcels_gdf,
+        intersection_gdf=intersection_gdf,
+        barriers_gdf=clipping_gdf,
     )
 
     # Get outdoor space
