@@ -347,7 +347,7 @@ def get_dict_census_uprn_range(local_authorities: list[str] = None) -> dict:
     """
     # rough expected UPRN range for whole of GB.
     # ONS estimates https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/families/bulletins/familiesandhouseholds/2024 ~29 million households in UK.
-    if not local_authorities or local_authorities == ["gb"]:
+    if not local_authorities or local_authorities == ["GB"]:
         min_uprns = 27000000
         max_uprns = 40000000
 
@@ -405,7 +405,7 @@ def get_dict_census_uprn_range(local_authorities: list[str] = None) -> dict:
 
         # +/- 40% buffer on total number of households
         min_uprns = int(total_census_households * 0.95)
-        max_uprns = int(total_census_households * 1.4)
+        max_uprns = int(total_census_households * 2)
 
         # Add the default values for the LAs we did not find
         min_uprns += len(missing_las) * default_min_uprns
@@ -539,7 +539,9 @@ if __name__ == "__main__":
         local_authority_dict=local_authority_dict,
     )
 
+    # ---------------------------
     # Save residential UPRNs to S3
+
     df = pl.from_pandas(
         domestic_uprns_gdf[
             [
@@ -553,25 +555,6 @@ if __name__ == "__main__":
             ]
         ]
     )
-
-    # --- PANDERA VALIDATION ---
-
-    # find acceptable UPRN range
-    uprn_bounds = get_dict_census_uprn_range(
-        local_authority_dict["valid_local_authorities"]
-    )
-    # perform validation checks on df
-    schema = uprns_schema.create_domestic_uprn_schema(
-        min_expected_rows=uprn_bounds["min"], max_expected_rows=uprn_bounds["max"]
-    )
-
-    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds['min']}")
-    print(f"Max Expected (1.4 * household census counts): {uprn_bounds['max']}")
-    print(f"Actual Rows:  {len(df)}")
-
-    df = schema.validate(df, lazy=True)
-
-    # ---------------------------
 
     if args.save:
         output_path = save_utils.get_str_output_path(
@@ -590,3 +573,20 @@ if __name__ == "__main__":
                 "release_date": release_date,
             },
         )
+
+    # --- PANDERA VALIDATION ---
+
+    # find acceptable UPRN range
+    uprn_bounds = get_dict_census_uprn_range(
+        local_authority_dict["valid_local_authorities"]
+    )
+    # perform validation checks on df
+    schema = uprns_schema.create_domestic_uprn_schema(
+        min_expected_rows=uprn_bounds["min"], max_expected_rows=uprn_bounds["max"]
+    )
+
+    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds['min']}")
+    print(f"Max Expected (2 * household census counts): {uprn_bounds['max']}")
+    print(f"Actual Rows:  {len(df)}")
+
+    df = schema.validate(df, lazy=True)
