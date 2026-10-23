@@ -65,7 +65,9 @@ Facts found during kickoff (2026-10-23):
 - Where should the shared check go? Probably a small generic helper that the three getters call (CLAUDE.md:
   `base_getters.py` must stay free of dataset-specific logic). Decide in `/implement`.
 - How should the getter test that a file exists: one `s3fs` listing of the partition folder, or one `exists`
-  call per square? Decide in `/implement`; one listing is fewer S3 calls.
+  call per square? Decide in `/implement`; one listing is fewer S3 calls. Use `s3fs` directly, not
+  `s3_utils.list_files_s3_path`: on `dev` that helper's glob (`{dir_uri}*`) returns the folder itself, not its
+  files. PR #551 fixes it; this branch does not merge #551, so that the two PRs stay independent.
 - Should the OS OpenMap and OpenRoad getters use the same land-square rule later, so that a missing land file
   also raises there? Not in this issue.
 - `land_grid_squares` does not contain NP and NQ (1 UPRN each). This does not affect GB LAs today.
