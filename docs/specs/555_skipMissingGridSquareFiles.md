@@ -39,6 +39,12 @@ Facts found during kickoff (2026-10-23):
 4. **One parametrised test** covers both cases (non-land skipped, land raises) for all three getters, with a mocked
    S3 listing. Rationale: one regression check per getter without three copies of the same mock setup.
 5. **Branch off `dev`**, independent of the failure-log PRs. Rationale: the fix can merge on its own.
+6. **The shared check is `s3_utils.filter_list_partition_paths`** (decided in `/implement`). Rationale:
+   `base_getters.py` must stay free of dataset-specific logic, and other `utils` modules already read `config`.
+7. **One `s3fs` listing of the partition folder per getter call**, not one `exists` call per square (decided in
+   `/implement`). Rationale: fewer S3 calls. It uses `s3fs` directly, not `s3_utils.list_files_s3_path`: on `dev`
+   that helper's glob (`{dir_uri}*`) returns the folder itself, not its files. PR #551 fixes it; this branch does
+   not merge #551, so that the two PRs stay independent.
 
 ## Alternatives considered
 
@@ -62,20 +68,18 @@ Facts found during kickoff (2026-10-23):
 
 ## Open questions
 
-- Where should the shared check go? Probably a small generic helper that the three getters call (CLAUDE.md:
-  `base_getters.py` must stay free of dataset-specific logic). Decide in `/implement`.
-- How should the getter test that a file exists: one `s3fs` listing of the partition folder, or one `exists`
-  call per square? Decide in `/implement`; one listing is fewer S3 calls. Use `s3fs` directly, not
-  `s3_utils.list_files_s3_path`: on `dev` that helper's glob (`{dir_uri}*`) returns the folder itself, not its
-  files. PR #551 fixes it; this branch does not merge #551, so that the two PRs stay independent.
 - Should the OS OpenMap and OpenRoad getters use the same land-square rule later, so that a missing land file
   also raises there? Not in this issue.
 - `land_grid_squares` does not contain NP and NQ (1 UPRN each). This does not affect GB LAs today.
 
 ## Verification
 
-- [ ] The UPRN, POI and NSUL getters skip a missing non-land square file with a log warning, and return the rows
-      from the other squares.
-- [ ] The three getters raise an error when a land square's file is missing.
-- [ ] One parametrised test covers both cases for all three getters; `uv run pytest` passes.
-- [ ] `uprns.py --local_authorities "North Yorkshire"` runs to the end locally (no `--save`).
+- [x] The UPRN, POI and NSUL getters skip a missing non-land square file with a log warning, and return the rows
+      from the other squares. Evidence: real S3 calls with `SE`, `OV`, `NZ` for all three datasets; the North
+      Yorkshire run logs `Skipping missing partition file for non-land square OV` for UPRN and POI.
+- [x] The three getters raise an error when a land square's file is missing. Evidence: the
+      `test_raises_for_missing_land_square` cases (real S3 has no missing land-square file).
+- [x] One parametrised test covers both cases for all three getters; `uv run pytest` passes (214 tests).
+- [x] `uprns.py --local_authorities "North Yorkshire"` runs to the end locally (no `--save`): exit 0,
+      383,008 domestic UPRNs. Note: the census check used its default range, because the census data has no row
+      for "North Yorkshire" (see the follow-up issue on census names).
