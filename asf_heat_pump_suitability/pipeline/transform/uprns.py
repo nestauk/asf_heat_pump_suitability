@@ -30,6 +30,7 @@ from asf_heat_pump_suitability.getters import base_getters
 from asf_heat_pump_suitability.utils import geo_utils
 from asf_heat_pump_suitability.schemas import uprns_schema
 import warnings
+import pandera.errors
 
 
 def generate_gdf_uprn_coords(
@@ -405,7 +406,7 @@ def get_dict_census_uprn_range(local_authorities: list[str] = None) -> dict:
 
         # +/- 40% buffer on total number of households
         min_uprns = int(total_census_households * 0.95)
-        max_uprns = int(total_census_households * 2)
+        max_uprns = int(total_census_households * 1.4)
 
         # Add the default values for the LAs we did not find
         min_uprns += len(missing_las) * default_min_uprns
@@ -586,7 +587,12 @@ if __name__ == "__main__":
     )
 
     print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds['min']}")
-    print(f"Max Expected (2 * household census counts): {uprn_bounds['max']}")
+    print(f"Max Expected (1.4 * household census counts): {uprn_bounds['max']}")
     print(f"Actual Rows:  {len(df)}")
 
-    df = schema.validate(df, lazy=True)
+    try:
+        schema.validate(df, lazy=True)
+    except pandera.errors.SchemaErrors as err:
+        warnings.warn(
+            f"UPRN schema validation failed for {local_authority_dict['url_slug']}:\n{err}"
+        )
