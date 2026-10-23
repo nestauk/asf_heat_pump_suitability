@@ -205,14 +205,16 @@ retargeted when #534 merges.
   numbers need a new loading path in `compare_versions.py`, which is not
   the integration job of #534. They moved to #535, together with the
   cross-LA peer checks. Only the three keys that copy existing numbers went
-  into #534.
+  into #534. On 2026-10-22 #534 stopped writing a baseline JSON, and the
+  baseline numbers were dropped from #535: the peer checks use the new
+  release's numbers that every comparison JSON already has.
 - **Put the JSON extension into #488 (checks as data).** It was considered
-  as the home for the baseline numbers. #535 holds them now and refers to
-  #488.
+  as the home for the baseline numbers, which were later dropped.
 
 ## Out of scope
 
-- Baseline numbers and cross-LA peer checks (#535)
+- Cross-LA peer checks, a limit from the run's spread, and a per-stage
+  roll-up (#535)
 - New flag thresholds for cluster counts or area
 - Running the comparisons (#526)
 - Splitting or refactoring `compare_versions.py` (#474, #488)
@@ -230,14 +232,11 @@ retargeted when #534 merges.
   does not depend on it.
 - ~~**How many top changes does the markdown show?**~~ Answered on
   2026-10-22 (decision 9): every row over 1%, and at least 10.
-- **Should the 1% display limit become a limit from the run's own spread?**
-  When a method change moves every LA, most rows pass 1% and the list is
-  long. Best guess: tune 1% after two GB runs, and move to median and MAD
-  for each stage and metric with the peer checks of #535.
-- **A per-stage roll-up in the markdown** (rows compared, rows over the
-  limit, median and largest change) would show a method change that
-  moves every LA at once. Best guess: add it if the first GB run with
-  `--compare` gives a long list.
+- ~~**Should the 1% display limit become a limit from the run's own
+  spread?**~~ Moved to #535 on 2026-10-23: a median and MAD limit for each
+  stage and metric. Until then, tune 1% after two GB runs.
+- ~~**A per-stage roll-up in the markdown**~~ (rows compared, rows over the
+  limit, median and largest change). Moved to #535 on 2026-10-23.
 - ~~**Is one S3 listing for each LA fast enough?**~~ Answered: yes. A GB
   summary (361 LAs) took 128 s on 2026-10-14.
 - **Does the `(null)` tech count in the sort?** Best guess: yes. A large
