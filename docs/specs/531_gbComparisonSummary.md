@@ -89,14 +89,18 @@ records the design decisions and why we made them.
 
 6. **Rows are sorted by `max_rel_change`.** It is the largest absolute
    value of `|delta| / old` for rows, UPRNs, clusters and area, the churn
-   `removed_share` and `added_share`, and `|n_delta| / n_old` for each
-   tech. `max_rel_change_metric` names the metric, for example
-   `tech:Networked heat pump`. A value with `old` = 0 is not used.
-   `uprns_missing_clusters` is shown but not used in the sort. Rows with
+   `removed_share` and `added_share`, the change in the share of UPRNs with
+   no cluster (`|missing_share_new - missing_share_old|`, metric
+   `missing_share`), and `|n_delta| / n_old` for each tech.
+   `max_rel_change_metric` names the metric, for example
+   `tech:Networked heat pump`. A value with `old` = 0 is not used. Rows with
    no JSON come after all compared rows.
    _Rationale:_ a relative change makes LAs of different sizes comparable.
    Churn shares find "same total, different UPRNs", which a net delta
-   hides. Small missing-cluster counts give large, unstable percentages.
+   hides. The missing-cluster count is used as a change in its share, not
+   as a ratio of the counts: small counts give large, unstable ratios, but
+   a share is already relative. A rise from 0.5% to 12% is the #519 failure
+   that this table must show (added 2026-10-23, from a code review).
 
 7. **No new flag thresholds.** The table shows the existing
    `tolerance_warnings` from the JSON and sorts. It does not flag rows. The
