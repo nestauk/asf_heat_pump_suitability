@@ -106,15 +106,21 @@ PARTITIONED_GETTERS = [
     ids=["osopen_uprn", "poi", "uprn_lookup"],
 )
 class TestPartitionedParquetGetters:
-    """Tests for the missing-file check in the partitioned parquet getters."""
+    """The partitioned getters skip a missing non-land square file and raise for a missing land-square file."""
 
     @staticmethod
     def mock_s3(mocker, config_key: str, squares_on_s3: list) -> object:
         """
-        Make S3 hold partition files for `squares_on_s3` only, and stub the parquet read.
+        Set up a fake S3 for one test, so that only `squares_on_s3` have a partition file.
 
-        The land squares are fixed to SE, NZ and SX, so the tests do not depend on the config list. SX is never
-        requested: a request for every land square makes the OS Open UPRN getter read the GB-wide file.
+        It patches three things:
+
+        - The land squares, to SE, NZ and SX, so that the tests do not depend on the config list.
+          SX is never requested, so a test never asks for all the land squares. If a test did, the UPRN
+          getter would read its single GB-wide file in place of the per-square files, and the missing-file
+          check would not run.
+        - The S3 folder listing, so that it returns only the files for `squares_on_s3`.
+        - `pl.read_parquet`, so that the test can check which paths the getter read.
 
         Args:
             mocker (pytest_mock.MockerFixture): pytest-mock fixture.
