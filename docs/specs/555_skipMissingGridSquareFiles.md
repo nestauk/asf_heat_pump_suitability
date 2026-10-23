@@ -1,8 +1,8 @@
 ---
 title: Skip missing non-land grid-square files in the partitioned parquet getters
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/555
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/560
 asana:
 created: 2026-10-23
 ---
