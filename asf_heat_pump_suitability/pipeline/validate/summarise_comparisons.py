@@ -57,34 +57,45 @@ STATUSES = ["compared", "comparison missing", "stage failed"]
 # Up to this many LAs, the file name lists every LA slug.
 MAX_LAS_NAMED_IN_SCOPE = 3
 
-# JSON keys with a fixed set of sub-keys, flattened into one column each.
+# JSON keys with a fixed set of sub-keys, flattened into one column each,
+# with the column type.
 FLAT_KEYS = {
-    "counts": [
-        "rows_old",
-        "rows_new",
-        "rows_delta",
-        "uprns_old",
-        "uprns_new",
-        "uprns_delta",
-    ],
-    "uprn_churn": [
-        "n_added",
-        "n_removed",
-        "n_retained",
-        "removed_share",
-        "added_share",
-        "n_null_old",
-        "n_null_new",
-    ],
-    "cluster_counts": ["clusters_old", "clusters_new", "clusters_delta"],
-    "total_area": ["area_m2_old", "area_m2_new", "area_m2_delta"],
+    "counts": {
+        "rows_old": pl.Int64,
+        "rows_new": pl.Int64,
+        "rows_delta": pl.Int64,
+        "uprns_old": pl.Int64,
+        "uprns_new": pl.Int64,
+        "uprns_delta": pl.Int64,
+    },
+    "uprn_churn": {
+        "n_added": pl.Int64,
+        "n_removed": pl.Int64,
+        "n_retained": pl.Int64,
+        "removed_share": pl.Float64,
+        "added_share": pl.Float64,
+        "n_null_old": pl.Int64,
+        "n_null_new": pl.Int64,
+    },
+    "cluster_counts": {
+        "clusters_old": pl.Int64,
+        "clusters_new": pl.Int64,
+        "clusters_delta": pl.Int64,
+    },
+    "total_area": {
+        "area_m2_old": pl.Float64,
+        "area_m2_new": pl.Float64,
+        "area_m2_delta": pl.Float64,
+    },
 }
-MISSING_CLUSTERS_KEYS = [
-    "uprns_in",
-    "uprns_in_clusters",
-    "uprns_missing",
-    "missing_share",
-]
+# Sub-keys of each version ("old", "new") in uprns_missing_clusters, with the
+# column type.
+MISSING_CLUSTERS_KEYS = {
+    "uprns_in": pl.Int64,
+    "uprns_in_clusters": pl.Int64,
+    "uprns_missing": pl.Int64,
+    "missing_share": pl.Float64,
+}
 # (metric name, old key, delta key) of the changes relative to the old value.
 RELATIVE_CHANGE_METRICS = [
     ("rows", "rows_old", "rows_delta"),
@@ -95,15 +106,6 @@ RELATIVE_CHANGE_METRICS = [
 SHARE_METRICS = ["removed_share", "added_share"]
 TECH_METRIC_PREFIX = "tech:"
 
-FLOAT_COLUMNS = {
-    "removed_share",
-    "added_share",
-    "area_m2_old",
-    "area_m2_new",
-    "area_m2_delta",
-    "missing_share_old",
-    "missing_share_new",
-}
 # The columns of the summary table. They are fixed, so a run with only
 # missing rows still has every column.
 SUMMARY_SCHEMA = {
@@ -117,15 +119,14 @@ SUMMARY_SCHEMA = {
     "release_date_new": pl.String,
     "trigger": pl.String,
     **{
-        column: pl.Float64 if column in FLOAT_COLUMNS else pl.Int64
-        for column in [
-            *(sub_key for sub_keys in FLAT_KEYS.values() for sub_key in sub_keys),
-            *(
-                f"{key}_{version}"
-                for version in ("old", "new")
-                for key in MISSING_CLUSTERS_KEYS
-            ),
-        ]
+        sub_key: dtype
+        for sub_keys in FLAT_KEYS.values()
+        for sub_key, dtype in sub_keys.items()
+    },
+    **{
+        f"{key}_{version}": dtype
+        for version in ("old", "new")
+        for key, dtype in MISSING_CLUSTERS_KEYS.items()
     },
     "tech_counts": pl.List(
         pl.Struct(
