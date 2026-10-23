@@ -96,7 +96,7 @@ def scrub_str_local_paths(text: str) -> str:
 
 def run_script(
     script_path: str, local_authority: str, release_date: str, flags: list = None
-) -> tuple[int, str]:
+) -> tuple[int, str, list[str]]:
     """
     Run one pipeline stage for one local authority and save outputs to S3.
 
@@ -107,7 +107,9 @@ def run_script(
         flags (list): additional flags for running pipeline script. Default None.
 
     Returns:
-        tuple[int, str]: the stage's process exit code (0 on success) and, if it failed, the error traceback, or None if no failure.
+        tuple[int, str, list[str]]: the stage's process exit code (0 on success), the error traceback if it failed
+        (otherwise None), and a list of every warning the stage printed to stderr with the `VALIDATION_WARNING:` prefix
+        (empty if none).
     """
     flags = flags or []
     result = subprocess.run(
@@ -129,7 +131,13 @@ def run_script(
         scrub_str_local_paths(result.stderr.strip()) if result.returncode != 0 else None
     )
 
-    return result.returncode, traceback
+    validation_warnings = [
+        scrub_str_local_paths(line.removeprefix("VALIDATION_WARNING:").strip())
+        for line in result.stderr.splitlines()
+        if line.startswith("VALIDATION_WARNING:")
+    ]
+
+    return result.returncode, traceback, validation_warnings
 
 
 if __name__ == "__main__":
@@ -156,7 +164,12 @@ if __name__ == "__main__":
     # if result.returncode != 0:
     #     sys.exit("Error running check_inputs.py: missing S3 input paths. Aborting.")
 
-    failed = {"local_authority": [], "stage_failed": [], "error_message": []}
+    failed = {
+        "local_authority": [],
+        "stage_failed": [],
+        "level": [],
+        "error_message": [],
+    }
 
     succeeded = 0
     for la in args.local_authorities:
@@ -169,25 +182,32 @@ if __name__ == "__main__":
         for stage_name, script_path in STAGES:
             print(f"\n--> Running: {stage_name}")
             if stage_name == "compute_contextual_features.py" and args.prod:
-                returncode, error_message = run_script(
+                returncode, error_message, validation_warnings = run_script(
                     script_path=script_path,
                     local_authority=la,
                     release_date=release_date,
                     flags=["--prod"],
                 )
             elif stage_name == "add_features.py":
-                returncode, error_message = run_script(
+                returncode, error_message, validation_warnings = run_script(
                     script_path=script_path,
                     local_authority=la,
                     release_date=release_date,
                     flags=["--model_release", args.model_release],
                 )
             else:
-                returncode, error_message = run_script(
+                returncode, error_message, validation_warnings = run_script(
                     script_path=script_path,
                     local_authority=la,
                     release_date=release_date,
                 )
+
+            for warning in validation_warnings:
+                failed["local_authority"].append(la)
+                failed["stage_failed"].append(stage_name)
+                failed["level"].append("warning")
+                failed["error_message"].append(warning)
+
             if returncode != 0:
                 elapsed = int(time.monotonic() - la_start)
                 print(
@@ -197,6 +217,7 @@ if __name__ == "__main__":
                 la_failed = True
                 failed["local_authority"].append(la)
                 failed["stage_failed"].append(stage_name)
+                failed["level"].append("error")
                 failed["error_message"].append(error_message)
                 break
 
@@ -221,8 +242,12 @@ if __name__ == "__main__":
             release_date=release_date,
             local_authorities=local_authority_dict["url_slug"],
         )
-        print(
-            f"Pipeline failed for the following Local Authorities at the specified stages:\n{failed}."
-            f"\nSee which stage each failure occurred in: {failure_fpath}"
-        )
+        if (failed["level"] == "error").any():
+            print(
+                f"Pipeline failed for some local authorities. See logs at {failure_fpath}"
+            )
+        else:
+            print(
+                f"Pipeline finished for all local authorities, some with warnings. See logs at {failure_fpath}"
+            )
         failed.to_csv(failure_fpath, index=False)
