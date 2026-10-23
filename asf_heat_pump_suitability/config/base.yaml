@@ -471,7 +471,6 @@ run_manifest:
       - "geodata.UK_poi_locations"
       - "geodata.grid_square_os_openmap_local"
       - "processed.non_domestic_poi_categories"
-      - "processed.valid_la_names"
       - "epc.domestic"
       - "epc.commercial.EW"
       - "epc.commercial.S"
@@ -480,7 +479,6 @@ run_manifest:
     add_features:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
-      - "processed.valid_la_names"
       - "processed.manually_labelled_block_of_flats"
       - "geodata.heat_network_zones.desnz_files"
       - "geodata.heat_network_zones.desnz_polygons"
@@ -494,7 +492,6 @@ run_manifest:
     decision_tree:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
-      - "processed.valid_la_names"
     cluster:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
@@ -502,11 +499,9 @@ run_manifest:
       - "geodata.grid_square_os_openroad"
       - "processed.poi_anchor_properties"
       - "geodata.heat_network_zones.desnz_polygons"
-      - "processed.valid_la_names"
     compute_contextual_features:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
-      - "processed.valid_la_names"
 
 compare_versions:
   stage_output_datasets:
