@@ -254,19 +254,19 @@ retargeted when #534 merges.
 From the acceptance criteria of
 https://github.com/nestauk/asf_heat_pump_suitability/issues/531:
 
-- [ ] The table has one row for each expected LA and stage in the release
-- [ ] A missing JSON for a stage with no output shows as `stage failed`
-- [ ] A missing JSON for a stage with output shows as `comparison missing`
-- [ ] Rows are sorted by the largest relative change, and each row names
+- [x] The table has one row for each expected LA and stage in the release
+- [x] A missing JSON for a stage with no output shows as `stage failed`
+- [x] A missing JSON for a stage with output shows as `comparison missing`
+- [x] Rows are sorted by the largest relative change, and each row names
       that metric
-- [ ] A second JSON for the same LA and stage is counted and listed, and
+- [x] A second JSON for the same LA and stage is counted and listed, and
       the newest is used
-- [ ] A version 2 JSON is read, with null columns for the keys its stage
+- [x] A version 2 JSON is read, with null columns for the keys its stage
       does not have
-- [ ] The markdown summary gives run-health counts and the top changes
-- [ ] The top changes list every compared row at or over the limit, and at
+- [x] The markdown summary gives run-health counts and the top changes
+- [x] The top changes list every compared row at or over the limit, and at
       least the floor number of rows
-- [ ] A subset run writes files named for its LAs and does not overwrite
+- [x] A subset run writes files named for its LAs and does not overwrite
       the GB summary of the same release
 - [ ] With `--save` the parquet and markdown are in
       `outputs/compare_versions/{release_date}/` (writes to S3, ask Aidan
