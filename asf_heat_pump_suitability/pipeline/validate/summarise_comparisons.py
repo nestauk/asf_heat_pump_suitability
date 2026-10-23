@@ -37,7 +37,10 @@ import polars as pl
 import s3fs
 
 from asf_heat_pump_suitability import PROJECT_DIR, config
-from asf_heat_pump_suitability.pipeline.transform.local_authority import make_str_slug
+from asf_heat_pump_suitability.pipeline.transform.local_authority import (
+    make_str_slug,
+    resolve_list_la_names,
+)
 from asf_heat_pump_suitability.pipeline.validate.compare_versions import (
     COMPARISONS_DIR,
     STAGE_OUTPUT_DATASETS,
@@ -574,12 +577,16 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     args = parse_arguments()
     release_date = save_utils.get_str_release_date(args.release_date)
-    # Same GB rule as orbit_pipeline.py, so a summary expects the LAs a GB run starts.
-    is_gb = args.local_authorities == ["GB"]
+    # Stops on a name that is not an LA, so a typo is not reported as
+    # "stage failed". Gives None for GB, in any case.
+    resolved_la_names = resolve_list_la_names(la_names=args.local_authorities)
+    is_gb = resolved_la_names is None
+    # The full GB list, as orbit_pipeline.py reads it, so a summary expects
+    # the LAs a GB run starts.
     la_names = (
         pl.read_csv(config["data"]["processed"]["valid_la_names"])["LAD23NM"].to_list()
         if is_gb
-        else args.local_authorities
+        else resolved_la_names
     )
     la_slugs = sorted({make_str_slug(name) for name in la_names})
 
