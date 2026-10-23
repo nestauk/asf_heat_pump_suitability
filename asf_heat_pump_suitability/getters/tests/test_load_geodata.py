@@ -113,6 +113,9 @@ class TestPartitionedParquetGetters:
         """
         Make S3 hold partition files for `squares_on_s3` only, and stub the parquet read.
 
+        The land squares are fixed to SE, NZ and SX, so the tests do not depend on the config list. SX is never
+        requested: a request for every land square makes the OS Open UPRN getter read the GB-wide file.
+
         Args:
             mocker (pytest_mock.MockerFixture): pytest-mock fixture.
             config_key (str): key of the partition path template in `config["data"]["geodata"]`.
@@ -121,6 +124,7 @@ class TestPartitionedParquetGetters:
         Returns:
             unittest.mock.MagicMock: the stubbed `pl.read_parquet`, to inspect the paths it read.
         """
+        mocker.patch.dict(config["constant"], {"land_grid_squares": ["SE", "NZ", "SX"]})
         template = config["data"]["geodata"][config_key]
         mocker.patch("s3fs.S3FileSystem").return_value.ls.return_value = [
             template.format(grid_square=sq).removeprefix("s3://")
