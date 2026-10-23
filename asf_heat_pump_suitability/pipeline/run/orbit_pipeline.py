@@ -185,6 +185,11 @@ if __name__ == "__main__":
             release_date=release_date, local_authorities="ORBIT_CONCAT"
         )
         failures.write_csv(save_as)
-        print(f"Pipeline failed for some local authorities. See logs at {save_as}")
+        if failures.filter(pl.col("level") == "error").height > 0:
+            print(f"Pipeline failed for some local authorities. See logs at {save_as}")
+        else:
+            print(
+                f"Pipeline finished for all local authorities, some with warnings. See logs at {save_as}"
+            )
     else:
         print("Pipeline finished for all Local Authorities successfully!")
