@@ -89,6 +89,13 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--model_release",
+        help="Date of model training in YYYYMMDD format.",
+        type=str,
+        required=True,
+    )
+
+    parser.add_argument(
         "--release_date",
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
     )
@@ -106,7 +113,6 @@ def parse_arguments() -> argparse.Namespace:
 if __name__ == "__main__":
     import os
     import sys
-    from pathlib import Path
     import polars as pl
     from tqdm import tqdm
     import subprocess
@@ -115,6 +121,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.utils import save_utils, s3_utils
 
     args = parse_arguments()
+    additional_flags = ["--prod"] if args.prod else []
     if args.prod:
         # .env is not uploaded to orbit, so pass the front-end S3 location to the jobs explicitly
         load_dotenv()
@@ -122,9 +129,8 @@ if __name__ == "__main__":
         missing = [name for name in front_end_vars if not os.environ.get(name)]
         if missing:
             sys.exit(f"--prod needs {', '.join(missing)} in your .env file.")
-        front_end_env_args = []
         for name in front_end_vars:
-            front_end_env_args += ["-e", f"{name}={os.environ[name]}"]
+            additional_flags += ["-e", f"{name}={os.environ[name]}"]
     local_authorities = args.local_authorities
     release_date = save_utils.get_str_release_date(args.release_date)
     print(f"Release date pinned to: {release_date}")
@@ -140,54 +146,31 @@ if __name__ == "__main__":
 
     for chunk in tqdm(chunks):
         print(f"Running chunk: {chunk}")
-        if args.prod:
-            subprocess.run(
-                [
-                    "orbit",
-                    "launch",
-                    "--script",
-                    "asf_heat_pump_suitability/pipeline/run/pipeline.py",
-                    "--team",
-                    "asf",
-                    "--project",
-                    "local_heat_planning_tool",
-                    "--cpu",
-                    "8",
-                    "--memory",
-                    "60gb",
-                    "-e",
-                    "PYTHONPATH=/app",  # Install repository in docker image
-                    *front_end_env_args,
-                    "--local_authorities",
-                    *chunk,
-                    "--release_date",
-                    release_date,
-                    "--prod",
-                ]
-            )
-        else:
-            subprocess.run(
-                [
-                    "orbit",
-                    "launch",
-                    "--script",
-                    "asf_heat_pump_suitability/pipeline/run/pipeline.py",
-                    "--team",
-                    "asf",
-                    "--project",
-                    "local_heat_planning_tool",
-                    "--cpu",
-                    "8",
-                    "--memory",
-                    "60gb",
-                    "-e",
-                    "PYTHONPATH=/app",
-                    "--local_authorities",
-                    *chunk,
-                    "--release_date",
-                    release_date,
-                ]
-            )
+        subprocess.run(
+            [
+                "orbit",
+                "launch",
+                "--script",
+                "asf_heat_pump_suitability/pipeline/run/pipeline.py",
+                "--team",
+                "asf",
+                "--project",
+                "local_heat_planning_tool",
+                "--cpu",
+                "8",
+                "--memory",
+                "60gb",
+                "-e",
+                "PYTHONPATH=/app",  # Install repository in docker image
+                "--local_authorities",
+                *chunk,
+                "--model_release",
+                args.model_release,
+                "--release_date",
+                release_date,
+                *additional_flags,
+            ]
+        )
 
     # Aggregate any error logs and save to a single file
     dir_uri = (

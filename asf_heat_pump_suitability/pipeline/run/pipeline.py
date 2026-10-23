@@ -1,9 +1,12 @@
 """
 Runs the entire pipeline for a list of local authorities. Executes each of the five stages in sequence, per local
-authority, and checks for errors after each stage.
+authority, and checks for errors after each stage. Saves outputs to S3.
 
 Usage:
-    python asf_heat_pump_suitability/pipeline/run/run_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--release_date YYYYMMDD]
+    python asf_heat_pump_suitability/pipeline/run/run_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] --model_release YYYYMMDD [--release_date YYYYMMDD]
+
+Set --model_release to the YYYYMMDD date of the block of flats model training run. This is used to load the trained
+block of flats classifier and the manually labelled data it was trained on from the corresponding dated directory.
 
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
@@ -46,6 +49,14 @@ def parse_arguments() -> argparse.Namespace:
         nargs="+",
         required=True,
     )
+
+    parser.add_argument(
+        "--model_release",
+        help="Date of model training in YYYYMMDD format.",
+        type=str,
+        required=True,
+    )
+
     parser.add_argument(
         "--release_date",
         help="The release date to pin across all stages, e.g. 20260801. "
@@ -132,9 +143,25 @@ if __name__ == "__main__":
         for stage_name, script_path in STAGES:
             print(f"\n--> Running: {stage_name}")
             if stage_name == "compute_contextual_features.py" and args.prod:
-                returncode = run_script(script_path, la, release_date, flags=["--prod"])
+                returncode = run_script(
+                    script_path=script_path,
+                    local_authority=la,
+                    release_date=release_date,
+                    flags=["--prod"],
+                )
+            elif stage_name == "add_features.py":
+                returncode = run_script(
+                    script_path=script_path,
+                    local_authority=la,
+                    release_date=release_date,
+                    flags=["--model_release", args.model_release],
+                )
             else:
-                returncode = run_script(script_path, la, release_date)
+                returncode = run_script(
+                    script_path=script_path,
+                    local_authority=la,
+                    release_date=release_date,
+                )
             if returncode != 0:
                 elapsed = int(time.monotonic() - la_start)
                 print(
