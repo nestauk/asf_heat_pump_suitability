@@ -37,8 +37,8 @@ tech_types_gdf = gpd.read_file(
 important_buildings_gdf = load_geodata.load_gdf_os_openmap_layer(
     layer="important_building", grid_squares="SX"
 )
-epc_domestic_set = uprns.load_set_valid_epc_uprns(epc_type="domestic")
-epc_commercial_set = uprns.load_set_valid_epc_uprns(epc_type="commercial")
+epc_domestic_set = uprns.load_arr_valid_epc_uprns(epc_type="domestic")
+epc_commercial_set = uprns.load_arr_valid_epc_uprns(epc_type="commercial")
 uprns_df = load_geodata.load_df_osopen_uprn()
 uprns_GB_gdf = uprns.generate_gdf_uprn_coords(uprns_df)
 

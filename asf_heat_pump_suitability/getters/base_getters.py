@@ -27,10 +27,11 @@ def load_df_from_s3(uri: str, **kwargs) -> pl.DataFrame:
     Returns:
         pl.DataFrame
     """
+    content = BytesIO(get_content_from_s3_path(uri))
     if fnmatch(uri, "*.parquet"):
-        return pl.read_parquet(uri, **kwargs)
+        return pl.read_parquet(content, **kwargs)
     elif fnmatch(uri, "*.csv"):
-        return pl.read_csv(uri, **kwargs)
+        return pl.read_csv(content, **kwargs)
 
 
 def get_df_from_excel_url(url: str, **kwargs) -> pl.DataFrame:

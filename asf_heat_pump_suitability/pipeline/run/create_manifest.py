@@ -37,6 +37,7 @@ if __name__ == "__main__":
         s3_client=s3_client,
         s3_bucket=front_end_s3_bucket,
         path_folder=front_end_staging_s3_path,
+        full=False,
         file_type=".geojson",
     )
 
@@ -48,6 +49,7 @@ if __name__ == "__main__":
         config["output"]["dataset"]["clusters_tech_contextual_info"]
         .format(
             local_authorities="{local_authorities}",
+            release_date="{release_date}",  # identity: only affects the directory, not the suffix
             tolerance_m=config["constant"]["clustering"]["tolerance_m"],
         )
         .split("{local_authorities}")[-1]
