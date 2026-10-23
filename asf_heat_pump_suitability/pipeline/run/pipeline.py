@@ -17,9 +17,11 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pandas as pd
 
+from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.utils import save_utils
 
 # (display name, path relative to the repo root) for each stage, in run order
@@ -76,9 +78,25 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def scrub_str_local_paths(text: str) -> str:
+    """
+    Replace local absolute paths in `text` with placeholders, so error logs don't expose usernames.
+    The project directory becomes `<PROJECT_DIR>` and the user's home directory becomes `~`.
+
+    Args:
+        text (str): text which may contain local file paths, e.g. an error traceback.
+
+    Returns:
+        str: `text` with local paths replaced.
+    """
+    return text.replace(str(PROJECT_DIR), "<PROJECT_DIR>").replace(
+        str(Path.home()), "~"
+    )
+
+
 def run_script(
     script_path: str, local_authority: str, release_date: str, flags: list = None
-) -> int:
+) -> tuple[int, str]:
     """
     Run one pipeline stage for one local authority and save outputs to S3.
 
@@ -89,7 +107,7 @@ def run_script(
         flags (list): additional flags for running pipeline script. Default None.
 
     Returns:
-        int: the stage's process exit code (0 on success).
+        tuple[int, str]: the stage's process exit code (0 on success) and, if it failed, the error traceback, or None if no failure.
     """
     flags = flags or []
     result = subprocess.run(
@@ -102,15 +120,23 @@ def run_script(
             release_date,
             "--save",
             *flags,
-        ]
+        ],
+        stderr=subprocess.PIPE,
+        text=True,
     )
-    return result.returncode
+
+    traceback = (
+        scrub_str_local_paths(result.stderr.strip()) if result.returncode != 0 else None
+    )
+
+    return result.returncode, traceback
 
 
 if __name__ == "__main__":
-    # Run from the repo root regardless of where the script is invoked from
-    from asf_heat_pump_suitability import PROJECT_DIR, config
+    from asf_heat_pump_suitability import config
+    from asf_heat_pump_suitability.pipeline.transform import local_authority
 
+    # Run from the repo root regardless of where the script is invoked from
     os.chdir(PROJECT_DIR)
 
     args = parse_arguments()
@@ -130,7 +156,7 @@ if __name__ == "__main__":
     # if result.returncode != 0:
     #     sys.exit("Error running check_inputs.py: missing S3 input paths. Aborting.")
 
-    failed = pd.DataFrame({"local_authority": [], "stage_failed": []})
+    failed = {"local_authority": [], "stage_failed": [], "error_message": []}
 
     succeeded = 0
     for la in args.local_authorities:
@@ -143,21 +169,21 @@ if __name__ == "__main__":
         for stage_name, script_path in STAGES:
             print(f"\n--> Running: {stage_name}")
             if stage_name == "compute_contextual_features.py" and args.prod:
-                returncode = run_script(
+                returncode, error_message = run_script(
                     script_path=script_path,
                     local_authority=la,
                     release_date=release_date,
                     flags=["--prod"],
                 )
             elif stage_name == "add_features.py":
-                returncode = run_script(
+                returncode, error_message = run_script(
                     script_path=script_path,
                     local_authority=la,
                     release_date=release_date,
                     flags=["--model_release", args.model_release],
                 )
             else:
-                returncode = run_script(
+                returncode, error_message = run_script(
                     script_path=script_path,
                     local_authority=la,
                     release_date=release_date,
@@ -169,8 +195,9 @@ if __name__ == "__main__":
                     f"(after {elapsed}s)"
                 )
                 la_failed = True
-                failed["local_authority"] = la
-                failed["stage_failed"] = stage_name
+                failed["local_authority"].append(la)
+                failed["stage_failed"].append(stage_name)
+                failed["error_message"].append(error_message)
                 break
 
         if la_failed:
@@ -184,17 +211,18 @@ if __name__ == "__main__":
         f"\n\nPipeline completed for {succeeded} of {len(args.local_authorities)} "
         "local authorities."
     )
-    if len(failed) > 0:
+
+    if len(failed["local_authority"]) > 0:
+        local_authority_dict = local_authority.get_dict_la_data(
+            failed["local_authority"]
+        )
+        failed = pd.DataFrame(failed)
         failure_fpath = config["output"]["log"]["pipeline_failure"].format(
-            release_date=release_date, local_authorities=args.local_authorities
+            release_date=release_date,
+            local_authorities=local_authority_dict["url_slug"],
         )
         print(
             f"Pipeline failed for the following Local Authorities at the specified stages:\n{failed}."
             f"\nSee which stage each failure occurred in: {failure_fpath}"
         )
-        failed.to_csv(
-            failure_fpath,
-            mode="a",
-            index=False,
-            header=False,
-        )
+        failed.to_csv(failure_fpath, index=False)
