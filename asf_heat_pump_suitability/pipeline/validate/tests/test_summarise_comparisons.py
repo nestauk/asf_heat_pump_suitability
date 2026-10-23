@@ -238,8 +238,10 @@ def test_max_rel_change_skips_zero_old_values_and_uses_shares(
     else:
         target = summary[key]
     target.update(edit)
-    _, metric = summarise_comparisons.generate_tuple_max_rel_change(summary=summary)
-    assert metric == expected_metric, f"The largest change should be {expected_metric}"
+    row = summarise_comparisons.generate_dict_flat_summary(summary=summary)
+    assert (
+        row["max_rel_change_metric"] == expected_metric
+    ), f"The largest change should be {expected_metric}"
 
 
 @pytest.mark.parametrize(

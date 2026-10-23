@@ -96,13 +96,9 @@ MISSING_CLUSTERS_KEYS = {
     "uprns_missing": pl.Int64,
     "missing_share": pl.Float64,
 }
-# (metric name, old key, delta key) of the changes relative to the old value.
-RELATIVE_CHANGE_METRICS = [
-    ("rows", "rows_old", "rows_delta"),
-    ("uprns", "uprns_old", "uprns_delta"),
-    ("clusters", "clusters_old", "clusters_delta"),
-    ("area_m2", "area_m2_old", "area_m2_delta"),
-]
+# Metrics whose change is taken relative to the old value, from the
+# {metric}_old and {metric}_delta columns.
+RELATIVE_CHANGE_METRICS = ["rows", "uprns", "clusters", "area_m2"]
 SHARE_METRICS = ["removed_share", "added_share"]
 TECH_METRIC_PREFIX = "tech:"
 
@@ -212,41 +208,36 @@ def get_bool_stage_output_exists(
     return True
 
 
-def generate_tuple_max_rel_change(summary: dict) -> tuple[float | None, str | None]:
+def generate_tuple_max_rel_change(row: dict) -> tuple[float | None, str | None]:
     """
-    Find the largest relative change in one comparison JSON.
+    Find the largest relative change in one flattened summary row.
 
     A metric whose old value is 0 or null is not used.
 
     Args:
-        summary (dict): content of one comparison JSON
+        row (dict): one row of the summary table, as from
+            `generate_dict_flat_summary`
 
     Returns:
         tuple[float | None, str | None]: the largest absolute relative change
             and the name of its metric (e.g. "rows", "removed_share",
             "missing_share", "tech:Networked heat pump"), or (None, None)
-            when no metric has
-            a value
+            when no metric has a value
     """
     changes = []
-    flat = {}
-    for key in ("counts", "cluster_counts", "total_area"):
-        flat.update(summary.get(key) or {})
-    for metric, old_key, delta_key in RELATIVE_CHANGE_METRICS:
-        if flat.get(old_key):
-            changes.append((abs(flat[delta_key]) / flat[old_key], metric))
-    churn = summary.get("uprn_churn") or {}
+    for metric in RELATIVE_CHANGE_METRICS:
+        if row[f"{metric}_old"]:
+            changes.append((abs(row[f"{metric}_delta"]) / row[f"{metric}_old"], metric))
     for metric in SHARE_METRICS:
-        if churn.get(metric) is not None:
-            changes.append((abs(churn[metric]), metric))
+        if row[metric] is not None:
+            changes.append((abs(row[metric]), metric))
     # The share of UPRNs with no cluster is already relative, so its change
     # is used as it is. A ratio of the small missing counts would be unstable.
     # A version is null when its add_features output is missing.
-    missing = summary.get("uprns_missing_clusters") or {}
-    if missing.get("old") and missing.get("new"):
-        share_change = missing["new"]["missing_share"] - missing["old"]["missing_share"]
+    if row["missing_share_old"] is not None and row["missing_share_new"] is not None:
+        share_change = row["missing_share_new"] - row["missing_share_old"]
         changes.append((abs(share_change), "missing_share"))
-    for tech in summary.get("tech_counts") or []:
+    for tech in row["tech_counts"] or []:
         if tech["n_old"]:
             changes.append(
                 (
@@ -259,7 +250,7 @@ def generate_tuple_max_rel_change(summary: dict) -> tuple[float | None, str | No
     return max(changes, key=lambda change: change[0], default=(None, None))
 
 
-def _generate_dict_flat_summary(summary: dict) -> dict:
+def generate_dict_flat_summary(summary: dict) -> dict:
     """
     Flatten one comparison JSON into the columns of the summary table.
 
@@ -270,12 +261,10 @@ def _generate_dict_flat_summary(summary: dict) -> dict:
         summary (dict): content of one comparison JSON
 
     Returns:
-        dict: one value for each column of `SUMMARY_SCHEMA` that a JSON gives
+        dict: one value for each column of `SUMMARY_SCHEMA` that a JSON
+            gives, with max_rel_change and max_rel_change_metric
     """
-    max_rel_change, metric = generate_tuple_max_rel_change(summary=summary)
     row = {
-        "max_rel_change": max_rel_change,
-        "max_rel_change_metric": metric,
         "schema_version": summary["schema_version"],
         "release_date_old": summary["release_date_old"],
         "release_date_new": summary["release_date_new"],
@@ -292,6 +281,9 @@ def _generate_dict_flat_summary(summary: dict) -> dict:
         row.update(
             {f"{key}_{version}": values.get(key) for key in MISSING_CLUSTERS_KEYS}
         )
+    row["max_rel_change"], row["max_rel_change_metric"] = generate_tuple_max_rel_change(
+        row=row
+    )
     return row
 
 
@@ -333,7 +325,7 @@ def generate_list_dict_la_rows(
             # when there is no older release.
             row["status"] = "compared"
             row["json_path"] = stage_files[0]["path"]
-            row.update(_generate_dict_flat_summary(summary=stage_files[0]["summary"]))
+            row.update(generate_dict_flat_summary(summary=stage_files[0]["summary"]))
         elif get_bool_stage_output_exists(
             stage=stage, local_authority=local_authority, release_date=release_date
         ):
