@@ -235,6 +235,9 @@ output:
   # Where compare_versions.py --save uploads each comparison's report, plots
   # and JSON: the new release's own folder, so they are deleted together.
   compare_versions: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{release_date}/compare_versions"
+  # Where summarise_comparisons.py --save uploads the summary table and
+  # markdown of all the LAs' comparisons for one release.
+  compare_versions_summary: "s3://asf-local-heat-planning-tool/outputs/compare_versions/{release_date}"
 
 # Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of proprerties and contextual information about properties within the clusters and surrounding neighbourhood
 metadata:
@@ -506,6 +509,13 @@ compare_versions:
     cluster: "tech_clusters"
     compute_contextual_features: "clusters_tech_contextual_info"
   decision_tree_buildings_dataset: "buildings_most_suitable_tech"
+  # The "top changes" list of the summary markdown shows every compared row
+  # whose largest relative change (a share: 0.01 = 1%) is at least
+  # summary_min_rel_change, with no cap, and at least summary_n_top_changes
+  # rows. It only chooses what the markdown lists; nothing is flagged.
+  # First values: change them after two GB runs.
+  summary_min_rel_change: 0.01
+  summary_n_top_changes: 10
   # The `layer` value carrying the clusters in the multi-layer front-end
   # geojson; the cluster checks filter to it. Versions without a `layer`
   # column (pre-August-2026 outputs) are treated as all-clusters.
