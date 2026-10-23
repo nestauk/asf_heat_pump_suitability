@@ -119,6 +119,7 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
     from asf_heat_pump_suitability import config
     from asf_heat_pump_suitability.utils import save_utils, s3_utils
+    from asf_heat_pump_suitability.pipeline.transform import local_authority
 
     args = parse_arguments()
     additional_flags = ["--prod"] if args.prod else []
@@ -136,9 +137,7 @@ if __name__ == "__main__":
     print(f"Release date pinned to: {release_date}")
 
     if local_authorities == ["GB"]:
-        local_authorities = pl.read_csv(config["data"]["processed"]["valid_la_names"])[
-            "LAD23NM"
-        ].to_list()
+        local_authorities = local_authority.load_list_la_names(nation="GB")
 
     chunks = chunk_list_strings(
         np.asarray(local_authorities), n=args.size, size=args.is_number_of_chunks
