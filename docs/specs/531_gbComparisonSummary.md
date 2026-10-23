@@ -268,10 +268,11 @@ https://github.com/nestauk/asf_heat_pump_suitability/issues/531:
       least the floor number of rows
 - [x] A subset run writes files named for its LAs and does not overwrite
       the GB summary of the same release
-- [ ] With `--save` the parquet and markdown are in
-      `outputs/compare_versions/{release_date}/` (writes to S3, ask Aidan
-      first)
-- [ ] A run over the sample LAs gives the expected rows
+- [x] With `--save` the parquet and markdown are in
+      `outputs/compare_versions/{release_date}/` (done 2026-10-23 for the 3
+      sample LAs with comparisons)
+- [x] A run over the sample LAs gives the expected rows (2026-10-23: 15
+      compared, Bradford comparison missing, Camden stage failed)
 
 Unit tests cover the status logic, the flattening, the sort key, the
 duplicate rule and the top-changes limit, with the real East Lothian JSONs
