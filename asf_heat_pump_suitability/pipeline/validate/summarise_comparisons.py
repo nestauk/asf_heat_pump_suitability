@@ -445,9 +445,7 @@ def generate_str_summary_markdown(
         counts = [str((df_stage["status"] == status).sum()) for status in STATUSES]
         lines.append(f"| {stage} | {' | '.join(counts)} |")
 
-    df_missing = df_summary.filter(
-        pl.col("status").is_in(["comparison missing", "stage failed"])
-    )
+    df_missing = df_summary.filter(pl.col("status") != "compared")
     lines += ["", "## Rows with no comparison", ""]
     if df_missing.is_empty():
         lines.append("None.")
