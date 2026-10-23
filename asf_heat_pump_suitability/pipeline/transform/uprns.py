@@ -170,9 +170,9 @@ def filter_gdf_domestic_uprns(
     print("Filtering to residential UPRNs...")
     # Find UPRNs which are in the non-residential buildings
     non_residential_uprns = set(
-        uprn_gdf.sjoin(non_residential_buildings_gdf, how="inner", predicate="within")[
-            "UPRN"
-        ]
+        uprn_gdf.sjoin(
+            non_residential_buildings_gdf, how="inner", predicate="intersects"
+        )["UPRN"]
     )
 
     # Get valid non-residential EPC UPRNs
@@ -288,7 +288,8 @@ def map_dict_uprns_to_building_id(
     buildings_gdf: gpd.GeoDataFrame,
     id_col: str,
     max_distance: float = 1,
-) -> dict:
+    as_dict: bool = True,
+) -> dict | pl.DataFrame:
     """
     Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within or intersect
     with, or the nearest building < 1m away if not located within a building.
@@ -298,9 +299,10 @@ def map_dict_uprns_to_building_id(
         buildings_gdf (gpd.GeoDataFrame): building footprints
         id_col (str): name of building ID column in `buildings_gdf`
         max_distance (float): max distance (metres) from which to join UPRNs to a building footprint. Default 1m.
+        as_dict (bool): set to True to return as `dict` or `False` to return as `polars` `DataFrame`. Default `True`.
 
     Returns:
-        dict: mapping of UPRNs to building IDs
+        dict | pl.DataFrame: mapping of UPRNs to building IDs
     """
     uprns_gdf = geo_utils.verify_gdf_crs(uprns_gdf)
     buildings_gdf = geo_utils.verify_gdf_crs(buildings_gdf)
@@ -320,16 +322,16 @@ def map_dict_uprns_to_building_id(
         buildings_gdf, how="inner", max_distance=max_distance
     )
     # combine the two gdfs and turn into a dictionary
-    uprns_building_dict = (
+    uprns_building_df = (
         (pd.concat([uprns_inside_buildings, nearest_buildings_uprns]))
         # Handle edge cases reproducibly where UPRNs on the edge of multiple buildings get joined to more than one building
-        .sort_values(by=id_col, ascending=True)
-        .drop_duplicates(subset="UPRN")
-        .set_index("UPRN")
-        .to_dict()[id_col]
+        .sort_values(by=id_col, ascending=True).drop_duplicates(subset="UPRN")
     )
 
-    return uprns_building_dict
+    if as_dict:
+        return uprns_building_df.set_index("UPRN").to_dict()[id_col]
+    else:
+        return pl.from_pandas(uprns_building_df[["UPRN", id_col]])
 
 
 def get_dict_census_uprn_range(local_authorities: list[str] = None) -> dict:
@@ -484,7 +486,7 @@ if __name__ == "__main__":
     uprns_gdf = generate_gdf_uprn_coords(uprns_df)
     del uprns_df
 
-    # Reduce UPRNs to only those within the LA boundaries and join LA code and name for later use
+    # Reduce UPRNs to only those intersecting the LA boundaries and join LA code and name for later use
     uprns_gdf = uprns_gdf.sjoin(
         la_boundaries_gdf[["LAD23CD", "LAD23NM", "geometry"]],
         how="inner",
