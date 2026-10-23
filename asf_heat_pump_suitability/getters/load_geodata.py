@@ -502,6 +502,8 @@ def load_gdf_poi(
     """
     Load and process Points of Interest data. CRS EPSG 4326.
 
+    In grid-square mode, non-land squares with no file are skipped.
+
     Returns:
         gpd.GeoDataFrame: Processed POI data containing types of POI specified
 
