@@ -203,25 +203,40 @@ def test_summary_is_sorted_by_largest_relative_change(df_summary):
 
 
 @pytest.mark.parametrize(
-    "key, edit, expected_metric",
+    "stage, key, edit, expected_metric",
     [
         # 50 new UPRNs with no tech, none before: no relative change, skipped.
         (
+            "decision_tree",
             "tech_counts",
             {"n_old": 0, "n_new": 50, "n_delta": 50},
             "tech:Individual or Networked heat pump",
         ),
         # Same total, but half the old UPRNs replaced: churn beats the techs.
-        ("uprn_churn", {"removed_share": 0.5}, "removed_share"),
+        ("decision_tree", "uprn_churn", {"removed_share": 0.5}, "removed_share"),
+        # Clusters and area flat, but 12% of UPRNs now have no cluster (0.5%
+        # before): the change in missing_share wins.
+        (
+            "compute_contextual_features",
+            "uprns_missing_clusters",
+            {"missing_share": 0.12},
+            "missing_share",
+        ),
     ],
 )
-def test_max_rel_change_skips_zero_old_values_and_uses_churn(
-    key, edit, expected_metric
+def test_max_rel_change_skips_zero_old_values_and_uses_shares(
+    stage, key, edit, expected_metric
 ):
-    """A metric with old = 0 is not used; churn shares count as changes."""
-    summary = _load_fixture("decision_tree_east_lothian_20261013_vs_20261014.json")
-    # The first tech_counts entry is the "(null)" tech.
-    target = summary[key][0] if key == "tech_counts" else summary[key]
+    """A metric with old = 0 is not used; changes in shares count as changes."""
+    summary = _load_fixture(f"{stage}_east_lothian_20261013_vs_20261014.json")
+    # The first tech_counts entry is the "(null)" tech. The missing-cluster
+    # edit is made to the new version.
+    if key == "tech_counts":
+        target = summary[key][0]
+    elif key == "uprns_missing_clusters":
+        target = summary[key]["new"]
+    else:
+        target = summary[key]
     target.update(edit)
     _, metric = summarise_comparisons.generate_tuple_max_rel_change(summary=summary)
     assert metric == expected_metric, f"The largest change should be {expected_metric}"

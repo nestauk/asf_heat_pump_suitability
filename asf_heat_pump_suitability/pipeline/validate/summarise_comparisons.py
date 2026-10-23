@@ -223,7 +223,8 @@ def generate_tuple_max_rel_change(summary: dict) -> tuple[float | None, str | No
     Returns:
         tuple[float | None, str | None]: the largest absolute relative change
             and the name of its metric (e.g. "rows", "removed_share",
-            "tech:Networked heat pump"), or (None, None) when no metric has
+            "missing_share", "tech:Networked heat pump"), or (None, None)
+            when no metric has
             a value
     """
     changes = []
@@ -237,6 +238,13 @@ def generate_tuple_max_rel_change(summary: dict) -> tuple[float | None, str | No
     for metric in SHARE_METRICS:
         if churn.get(metric) is not None:
             changes.append((abs(churn[metric]), metric))
+    # The share of UPRNs with no cluster is already relative, so its change
+    # is used as it is. A ratio of the small missing counts would be unstable.
+    # A version is null when its add_features output is missing.
+    missing = summary.get("uprns_missing_clusters") or {}
+    if missing.get("old") and missing.get("new"):
+        share_change = missing["new"]["missing_share"] - missing["old"]["missing_share"]
+        changes.append((abs(share_change), "missing_share"))
     for tech in summary.get("tech_counts") or []:
         if tech["n_old"]:
             changes.append(
