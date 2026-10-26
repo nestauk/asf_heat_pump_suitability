@@ -398,7 +398,8 @@ def _jitter_arr_duplicate_coords(coords_arr: np.ndarray) -> np.ndarray:
     Move each extra copy of a coordinate east, so that every copy keeps its own Voronoi cell.
 
     The first copy of a coordinate (in input order) does not move. The second copy moves 1 x DUPLICATE_SEED_JITTER_M
-    metres east, the third copy moves 2 x DUPLICATE_SEED_JITTER_M metres east, and so on.
+    metres east, the third copy moves 2 x DUPLICATE_SEED_JITTER_M metres east, and so on. Each copy of one point gets
+    a different distance, so the copies cannot land on each other.
 
     Args:
         coords_arr (np.ndarray): (N, 2) array of x, y seed coordinates in metres.
