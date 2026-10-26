@@ -3,6 +3,7 @@ Unit tests for functions in cluster.py
 """
 
 import os
+import numpy as np
 import pytest
 import pandas as pd
 import geopandas as gpd
@@ -11,6 +12,8 @@ from shapely.geometry import Polygon
 from shapely.affinity import rotate
 from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.cluster.cluster import (
+    DUPLICATE_SEED_JITTER,
+    _jitter_duplicate_coords,
     extend_edges_gdf,
     filter_gdf_anchors_to_save,
     generate_gdf_clusters,
@@ -732,6 +735,100 @@ class TestExtendEdgesGdf:
         # Same join_style as used in cluster._clip_gdf_voronoi_cells_polygon_buffer
         expected = gdf_far_apart_polygons.buffer(20, join_style=2).area.sum()
         assert results == expected, "Voronoi not clipped to buffer correctly"
+
+    @pytest.fixture(scope="class")
+    def gdf_shared_corner_polygons(self):
+        """Generate a geodataframe of two squares that touch at one corner."""
+        return gpd.GeoDataFrame(
+            {
+                "building_id": ["B01", "B02"],
+                "geometry": [
+                    Polygon(
+                        [
+                            (400000, 400000),
+                            (400010, 400000),
+                            (400010, 400010),
+                            (400000, 400010),
+                        ]
+                    ),
+                    # Starts at the north-east corner of B01, so both buildings add (400010, 400010)
+                    Polygon(
+                        [
+                            (400010, 400010),
+                            (400020, 400010),
+                            (400020, 400020),
+                            (400010, 400020),
+                        ]
+                    ),
+                ],
+            },
+            crs="EPSG:27700",
+        )
+
+    def test_shared_corner_gives_one_cell_per_building(
+        self, gdf_shared_corner_polygons
+    ):
+        """Test two buildings that share a corner each get a cell that contains the building."""
+        boundary = gdf_shared_corner_polygons.geometry.union_all().buffer(30)
+        cells_gdf = extend_edges_gdf(gdf=gdf_shared_corner_polygons, boundary=boundary)
+
+        assert (
+            len(cells_gdf) == 2
+        ), f"two buildings with a shared corner must give two cells, got {len(cells_gdf)}"
+        # The shared corner can only be in one cell, so shrink the buildings by 0.1 m first,
+        # as sjoin_gdf_buildings_to_clusters does
+        shrunk_buildings_gdf = gdf_shared_corner_polygons.assign(
+            geometry=gdf_shared_corner_polygons.buffer(-0.1)
+        )
+        contained = cells_gdf[["geometry"]].sjoin(
+            shrunk_buildings_gdf, how="inner", predicate="contains"
+        )["building_id"]
+        assert set(contained) == {
+            "B01",
+            "B02",
+        }, f"each building must be inside its own cell, only {set(contained)} are"
+
+
+class TestJitterDuplicateCoords:
+    """Tests for `_jitter_duplicate_coords`."""
+
+    def test_copies_of_each_point_are_numbered_separately(self):
+        """Test the n-th copy of a point moves n jitter steps east and the first copy stays."""
+        coords = np.array(
+            [
+                [400000.0, 400000.0],
+                [400005.0, 400000.0],
+                [400000.0, 400000.0],
+                [400005.0, 400000.0],
+                [400000.0, 400000.0],
+            ]
+        )
+        result = _jitter_duplicate_coords(coords)
+
+        expected_x_shift = np.array([0, 0, 1, 1, 2]) * DUPLICATE_SEED_JITTER
+        np.testing.assert_allclose(
+            result[:, 0] - coords[:, 0],
+            expected_x_shift,
+            rtol=0,
+            atol=1e-9,
+            err_msg="copies must be numbered inside each group of identical points, not across all points",
+        )
+        assert np.array_equal(
+            result[:, 1], coords[:, 1]
+        ), "the jitter must only move points east, never north or south"
+
+    def test_raises_when_jitter_leaves_duplicates(self):
+        """Test a jittered copy that lands on another seed raises a ValueError."""
+        # The second copy of the first point moves onto the third point
+        coords = np.array(
+            [
+                [400000.0, 400000.0],
+                [400000.0, 400000.0],
+                [400000.0 + DUPLICATE_SEED_JITTER, 400000.0],
+            ]
+        )
+        with pytest.raises(ValueError, match="duplicate"):
+            _jitter_duplicate_coords(coords)
 
 
 class TestOverlayGdfPhysicalBarriers:

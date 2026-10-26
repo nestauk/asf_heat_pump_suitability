@@ -71,6 +71,9 @@ ANCHOR_REASSIGNMENT_MAPPING = {NETWORKED: COMMUNAL}
 
 ROAD_TYPES = ["A Road", "B Road", "Motorway", "Minor Road"]
 
+# Metres (0.05 mm) to move each extra copy of a Voronoi seed east, so that all seeds are unique
+DUPLICATE_SEED_JITTER = 5e-5
+
 
 def generate_gdf_clusters(
     buildings_gdf: gpd.GeoDataFrame,
@@ -332,19 +335,9 @@ def extend_edges_gdf(
     print(f"Generated {len(all_points)} points.")
     # Extract a flat (N, 2) float64 array of all point coordinates
     coords_arr = shapely.get_coordinates(np.array(all_points))
-
     # ordered=True (below) requires every input coordinate to be unique — GEOS raises GEOSException otherwise.
-    # Buildings can (rarely) share corner coordinates (e.g. shared walls), so duplicates can exist.
-    # To combat this we jitter duplicates by a 0.1mm x-offset so both buildings keep their seed points.
-
-    # Returns the index of the first occurrence of each unique coordinate pair
-    _, first_occ = np.unique(coords_arr, axis=0, return_index=True)
-    # Mark every position that is NOT a first occurrence as a duplicate
-    is_dup = np.ones(len(coords_arr), dtype=bool)
-    is_dup[first_occ] = False
-    # Offset each duplicate's x coordinate by a unique multiple of 0.1mm - this should not affect the overall shape of buildings significantly.
-    # (progressive multiples ensure jittered points don't collide with each other)
-    coords_arr[is_dup, 0] += np.arange(1, is_dup.sum() + 1) * 1e-4
+    # Buildings can share corner coordinates (e.g. shared walls), so duplicates can exist.
+    coords_arr = _jitter_duplicate_coords(coords_arr)
 
     # Convert to a Multipoint collection for Voronoi
     coords = MultiPoint(coords_arr)
@@ -397,6 +390,45 @@ def extend_edges_gdf(
         geometry="geometry",
         crs=gdf.crs,
     )
+
+
+def _jitter_duplicate_coords(coords_arr: np.ndarray) -> np.ndarray:
+    """
+    Move each extra copy of a coordinate east, so that both buildings keep their Voronoi seed.
+
+    The n-th extra copy of a coordinate moves n x DUPLICATE_SEED_JITTER metres east. The first copy in the
+    input order does not move.
+
+    Args:
+        coords_arr (np.ndarray): (N, 2) array of x, y seed coordinates in metres.
+
+    Returns:
+        np.ndarray: copy of `coords_arr` with the duplicate coordinates moved.
+
+    Raises:
+        ValueError: if duplicate coordinates remain after the move.
+    """
+    _, group_ids, group_sizes = np.unique(
+        coords_arr, axis=0, return_inverse=True, return_counts=True
+    )
+    # The shape of return_inverse changes between numpy versions, so flatten it
+    group_ids = group_ids.ravel()
+    # A stable sort keeps the copies of one coordinate in input order, so the first copy gets rank 0
+    order = np.argsort(group_ids, kind="stable")
+    group_starts = np.cumsum(group_sizes) - group_sizes
+    rank = np.empty(len(order), dtype=np.int64)
+    rank[order] = np.arange(len(order)) - np.repeat(group_starts, group_sizes)
+
+    jittered_arr = coords_arr.copy()
+    jittered_arr[:, 0] += rank * DUPLICATE_SEED_JITTER
+
+    n_duplicates = len(jittered_arr) - len(np.unique(jittered_arr, axis=0))
+    if n_duplicates:
+        raise ValueError(
+            f"{n_duplicates} duplicate Voronoi seed coordinates remain after the jitter. "
+            "voronoi_polygons(ordered=True) needs unique seeds."
+        )
+    return jittered_arr
 
 
 def _clip_gdf_voronoi_cells_polygon_buffer(
