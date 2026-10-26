@@ -414,7 +414,7 @@ def _jitter_duplicate_coords(coords_arr: np.ndarray) -> np.ndarray:
     jittered_arr = coords_arr.copy()
     jittered_arr[:, 0] += rank * DUPLICATE_SEED_JITTER
 
-    n_duplicates = len(jittered_arr) - len(np.unique(jittered_arr, axis=0))
+    n_duplicates = pd.DataFrame(jittered_arr).duplicated().sum()
     if n_duplicates:
         raise ValueError(
             f"{n_duplicates} duplicate Voronoi seed coordinates remain after the jitter. "
