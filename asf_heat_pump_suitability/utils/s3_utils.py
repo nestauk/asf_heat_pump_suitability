@@ -20,14 +20,15 @@ def list_files_s3_path(dir_uri: str, file_type: str | List[str] = None) -> List[
         List[str]: list of all file paths found.
     """
     fs = s3fs.S3FileSystem()
+    dir_uri = dir_uri.rstrip("/")
     if file_type is None:
-        return fs.glob(f"{dir_uri}*")
+        return fs.glob(f"{dir_uri}/*")
     if isinstance(file_type, str):
         file_type = [file_type]
     paths = []
     for ext in file_type:
         ext = ext.lstrip(".")
-        paths.extend([f for f in fs.glob(f"{dir_uri}*.{ext}")])
+        paths.extend([f for f in fs.glob(f"{dir_uri}/*.{ext}")])
     return paths
 
 
