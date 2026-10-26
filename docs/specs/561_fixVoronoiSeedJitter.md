@@ -47,9 +47,10 @@ All changes are in `extend_edges_gdf`.
    smallest change at the cause (Roisin's proposal).
 2. **Number the copies of each point separately.** The first copy stays where it is, the second copy moves 0.05 mm
    east, and the third copy moves 0.10 mm east. Today the numbers run across the whole LA (1 to 37,357), so the last
-   copies move metres. To find which copy is the first, sort the seeds with a stable sort
-   (`np.argsort(..., kind="stable")`). A stable sort keeps equal points in their original order, so the copy that
-   comes first in the seed list always stays. Rationale: the largest shift then depends only on how many buildings
+   copies move metres. The copies are numbered with pandas `groupby(...).cumcount()`, which numbers each group's
+   rows 0, 1, 2, ... in their original order, so the copy that comes first in the seed list always stays. (The first
+   version used a stable `np.argsort`; review replaced it with `cumcount`, which gives the same numbers on 2.4 M
+   seeds and is about 19 times faster.) Rationale: the largest shift then depends only on how many buildings
    share one corner (usually 2 or 3), not on the number of buildings in the LA.
 3. **The jitter step is 0.05 mm (`5e-5` m), as a named module-level constant.** Rationale: Aidan's choice, between a
    smaller step (Roisin) and the risk that points very close together make the GEOS input more nearly degenerate
