@@ -1,5 +1,23 @@
 # asf_heat_pump_suitability/config
 
+## Attribution
+
+**Local heat planning data**
+
+**Created by:** Nesta
+
+**Date:** November 2026
+
+This dataset is licensed under a [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en).
+
+**Commercial Exception:** Low-carbon heating suppliers are granted an exception to use this dataset for commercial planning and installations of low-carbon heating technologies. All other terms of the CC BY-NC-SA 4.0 license remain in effect, including the requirement to share any adapted versions of this dataset under the same license terms.
+
+If you use this dataset in any reports, products, or publications, please cite it as:
+
+_"Nesta. (2026). Local heat planning data. https://clean-heat-playbook.nesta.org.uk/lhp/"_
+
+You must also attribute the data sources listed in the **Data sources** below in any resulting reports, products, or publications.
+
 ## Data sources
 
 The sources of data used in this project are listed in the table below. Data is downloaded from these sources and saved
