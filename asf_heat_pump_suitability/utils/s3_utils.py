@@ -136,6 +136,8 @@ def filter_list_partition_paths(
     """
     Get the S3 file path for each grid square, skipping non-land squares with no file and raising for land squares with no file.
 
+    A missing non-land square (e.g. sea only) is skipped with a warning. A missing land square raises an error.
+
     Args:
         uri_template (str): S3 URI of one partition file, with a `{grid_square}` placeholder.
         grid_squares (List[str]): 100km BNG grid square codes to get paths for.
