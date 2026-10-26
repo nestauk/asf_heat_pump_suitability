@@ -66,14 +66,14 @@ All changes are in `extend_edges_gdf`.
    test only fails if the jitter is removed. It does not fail if the copies are numbered across the whole LA again,
    which is the bug in #561. The helper test checks the shift of each copy and the `ValueError` directly.
 7. **Acceptance runs.** First, Windsor and Maidenhead `cluster.py` with `PYTHONHASHSEED=0` and `=1`, without
-   `--save`. Then Aidan copies the 20261014 decision-tree outputs of Plymouth and Manchester into a new release date, saves
+   `--save`. Then Aidan copies the 20261014 decision-tree outputs of Woking and Thurrock into a new release date, saves
    the fixed `cluster.py` outputs there, and runs `compare_versions --stage cluster --trigger methodology_change`
    against 20261014. Rationale: the fix changes cells in every LA, so the team must see the size of the change.
    `compare_versions` reads only dated outputs on S3, so this step writes to S3, and Aidan runs it himself after
    `/implement` (decided 2026-10-26). Aidan chose this quick comparison over a clean one (a dev baseline under its own
    new date): it takes half the runs, but the result also contains the cluster changes that merged after 20261014
-   (for example #525, anchor loads). Aidan narrowed the comparison to two sample LAs: Plymouth (the usual reference
-   LA) and Manchester (dense terraced streets, where moved seeds did the most harm). Windsor and Maidenhead cannot be
+   (for example #525, anchor loads). Aidan narrowed the comparison to two random LAs, Woking and Thurrock (seed 561,
+   from the 313 non-sample LAs with decision-tree and cluster outputs in 20261014). Windsor and Maidenhead cannot be
    compared, because its 20261014 run has no cluster outputs.
 
 Owner: Aidan builds it; Roisin reviews.
@@ -114,5 +114,5 @@ Owner: Aidan builds it; Roisin reviews.
 - [x] The new shared-corner test passes, and `uv run pytest` passes (217 tests).
 - [x] Windsor and Maidenhead `cluster.py` runs to the end with `PYTHONHASHSEED=0` and `=1` (no `--save`): both exit
       0 with 2,361,816 seeds. Before the fix, `PYTHONHASHSEED=0` failed with the GEOS error.
-- [ ] Aidan: `compare_versions --stage cluster --trigger methodology_change` on Plymouth and Manchester (the fix saved under
+- [ ] Aidan: `compare_versions --stage cluster --trigger methodology_change` on Woking and Thurrock (the fix saved under
       a new release date, compared with 20261014) shows the change, and the team accepts it.
