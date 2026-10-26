@@ -65,10 +65,13 @@ All changes are in `extend_edges_gdf`.
    test only fails if the jitter is removed. It does not fail if the copies are numbered across the whole LA again,
    which is the bug in #561. The helper test checks the shift of each copy and the `ValueError` directly.
 7. **Acceptance runs.** First, Windsor and Maidenhead `cluster.py` with `PYTHONHASHSEED=0` and `=1`, without
-   `--save`. Then Aidan saves `cluster.py` outputs for the 6 sample LAs under a new release date and runs
-   `compare_versions --stage cluster --trigger methodology_change` for each. Rationale: the fix changes cells in every
-   LA, so the team must see the size of the change. `compare_versions` reads only dated outputs on S3, so this step
-   writes to S3, and Aidan runs it himself after `/implement` (decided 2026-10-26).
+   `--save`. Then Aidan copies the 20261014 decision-tree outputs of the 6 sample LAs into a new release date, saves
+   the fixed `cluster.py` outputs there, and runs `compare_versions --stage cluster --trigger methodology_change`
+   against 20261014. Rationale: the fix changes cells in every LA, so the team must see the size of the change.
+   `compare_versions` reads only dated outputs on S3, so this step writes to S3, and Aidan runs it himself after
+   `/implement` (decided 2026-10-26). Aidan chose this quick comparison over a clean one (a dev baseline under its own
+   new date): it takes half the runs, but the result also contains the cluster changes that merged after 20261014
+   (for example #525, anchor loads).
 
 Owner: Aidan builds it; Roisin reviews.
 
@@ -99,10 +102,14 @@ Owner: Aidan builds it; Roisin reviews.
 
 ## Verification
 
-- [ ] `extend_edges_gdf` adds the first corner of each building one time only.
-- [ ] The n-th copy of a duplicated coordinate moves east by n × 0.05 mm; the first copy does not move.
-- [ ] A remaining duplicate seed raises a `ValueError` with a clear message before `voronoi_polygons`.
-- [ ] The new shared-corner test passes, and `uv run pytest` passes.
-- [ ] Windsor and Maidenhead `cluster.py` runs to the end with `PYTHONHASHSEED=0` and `=1` (no `--save`).
-- [ ] Aidan: `compare_versions --stage cluster --trigger methodology_change` on the 6 sample LAs (outputs saved under
-      a new release date) shows the change, and the team accepts it.
+- [x] `extend_edges_gdf` adds the first corner of each building one time only. Evidence: duplicate seeds in Windsor
+      and Maidenhead fell from 37,357 to 28 (16 whole-metre corners and 12 shared corners).
+- [x] The n-th copy of a duplicated coordinate moves east by n × 0.05 mm; the first copy does not move. Evidence:
+      `test_copies_of_each_point_are_numbered_separately`; the largest shift in Windsor and Maidenhead is 0.05 mm.
+- [x] A remaining duplicate seed raises a `ValueError` with a clear message before `voronoi_polygons`. Evidence:
+      `test_raises_when_jitter_leaves_duplicates`.
+- [x] The new shared-corner test passes, and `uv run pytest` passes (217 tests).
+- [x] Windsor and Maidenhead `cluster.py` runs to the end with `PYTHONHASHSEED=0` and `=1` (no `--save`): both exit
+      0 with 2,361,816 seeds. Before the fix, `PYTHONHASHSEED=0` failed with the GEOS error.
+- [ ] Aidan: `compare_versions --stage cluster --trigger methodology_change` on the 6 sample LAs (the fix saved under
+      a new release date, compared with 20261014) shows the change, and the team accepts it.
