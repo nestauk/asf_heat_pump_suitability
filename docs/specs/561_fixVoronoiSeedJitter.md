@@ -58,9 +58,13 @@ All changes are in `extend_edges_gdf`.
    Rationale: a future regression gives an error that names the cause, not only a GEOS coordinate. About a few
    seconds for 2.4 M seeds.
 5. **One new test in `pipeline/cluster/tests/test_cluster.py`:** two buildings that share a corner give two Voronoi
-   cells, and each cell contains its building. Rationale: it covers the shared-corner case that the jitter exists
-   for (Roisin's proposal), and fits the high-signal testing rule.
-6. **Acceptance runs.** First, Windsor and Maidenhead `cluster.py` with `PYTHONHASHSEED=0` and `=1`, without
+   cells, and each cell contains its building after a 0.1 m inward buffer. Rationale: it covers the shared-corner
+   case that the jitter exists for (Roisin's proposal), and fits the high-signal testing rule. The shared corner can
+   be in one cell only, so the test shrinks the buildings by 0.1 m first, as `sjoin_gdf_buildings_to_clusters` does.
+6. **The jitter is a private helper, `_jitter_duplicate_coords`, with its own test.** Rationale: the shared-corner
+   test only fails if the jitter is removed. It does not fail if the copies are numbered across the whole LA again,
+   which is the bug in #561. The helper test checks the shift of each copy and the `ValueError` directly.
+7. **Acceptance runs.** First, Windsor and Maidenhead `cluster.py` with `PYTHONHASHSEED=0` and `=1`, without
    `--save`. Then Aidan saves `cluster.py` outputs for the 6 sample LAs under a new release date and runs
    `compare_versions --stage cluster --trigger methodology_change` for each. Rationale: the fix changes cells in every
    LA, so the team must see the size of the change. `compare_versions` reads only dated outputs on S3, so this step
@@ -92,8 +96,6 @@ Owner: Aidan builds it; Roisin reviews.
 - Does the fix reduce the number of buildings with no cluster (#519, #524)? A moved seed inside a building with a
   different technology could push that building partly outside its cluster. Compare the missing-cluster count before
   and after in the `compare_versions` output.
-- Should the jitter become a small private helper, so that a test can check the shift directly? Decide in
-  `/implement`, only if the shared-corner test cannot show a regression on its own.
 
 ## Verification
 
