@@ -97,6 +97,7 @@ def load_df_uprn_lookup(
 
     Args:
         grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded. Default None to load whole GB.
+            Non-land squares with no file are skipped.
         uprn_filter (Optional[set]): set of UPRNs to filter to. Applied per file to reduce memory and I/O.
         **kwargs for polars.read_parquet()
 
@@ -106,11 +107,14 @@ def load_df_uprn_lookup(
     print("Loading UPRN national statistics lookup...")
     uri = config["data"]["geodata"]["gb_uprn_lookup_partitioned"]
     if grid_squares:
+        paths = s3_utils.filter_list_partition_paths(
+            uri_template=uri, grid_squares=grid_squares
+        )
         dfs = [
-            pl.read_parquet(uri.format(grid_square=grid_square), **kwargs)
+            pl.read_parquet(path, **kwargs)
             # Clean postcode column of leading and trailing whitespace
             .with_columns(pl.col("PCDS").str.strip_chars().name.keep())
-            for grid_square in grid_squares
+            for path in paths
         ]
         if uprn_filter:
             dfs = [df.filter(pl.col("UPRN").is_in(uprn_filter)) for df in dfs]
