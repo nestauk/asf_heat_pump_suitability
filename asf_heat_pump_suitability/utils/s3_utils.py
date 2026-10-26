@@ -134,9 +134,7 @@ def filter_list_partition_paths(
     uri_template: str, grid_squares: List[str]
 ) -> List[str]:
     """
-    Get the S3 path of the file for each grid square that has one, in a dataset stored as one file per grid square.
-
-    A missing non-land square (e.g. sea only) is skipped with a warning. A missing land square raises an error.
+    Get the S3 file path for each grid square, skipping non-land squares with no file and raising for land squares with no file.
 
     Args:
         uri_template (str): S3 URI of one partition file, with a `{grid_square}` placeholder.
