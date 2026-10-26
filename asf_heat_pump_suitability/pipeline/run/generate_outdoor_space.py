@@ -95,6 +95,7 @@ if __name__ == "__main__":
     from asf_heat_pump_suitability.pipeline.transform import (
         uprns,
         outdoor_space,
+        barriers,
     )
     from asf_heat_pump_suitability.pipeline.run import optimise_inputs
     from asf_heat_pump_suitability.utils import save_utils
@@ -188,6 +189,17 @@ if __name__ == "__main__":
             land_parcels_gdf=land_parcels_gdf,
             buildings_gdf=buildings_gdf,
         )
+
+        # Clip land parcels to barriers
+        clipping_gdf = barriers.load_transform_gdf_polygon_barriers(
+            grid_squares=neighbouring_grid_squares_list
+        )
+        land_parcels_gdf = outdoor_space.clip_gdf_land_parcels_to_barriers(
+            land_parcels_gdf=land_parcels_gdf,
+            intersection_gdf=intersection_gdf,
+            barriers_gdf=clipping_gdf,
+        )
+
         outdoor_space_gdf = outdoor_space.generate_gdf_outdoor_space(
             building_intersections_gdf=intersection_gdf,
             land_parcels_gdf=land_parcels_gdf,
