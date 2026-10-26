@@ -342,17 +342,17 @@ def extend_gdf_logic_trace(
         # 6) Networked heat pump
         (
             is_networked,
-            "This cluster is assigned 'networked heat pump' because multiple properties within these buildings have no or little outdoor space (up to 30m2)",
+            "This cluster is assigned 'networked heat pump' because at least one property within each building has little or no outdoor space (up to 30m2)",
         ),
         # 7) Individual solution or networked HP (lack of outdoor space info) + DHN potential
         (
             is_ind_or_net & dhn_potential,
-            "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space:\n -This cluster is in an area of 'district heat network' potential and if homes have no or little outdoor space (up to 30m2), then homes would be most suitable for a district heat network connection when/if a 'district heat network' is constructed.\n A 'networked heat pump' could also be considered as an alternative solution, because multiple properties within these buildings have no or little outdoor space (up to 30m2).\n\nIf there is sufficient outdoor space for each property (above 30m2):\n - 'Individual solutions' will be the most suitable option for properties in this cluster because outdoor space is above 30m2 for all properties.\n - The cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
+            "Outdoor space is unknown for all properties in buildings within this cluster, so the model is unable to assign a technology group.\n If, in reality, there is little (up to 30m2) contiguous outdoor space:\n -This cluster is in an area of 'district heat network' potential and if homes have no or little outdoor space (up to 30m2), then homes would be most suitable for a district heat network connection when/if a 'district heat network' is constructed.\n A 'networked heat pump' could also be considered as an alternative solution, because at least one property within each building has little or no outdoor space (up to 30m2).\n\nIf there is sufficient outdoor space for each property (above 30m2):\n - 'Individual solutions' will be the most suitable option for properties in this cluster because outdoor space is above 30m2 for all properties.\n - The cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
         ),
         # 8) Individual solution or networked HP (lack of outdoor space info)
         (
             is_ind_or_net,
-            "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space, a 'networked heat pump' solution is most suitable. If there is sufficient outdoor space for each property (above 30m2) an 'individual solution' will be most suitable.",
+            "Outdoor space is unknown for all properties in buildings within this cluster, so the model is unable to assign a technology group.\n If, in reality, there is little (up to 30m2) contiguous outdoor space, a 'networked heat pump' solution is most suitable. If there is sufficient outdoor space for each property (above 30m2) an 'individual solution' will be most suitable.",
         ),
         # 9) Individual solution + DHN potential
         (
