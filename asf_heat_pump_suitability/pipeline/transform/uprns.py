@@ -597,7 +597,7 @@ if __name__ == "__main__":
         warnings.warn(
             f"UPRN schema validation failed for {local_authority_dict['url_slug']}:\n{err}"
         )
-        # One-line copy of the warning for pipeline.py to pick up from stderr and save in the failure log
+        # One-line copy (up to 1000 characters) of the warning for pipeline.py to pick up from stderr and save in the failure log
         print(
             f"VALIDATION_WARNING: {' '.join(str(err).split())[:1000]}", file=sys.stderr
         )
