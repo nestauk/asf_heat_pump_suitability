@@ -408,16 +408,8 @@ def _jitter_duplicate_coords(coords_arr: np.ndarray) -> np.ndarray:
     Raises:
         ValueError: if duplicate coordinates remain after the move.
     """
-    _, group_ids, group_sizes = np.unique(
-        coords_arr, axis=0, return_inverse=True, return_counts=True
-    )
-    # The shape of return_inverse changes between numpy versions, so flatten it
-    group_ids = group_ids.ravel()
-    # A stable sort keeps the copies of one coordinate in input order, so the first copy gets rank 0
-    order = np.argsort(group_ids, kind="stable")
-    group_starts = np.cumsum(group_sizes) - group_sizes
-    rank = np.empty(len(order), dtype=np.int64)
-    rank[order] = np.arange(len(order)) - np.repeat(group_starts, group_sizes)
+    # Number the copies of each coordinate 0, 1, 2, ... in input order, so the first copy gets 0
+    rank = pd.DataFrame(coords_arr).groupby([0, 1], sort=False).cumcount().to_numpy()
 
     jittered_arr = coords_arr.copy()
     jittered_arr[:, 0] += rank * DUPLICATE_SEED_JITTER
