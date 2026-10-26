@@ -93,7 +93,7 @@ class TestLoadGdfOsOpenroad:
             load_geodata.load_gdf_os_openroad(grid_squares=["ND"])
 
 
-PARTITIONED_GETTERS = [
+PARTITIONED_GETTERS = [  # format: (getter, config_key)
     (load_geodata.load_df_osopen_uprn, "uk_osopen_uprn_partitioned"),
     (load_geodata.load_gdf_poi, "UK_poi_locations_partitioned"),
     (load_data.load_df_uprn_lookup, "gb_uprn_lookup_partitioned"),
