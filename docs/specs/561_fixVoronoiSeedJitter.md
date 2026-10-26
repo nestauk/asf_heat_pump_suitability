@@ -45,9 +45,12 @@ All changes are in `extend_edges_gdf`.
 1. **Line 327 adds the corners with `exterior.coords[1:-1]`.** Rationale: line 325 always adds the first corner as
    `interpolate(0)`, so the corner list does not need it. This removes 37,329 of the 37,357 duplicates. It is the
    smallest change at the cause (Roisin's proposal).
-2. **The jitter counts inside each group of identical coordinates.** The first copy (in array order) stays, and the
-   n-th later copy moves east by n × the jitter step. Use a stable sort, so that the first copy always keeps rank 0.
-   Rationale: the shift no longer grows with the number of buildings in the LA.
+2. **Number the copies of each point separately.** The first copy stays where it is, the second copy moves 0.05 mm
+   east, and the third copy moves 0.10 mm east. Today the numbers run across the whole LA (1 to 37,357), so the last
+   copies move metres. To find which copy is the first, sort the seeds with a stable sort
+   (`np.argsort(..., kind="stable")`). A stable sort keeps equal points in their original order, so the copy that
+   comes first in the seed list always stays. Rationale: the largest shift then depends only on how many buildings
+   share one corner (usually 2 or 3), not on the number of buildings in the LA.
 3. **The jitter step is 0.05 mm (`5e-5` m), as a named module-level constant.** Rationale: Aidan's choice, between a
    smaller step (Roisin) and the risk that points very close together make the GEOS input more nearly degenerate
    (the #556 type of failure). Not tested before this spec, so the acceptance runs cover it.
