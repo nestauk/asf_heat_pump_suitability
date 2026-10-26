@@ -236,8 +236,8 @@ output:
 
 # Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of properties and contextual information about properties within the clusters and surrounding neighbourhood
 metadata:
-  "License": "This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)\n Commercial Exception: Low-carbon heating suppliers are granted an exception to use this dataset for commercial planning and installations of low-carbon heating technologies. All other terms of the CC BY-NC-SA 4.0 license remain in effect, including the requirement to share any adapted versions of this dataset under the same license terms. See 'Data sources and attributions' for attribution requirements."
-  "Development stage": "Beta - this dataset is in early stages of development, may contain errors and may change regularly."
+  "License": "This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0), https://creativecommons.org/licenses/by-nc-sa/4.0/ \n Notwithstanding the foregoing, UK-based low-carbon heating suppliers shall be entitled to use this dataset for internal commercial planning and installations of low-carbon heating technologies. All other terms of the CC BY-NC-SA 4.0 license remain in effect, including (without limitation) requirements in respect of attribution and the requirement to share any adapted versions of this dataset under the same license terms. See 'Data sources and attributions' for attribution requirements."
+  "Development stage": "Beta - this dataset is in early stages of development and may change regularly."
   "Data sources and attributions": "Please follow the attribution instructions in this link: https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme"
   "GitHub repository": "https://github.com/nestauk/asf_heat_pump_suitability"
   # Grouped by layer: each key matches the `layer` property of the features it describes
