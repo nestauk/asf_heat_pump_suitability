@@ -12,7 +12,9 @@ from shapely.affinity import rotate
 from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.cluster.cluster import (
     extend_edges_gdf,
+    filter_gdf_anchors_to_save,
     generate_gdf_clusters,
+    generate_series_anchor_ids,
     overlay_gdf_physical_barriers,
     reassign_gdf_near_anchor_properties,
 )
@@ -234,6 +236,14 @@ def empty_gdf():
 
 
 @pytest.fixture(scope="module")
+def empty_anchor_gdf():
+    """Create an anchor geodataframe with the `anchor_load_id` column and no rows."""
+    return gpd.GeoDataFrame(
+        {"anchor_load_id": [], "geometry": []}, geometry="geometry", crs=27700
+    )
+
+
+@pytest.fixture(scope="module")
 def tech_gdf(gdf_mixed_buildings):
     """
     Assign building footprints a technology type and a boolean to indicate whether or not they are a domestic building.
@@ -284,6 +294,7 @@ class TestGenerateGdfClusters:
         gdf_enclosing_boundary,
         tech_gdf,
         empty_gdf,
+        empty_anchor_gdf,
     ):
         """Test each domestic building is assigned to a cluster and only to one cluster."""
         clusters_gdf = generate_gdf_clusters(
@@ -291,7 +302,7 @@ class TestGenerateGdfClusters:
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=tech_gdf,
             polygon_overlay_gdf=empty_gdf,
-            combined_anchor_gdf=empty_gdf,
+            combined_anchor_gdf=empty_anchor_gdf,
             radius=50,
             id_col="building_id",
             local_authorities_slug="TEST",
@@ -320,6 +331,7 @@ class TestGenerateGdfClusters:
         gdf_enclosing_boundary,
         tech_gdf,
         empty_gdf,
+        empty_anchor_gdf,
     ):
         """Test that there are only domestic building footprints in the clusters (i.e. no non-domestic buildings are
         retained) and test that there are no clusters retained which do not contain a domestic building (i.e. no empty
@@ -331,7 +343,7 @@ class TestGenerateGdfClusters:
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=domestic_tech_gdf,
             polygon_overlay_gdf=empty_gdf,
-            combined_anchor_gdf=empty_gdf,
+            combined_anchor_gdf=empty_anchor_gdf,
             radius=50,
             id_col="building_id",
             local_authorities_slug="TEST",
@@ -370,6 +382,7 @@ class TestGenerateGdfClusters:
         gdf_enclosing_boundary,
         tech_gdf,
         empty_gdf,
+        empty_anchor_gdf,
     ):
         """Test there are no overlapping clusters."""
         results = generate_gdf_clusters(
@@ -377,7 +390,7 @@ class TestGenerateGdfClusters:
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=tech_gdf,
             polygon_overlay_gdf=empty_gdf,
-            combined_anchor_gdf=empty_gdf,
+            combined_anchor_gdf=empty_anchor_gdf,
             radius=50,
             id_col="building_id",
             local_authorities_slug="TEST",
@@ -394,6 +407,7 @@ class TestGenerateGdfClusters:
         gdf_enclosing_boundary,
         tech_gdf,
         empty_gdf,
+        empty_anchor_gdf,
     ):
         """Test dissolve of neighbouring clusters worked."""
         results = generate_gdf_clusters(
@@ -401,7 +415,7 @@ class TestGenerateGdfClusters:
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=tech_gdf,
             polygon_overlay_gdf=empty_gdf,
-            combined_anchor_gdf=empty_gdf,
+            combined_anchor_gdf=empty_anchor_gdf,
             radius=50,
             id_col="building_id",
             local_authorities_slug="TEST",
@@ -433,6 +447,7 @@ class TestGenerateGdfClusters:
         gdf_enclosing_boundary,
         tech_gdf,
         empty_gdf,
+        empty_anchor_gdf,
     ):
         """Assert that adjacent buildings assigned 'communal' for different reasons (blocks of flats vs anchor proximity) form separate clusters."""
         # B11 and B12 are the neighbouring communal buildings that merge into one
@@ -447,7 +462,7 @@ class TestGenerateGdfClusters:
             boundary_gdf=gdf_enclosing_boundary,
             tech_gdf=split_tech_gdf,
             polygon_overlay_gdf=empty_gdf,
-            combined_anchor_gdf=empty_gdf,
+            combined_anchor_gdf=empty_anchor_gdf,
             radius=50,
             id_col="building_id",
             local_authorities_slug="TEST",
@@ -472,6 +487,74 @@ class TestGenerateGdfClusters:
         assert (
             non_communal_clusters["communal_origin"].isna().all()
         ), "non-communal clusters must have a null communal origin"
+
+    @pytest.fixture(scope="class")
+    def gdf_two_anchor_loads(self):
+        """
+        Two anchor loads: A1 west of B03 (10m from B03, 20m from B02, 25m from B04) and A9 east
+        of B04 (5m from B04, 20m from B03). With a 30m radius, only A1 is in range of B02, and both
+        anchor loads are in range of B03 and B04. The IDs run against the distances, so ID order and
+        nearest-first order differ.
+        """
+        west = Polygon(
+            [(400040, 400000), (400050, 400000), (400050, 400010), (400040, 400010)]
+        )
+        east = Polygon(
+            [(400090, 399995), (400100, 399995), (400100, 400005), (400090, 400005)]
+        )
+        return gpd.GeoDataFrame(
+            {"anchor_load_id": ["A1", "A9"], "geometry": [west, east]}, crs="EPSG:27700"
+        )
+
+    def test_anchor_origin_clusters_list_reassigning_anchor_ids(
+        self,
+        gdf_mixed_buildings,
+        gdf_enclosing_boundary,
+        tech_gdf,
+        empty_gdf,
+        gdf_two_anchor_loads,
+    ):
+        """Test anchor-load origin clusters list the unique IDs of the anchor loads that caused
+        their buildings to be reassigned, nearest first, and every other cluster carries no list.
+        """
+        results = generate_gdf_clusters(
+            buildings_gdf=gdf_mixed_buildings,
+            boundary_gdf=gdf_enclosing_boundary,
+            tech_gdf=tech_gdf,
+            polygon_overlay_gdf=empty_gdf,
+            combined_anchor_gdf=gdf_two_anchor_loads,
+            radius=30,
+            id_col="building_id",
+            local_authorities_slug="TEST",
+        )
+        cluster_of = (
+            results[["cluster_id", "geometry"]]
+            .sjoin(gdf_mixed_buildings, how="inner", predicate="contains")
+            .set_index("building_id")["cluster_id"]
+        )
+        reassigning_anchor_load_ids = results.set_index("cluster_id")[
+            "reassigning_anchor_load_ids"
+        ]
+
+        assert reassigning_anchor_load_ids[cluster_of["B02"]] == [
+            "A1"
+        ], "a cluster reassigned by one anchor must list just that anchor"
+        assert reassigning_anchor_load_ids[cluster_of["B04"]] == [
+            "A9",
+            "A1",
+        ], "a cluster whose buildings were reassigned by two anchor loads must list both, nearest first (A9 is 5m from B04, A1 is 10m from B03)"
+
+        anchor_origin = results["communal_origin"] == "anchor proximity"
+        assert (
+            reassigning_anchor_load_ids[results.loc[~anchor_origin, "cluster_id"]]
+            .isna()
+            .all()
+        ), "clusters not of anchor origin must carry a null reassigning_anchor_load_ids"
+        assert (
+            reassigning_anchor_load_ids[results.loc[anchor_origin, "cluster_id"]]
+            .notna()
+            .all()
+        ), "every anchor-origin cluster must list at least one anchor"
 
 
 class TestExtendEdgesGdf:
@@ -850,7 +933,12 @@ class TestReassignGdfAnchorProperties:
         )
 
         return gpd.GeoDataFrame(
-            {"class": ["school"], "geometry": [anchor_property]}, crs="EPSG:27700"
+            {
+                "class": ["school"],
+                "anchor_load_id": ["A1"],
+                "geometry": [anchor_property],
+            },
+            crs="EPSG:27700",
         )
 
     def test_cells_within_anchor_radius(self, tech_gdf, gdf_anchor_property):
@@ -930,3 +1018,151 @@ class TestReassignGdfAnchorProperties:
             assert pd.isna(
                 results[building]
             ), f"building {building} not reassigned to 'communal' must keep a null communal_origin"
+
+    def test_reassigned_buildings_record_anchor_ids(
+        self, tech_gdf, gdf_anchor_property
+    ):
+        """Test reassigned buildings list the anchor loads within the radius and no other building gets a list."""
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=tech_gdf, combined_anchor_gdf=gdf_anchor_property, radius=1000
+        )
+        results = reassigned_gdf.set_index("building_id")["reassigning_anchor_load_ids"]
+        reassigned = ["B02", "B03", "B04"]
+        for building in reassigned:
+            assert results[building] == [
+                "A1"
+            ], f"reassigned building {building} must list the anchor load that reassigned it"
+        assert (
+            results.drop(reassigned).isna().all()
+        ), "buildings the anchor load did not reassign must have a null reassigning_anchor_load_ids, even inside the radius"
+
+    def test_reassigned_building_lists_every_anchor_load_within_radius(
+        self, gdf_mixed_buildings
+    ):
+        """Test a building lists every anchor load within the radius, not only the nearest one, nearest first."""
+        near_west = Polygon(
+            [(399980, 399995), (399990, 399995), (399990, 400005), (399980, 400005)]
+        )
+        far_east = Polygon(
+            [(400035, 399995), (400045, 399995), (400045, 400005), (400035, 400005)]
+        )
+        anchors_gdf = gpd.GeoDataFrame(
+            {"anchor_load_id": ["A2", "A1"], "geometry": [near_west, far_east]},
+            crs="EPSG:27700",
+        )
+        networked_gdf = gdf_mixed_buildings[
+            gdf_mixed_buildings["building_id"] == "B01"
+        ].assign(assigned_tech="Networked heat pump", communal_origin=None)
+
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=networked_gdf, combined_anchor_gdf=anchors_gdf, radius=30
+        )
+
+        assert reassigned_gdf["reassigning_anchor_load_ids"].iloc[0] == [
+            "A2",
+            "A1",
+        ], "a building 10m from A2 and 25m from A1 must list both, nearest first"
+
+    @pytest.fixture(scope="class")
+    def gdf_equidistant_anchors(self):
+        """Two anchor loads 20m either side of B01 (x 400000-400010), listed with the higher ID first."""
+        west = Polygon(
+            [(399970, 399995), (399980, 399995), (399980, 400005), (399970, 400005)]
+        )
+        east = Polygon(
+            [(400030, 399995), (400040, 399995), (400040, 400005), (400030, 400005)]
+        )
+        return gpd.GeoDataFrame(
+            {"anchor_load_id": ["A2", "A1"], "geometry": [west, east]}, crs="EPSG:27700"
+        )
+
+    def test_equidistant_anchor_loads_give_one_row_per_building(
+        self, gdf_mixed_buildings, gdf_equidistant_anchors
+    ):
+        """Test a building equidistant from two anchor loads is kept once and linked to both, in ID order."""
+        networked_gdf = gdf_mixed_buildings[
+            gdf_mixed_buildings["building_id"] == "B01"
+        ].assign(assigned_tech="Networked heat pump", communal_origin=None)
+
+        reassigned_gdf = reassign_gdf_near_anchor_properties(
+            tech_gdf=networked_gdf,
+            combined_anchor_gdf=gdf_equidistant_anchors,
+            radius=30,
+        )
+
+        assert (
+            len(reassigned_gdf) == 1
+        ), "a building equidistant from two anchor loads must not be duplicated"
+        assert reassigned_gdf["reassigning_anchor_load_ids"].iloc[0] == [
+            "A1",
+            "A2",
+        ], "a building equidistant from two anchor loads must list both in ID order, whatever the anchor loads' row order"
+        assert (
+            reassigned_gdf["assigned_tech"].iloc[0] == "Communal solution"
+        ), "the building must still be reassigned to communal"
+
+
+class TestGenerateSeriesAnchorIds:
+    """Tests for `generate_series_anchor_ids`."""
+
+    @pytest.fixture(scope="class")
+    def square(self):
+        """A 10m square footprint."""
+        return Polygon(
+            [(400000, 400000), (400010, 400000), (400010, 400010), (400000, 400010)]
+        )
+
+    def test_id_identifies_the_footprint(self, square):
+        """The anchor load ID depends only on the footprint shape: the same shape gives the same ID
+        whatever the order of the points in its polygon, and a different shape gives a different ID.
+        """
+        rotated_start = Polygon(
+            [(400010, 400010), (400000, 400010), (400000, 400000), (400010, 400000)]
+        )
+        reversed_ring = Polygon(list(square.exterior.coords)[::-1])
+        shifted = shapely.affinity.translate(square, xoff=1)
+        ids = generate_series_anchor_ids(
+            gpd.GeoSeries(
+                [square, rotated_start, reversed_ring, shifted], crs="EPSG:27700"
+            )
+        ).tolist()
+        assert (
+            ids[0] == ids[1] == ids[2]
+        ), "one footprint must hash to one ID regardless of how its ring is written"
+        assert ids[3] != ids[0], "a different footprint must not share the ID"
+
+
+class TestFilterGdfAnchorsToSave:
+    """Tests for `filter_gdf_anchors_to_save`."""
+
+    def test_keeps_la_anchors_and_referenced_outside_anchors(self):
+        """Anchor loads in the LA are kept whether linked or not; anchor loads outside it only if a cluster references them."""
+
+        def square(x):
+            return Polygon([(x, 0), (x + 10, 0), (x + 10, 10), (x, 10)])
+
+        anchor_gdf = gpd.GeoDataFrame(
+            {"anchor_load_id": ["INSIDE", "OUTSIDE_LINKED", "OUTSIDE_UNLINKED"]},
+            geometry=[square(0), square(200), square(400)],
+            crs="EPSG:27700",
+        )
+        boundary_gdf = gpd.GeoDataFrame(
+            geometry=[Polygon([(-50, -50), (100, -50), (100, 100), (-50, 100)])],
+            crs="EPSG:27700",
+        )
+        clusters_gdf = pd.DataFrame(
+            {"reassigning_anchor_load_ids": [["OUTSIDE_LINKED"], None]},
+        )
+
+        kept = filter_gdf_anchors_to_save(
+            anchor_gdf=anchor_gdf, boundary_gdf=boundary_gdf, clusters_gdf=clusters_gdf
+        )
+
+        assert set(kept["anchor_load_id"]) == {
+            "INSIDE",
+            "OUTSIDE_LINKED",
+        }, "every anchor load ID a cluster references must be saved, and unlinked anchor load IDs outside the LA must not"
+        assert list(kept.columns) == [
+            "anchor_load_id",
+            "geometry",
+        ], "the saved anchor loads dataframe must include only the `anchor_load_id` and the `geometry`"

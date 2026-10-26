@@ -24,12 +24,14 @@ import pandas as pd
 import polars as pl
 import logging
 import argparse
+import sys
 from typing import Optional, List
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.getters import base_getters
 from asf_heat_pump_suitability.utils import geo_utils
 from asf_heat_pump_suitability.schemas import uprns_schema
 import warnings
+import pandera.errors
 
 
 def generate_gdf_uprn_coords(
@@ -143,17 +145,16 @@ def filter_gdf_domestic_uprns(
     buildings_gdf: gpd.GeoDataFrame,
     non_residential_buildings_gdf: gpd.GeoDataFrame,
     domestic_epc_uprns: np.array,
-    local_authority_dict: dict,
     id_col: str = config["constant"]["id"]["building"],
 ) -> gpd.GeoDataFrame:
     """
     Filter UPRNs to domestic UPRNs only by retaining UPRNs which appear in domestic EPC register, OR are located within
     a building footprint AND are not in the commercial EPC register and / or a building type that is unlikely to contain
-    residential properties, e.g. hospital, train station, museum etc, AND (for Plymouth only) are in a building with
+    residential properties, e.g. hospital, train station, museum etc, AND are in a building with
     `m2_per_predicted_UPRN` below a defined threshold.
 
     See analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py for
-    threshold selection for Plymouth.
+    threshold selection. Note this used Plymouth data only and should be confirmed with further analysis.
 
     Args:
         uprn_gdf (gpd.GeoDataFrame): UPRNs with point geometries to be filtered.
@@ -161,7 +162,6 @@ def filter_gdf_domestic_uprns(
         non_residential_buildings_gdf (gpd.GeoDataFrame): polygons of buildings which are unlikely to contain residential
         properties.
         domestic_epc_uprns (np.array): UPRNs in domestic EPC register for area of interest.
-        local_authority_dict (dict): name of local authority the domestic UPRNs are being identified for.
         id_col (str): name of ID column in `buildings_gdf`. Defaults to ID column defined in config.
 
     Returns:
@@ -194,29 +194,23 @@ def filter_gdf_domestic_uprns(
     ]
 
     # TODO this could be updated to a classification model and scaled
-    # This triggers for Plymouth only as the threshold density was calculated from Plymouth data only
-    if not local_authority_dict["valid_local_authorities"] or [
-        la.lower() for la in local_authority_dict["valid_local_authorities"]
-    ] == ["plymouth"]:
-        # Identify large buildings with low UPRN density which will be labelled non-domestic
-        non_domestic_buildings_gdf = _generate_gdf_non_domestic_buildings_by_density(
-            domestic_uprns_gdf=domestic_uprn_gdf,
-            buildings_gdf=buildings_gdf,
-            epc_uprns=domestic_epc_uprns,
-            id_col=id_col,
-        )
+    # TODO the threshold density was calculated from Plymouth data only so it may need future adjustment for other local authorities
+    # Identify large buildings with low UPRN density which will be labelled non-domestic
+    non_domestic_buildings_gdf = _generate_gdf_non_domestic_buildings_by_density(
+        domestic_uprns_gdf=domestic_uprn_gdf,
+        buildings_gdf=buildings_gdf,
+        epc_uprns=domestic_epc_uprns,
+        id_col=id_col,
+    )
 
-        # Remove UPRNs in these buildings from the domestic subset
-        non_domestic_uprns = set(
-            uprn_gdf.sjoin(
-                non_domestic_buildings_gdf, how="inner", predicate="intersects"
-            )["UPRN"]
-        )
+    # Remove UPRNs in these buildings from the domestic subset
+    non_domestic_uprns = set(
+        uprn_gdf.sjoin(non_domestic_buildings_gdf, how="inner", predicate="intersects")[
+            "UPRN"
+        ]
+    )
 
-        return domestic_uprn_gdf[~domestic_uprn_gdf["UPRN"].isin(non_domestic_uprns)]
-
-    else:
-        return domestic_uprn_gdf
+    return domestic_uprn_gdf[~domestic_uprn_gdf["UPRN"].isin(non_domestic_uprns)]
 
 
 def _generate_gdf_non_domestic_buildings_by_density(
@@ -288,7 +282,8 @@ def map_dict_uprns_to_building_id(
     buildings_gdf: gpd.GeoDataFrame,
     id_col: str,
     max_distance: float = 1,
-) -> dict:
+    as_dict: bool = True,
+) -> dict | pl.DataFrame:
     """
     Create a mapping of UPRNs (keys) to the building ID (values) of the building they are located within or intersect
     with, or the nearest building < 1m away if not located within a building.
@@ -298,9 +293,10 @@ def map_dict_uprns_to_building_id(
         buildings_gdf (gpd.GeoDataFrame): building footprints
         id_col (str): name of building ID column in `buildings_gdf`
         max_distance (float): max distance (metres) from which to join UPRNs to a building footprint. Default 1m.
+        as_dict (bool): set to True to return as `dict` or `False` to return as `polars` `DataFrame`. Default `True`.
 
     Returns:
-        dict: mapping of UPRNs to building IDs
+        dict | pl.DataFrame: mapping of UPRNs to building IDs
     """
     uprns_gdf = geo_utils.verify_gdf_crs(uprns_gdf)
     buildings_gdf = geo_utils.verify_gdf_crs(buildings_gdf)
@@ -320,16 +316,16 @@ def map_dict_uprns_to_building_id(
         buildings_gdf, how="inner", max_distance=max_distance
     )
     # combine the two gdfs and turn into a dictionary
-    uprns_building_dict = (
+    uprns_building_df = (
         (pd.concat([uprns_inside_buildings, nearest_buildings_uprns]))
         # Handle edge cases reproducibly where UPRNs on the edge of multiple buildings get joined to more than one building
-        .sort_values(by=id_col, ascending=True)
-        .drop_duplicates(subset="UPRN")
-        .set_index("UPRN")
-        .to_dict()[id_col]
+        .sort_values(by=id_col, ascending=True).drop_duplicates(subset="UPRN")
     )
 
-    return uprns_building_dict
+    if as_dict:
+        return uprns_building_df.set_index("UPRN").to_dict()[id_col]
+    else:
+        return pl.from_pandas(uprns_building_df[["UPRN", id_col]])
 
 
 def get_dict_census_uprn_range(local_authorities: list[str] = None) -> dict:
@@ -345,7 +341,7 @@ def get_dict_census_uprn_range(local_authorities: list[str] = None) -> dict:
     """
     # rough expected UPRN range for whole of GB.
     # ONS estimates https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/families/bulletins/familiesandhouseholds/2024 ~29 million households in UK.
-    if not local_authorities or local_authorities == ["gb"]:
+    if not local_authorities or local_authorities == ["GB"]:
         min_uprns = 27000000
         max_uprns = 40000000
 
@@ -534,10 +530,11 @@ if __name__ == "__main__":
         buildings_gdf=layers["building_gdf"],
         domestic_epc_uprns=domestic_epc_uprns,
         non_residential_buildings_gdf=non_residential_buildings_gdf,
-        local_authority_dict=local_authority_dict,
     )
 
+    # ---------------------------
     # Save residential UPRNs to S3
+
     df = pl.from_pandas(
         domestic_uprns_gdf[
             [
@@ -551,25 +548,6 @@ if __name__ == "__main__":
             ]
         ]
     )
-
-    # --- PANDERA VALIDATION ---
-
-    # find acceptable UPRN range
-    uprn_bounds = get_dict_census_uprn_range(
-        local_authority_dict["valid_local_authorities"]
-    )
-    # perform validation checks on df
-    schema = uprns_schema.create_domestic_uprn_schema(
-        min_expected_rows=uprn_bounds["min"], max_expected_rows=uprn_bounds["max"]
-    )
-
-    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds['min']}")
-    print(f"Max Expected (1.4 * household census counts): {uprn_bounds['max']}")
-    print(f"Actual Rows:  {len(df)}")
-
-    df = schema.validate(df, lazy=True)
-
-    # ---------------------------
 
     if args.save:
         output_path = save_utils.get_str_output_path(
@@ -587,4 +565,30 @@ if __name__ == "__main__":
                 "local_authorities": args.local_authorities,
                 "release_date": release_date,
             },
+        )
+
+    # --- PANDERA VALIDATION ---
+
+    # find acceptable UPRN range
+    uprn_bounds = get_dict_census_uprn_range(
+        local_authority_dict["valid_local_authorities"]
+    )
+    # perform validation checks on df
+    schema = uprns_schema.create_domestic_uprn_schema(
+        min_expected_rows=uprn_bounds["min"], max_expected_rows=uprn_bounds["max"]
+    )
+
+    print(f"Min Expected (0.95 * houshold census counts): {uprn_bounds['min']}")
+    print(f"Max Expected (1.4 * household census counts): {uprn_bounds['max']}")
+    print(f"Actual Rows:  {len(df)}")
+
+    try:
+        schema.validate(df, lazy=True)
+    except pandera.errors.SchemaErrors as err:
+        warnings.warn(
+            f"UPRN schema validation failed for {local_authority_dict['url_slug']}:\n{err}"
+        )
+        # One-line copy (up to 1000 characters) of the warning for pipeline.py to pick up from stderr and save in the failure log
+        print(
+            f"VALIDATION_WARNING: {' '.join(str(err).split())[:1000]}", file=sys.stderr
         )

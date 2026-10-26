@@ -4,8 +4,12 @@ This file contains utility functions for interacting with Amazon S3.
 
 import s3fs
 import boto3
+import logging
+import os
 from typing import List
 from urllib.parse import urlparse
+
+from asf_heat_pump_suitability import config
 
 
 def list_files_s3_path(dir_uri: str, file_type: str | List[str] = None) -> List[str]:
@@ -20,14 +24,15 @@ def list_files_s3_path(dir_uri: str, file_type: str | List[str] = None) -> List[
         List[str]: list of all file paths found.
     """
     fs = s3fs.S3FileSystem()
+    dir_uri = dir_uri.rstrip("/")
     if file_type is None:
-        return fs.glob(f"{dir_uri}*")
+        return fs.glob(f"{dir_uri}/*")
     if isinstance(file_type, str):
         file_type = [file_type]
     paths = []
     for ext in file_type:
         ext = ext.lstrip(".")
-        paths.extend([f for f in fs.glob(f"{dir_uri}*.{ext}")])
+        paths.extend([f for f in fs.glob(f"{dir_uri}/*.{ext}")])
     return paths
 
 
@@ -124,3 +129,39 @@ def get_bool_s3_path_exists(s3_client: boto3.client, s3_bucket: str, path: str) 
     """
     response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=path, MaxKeys=1)
     return response.get("KeyCount", 0) > 0
+
+
+def filter_list_partition_paths(
+    uri_template: str, grid_squares: List[str]
+) -> List[str]:
+    """
+    Get the S3 file path for each grid square, skipping non-land squares with no file and raising for land squares with no file.
+
+    A missing non-land square (e.g. sea only) is skipped with a warning. A missing land square raises an error.
+
+    Args:
+        uri_template (str): S3 URI of one partition file, with a `{grid_square}` placeholder.
+        grid_squares (List[str]): 100km BNG grid square codes to get paths for.
+
+    Returns:
+        List[str]: S3 URIs of the partition files that exist.
+
+    Raises:
+        FileNotFoundError: if the file for a land square is missing.
+    """
+    fs = s3fs.S3FileSystem()
+    files_on_s3 = set(fs.ls(os.path.dirname(uri_template)))
+    paths = []
+    for square in grid_squares:
+        path = uri_template.format(grid_square=square)
+        if path.removeprefix("s3://") in files_on_s3:
+            paths.append(path)
+        elif square in config["constant"]["land_grid_squares"]:
+            raise FileNotFoundError(
+                f"Missing partition file for land square {square}: {path}"
+            )
+        else:
+            logging.warning(
+                f"Skipping missing partition file for non-land square {square}: {path}"
+            )
+    return paths

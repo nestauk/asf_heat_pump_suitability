@@ -1,8 +1,34 @@
-import pandas as pd
+import geopandas as gpd
 import difflib
 import regex as re
+from typing import List
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 from asf_heat_pump_suitability import config
+
+
+def load_list_la_names(nation: str = None) -> List[str]:
+    """
+    Load list of local authority names for a given nation.
+
+    Args:
+        nation (str): one of "E" (England); "N" (Northern Ireland); "S" (Scotland); "W" (Wales); or "GB" (Great Britain). Default None to load all local authorities in the UK.
+
+    Returns:
+        List[str]: local authority names.
+    """
+    assert nation in [None, "E", "N", "S", "W", "GB"], "`nation` value invalid"
+    la_df = gpd.read_file(config["data"]["geodata"]["boundaries"]["UK_ons_lad_bounds"])
+    la_df["nation"] = la_df["LAD23CD"].str[:1]
+
+    if not nation:
+        return la_df["LAD23NM"].to_list()
+
+    if nation.upper() == "GB":
+        eligible = ["E", "W", "S"]
+    else:
+        eligible = [nation]
+
+    return la_df[la_df["nation"].isin(eligible)]["LAD23NM"].to_list()
 
 
 def resolve_list_la_names(la_names: str | list[str]) -> list:
@@ -19,8 +45,7 @@ def resolve_list_la_names(la_names: str | list[str]) -> list:
         ValueError: If any provided local authority name is not found in the valid list.
     """
     # Load reference data of possible LA names
-    possible_la_names = pd.read_csv(config["data"]["processed"]["valid_la_names"])
-    possible_la_names = possible_la_names["LAD23NM"]
+    possible_la_names = load_list_la_names()
 
     # Map for lookup
     possible_la_names_map = {name.lower(): name for name in possible_la_names}

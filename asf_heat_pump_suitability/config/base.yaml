@@ -84,9 +84,7 @@ data:
     # Names of inspire file bounds for England, Wales and Scotland
     inspire_file_names: "s3://asf-local-heat-planning-tool/inputs/processed/inspire/inspire_file_bounds_EWS.parquet"
     # Manually labelled blocks of flats
-    manually_labelled_block_of_flats: "s3://asf-local-heat-planning-tool/inputs/processed/manually_labelled_block_of_flats.parquet"
-    # Valid local authority names, taken from the 'LAD23NM' column of the UK_ons_lad_bound file
-    valid_la_names: "s3://asf-local-heat-planning-tool/inputs/processed/valid_la_names.csv"
+    manually_labelled_block_of_flats: "s3://asf-local-heat-planning-tool/inputs/processed/{release_date}_manually_labelled_block_of_flats.parquet"
     uprn_to_building_id_mapping: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{local_authorities}_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
 
 constant:
@@ -219,10 +217,12 @@ output:
     buildings_most_suitable_tech: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_buildings_most_suitable_tech.parquet"
     # Buildings containing domestic UPRNs aggregated into groups of neighbouring clusters of the same tech type
     tech_clusters: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_clustered_tech_polygons.parquet"
+    # Anchor load footprints in the local authority with their geometry-derived anchor_load_id; the IDs referenced by tech_clusters.reassigning_anchor_load_ids
+    anchor_loads: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_anchor_loads.parquet"
     # Opportunity areas with most suitable tech, cluster ID, contextual data
     clusters_tech_contextual_info: "s3://asf-local-heat-planning-tool/outputs/data/{local_authorities}/{release_date}/{local_authorities}_clusters_contextual_features_{tolerance_m}m.geojson"
   model:
-    block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_building_classifier.pkl"
+    block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/block_of_flats_building_classifier.pkl"
     training_data:
       # Sample for modelling
       sample_for_block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.parquet"
@@ -230,58 +230,71 @@ output:
       enriched_buildings: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{local_authorities}_enriched_buildings_with_flats.parquet"
       enriched_buildings_with_geoms: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{local_authorities}_enriched_buildings_with_flats_and_geometries.parquet"
       first_labelling: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/first_round_confident_LABELLED_buildings_containing_flats_sample_n806.parquet"
+      labelled_dir: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/labelled_data/"
   log:
     pipeline_failure: "s3://asf-local-heat-planning-tool/outputs/logs/pipeline_failure/{release_date}/{local_authorities}_pipeline_failures.csv"
   # Where compare_versions.py --save uploads each comparison's report, plots
   # and JSON: the new release's own folder, so they are deleted together.
   compare_versions: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{release_date}/compare_versions"
 
-# Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of proprerties and contextual information about properties within the clusters and surrounding neighbourhood
+# Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of properties and contextual information about properties within the clusters and surrounding neighbourhood
 metadata:
-  "License": "This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
-  "Development stage": "Alpha - this dataset is in the early stages of development, may contain errors and may change regularly."
-  "Data sources and attributions": "https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme"
+  "License": "This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)\n Commercial Exception: Low-carbon heating suppliers are granted an exception to use this dataset for commercial planning and installations of low-carbon heating technologies. All other terms of the CC BY-NC-SA 4.0 license remain in effect, including the requirement to share any adapted versions of this dataset under the same license terms. See 'Data sources and attributions' for attribution requirements."
+  "Development stage": "Beta - this dataset is in early stages of development, may contain errors and may change regularly."
+  "Data sources and attributions": "Please follow the attribution instructions in this link: https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme"
   "GitHub repository": "https://github.com/nestauk/asf_heat_pump_suitability"
+  # Grouped by layer: each key matches the `layer` property of the features it describes
   "Variable names and descriptions":
-    "cluster_id": "Unique identifier for each cluster."
-    "assigned_tech": "Assigned low-carbon heating technology category. Categories are: `Individual solution`, `Networked heat pump`, `Communal solution`, `District heat network`. Can additionally contain `DESNZ_HNZ` values (if the local authority was part of the DESNZ heat network zoning pilot)."
-    "communal_origin": "Route by which a `Communal solution` cluster was assigned: `block of flats` (the cluster contains blocks of flats) or `anchor proximity` (buildings near an anchor load such as a school or hospital). Null for non-communal clusters."
-    "geometry": "Polygon geometry of the cluster"
-    "n_UPRNs": "Number of domestic UPRNs (properties) within the cluster"
-    "n_uprns_in_listed_building": "Number of UPRNs (properties) within the cluster that are in listed buildings"
-    "n_uprns_solar_pv": "Number of UPRNs (properties) within the cluster that have solar PV"
-    "n_uprns_off_gas": "Number of UPRNs (properties) within the cluster that are off-gas"
-    "perc_uprns_solar_pv": "Percentage of UPRNs (properties) within the cluster that have solar PV"
-    "perc_uprns_off_gas": "Percentage of UPRNs (properties) within the cluster that are off-gas"
-    "attachment_detached": "Number of UPRNs (properties) within the cluster that are detached"
-    "attachment_end_terrace": "Number of UPRNs (properties) within the cluster that are end terrace"
-    "attachment_flat": "Number of UPRNs (properties) within the cluster that are flats"
-    "attachment_mid_terrace": "Number of UPRNs (properties) within the cluster that are mid terrace"
-    "attachment_semi_detached": "Number of UPRNs (properties) within the cluster that are semi detached"
-    "attachment_null": "Number of UPRNs (properties) within the cluster with unknown attachment type"
-    "tenure_owner_occupied": "Number of UPRNs (properties) within the cluster that are owner occupied"
-    "tenure_rental_(private)": "Number of UPRNs (properties) within the cluster that are private rental"
-    "tenure_rental_(social)": "Number of UPRNs (properties) within the cluster that are social rental"
-    "tenure_null": "Number of UPRNs (properties) within the cluster with unknown tenure"
-    "perc_tenure_owner_occupied": "Percentage of UPRNs (properties) within the cluster that are owner occupied"
-    "perc_tenure_rental_(private)": "Percentage of UPRNs (properties) within the cluster that are private rental"
-    "perc_tenure_rental_(social)": "Percentage of UPRNs (properties) within the cluster that are social rental"
-    "perc_tenure_null": "Percentage of UPRNs (properties) within the cluster with unknown tenure"
-    "current_energy_rating_a": "Number of UPRNs (properties) within the cluster with energy rating A"
-    "current_energy_rating_b": "Number of UPRNs (properties) within the cluster with energy rating B"
-    "current_energy_rating_c": "Number of UPRNs (properties) within the cluster with energy rating C"
-    "current_energy_rating_d": "Number of UPRNs (properties) within the cluster with energy rating D"
-    "current_energy_rating_e": "Number of UPRNs (properties) within the cluster with energy rating E"
-    "current_energy_rating_f": "Number of UPRNs (properties) within the cluster with energy rating F"
-    "current_energy_rating_g": "Number of UPRNs (properties) within the cluster with energy rating G"
-    "current_energy_rating_null": "Number of UPRNs (properties) within the cluster with unknown energy rating"
-    "median_estimated_energy_consumption_12_months_kwh_per_m2": "Median estimated energy consumption in 12 months (in kWh/m2) of properties within the cluster"
-    "median_outdoor_space_m2": "Median of the maximum contiguous outdoor space in metres squared of properties within the cluster"
-    "in_hn_zone": "Whether any properties within the cluster are in DESNZ heat network zones. You can refer to https://www.gov.uk/government/publications/heat-network-zone-opportunity-reports to view heat network zone locations"
-    "in_city_centre": "Whether any properties within the cluster are in a location classified into one of the following Spatial Signatures Framework pen portraits/signature types https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/transform/city_centres.py#L10-L17"
-    "within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline": "Whether any properties within the cluster are within {COASTLINE_DISTANCE_THRESHOLD_M}m of the coastline"
-    "in_protected_area": "Whether any properties within the cluster are in building conservation areas for England and Wales, or Scottish World Heritage sites."
-    "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load": "Whether the cluster is within a {ANCHOR_LOAD_RADIUS}m radius of an anchor load (a location with high heat demand, e.g. a school or hospital). See a full list of anchor load types in https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/cluster/cluster.py#L28-L46"
+    "clusters_with_contextual_features":
+      "cluster_id": "Unique identifier for each cluster."
+      "assigned_tech": "Assigned low-carbon heating technology category. Categories are: `Individual solution`, `Networked heat pump`, `Communal solution`, `District heat network`. Can additionally contain `DESNZ_HNZ` values (if the local authority was part of the DESNZ heat network zoning pilot)."
+      "communal_origin": "Route by which a `Communal solution` cluster was assigned: `block of flats` (the cluster contains blocks of flats) or `anchor proximity` (buildings near an anchor load such as a school or hospital). Null for non-communal clusters."
+      "reassigning_anchor_load_ids": "List of `anchor_load_id` values of the anchor loads that caused at least one building in the cluster to be reassigned to a `Communal solution`, nearest first: each anchor load is placed by its distance to the nearest building it reassigned in the cluster. This variable is only set for clusters where `communal_origin` is `anchor proximity`; null otherwise, including for block-of-flats clusters that sit within the anchor radius."
+      "geometry": "Polygon geometry of the cluster."
+      "logic_trace": "Describes why a specific technology has been assigned as most suitable."
+      "n_UPRNs": "Number of domestic UPRNs (properties) within the cluster"
+      "n_uprns_in_listed_building": "Number of UPRNs (properties) within the cluster that are in listed buildings"
+      "n_uprns_solar_pv": "Number of UPRNs (properties) within the cluster that have solar PV"
+      "n_uprns_off_gas": "Number of UPRNs (properties) within the cluster that are off-gas"
+      "perc_uprns_solar_pv": "Percentage of UPRNs (properties) within the cluster that have solar PV"
+      "perc_uprns_off_gas": "Percentage of UPRNs (properties) within the cluster that are off-gas"
+      "attachment_detached": "Number of UPRNs (properties) within the cluster that are detached"
+      "attachment_end_terrace": "Number of UPRNs (properties) within the cluster that are end terrace"
+      "attachment_flat": "Number of UPRNs (properties) within the cluster that are flats"
+      "attachment_mid_terrace": "Number of UPRNs (properties) within the cluster that are mid terrace"
+      "attachment_semi_detached": "Number of UPRNs (properties) within the cluster that are semi detached"
+      "attachment_null": "Number of UPRNs (properties) within the cluster with unknown attachment type"
+      "tenure_owner_occupied": "Number of UPRNs (properties) within the cluster that are owner occupied"
+      "tenure_rental_(private)": "Number of UPRNs (properties) within the cluster that are private rental"
+      "tenure_rental_(social)": "Number of UPRNs (properties) within the cluster that are social rental"
+      "tenure_null": "Number of UPRNs (properties) within the cluster with unknown tenure"
+      "perc_tenure_owner_occupied": "Percentage of UPRNs (properties) within the cluster that are owner occupied"
+      "perc_tenure_rental_(private)": "Percentage of UPRNs (properties) within the cluster that are private rental"
+      "perc_tenure_rental_(social)": "Percentage of UPRNs (properties) within the cluster that are social rental"
+      "perc_tenure_null": "Percentage of UPRNs (properties) within the cluster with unknown tenure"
+      "current_energy_rating_a": "Number of UPRNs (properties) within the cluster with energy rating A"
+      "current_energy_rating_b": "Number of UPRNs (properties) within the cluster with energy rating B"
+      "current_energy_rating_c": "Number of UPRNs (properties) within the cluster with energy rating C"
+      "current_energy_rating_d": "Number of UPRNs (properties) within the cluster with energy rating D"
+      "current_energy_rating_e": "Number of UPRNs (properties) within the cluster with energy rating E"
+      "current_energy_rating_f": "Number of UPRNs (properties) within the cluster with energy rating F"
+      "current_energy_rating_g": "Number of UPRNs (properties) within the cluster with energy rating G"
+      "current_energy_rating_null": "Number of UPRNs (properties) within the cluster with unknown energy rating"
+      "median_estimated_energy_consumption_12_months_kwh_per_m2": "Median estimated energy consumption in 12 months (in kWh/m2) of properties within the cluster"
+      "median_outdoor_space_m2": "The median across all UPRNs in the cluster of the maximum contiguous outdoor area in metres squared per property."
+      "in_hn_zone": "Whether any properties within the cluster are in DESNZ heat network zones or LHEES heat network zones. You can refer to https://www.gov.uk/government/publications/heat-network-zone-opportunity-reports and to https://www.gov.scot/publications/local-heat-energy-efficiency-strategies-delivery-plans-guidance/"
+      "in_city_centre": "Whether any properties within the cluster are in a location classified into one of the following Spatial Signatures Framework pen portraits/signature types https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/transform/city_centres.py#L10-L17"
+      "within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline": "Whether any properties within the cluster are within {COASTLINE_DISTANCE_THRESHOLD_M}m of the coastline"
+      "in_protected_area": "Whether any properties within the cluster are in building conservation areas for England and Wales, or Scottish World Heritage sites."
+      "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load": "Whether the cluster is within a {ANCHOR_LOAD_RADIUS}m radius of an anchor load (a location with high heat demand, e.g. a school or hospital). See a full list of anchor load types in https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/cluster/cluster.py#L28-L46"
+    "anchor_loads":
+      "anchor_load_id": "Unique identifier of an anchor load, derived from its footprint geometry. Referenced by the `reassigning_anchor_load_ids` of clusters."
+      "geometry": "Polygon footprint of the anchor load building."
+    "ward_boundaries":
+      "geometry": "Polygon geometry of the electoral ward."
+    "areas_of_district_heat_network_potential":
+      "source_annotation": "Source of the area: `DESNZ advanced heat network zoning in England`, `LHEES heat network zoning in Scotland` or `City centre areas`."
+      "geometry": "Polygon geometry of the area with district heat network potential."
 
 #----------------------------------------------------------------#
 # DEPRECATING
@@ -461,7 +474,6 @@ run_manifest:
       - "geodata.UK_poi_locations"
       - "geodata.grid_square_os_openmap_local"
       - "processed.non_domestic_poi_categories"
-      - "processed.valid_la_names"
       - "epc.domestic"
       - "epc.commercial.EW"
       - "epc.commercial.S"
@@ -470,7 +482,6 @@ run_manifest:
     add_features:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
-      - "processed.valid_la_names"
       - "processed.manually_labelled_block_of_flats"
       - "geodata.heat_network_zones.desnz_files"
       - "geodata.heat_network_zones.desnz_polygons"
@@ -484,7 +495,6 @@ run_manifest:
     decision_tree:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
-      - "processed.valid_la_names"
     cluster:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
@@ -492,11 +502,9 @@ run_manifest:
       - "geodata.grid_square_os_openroad"
       - "processed.poi_anchor_properties"
       - "geodata.heat_network_zones.desnz_polygons"
-      - "processed.valid_la_names"
     compute_contextual_features:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
-      - "processed.valid_la_names"
 
 compare_versions:
   stage_output_datasets:
