@@ -227,7 +227,7 @@ requires-dist = [
     { name = "scikit-learn", specifier = "~=1.7" },
     { name = "scipy" },
     { name = "seaborn" },
-    { name = "shapely", specifier = "~=2.1" },
+    { name = "shapely", specifier = ">=2.1,<2.2" },
     { name = "simplekml" },
     { name = "smart-open", specifier = "~=7.3" },
     { name = "sphinx", marker = "extra == 'dev'" },
