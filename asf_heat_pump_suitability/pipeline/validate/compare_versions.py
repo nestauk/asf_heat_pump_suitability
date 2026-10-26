@@ -1641,9 +1641,10 @@ def generate_str_report(
         df_uprns_old (pl.DataFrame | None): the UPRNs in the older release's
             add_features output (a single UPRN column). Only used for the
             compute_contextual_features stage, to count how many UPRNs did
-            not end up in any cluster. None for the other stages, or if the
-            file could not be read; the report then says the count is
-            unavailable.
+            not end up in any cluster. Other stages pass None, and their
+            report has no missing-cluster section. For
+            compute_contextual_features, None means the file could not be
+            read, and the section says why that count is missing.
         df_uprns_new (pl.DataFrame | None): the same for the newer release.
 
     Returns:

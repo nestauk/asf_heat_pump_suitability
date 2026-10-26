@@ -35,7 +35,7 @@ def load_df_osopen_uprn(
     Args:
         parquet (bool): set to `True` to load `parquet` file for speed gains, or `False` to load original CSV+ZIP format. Default True.
         grid_squares (Optional[List[str]]): 100km BNG grid square codes (e.g. ["SX", "SY"]) to load UPRN data for.
-        Ignored when `parquet=False`.
+        Ignored when `parquet=False`. Non-land squares with no file are skipped.
         **kwargs for pl.read_csv or pl.read_parquet
 
     Returns:
@@ -49,12 +49,10 @@ def load_df_osopen_uprn(
         ):
             paths = config["data"]["geodata"]["uk_osopen_uprn_parquet"]
         else:
-            paths = [
-                config["data"]["geodata"]["uk_osopen_uprn_partitioned"].format(
-                    grid_square=sq
-                )
-                for sq in grid_squares
-            ]
+            paths = s3_utils.filter_list_partition_paths(
+                uri_template=config["data"]["geodata"]["uk_osopen_uprn_partitioned"],
+                grid_squares=grid_squares,
+            )
         return pl.read_parquet(paths, **kwargs)
 
     else:
@@ -504,6 +502,8 @@ def load_gdf_poi(
     """
     Load and process Points of Interest data. CRS EPSG 4326.
 
+    When a list of squares is passed, non-land squares with no file are skipped.
+
     Returns:
         gpd.GeoDataFrame: Processed POI data containing types of POI specified
 
@@ -522,12 +522,10 @@ def load_gdf_poi(
 
     if parquet:
         if grid_squares:
-            paths = [
-                config["data"]["geodata"]["UK_poi_locations_partitioned"].format(
-                    grid_square=sq
-                )
-                for sq in grid_squares
-            ]
+            paths = s3_utils.filter_list_partition_paths(
+                uri_template=config["data"]["geodata"]["UK_poi_locations_partitioned"],
+                grid_squares=grid_squares,
+            )
             return pl.read_parquet(paths, **kwargs)
         path = config["data"]["geodata"]["UK_poi_locations_parquet"]
         return pl.read_parquet(path, **kwargs)

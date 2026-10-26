@@ -5,7 +5,7 @@ Splits the given local authorities into chunks and launches one `orbit` job per 
 remotely for that chunk's local authorities.
 
 Usage:
-    python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--size N [--is_number_of_chunks]] [--release_date YYYYMMDD] [--compare [--trigger TRIGGER] [--old_release_date YYYYMMDD]]
+    python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities <LOCAL_AUTHORITY> [<LOCAL_AUTHORITY> ...] [--size N [--is_number_of_chunks]] --model_release YYYYMMDD [--release_date YYYYMMDD] [--compare [--trigger TRIGGER] [--old_release_date YYYYMMDD]]
 
     e.g. to run for Great Britain in chunks of 20 local authorities each:
         python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py --local_authorities GB --size 20
@@ -22,6 +22,8 @@ chunks if `--is_number_of_chunks` is also passed (the number of batches to run i
 omitted, all local authorities are run in a single chunk.
 
 Pass `--prod` to push changes to production (i.e. staging area). This should only be used when running from `dev`.
+With `--prod`, the launcher reads `front_end_s3_bucket` and `front_end_staging_s3_path` from `.env` and passes them
+to the jobs.
 
 The release date defaults to today and is pinned across all stages, so a run crossing midnight still writes to a single
 dated release directory.
@@ -98,6 +100,13 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--model_release",
+        help="Date of model training in YYYYMMDD format.",
+        type=str,
+        required=True,
+    )
+
+    parser.add_argument(
         "--release_date",
         help="Release date in YYYYMMDD format used for the dated input and output directories. Defaults to today's date.",
     )
@@ -119,21 +128,32 @@ def parse_arguments() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    from pathlib import Path
+    import os
+    import sys
     import polars as pl
     from tqdm import tqdm
     import subprocess
+    from dotenv import load_dotenv
     from asf_heat_pump_suitability.utils import s3_utils
+    from asf_heat_pump_suitability.pipeline.transform import local_authority
 
     args = parse_arguments()
+    additional_flags = ["--prod"] if args.prod else []
+    if args.prod:
+        # .env is not uploaded to orbit, so pass the front-end S3 location to the jobs explicitly
+        load_dotenv()
+        front_end_vars = ("front_end_s3_bucket", "front_end_staging_s3_path")
+        missing = [name for name in front_end_vars if not os.environ.get(name)]
+        if missing:
+            sys.exit(f"--prod needs {', '.join(missing)} in your .env file.")
+        for name in front_end_vars:
+            additional_flags += ["-e", f"{name}={os.environ[name]}"]
     local_authorities = args.local_authorities
     release_date = save_utils.get_str_release_date(args.release_date)
     print(f"Release date pinned to: {release_date}")
 
     if local_authorities == ["GB"]:
-        local_authorities = pl.read_csv(config["data"]["processed"]["valid_la_names"])[
-            "LAD23NM"
-        ].to_list()
+        local_authorities = local_authority.load_list_la_names(nation="GB")
 
     chunks = chunk_list_strings(
         np.asarray(local_authorities), n=args.size, size=args.is_number_of_chunks
@@ -147,55 +167,32 @@ if __name__ == "__main__":
 
     for chunk in tqdm(chunks):
         print(f"Running chunk: {chunk}")
-        if args.prod:
-            subprocess.run(
-                [
-                    "orbit",
-                    "launch",
-                    "--script",
-                    "asf_heat_pump_suitability/pipeline/run/pipeline.py",
-                    "--team",
-                    "asf",
-                    "--project",
-                    "local_heat_planning_tool",
-                    "--cpu",
-                    "8",
-                    "--memory",
-                    "60gb",
-                    "-e",
-                    "PYTHONPATH=/app",  # Install repository in docker image
-                    "--local_authorities",
-                    *chunk,
-                    "--release_date",
-                    release_date,
-                    "--prod",
-                    *compare_flags,
-                ]
-            )
-        else:
-            subprocess.run(
-                [
-                    "orbit",
-                    "launch",
-                    "--script",
-                    "asf_heat_pump_suitability/pipeline/run/pipeline.py",
-                    "--team",
-                    "asf",
-                    "--project",
-                    "local_heat_planning_tool",
-                    "--cpu",
-                    "8",
-                    "--memory",
-                    "60gb",
-                    "-e",
-                    "PYTHONPATH=/app",
-                    "--local_authorities",
-                    *chunk,
-                    "--release_date",
-                    release_date,
-                    *compare_flags,
-                ]
-            )
+        subprocess.run(
+            [
+                "orbit",
+                "launch",
+                "--script",
+                "asf_heat_pump_suitability/pipeline/run/pipeline.py",
+                "--team",
+                "asf",
+                "--project",
+                "local_heat_planning_tool",
+                "--cpu",
+                "8",
+                "--memory",
+                "60gb",
+                "-e",
+                "PYTHONPATH=/app",  # Install repository in docker image
+                "--local_authorities",
+                *chunk,
+                "--model_release",
+                args.model_release,
+                "--release_date",
+                release_date,
+                *additional_flags,
+                *compare_flags,
+            ]
+        )
 
     # Aggregate any error logs and save to a single file
     dir_uri = (
@@ -210,6 +207,11 @@ if __name__ == "__main__":
             release_date=release_date, local_authorities="ORBIT_CONCAT"
         )
         failures.write_csv(save_as)
-        print(f"Pipeline failed for some local authorities. See logs at {save_as}")
+        if failures.filter(pl.col("level") == "error").height > 0:
+            print(f"Pipeline failed for some local authorities. See logs at {save_as}")
+        else:
+            print(
+                f"Pipeline finished for all local authorities, some with warnings. See logs at {save_as}"
+            )
     else:
         print("Pipeline finished for all Local Authorities successfully!")
