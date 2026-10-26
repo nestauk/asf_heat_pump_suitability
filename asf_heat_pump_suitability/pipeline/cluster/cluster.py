@@ -323,8 +323,9 @@ def extend_edges_gdf(
             num_pts = int(np.ceil(exterior.length / spacing))
             # Return a list of points at each segment-distance-interval along the exterior edge of the building
             pts = [exterior.interpolate(i * spacing) for i in range(num_pts)]
-            # Add corner vertices of building into list, dropping the last one which is a duplicate of the starting point
-            pts.extend(Point(coord) for coord in exterior.coords[:-1])
+            # Add corner vertices of building into list. Skip the first corner, which interpolate(0) already added,
+            # and the last one, which closes the ring
+            pts.extend(Point(coord) for coord in exterior.coords[1:-1])
             all_points.extend(pts)
             all_building_ids.extend([building_id] * len(pts))
 
