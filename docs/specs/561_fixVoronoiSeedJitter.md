@@ -1,8 +1,8 @@
 ---
 title: Add each Voronoi seed once and bound the duplicate jitter
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/561
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/573
 asana:
 created: 2026-10-26
 ---
