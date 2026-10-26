@@ -109,7 +109,7 @@ def run_script(
     Returns:
         tuple[int, str, list[str]]: the stage's process exit code (0 on success), the error traceback if it failed
         (otherwise None), and a list of every warning the stage printed to stderr with the `VALIDATION_WARNING:` prefix
-        (empty if none).
+        (empty if None).
     """
     flags = flags or []
     result = subprocess.run(
@@ -167,7 +167,7 @@ if __name__ == "__main__":
     failed = {
         "local_authority": [],
         "stage_failed": [],
-        "level": [],
+        "level": [],  # e.g. "error" or "warning"
         "error_message": [],
     }
 
