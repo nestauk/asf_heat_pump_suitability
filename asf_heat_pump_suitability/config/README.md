@@ -8,9 +8,7 @@
 
 **Date:** November 2026
 
-This dataset is licensed under a [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en).
-
-**Commercial Exception:** Low-carbon heating suppliers are granted an exception to use this dataset for commercial planning and installations of low-carbon heating technologies. All other terms of the CC BY-NC-SA 4.0 license remain in effect, including the requirement to share any adapted versions of this dataset under the same license terms.
+This dataset is licensed under a [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.en). Notwithstanding the foregoing, UK-based low-carbon heating suppliers shall be entitled to use this dataset for internal commercial planning and installations of low-carbon heating technologies. All other terms of the [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) license remain in effect, including (without limitation) requirements in respect of attribution and the requirement to share any adapted versions of this dataset under the same license terms.
 
 If you use this dataset in any reports, products, or publications, please cite it as:
 
