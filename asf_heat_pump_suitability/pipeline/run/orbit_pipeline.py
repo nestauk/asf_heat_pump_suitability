@@ -56,20 +56,17 @@ def chunk_list_strings(arr: np.array, n: int, size: bool) -> List[List[str]]:
     return chunks
 
 
-def validate_str_cli_arguments(arg: str | List[str]) -> str | List[str]:
+def validate_str_cli_arguments(args: List[str]) -> List[str]:
     """
-    Validate (list of) string(s) is prefixed with '--'.
+    Add a '--' prefix to each argument that does not already have one.
 
     Args:
-        arg (str | List[str]): single argument or list of arguments to validate.
+        args (List[str]): arguments to pass to `orbit`.
 
     Returns:
-        str | List[str]: validated input argument(s)
+        List[str]: arguments prefixed with '--'
     """
-    if isinstance(arg, list):
-        return ["--" + a for a in arg if not a.startswith("--")]
-    if not arg.startswith("--"):
-        return "--" + arg
+    return [a if a.startswith("--") else "--" + a for a in args]
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -149,9 +146,7 @@ if __name__ == "__main__":
     args = parse_arguments()
     additional_flags = ["--prod"] if args.prod else []
     if args.orbit_args:
-        additional_flags.extend(
-            [arg for arg in validate_str_cli_arguments(args.orbit_args)]
-        )
+        additional_flags.extend(validate_str_cli_arguments(args.orbit_args))
 
     if args.prod:
         # .env is not uploaded to orbit, so pass the front-end S3 location to the jobs explicitly
