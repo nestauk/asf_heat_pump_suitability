@@ -78,6 +78,7 @@ def add_compare_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--old_release_date",
         help="Compare every stage against this release, e.g. 20260901, instead of each stage's latest earlier one.",
+        # Checks the date format is correct (YYYYMMDD) when the flag is read
         type=save_utils.get_str_release_date,
         default=None,
         required=False,
