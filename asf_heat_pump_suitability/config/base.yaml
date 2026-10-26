@@ -85,8 +85,6 @@ data:
     inspire_file_names: "s3://asf-local-heat-planning-tool/inputs/processed/inspire/inspire_file_bounds_EWS.parquet"
     # Manually labelled blocks of flats
     manually_labelled_block_of_flats: "s3://asf-local-heat-planning-tool/inputs/processed/{release_date}_manually_labelled_block_of_flats.parquet"
-    # Valid local authority names, taken from the 'LAD23NM' column of the UK_ons_lad_bound file
-    valid_la_names: "s3://asf-local-heat-planning-tool/inputs/processed/valid_la_names.csv"
     uprn_to_building_id_mapping: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{local_authorities}_uprn_to_building_mapping_non_domestic_and_domestic.parquet"
 
 constant:
@@ -238,9 +236,9 @@ output:
 
 # Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of properties and contextual information about properties within the clusters and surrounding neighbourhood
 metadata:
-  "License": "This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License."
-  "Development stage": "Alpha - this dataset is in the early stages of development, may contain errors and may change regularly."
-  "Data sources and attributions": "https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme"
+  "License": "This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)\n Commercial Exception: Low-carbon heating suppliers are granted an exception to use this dataset for commercial planning and installations of low-carbon heating technologies. All other terms of the CC BY-NC-SA 4.0 license remain in effect, including the requirement to share any adapted versions of this dataset under the same license terms. See 'Data sources and attributions' for attribution requirements."
+  "Development stage": "Beta - this dataset is in early stages of development, may contain errors and may change regularly."
+  "Data sources and attributions": "Please follow the attribution instructions in this link: https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme"
   "GitHub repository": "https://github.com/nestauk/asf_heat_pump_suitability"
   # Grouped by layer: each key matches the `layer` property of the features it describes
   "Variable names and descriptions":
@@ -473,7 +471,6 @@ run_manifest:
       - "geodata.UK_poi_locations"
       - "geodata.grid_square_os_openmap_local"
       - "processed.non_domestic_poi_categories"
-      - "processed.valid_la_names"
       - "epc.domestic"
       - "epc.commercial.EW"
       - "epc.commercial.S"
@@ -482,7 +479,6 @@ run_manifest:
     add_features:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
-      - "processed.valid_la_names"
       - "processed.manually_labelled_block_of_flats"
       - "geodata.heat_network_zones.desnz_files"
       - "geodata.heat_network_zones.desnz_polygons"
@@ -496,7 +492,6 @@ run_manifest:
     decision_tree:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
-      - "processed.valid_la_names"
     cluster:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
@@ -504,11 +499,9 @@ run_manifest:
       - "geodata.grid_square_os_openroad"
       - "processed.poi_anchor_properties"
       - "geodata.heat_network_zones.desnz_polygons"
-      - "processed.valid_la_names"
     compute_contextual_features:
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
-      - "processed.valid_la_names"
 
 compare_versions:
   stage_output_datasets:
