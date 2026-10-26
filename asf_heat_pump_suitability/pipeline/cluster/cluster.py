@@ -72,7 +72,7 @@ ANCHOR_REASSIGNMENT_MAPPING = {NETWORKED: COMMUNAL}
 ROAD_TYPES = ["A Road", "B Road", "Motorway", "Minor Road"]
 
 # Jitter: the distance in metres (0.05 mm) that each extra copy of a Voronoi seed moves east. It makes all seeds unique.
-DUPLICATE_SEED_JITTER = 5e-5
+DUPLICATE_SEED_JITTER_M = 5e-5
 
 
 def generate_gdf_clusters(
@@ -338,7 +338,7 @@ def extend_edges_gdf(
     # ordered=True (below) requires every input coordinate to be unique — GEOS raises GEOSException otherwise.
     # Some seeds are still duplicates. This happens where two buildings share a corner, or where a 1 m point is
     # exactly on a corner.
-    coords_arr = _jitter_duplicate_coords(coords_arr)
+    coords_arr = _jitter_arr_duplicate_coords(coords_arr)
 
     # Convert to a Multipoint collection for Voronoi
     coords = MultiPoint(coords_arr)
@@ -393,12 +393,12 @@ def extend_edges_gdf(
     )
 
 
-def _jitter_duplicate_coords(coords_arr: np.ndarray) -> np.ndarray:
+def _jitter_arr_duplicate_coords(coords_arr: np.ndarray) -> np.ndarray:
     """
     Move each extra copy of a coordinate east, so that every copy keeps its own Voronoi cell.
 
-    The first copy of a coordinate (in input order) does not move. The second copy moves 1 x DUPLICATE_SEED_JITTER
-    metres east, the third copy moves 2 x DUPLICATE_SEED_JITTER metres east, and so on.
+    The first copy of a coordinate (in input order) does not move. The second copy moves 1 x DUPLICATE_SEED_JITTER_M
+    metres east, the third copy moves 2 x DUPLICATE_SEED_JITTER_M metres east, and so on.
 
     Args:
         coords_arr (np.ndarray): (N, 2) array of x, y seed coordinates in metres.
@@ -416,7 +416,7 @@ def _jitter_duplicate_coords(coords_arr: np.ndarray) -> np.ndarray:
     )
 
     jittered_arr = coords_arr.copy()
-    jittered_arr[:, 0] += copy_number * DUPLICATE_SEED_JITTER
+    jittered_arr[:, 0] += copy_number * DUPLICATE_SEED_JITTER_M
 
     n_duplicates = pd.DataFrame(jittered_arr).duplicated().sum()
     if n_duplicates:

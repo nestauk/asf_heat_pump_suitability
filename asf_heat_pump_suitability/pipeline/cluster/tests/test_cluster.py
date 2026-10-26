@@ -12,8 +12,8 @@ from shapely.geometry import Polygon
 from shapely.affinity import rotate
 from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.cluster.cluster import (
-    DUPLICATE_SEED_JITTER,
-    _jitter_duplicate_coords,
+    DUPLICATE_SEED_JITTER_M,
+    _jitter_arr_duplicate_coords,
     extend_edges_gdf,
     filter_gdf_anchors_to_save,
     generate_gdf_clusters,
@@ -780,20 +780,20 @@ class TestExtendEdgesGdf:
         shrunk_buildings_gdf = gdf_shared_corner_polygons.assign(
             geometry=gdf_shared_corner_polygons.buffer(-0.1)
         )
-        contained = cells_gdf[["geometry"]].sjoin(
+        contained_building_ids = cells_gdf[["geometry"]].sjoin(
             shrunk_buildings_gdf, how="inner", predicate="contains"
         )["building_id"]
-        assert set(contained) == {
+        assert set(contained_building_ids) == {
             "B01",
             "B02",
-        }, f"each building must be inside its own cell, only {set(contained)} are"
+        }, f"each building must be inside its own cell, only {set(contained_building_ids)} are"
 
 
-class TestJitterDuplicateCoords:
-    """Tests for `_jitter_duplicate_coords`."""
+class TestJitterArrDuplicateCoords:
+    """Tests for `_jitter_arr_duplicate_coords`."""
 
     def test_copies_of_each_point_are_numbered_separately(self):
-        """Test the n-th copy of a point moves n jitter steps east and the first copy stays."""
+        """Test that the first copy of a point stays, and each later copy moves one more jitter step east."""
         coords = np.array(
             [
                 [400000.0, 400000.0],
@@ -803,18 +803,19 @@ class TestJitterDuplicateCoords:
                 [400000.0, 400000.0],
             ]
         )
-        result = _jitter_duplicate_coords(coords)
+        jittered_coords = _jitter_arr_duplicate_coords(coords)
 
-        expected_x_shift = np.array([0, 0, 1, 1, 2]) * DUPLICATE_SEED_JITTER
+        expected_x_shift = np.array([0, 0, 1, 1, 2]) * DUPLICATE_SEED_JITTER_M
         np.testing.assert_allclose(
-            result[:, 0] - coords[:, 0],
+            jittered_coords[:, 0] - coords[:, 0],
             expected_x_shift,
+            # Compare in absolute metres only: 1e-9 m allows for float rounding at BNG coordinates near 400,000 m
             rtol=0,
             atol=1e-9,
             err_msg="copies must be numbered inside each group of identical points, not across all points",
         )
         assert np.array_equal(
-            result[:, 1], coords[:, 1]
+            jittered_coords[:, 1], coords[:, 1]
         ), "the jitter must only move points east, never north or south"
 
     def test_raises_when_jitter_leaves_duplicates(self):
@@ -824,11 +825,11 @@ class TestJitterDuplicateCoords:
             [
                 [400000.0, 400000.0],
                 [400000.0, 400000.0],
-                [400000.0 + DUPLICATE_SEED_JITTER, 400000.0],
+                [400000.0 + DUPLICATE_SEED_JITTER_M, 400000.0],
             ]
         )
         with pytest.raises(ValueError, match="duplicate"):
-            _jitter_duplicate_coords(coords)
+            _jitter_arr_duplicate_coords(coords)
 
 
 class TestOverlayGdfPhysicalBarriers:

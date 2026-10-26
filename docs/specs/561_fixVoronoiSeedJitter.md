@@ -62,7 +62,7 @@ All changes are in `extend_edges_gdf`.
    cells, and each cell contains its building after a 0.1 m inward buffer. Rationale: it covers the shared-corner
    case that the jitter exists for (Roisin's proposal), and fits the high-signal testing rule. The shared corner can
    be in one cell only, so the test shrinks the buildings by 0.1 m first, as `sjoin_gdf_buildings_to_clusters` does.
-6. **The jitter is a private helper, `_jitter_duplicate_coords`, with its own test.** Rationale: the shared-corner
+6. **The jitter is a private helper, `_jitter_arr_duplicate_coords`, with its own test.** Rationale: the shared-corner
    test only fails if the jitter is removed. It does not fail if the copies are numbered across the whole LA again,
    which is the bug in #561. The helper test checks the shift of each copy and the `ValueError` directly.
 7. **Acceptance runs.** First, Windsor and Maidenhead `cluster.py` with `PYTHONHASHSEED=0` and `=1`, without
