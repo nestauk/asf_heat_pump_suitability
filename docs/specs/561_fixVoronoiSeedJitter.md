@@ -60,9 +60,11 @@ All changes are in `extend_edges_gdf`.
 5. **One new test in `pipeline/cluster/tests/test_cluster.py`:** two buildings that share a corner give two Voronoi
    cells, and each cell contains its building. Rationale: it covers the shared-corner case that the jitter exists
    for (Roisin's proposal), and fits the high-signal testing rule.
-6. **Acceptance runs (no `--save`):** Windsor and Maidenhead with `PYTHONHASHSEED=0` and `=1`, then
-   `compare_versions --stage cluster --trigger methodology_change` on the sample LAs. Rationale: the fix changes cells
-   in every LA, so the team must see the size of the change.
+6. **Acceptance runs.** First, Windsor and Maidenhead `cluster.py` with `PYTHONHASHSEED=0` and `=1`, without
+   `--save`. Then Aidan saves `cluster.py` outputs for the 6 sample LAs under a new release date and runs
+   `compare_versions --stage cluster --trigger methodology_change` for each. Rationale: the fix changes cells in every
+   LA, so the team must see the size of the change. `compare_versions` reads only dated outputs on S3, so this step
+   writes to S3, and Aidan runs it himself after `/implement` (decided 2026-10-26).
 
 Owner: Aidan builds it; Roisin reviews.
 
@@ -100,5 +102,5 @@ Owner: Aidan builds it; Roisin reviews.
 - [ ] A remaining duplicate seed raises a `ValueError` with a clear message before `voronoi_polygons`.
 - [ ] The new shared-corner test passes, and `uv run pytest` passes.
 - [ ] Windsor and Maidenhead `cluster.py` runs to the end with `PYTHONHASHSEED=0` and `=1` (no `--save`).
-- [ ] `compare_versions --stage cluster --trigger methodology_change` on the sample LAs shows the change, and the team
-      accepts it.
+- [ ] Aidan: `compare_versions --stage cluster --trigger methodology_change` on the 6 sample LAs (outputs saved under
+      a new release date) shows the change, and the team accepts it.
