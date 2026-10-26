@@ -16,6 +16,7 @@ def load_list_la_names(nation: str = None) -> List[str]:
     Returns:
         List[str]: local authority names.
     """
+    assert nation in [None, "E", "N", "S", "W", "GB"], "`nation` value invalid"
     la_df = gpd.read_file(config["data"]["geodata"]["boundaries"]["UK_ons_lad_bounds"])
     la_df["nation"] = la_df["LAD23CD"].str[:1]
 
