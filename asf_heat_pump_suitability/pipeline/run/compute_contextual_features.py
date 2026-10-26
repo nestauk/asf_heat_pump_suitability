@@ -618,7 +618,7 @@ if __name__ == "__main__":
         clusters_with_contextual_features_gdf.to_crs(epsg=4326)
     )
 
-    # retract tenure for clusters with no 1 UPRN only (i.e. make "tenure_" columns "Retracted" for clusters with 1 UPRN only)
+    # Hide tenure for clusters with 1 UPRN only (i.e. make "tenure_" columns "Hidden" for clusters with 1 UPRN only)
     clusters_with_contextual_features_gdf.loc[
         clusters_with_contextual_features_gdf["n_UPRNs"] == 1,
         [
@@ -626,7 +626,7 @@ if __name__ == "__main__":
             for col in clusters_with_contextual_features_gdf.columns
             if col.startswith("tenure_")
         ],
-    ] = "Retracted"
+    ] = "Hidden"
 
     print("Creating layer with district HN potential and converting to EPSG:4326...")
     if (len(spatial_signatures_gdf) > 0) and (len(hn_zones_gdf) > 0):
