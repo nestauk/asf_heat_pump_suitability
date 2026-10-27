@@ -22,6 +22,7 @@ should pass the same --release_date to every stage.
 """
 
 import argparse
+import copy
 import polars as pl
 import geopandas as gpd
 import numpy as np
@@ -341,17 +342,17 @@ def extend_gdf_logic_trace(
         # 6) Networked heat pump
         (
             is_networked,
-            "This cluster is assigned 'networked heat pump' because multiple properties within these buildings have no or little outdoor space (up to 30m2)",
+            "This cluster is assigned 'networked heat pump' because at least one property within each building has little or no outdoor space (up to 30m2)",
         ),
         # 7) Individual solution or networked HP (lack of outdoor space info) + DHN potential
         (
             is_ind_or_net & dhn_potential,
-            "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space:\n -This cluster is in an area of 'district heat network' potential and if homes have no or little outdoor space (up to 30m2), then homes would be most suitable for a district heat network connection when/if a 'district heat network' is constructed.\n A 'networked heat pump' could also be considered as an alternative solution, because multiple properties within these buildings have no or little outdoor space (up to 30m2).\n\nIf there is sufficient outdoor space for each property (above 30m2):\n - 'Individual solutions' will be the most suitable option for properties in this cluster because outdoor space is above 30m2 for all properties.\n - The cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
+            "Outdoor space is unknown for all properties in buildings within this cluster, so the model is unable to assign a technology group.\n If, in reality, there is little (up to 30m2) contiguous outdoor space:\n -This cluster is in an area of 'district heat network' potential and if homes have no or little outdoor space (up to 30m2), then homes would be most suitable for a district heat network connection when/if a 'district heat network' is constructed.\n A 'networked heat pump' could also be considered as an alternative solution, because at least one property within each building has little or no outdoor space (up to 30m2).\n\nIf there is sufficient outdoor space for each property (above 30m2):\n - 'Individual solutions' will be the most suitable option for properties in this cluster because outdoor space is above 30m2 for all properties.\n - The cluster is also in an area of 'district heat network' potential. If a district heat network is built, connection to the network could be offered.",
         ),
         # 8) Individual solution or networked HP (lack of outdoor space info)
         (
             is_ind_or_net,
-            "Outdoor space is unknown for multiple properties in buildings within this cluster, so the model is unable to assign a technology group.\n If there is little (up to 30m2) contiguous outdoor space, a 'networked heat pump' solution is most suitable. If there is sufficient outdoor space for each property (above 30m2) an 'individual solution' will be most suitable.",
+            "Outdoor space is unknown for all properties in buildings within this cluster, so the model is unable to assign a technology group.\n If, in reality, there is little (up to 30m2) contiguous outdoor space, a 'networked heat pump' solution is most suitable. If there is sufficient outdoor space for each property (above 30m2) an 'individual solution' will be most suitable.",
         ),
         # 9) Individual solution + DHN potential
         (
@@ -454,7 +455,7 @@ def create_json_contextual_features_metadata(
         optional_data_layers (dict): dictionary of optional data layers with layer name as key and geodataframe as value
 
     Returns:
-       json: geojson file with metadata in the `metadata` key and cluster level data in geojson format in the `features` key
+       json: geojson file with metadata in the `metadata` key (variable descriptions grouped by layer) and cluster level data in geojson format in the `features` key
 
     """
     target_crs = "EPSG:4326"
@@ -495,20 +496,22 @@ def create_json_contextual_features_metadata(
     }
 
     # append metadata from config base.yaml
-    metadata.update(config["metadata"])
-    metadata["Variable names and descriptions"][
-        f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"
-    ] = (
-        metadata["Variable names and descriptions"]
+    # Copy it first: the .pop() calls below would otherwise also remove keys from the config
+    metadata.update(copy.deepcopy(config["metadata"]))
+    # Fill in the distance thresholds in two cluster variable names
+    # (only the cluster layer has variable names with a threshold)
+    cluster_descriptions = metadata["Variable names and descriptions"][
+        "clusters_with_contextual_features"
+    ]
+    cluster_descriptions[f"within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline"] = (
+        cluster_descriptions
         # Pop deletes the original key and returns the value
         .pop("within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline").format(
             COASTLINE_DISTANCE_THRESHOLD_M=COASTLINE_DISTANCE_THRESHOLD_M
         )
     )
-    metadata["Variable names and descriptions"][
-        f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"
-    ] = (
-        metadata["Variable names and descriptions"]
+    cluster_descriptions[f"within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load"] = (
+        cluster_descriptions
         # Pop deletes the original key and returns the value
         .pop("within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load").format(
             ANCHOR_LOAD_RADIUS=ANCHOR_LOAD_RADIUS

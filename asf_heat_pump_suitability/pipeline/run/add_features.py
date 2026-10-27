@@ -6,7 +6,10 @@ Script to add features to UPRNs:
 - EPC-derived features of tenure; attachment type of property; and current energy rating, solar PV info, estimated current energy consumption.
 
 Run:
-python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES
+python asf_heat_pump_suitability/pipeline/run/add_features.py --local_authorities LOCAL_AUTHORITIES --model_release YYYYMMDD
+
+Set --model_release to the YYYYMMDD date of the block of flats model training run. This is used to load the trained
+block of flats classifier and the manually labelled data it was trained on from the corresponding dated directory.
 
 To save outputs to S3, add --save flag.
 
@@ -38,7 +41,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--model_release",
         help="Date of model training in YYYYMMDD format.",
-        type=int,
+        type=str,
         required=True,
     )
 
@@ -78,6 +81,7 @@ if __name__ == "__main__":
         train_model,
     )
     from asf_heat_pump_suitability.pipeline.transform import (
+        barriers,
         uprns,
         outdoor_space,
         epc,
@@ -233,6 +237,16 @@ if __name__ == "__main__":
     intersection_gdf = outdoor_space.generate_gdf_building_intersections(
         land_parcels_gdf=land_parcels_gdf,
         buildings_gdf=buildings_gdf,
+    )
+
+    # Clip land parcels to barriers
+    clipping_gdf = barriers.load_transform_gdf_polygon_barriers(
+        grid_squares=local_authority_dict["grid_squares"]
+    )
+    land_parcels_gdf = outdoor_space.clip_gdf_land_parcels_to_barriers(
+        land_parcels_gdf=land_parcels_gdf,
+        intersection_gdf=intersection_gdf,
+        barriers_gdf=clipping_gdf,
     )
 
     # Get outdoor space
