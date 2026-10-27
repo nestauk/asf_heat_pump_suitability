@@ -116,5 +116,11 @@ Owner: Aidan builds it; Roisin reviews.
 - [x] The new shared-corner test passes, and `uv run pytest` passes (217 tests).
 - [x] Windsor and Maidenhead `cluster.py` runs to the end with `PYTHONHASHSEED=0` and `=1` (no `--save`): both exit
       0 with 2,361,816 seeds. Before the fix, `PYTHONHASHSEED=0` failed with the GEOS error.
-- [ ] Aidan: `compare_versions --stage cluster --trigger methodology_change` on Woking and Thurrock (the fix saved under
-      a release date after the GB run, compared with `20261026`) shows the change, and the team accepts it.
+- [x] Aidan: `compare_versions --stage cluster --trigger methodology_change` on Woking and Thurrock (the fix saved under
+      `20261027`, compared with the GB run in `20261026`) shows the change. Evidence (2026-10-27): Woking 1,216 → 1,203
+      clusters, total area +4,504 m² (+0.03%), smallest cluster 0.0 → 25.3 m²; Thurrock 1,822 → 1,820 clusters, total
+      area +6,883 m² (+0.03%); no schema or input changes.
+- [x] Windsor and Maidenhead runs the full pipeline on Orbit with `PYTHONHASHSEED=0` (the load order that failed in the
+      GB run of 2026-10-26 at 492949, 166056). Evidence (2026-10-27): all stage outputs in `20261027`, including the
+      clusters and the contextual geojson, and no failure log for `20261027`.
+- [ ] The reviewer accepts the size of the cluster changes.
