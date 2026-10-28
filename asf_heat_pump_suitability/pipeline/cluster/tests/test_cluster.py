@@ -809,9 +809,6 @@ class TestJitterArrDuplicateCoords:
         np.testing.assert_allclose(
             jittered_coords[:, 0] - coords[:, 0],
             expected_x_shift,
-            # The x values are about 400,000 m, and a float that large is only exact to about 1e-10 m, so the
-            # shift read back from the result can be off by about 3e-11 m. Allow 1e-9 m in absolute terms. A
-            # relative tolerance does not help, because some expected shifts are 0.
             rtol=0,
             atol=1e-9,
             err_msg="copies must be numbered inside each group of identical points, not across all points",
