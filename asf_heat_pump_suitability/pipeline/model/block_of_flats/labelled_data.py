@@ -202,7 +202,7 @@ def transform_df_labelled_data(
     """
     Prepare labelled data for training model: assign train / test label; remove buildings where labellers disagree on
     binary class; set confidence to 1 where labellers agree on binary class; remove buildings with labels intended for
-    exclusion.
+    exclusion and remove buildings where label confidence is 0.
 
     Args:
         labelled_df (pl.DataFrame): dataframe containing all labelled samples from all labellers
@@ -255,8 +255,8 @@ def transform_df_labelled_data(
             # Remove buildings which are excluded from training data
             ~pl.col("label").is_in(EXCLUDED_ARCHETYPES),
             pl.col("confidence") == 1,
-            # Add train / test split label
         )
+        # Add train / test split label
         .join(unlabelled_df.select([id_str, "split"]), how="left", on=id_str)
     )
 

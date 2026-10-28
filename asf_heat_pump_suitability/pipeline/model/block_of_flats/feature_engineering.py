@@ -98,6 +98,23 @@ def _generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.Dat
 def generate_df_nearest_neighbour_features(
     gdf: gpd.GeoDataFrame, id_col: str
 ) -> pl.DataFrame:
+    """
+    Generate features describing the nearest neighbouring building of each building in `gdf`:
+    - n_flats_nearest (the number of flats in the nearest building)
+    - nn_distance_m (the distance in metres to the nearest building)
+
+    Only buildings within `gdf` are considered as neighbours, so the features describe proximity to other buildings in
+    this set (e.g. other buildings containing flats if `gdf` is filtered to these), not to all buildings. Neighbours are
+    searched for within 30m. Buildings with no neighbour within 30m have both features set to -100. If multiple
+    neighbours are equidistant, the one with the most flats is kept so there is one row per building.
+
+    Args:
+        gdf (gpd.GeoDataFrame): building footprints with an `n_flats` column and `geometry`
+        id_col (str): name of building ID column
+
+    Returns:
+        pl.DataFrame: select features per building footprint (per id_col)
+    """
     nearest_cols = [id_col, "n_flats", "geometry"]
     nearest_neighbours = (
         gdf[nearest_cols]
@@ -118,6 +135,8 @@ def generate_df_nearest_neighbour_features(
         pl.from_pandas(nearest_neighbours)
         .rename({f"{id_col}_left": id_col})
         .select([id_col, "n_flats_nearest", "nn_distance_m"])
+        .sort("n_flats_nearest", descending=True)
+        .unique(subset=id_col, keep="first", maintain_order=True)
     )
 
 

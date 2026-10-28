@@ -33,7 +33,7 @@ import argparse
 # Set random state int and RandomState instance
 # See more on controlling randomness in sklearn docs: https://scikit-learn.org/stable/common_pitfalls.html#controlling-randomness
 RANDOM_STATE = (
-    3  # used in cross-validation for consistency of repeated calls to split dataset
+    8  # used in cross-validation for consistency of repeated calls to split dataset
 )
 RNG = np.random.RandomState(
     RANDOM_STATE
@@ -178,7 +178,7 @@ def train_eval_rfc_block_of_flats_classifier(
     final_model = search.best_estimator_
 
     importances = pl.DataFrame(
-        {"feature": FEATURES, "importance": final_model.feature_importances_}
+        {"feature": features, "importance": final_model.feature_importances_}
     ).sort("importance", descending=True)
     print("Feature importance:")
     print(importances)
@@ -218,6 +218,9 @@ def predict_class_block_of_flats(
         - flats_per_hull_area_m2
         - avg_n_stacked_uprns
         - std_n_stacked_uprns
+        - max_n_stacked_uprns
+        - n_flats_nearest
+        - nn_distance_m
 
     Args:
         model (RandomForestClassifier): trained model for binary classification of buildings into blocks of flats or not
@@ -377,7 +380,7 @@ if __name__ == "__main__":
             "sample_for_block_of_flats_model"
         ].format(
             release_date=model_release,
-            local_authorities=local_authorities,
+            local_authorities=local_authority_dict["url_slug"],
             l=3005,
             seed=7,
         )
@@ -486,11 +489,12 @@ if __name__ == "__main__":
         ].format(release_date=model_release)
         save_utils.save_to_s3(labelled_df, path=save_as)
 
-        model_df.write_parquet(
-            config["output"]["model"]["training_data"]["model_data"].format(
+        save_utils.save_to_s3(
+            df=model_df,
+            path=config["output"]["model"]["training_data"]["model_data"].format(
                 release_date=model_release,
                 local_authorities=local_authority_dict["url_slug"],
-            )
+            ),
         )
 
         save_as = config["output"]["model"]["block_of_flats_model"].format(
