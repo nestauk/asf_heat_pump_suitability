@@ -103,10 +103,9 @@ def generate_df_nearest_neighbour_features(
     - n_flats_nearest (the number of flats in the nearest building)
     - nn_distance_m (the distance in metres to the nearest building)
 
-    Only buildings within `gdf` are considered as neighbours, so the features describe proximity to other buildings in
-    this set (e.g. other buildings containing flats if `gdf` is filtered to these), not to all buildings. Neighbours are
-    searched for within 30m. Buildings with no neighbour within 30m have both features set to -100. If multiple
-    neighbours are equidistant, the one with the most flats is kept so there is one row per building.
+    Only buildings within `gdf` are considered as neighbours. Neighbours are searched for within 30m. Buildings with no
+    neighbour within 30m have both features set to -100. If multiple neighbours are equidistant, the one with the most
+    flats is kept so there is one row per building.
 
     Args:
         gdf (gpd.GeoDataFrame): building footprints with an `n_flats` column and `geometry`
