@@ -811,7 +811,6 @@ class TestJitterArrDuplicateCoords:
             expected_x_shift,
             # Floats near 400,000 m are only exact to about 6e-11 m, so new_x - old_x is not exactly the shift.
             # 1 nm (atol) allows for that rounding but still catches a wrong step.
-            # rtol=0, because some expected shifts are 0.
             rtol=0,
             atol=1e-9,
             err_msg="copies must be numbered inside each group of identical points, not across all points",
