@@ -45,16 +45,18 @@ All changes are in `extend_edges_gdf`.
 1. **Line 327 adds the corners with `exterior.coords[1:-1]`.** Rationale: line 325 always adds the first corner as
    `interpolate(0)`, so the corner list does not need it. This removes 37,329 of the 37,357 duplicates. It is the
    smallest change at the cause (Roisin's proposal).
-2. **Number the copies of each point separately.** The first copy stays where it is, the second copy moves 0.05 mm
-   east, and the third copy moves 0.10 mm east. Today the numbers run across the whole LA (1 to 37,357), so the last
+2. **Number the copies of each point separately.** The first copy stays where it is, the second copy moves 0.1 mm
+   east, and the third copy moves 0.2 mm east. Today the numbers run across the whole LA (1 to 37,357), so the last
    copies move metres. The copies are numbered with pandas `groupby(...).cumcount()`, which numbers each group's
    rows 0, 1, 2, ... in their original order, so the copy that comes first in the seed list always stays. (The first
    version used a stable `np.argsort`; review replaced it with `cumcount`, which gives the same numbers on 2.4 M
    seeds and is about 19 times faster.) Rationale: the largest shift then depends only on how many buildings
    share one corner (usually 2 or 3), not on the number of buildings in the LA.
-3. **The jitter step is 0.05 mm (`5e-5` m), as a named module-level constant.** Rationale: Aidan's choice, between a
-   smaller step (Roisin) and the risk that points very close together make the GEOS input more nearly degenerate
-   (the #556 type of failure). Not tested before this spec, so the acceptance runs cover it.
+3. **The jitter step is 0.1 mm (`1e-4` m), the original step, as a named module-level constant
+   `DUPLICATE_SEED_JITTER_M`.** Rationale: with decision 2, the step no longer grows with the LA, so the original
+   0.1 mm is small enough, and it keeps the copies further apart than a smaller step, which is safer for GEOS (the
+   #556 type of failure). The first version of this branch used 0.05 mm (Aidan's choice at kickoff); Roisin asked in
+   review to restore 0.1 mm, and Aidan agreed (2026-10-28).
 4. **A check before `voronoi_polygons` raises a `ValueError` if any duplicate seeds remain after the jitter.**
    Rationale: a future regression gives an error that names the cause, not only a GEOS coordinate. About a few
    seconds for 2.4 M seeds.
@@ -84,10 +86,11 @@ Owner: Aidan builds it; Roisin reviews.
 
 - **De-duplicate per building** (for example a dict keyed by coordinate in the densify loop). It also removes the 16
   whole-metre corners and repeated vertices. Rejected: a larger change for the same practical result, because those
-  few remaining duplicates only move 0.05 mm after decision 2.
+  few remaining duplicates only move 0.1 mm after decision 2.
 - **Start the 1 m points at `i = 1`.** It has the same effect as decision 1. Rejected: decision 1 keeps the even
   spacing from the first corner and changes only the corner list.
-- **Keep the 0.1 mm step, or use a smaller step (for example 0.01 mm).** Rejected in favour of 0.05 mm (decision 3).
+- **A smaller step (0.05 mm, or 0.01 mm).** Rejected: after decision 2 the 0.1 mm step is already small enough, and
+  points very close together are harder for GEOS (decision 3). The branch used 0.05 mm until review.
 - **No duplicate check.** Rejected: the check is cheap and makes a regression clear.
 - **Sort the grid squares (`sorted()`) in this fix.** Rejected: after the fix the result does not depend on the load
   order, and the change touches `local_authority.py`, which every stage uses.
@@ -100,7 +103,6 @@ Owner: Aidan builds it; Roisin reviews.
 
 ## Open questions
 
-- Does 0.05 mm pass for every sample LA and for Windsor and Maidenhead in both orders? The acceptance runs answer it.
 - Does the fix reduce the number of buildings with no cluster (#519, #524)? A moved seed inside a building with a
   different technology could push that building partly outside its cluster. Compare the missing-cluster count before
   and after in the `compare_versions` output.
@@ -109,8 +111,10 @@ Owner: Aidan builds it; Roisin reviews.
 
 - [x] `extend_edges_gdf` adds the first corner of each building one time only. Evidence: duplicate seeds in Windsor
       and Maidenhead fell from 37,357 to 28 (16 whole-metre corners and 12 shared corners).
-- [x] The n-th copy of a duplicated coordinate moves east by n × 0.05 mm; the first copy does not move. Evidence:
-      `test_copies_of_each_point_are_numbered_separately`; the largest shift in Windsor and Maidenhead is 0.05 mm.
+- [x] The second copy of a duplicated coordinate moves east by one jitter step (0.1 mm), the third by two, and so on;
+      the first copy does not move. Evidence: `test_copies_of_each_point_are_numbered_separately`. In Windsor and
+      Maidenhead the most copies of one point is 2, so the largest shift is one step (0.1 mm). The acceptance runs
+      below used the 0.05 mm step, before review restored 0.1 mm.
 - [x] A remaining duplicate seed raises a `ValueError` with a clear message before `voronoi_polygons`. Evidence:
       `test_raises_when_jitter_leaves_duplicates`.
 - [x] The new shared-corner test passes, and `uv run pytest` passes (217 tests).
