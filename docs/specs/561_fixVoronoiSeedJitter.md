@@ -114,7 +114,8 @@ Owner: Aidan builds it; Roisin reviews.
 - [x] The second copy of a duplicated coordinate moves east by one jitter step (0.1 mm), the third by two, and so on;
       the first copy does not move. Evidence: `test_copies_of_each_point_are_numbered_separately`. In Windsor and
       Maidenhead the most copies of one point is 2, so the largest shift is one step (0.1 mm). The acceptance runs
-      below used the 0.05 mm step, before review restored 0.1 mm.
+      below used the 0.05 mm step, before review restored 0.1 mm. With 0.1 mm, Windsor and Maidenhead `cluster.py`
+      again runs to the end with `PYTHONHASHSEED=0` and `=1` (both exit 0, 2,361,816 seeds, 2026-10-28).
 - [x] A remaining duplicate seed raises a `ValueError` with a clear message before `voronoi_polygons`. Evidence:
       `test_raises_when_jitter_leaves_duplicates`.
 - [x] The new shared-corner test passes, and `uv run pytest` passes (217 tests).
