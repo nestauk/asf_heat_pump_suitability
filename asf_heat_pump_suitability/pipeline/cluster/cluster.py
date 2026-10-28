@@ -71,8 +71,8 @@ ANCHOR_REASSIGNMENT_MAPPING = {NETWORKED: COMMUNAL}
 
 ROAD_TYPES = ["A Road", "B Road", "Motorway", "Minor Road"]
 
-# Jitter: the distance in metres (0.05 mm) that each extra copy of a Voronoi seed moves east. It makes all seeds unique.
-DUPLICATE_SEED_JITTER_M = 5e-5
+# Jitter: the distance in metres (0.1 mm) that each extra copy of a Voronoi seed moves east. It makes all seeds unique.
+DUPLICATE_SEED_JITTER_M = 1e-4
 
 
 def generate_gdf_clusters(
