@@ -336,8 +336,7 @@ def extend_edges_gdf(
     # Extract a flat (N, 2) float64 array of all point coordinates
     coords_arr = shapely.get_coordinates(np.array(all_points))
     # ordered=True (below) requires every input coordinate to be unique — GEOS raises GEOSException otherwise.
-    # Some seeds are still duplicates. This happens where two buildings share a corner, or where a 1 m point is
-    # exactly on a corner.
+    # Buildings can (rarely) share coordinates (e.g. shared walls), so duplicate seeds can exist.
     coords_arr = _jitter_arr_duplicate_coords(coords_arr)
 
     # Convert to a Multipoint collection for Voronoi
