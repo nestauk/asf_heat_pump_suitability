@@ -375,7 +375,12 @@ if __name__ == "__main__":
     unlabelled_df = pl.read_parquet(
         config["output"]["model"]["training_data"][
             "sample_for_block_of_flats_model"
-        ].format(release_date=model_release, l=3005, seed=7)
+        ].format(
+            release_date=model_release,
+            local_authorities=local_authorities,
+            l=3005,
+            seed=7,
+        )
     )
     labelled_gdf = labelled_data.load_gdf_unprocessed_labelled_data()
     labelled_df = labelled_data.extract_df_labelled_data(labelled_gdf)
@@ -467,12 +472,6 @@ if __name__ == "__main__":
         building_features_df, how="left", left_on="building_id", right_on="ID"
     ).rename({"building_id": "ID"})
 
-    # TODO remove before merge
-    from asf_heat_pump_suitability import PROJECT_DIR
-    import os
-
-    model_df.write_csv(os.path.join(PROJECT_DIR, "outputs/data/model_data.csv"))
-
     model = train_eval_rfc_block_of_flats_classifier(
         df=model_df,
         id_col="ID",
@@ -486,6 +485,13 @@ if __name__ == "__main__":
             "manually_labelled_block_of_flats"
         ].format(release_date=model_release)
         save_utils.save_to_s3(labelled_df, path=save_as)
+
+        model_df.write_parquet(
+            config["output"]["model"]["training_data"]["model_data"].format(
+                release_date=model_release,
+                local_authorities=local_authority_dict["url_slug"],
+            )
+        )
 
         save_as = config["output"]["model"]["block_of_flats_model"].format(
             release_date=model_release
