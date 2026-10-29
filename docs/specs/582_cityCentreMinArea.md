@@ -1,8 +1,8 @@
 ---
 title: Remove city centre areas smaller than 0.72 ha
-status: draft
+status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/582
-pr:
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/583
 asana: https://app.asana.com/1/5571817120120/project/1214222223606748/task/1219988772795465
 created: 2026-10-29
 ---
