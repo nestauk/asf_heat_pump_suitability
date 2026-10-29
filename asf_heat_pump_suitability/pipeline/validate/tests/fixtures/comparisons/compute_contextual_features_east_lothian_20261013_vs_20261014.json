@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "stage": "compute_contextual_features",
+  "local_authority": "east_lothian",
+  "release_date_old": "20261013",
+  "release_date_new": "20261014",
+  "trigger": null,
+  "counts": {
+    "rows_old": 5668,
+    "rows_new": 5668,
+    "rows_delta": 0,
+    "uprns_old": null,
+    "uprns_new": null,
+    "uprns_delta": null
+  },
+  "cluster_counts": {
+    "clusters_old": 5346,
+    "clusters_new": 5346,
+    "clusters_delta": 0
+  },
+  "total_area": {
+    "area_m2_old": 26057961.146400124,
+    "area_m2_new": 26055575.377871186,
+    "area_m2_delta": -2385.7685289382935
+  },
+  "uprns_missing_clusters": {
+    "old": {
+      "uprns_in": 58674,
+      "uprns_in_clusters": 58382,
+      "uprns_missing": 292,
+      "missing_share": 0.004976650645941985
+    },
+    "new": {
+      "uprns_in": 58674,
+      "uprns_in_clusters": 58382,
+      "uprns_missing": 292,
+      "missing_share": 0.004976650645941985
+    }
+  },
+  "tolerance_warnings": []
+}

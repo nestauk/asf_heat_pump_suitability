@@ -1,0 +1,26 @@
+{
+  "schema_version": 2,
+  "stage": "uprns",
+  "local_authority": "east_lothian",
+  "release_date_old": "20261013",
+  "release_date_new": "20261014",
+  "trigger": null,
+  "counts": {
+    "rows_old": 58674,
+    "rows_new": 58674,
+    "rows_delta": 0,
+    "uprns_old": 58674,
+    "uprns_new": 58674,
+    "uprns_delta": 0
+  },
+  "uprn_churn": {
+    "n_added": 0,
+    "n_removed": 0,
+    "n_retained": 58674,
+    "removed_share": 0.0,
+    "added_share": 0.0,
+    "n_null_old": 0,
+    "n_null_new": 0
+  },
+  "tolerance_warnings": []
+}
