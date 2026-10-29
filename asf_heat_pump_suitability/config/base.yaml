@@ -346,7 +346,7 @@ run_manifest:
     uprns:
       - "geodata.uk_osopen_uprn_partitioned"
       - "geodata.boundaries.UK_ons_lad_bounds"
-      - "geodata.UK_poi_locations"
+      - "geodata.UK_poi_locations_partitioned"
       - "geodata.grid_square_os_openmap_local"
       - "processed.non_domestic_poi_categories"
       - "epc.domestic"
