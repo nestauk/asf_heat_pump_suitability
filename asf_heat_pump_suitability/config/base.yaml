@@ -101,13 +101,8 @@ constant:
     opgrsp_essh_gb: ["HW", "HX", "NQ", "NV", "OV", "SA", "SB"]
     oproad_essh_gb: ["HW", "HX", "NQ", "NV", "OV", "SA", "SB"]
   sampling_areas:
-    la_names:
-      - "Bath and North East Somerset"
-      - "Bradford"
-      - "Glasgow City"
-      - "Manchester"
-      - "Nottingham"
-      - "Plymouth"
+    # Cover the 6 sampling LAs: Bath and North East Somerset, Bradford,
+    # Glasgow City, Manchester, Nottingham and Plymouth
     grid_squares:
       - "NS"
       - "SD"
