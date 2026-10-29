@@ -146,6 +146,7 @@ def _generate_df_stacked_uprn_features(
     Generate select features from UPRNs with building footprints joined to them:
     - avg_n_stacked_uprns (the average number of UPRNs sharing the same coordinates per building)
     - std_n_stacked_uprns (the standard deviation of the number of UPRNs sharing the same coordinates per building)
+    - max_n_stacked_uprns (the maximum number of UPRNs sharing the same coordinates per building)
 
     Args:
         gdf (gpd.GeoDataFrame): UPRNs and geometries with building footprints joined to them

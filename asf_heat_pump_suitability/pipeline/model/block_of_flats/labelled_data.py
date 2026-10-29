@@ -202,7 +202,7 @@ def transform_df_labelled_data(
     """
     Prepare labelled data for training model: assign train / test label; remove buildings where labellers disagree on
     binary class; set confidence to 1 where labellers agree on binary class; remove buildings with labels intended for
-    exclusion and remove buildings where label confidence is 0.
+    exclusion and retain only buildings where label confidence is 1.
 
     Args:
         labelled_df (pl.DataFrame): dataframe containing all labelled samples from all labellers
