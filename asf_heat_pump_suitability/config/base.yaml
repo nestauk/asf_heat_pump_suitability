@@ -355,8 +355,11 @@ run_manifest:
       - "EW_household_census_data"
       - "S_household_census_data"
     add_features:
+      - "geodata.uk_osopen_uprn_partitioned"
       - "geodata.boundaries.UK_ons_lad_bounds"
       - "geodata.grid_square_os_openmap_local"
+      - "geodata.grid_square_os_openmap_greenspace"
+      - "geodata.grid_square_os_openroad"
       - "processed.manually_labelled_block_of_flats"
       - "processed.inspire_file_names"
       - "epc.domestic"
