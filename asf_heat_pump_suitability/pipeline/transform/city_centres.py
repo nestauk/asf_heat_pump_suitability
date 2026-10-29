@@ -1,11 +1,12 @@
 """
-Functions to label UPRNs within city centre areas.
+Functions to label UPRNs within city centre areas and to filter city centre areas by size.
 """
 
 import geopandas as gpd
 import polars as pl
 
 from asf_heat_pump_suitability import config
+from asf_heat_pump_suitability.utils import geo_utils
 
 CITY_CENTRE_TYPES = [  # TODO: confirm types with scaling
     "Hyper concentrated urbanity",
@@ -15,6 +16,31 @@ CITY_CENTRE_TYPES = [  # TODO: confirm types with scaling
     "Local urbanity",
     "Dense urban neighbourhoods",
 ]
+
+
+def filter_gdf_city_centre_min_area(
+    city_centres_gdf: gpd.GeoDataFrame, min_area_m2: float
+) -> gpd.GeoDataFrame:
+    """
+    Merge touching city centre areas and remove each merged part smaller than the minimum area.
+
+    Args:
+        city_centres_gdf (gpd.GeoDataFrame): city centre polygons with `source_annotation` and `geometry`
+        min_area_m2 (float): minimum area of a merged part to keep, in m²
+
+    Returns:
+        gpd.GeoDataFrame: one row per kept part with `source_annotation` and `geometry` (EPSG:27700).
+            Empty, with the same columns, if no part is kept.
+    """
+    city_centres_gdf = geo_utils.verify_gdf_crs(city_centres_gdf)
+    # Merge before the size test, so small polygons that are part of a large centre are kept
+    parts_gdf = (
+        city_centres_gdf[["source_annotation", "geometry"]]
+        .dissolve(by="source_annotation", as_index=False)
+        .explode(ignore_index=True)
+    )
+
+    return parts_gdf[parts_gdf.area >= min_area_m2].reset_index(drop=True)
 
 
 def extend_df_city_centre_labels(
