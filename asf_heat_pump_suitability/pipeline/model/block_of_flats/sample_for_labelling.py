@@ -1035,6 +1035,7 @@ if __name__ == "__main__":
             path = config["output"]["model"]["training_data"][
                 "per_labeller_sample_for_block_of_flats_model"
             ].format(
+                local_authorities=slug,
                 labeller=labeller,
                 release_date=release_date,
                 l=len(sample_df),
