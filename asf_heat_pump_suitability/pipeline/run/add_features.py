@@ -174,7 +174,7 @@ if __name__ == "__main__":
     # Nearest neighbour features, using buildings containing flats as neighbours (as in model training)
     flats_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
         building_features_df.filter(
-            pl.col("n_flats") > 1, pl.col("n_domestic_uprns") > 0
+            pl.col("n_flats") > 0, pl.col("n_domestic_uprns") > 0
         )
         .select(["ID", "n_flats"])
         .to_pandas(),
