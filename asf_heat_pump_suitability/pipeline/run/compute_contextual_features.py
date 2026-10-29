@@ -621,6 +621,28 @@ if __name__ == "__main__":
         clusters_with_contextual_features_gdf.to_crs(epsg=4326)
     )
 
+    # Hide property makeup information for clusters with only one property (n_UPRNs == 1) to avoid disclosing information about individual properties
+    prefixes = ("attachment_", "tenure_", "epc_")
+    cols = [
+        col
+        for col in clusters_with_contextual_features_gdf.columns
+        if col.startswith(prefixes)
+    ]
+    cols.extend(
+        [
+            "n_uprns_solar_pv",
+            "n_uprns_missing_solar_pv_flag",
+            "n_uprns_off_gas",
+            "n_uprns_missing_off_gas_flag",
+            "n_uprns_in_listed_building",
+            "median_estimated_energy_consumption_12_months_kwh_per_m2",
+            "median_outdoor_space_m2",
+        ]
+    )
+    clusters_with_contextual_features_gdf.loc[
+        clusters_with_contextual_features_gdf["n_UPRNs"] == 1, cols
+    ] = None
+
     print("Creating layer with district HN potential and converting to EPSG:4326...")
     if (len(spatial_signatures_gdf) > 0) and (len(hn_zones_gdf) > 0):
         hn_potential = pd.concat(
