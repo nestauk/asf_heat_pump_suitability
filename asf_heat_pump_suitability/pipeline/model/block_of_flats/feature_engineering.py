@@ -95,6 +95,50 @@ def _generate_df_building_features(gdf: gpd.GeoDataFrame, id_col: str) -> pl.Dat
     return agg_building_df
 
 
+def generate_df_nearest_neighbour_features(
+    gdf: gpd.GeoDataFrame, id_col: str
+) -> pl.DataFrame:
+    """
+    Generate features describing the nearest neighbouring building of each building in `gdf`:
+    - n_flats_nearest (the number of flats in the nearest building)
+    - nn_distance_m (the distance in metres to the nearest building)
+
+    Only buildings within `gdf` are considered as neighbours. Neighbours are searched for within 30m. Buildings with no
+    neighbour within 30m have both features set to -100. If multiple neighbours are equidistant, the one with the most
+    flats is kept so there is one row per building.
+
+    Args:
+        gdf (gpd.GeoDataFrame): building footprints with an `n_flats` column and `geometry`
+        id_col (str): name of building ID column
+
+    Returns:
+        pl.DataFrame: select features per building footprint (per id_col)
+    """
+    nearest_cols = [id_col, "n_flats", "geometry"]
+    nearest_neighbours = (
+        gdf[nearest_cols]
+        .sjoin_nearest(
+            gdf[nearest_cols],
+            how="left",
+            max_distance=30,
+            rsuffix="nearest",
+            distance_col="nn_distance_m",
+            exclusive=True,
+        )
+        .drop(columns="geometry")
+    )
+    fill_na_cols = ["n_flats_nearest", "nn_distance_m"]
+    nearest_neighbours[fill_na_cols] = nearest_neighbours[fill_na_cols].fillna(-100)
+
+    return (
+        pl.from_pandas(nearest_neighbours)
+        .rename({f"{id_col}_left": id_col})
+        .select([id_col, "n_flats_nearest", "nn_distance_m"])
+        .sort("n_flats_nearest", descending=True)
+        .unique(subset=id_col, keep="first", maintain_order=True)
+    )
+
+
 def _generate_df_stacked_uprn_features(
     gdf: gpd.GeoDataFrame, id_col: str
 ) -> pl.DataFrame:
@@ -102,6 +146,7 @@ def _generate_df_stacked_uprn_features(
     Generate select features from UPRNs with building footprints joined to them:
     - avg_n_stacked_uprns (the average number of UPRNs sharing the same coordinates per building)
     - std_n_stacked_uprns (the standard deviation of the number of UPRNs sharing the same coordinates per building)
+    - max_n_stacked_uprns (the maximum number of UPRNs sharing the same coordinates per building)
 
     Args:
         gdf (gpd.GeoDataFrame): UPRNs and geometries with building footprints joined to them
@@ -123,6 +168,7 @@ def _generate_df_stacked_uprn_features(
     df = df.group_by(id_col).agg(
         pl.col("n_stacked_uprns").mean().alias("avg_n_stacked_uprns"),
         pl.col("n_stacked_uprns").std().alias("std_n_stacked_uprns"),
+        pl.col("n_stacked_uprns").max().alias("max_n_stacked_uprns"),
     )
 
     return df
