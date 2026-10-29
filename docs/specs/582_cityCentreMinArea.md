@@ -73,11 +73,11 @@ The cluster effect is about 12 times the direct effect, because a small area tha
 
 ## Verification
 
-- [ ] `constant.threshold.city_centre_min_area_m2` is 7200, with a source comment.
-- [ ] Touching areas are merged before the size test (the new test passes).
-- [ ] The `areas_of_district_heat_network_potential` layer has no city centre part smaller than 7,200 m².
-- [ ] `in_city_centre` uses the same filtered areas as the layer.
-- [ ] HNZ geometries in the layer do not change.
-- [ ] The `in_city_centre` metadata description states the minimum area.
-- [ ] Local run of `compute_contextual_features.py` (no `--save`): Babergh has no city centre areas; Gateshead has three (about 0.77 ha, 3.2 ha and 374 ha).
-- [ ] `uv run pytest` passes.
+- [x] `constant.threshold.city_centre_min_area_m2` is 7200, with a source comment.
+- [x] Touching areas are merged before the size test (the new test passes).
+- [x] The `areas_of_district_heat_network_potential` layer has no city centre part smaller than 7,200 m².
+- [x] `in_city_centre` uses the same filtered areas as the layer.
+- [x] HNZ geometries in the layer do not change.
+- [x] The `in_city_centre` metadata description states the minimum area.
+- [x] Local run of `compute_contextual_features.py` (no `--save`): Babergh has no city centre areas; Gateshead has three (about 0.77 ha, 3.2 ha and 374 ha).
+- [x] `uv run pytest` passes.
