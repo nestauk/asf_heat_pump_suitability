@@ -51,6 +51,13 @@ branch and PR, and updates this spec.
      signature files, because `--detail` selects one of them. Also add
      `geodata.boundaries.UK_ons_ward_boundaries` (found in review: the
      ward boundaries layer from #525 reads it).
+   - `add_features`: add `geodata.uk_osopen_uprn_partitioned`,
+     `geodata.grid_square_os_openmap_greenspace` and
+     `geodata.grid_square_os_openroad` (found in review: `dev` added the
+     block of flats classifier and the barrier clip to this stage).
+   - `uprns`: `geodata.UK_poi_locations` becomes
+     `geodata.UK_poi_locations_partitioned`. The stage reads the POI files
+     for each grid square, not the `.gpkg`.
 3. Keep `data.geodata.gb_code_points`. `clip_inputs.py` reads it (see decision 2).
 4. Fix `pipeline/transform/clip_inputs.py`:
    - `geodata.uk_osopen_uprn` becomes `geodata.uk_osopen_uprn_raw`. The script
