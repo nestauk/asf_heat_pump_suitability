@@ -1,5 +1,5 @@
 """
-Functions to label UPRNs within city centre areas and to filter city centre areas by size.
+Functions to label UPRNs in city centre areas and to remove city centre areas that are too small.
 """
 
 import geopandas as gpd
@@ -22,25 +22,30 @@ def filter_gdf_city_centre_min_area(
     city_centres_gdf: gpd.GeoDataFrame, min_area_m2: float
 ) -> gpd.GeoDataFrame:
     """
-    Merge touching city centre areas and remove each merged part smaller than the minimum area.
+    Remove city centre areas that are smaller than a minimum area.
+
+    The function merges touching polygons first. Each separate area after the merge is one "part".
 
     Args:
         city_centres_gdf (gpd.GeoDataFrame): city centre polygons with `source_annotation` and `geometry`
-        min_area_m2 (float): minimum area of a merged part to keep, in m²
+        min_area_m2 (float): smallest area of a part to keep, in m²
 
     Returns:
-        gpd.GeoDataFrame: one row per kept part with `source_annotation` and `geometry` (EPSG:27700).
-            Empty, with the same columns, if no part is kept.
+        gpd.GeoDataFrame: one row for each part that stays, with `source_annotation` and `geometry`
+            (EPSG:27700). Empty, with the same columns, if no part stays.
     """
     city_centres_gdf = geo_utils.verify_gdf_crs(city_centres_gdf)
-    # Merge before the size test, so small polygons that are part of a large centre are kept
-    parts_gdf = (
+    # Merge touching polygons before the size test.
+    # Then a small polygon that is part of a large city centre stays.
+    city_centre_parts_gdf = (
         city_centres_gdf[["source_annotation", "geometry"]]
         .dissolve(by="source_annotation", as_index=False)
         .explode(ignore_index=True)
     )
 
-    return parts_gdf[parts_gdf.area >= min_area_m2].reset_index(drop=True)
+    is_large_enough = city_centre_parts_gdf.area >= min_area_m2
+
+    return city_centre_parts_gdf[is_large_enough].reset_index(drop=True)
 
 
 def extend_df_city_centre_labels(

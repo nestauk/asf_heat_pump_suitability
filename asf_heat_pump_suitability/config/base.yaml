@@ -96,7 +96,7 @@ constant:
   threshold:
     m2_per_predicted_UPRN: 261.608136 # Identified by analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py
     outdoor_space_threshold_m2: 30
-    city_centre_min_area_m2: 7200 # About 90% of the smallest DESNZ heat network zone (7,966 m², Gateshead, HNZ inputs as of 2026-10). City centre areas smaller than this are removed. See docs/specs/582_cityCentreMinArea.md
+    city_centre_min_area_m2: 7200 # Smallest city centre area to keep, in m². The value is about 90% of the smallest DESNZ heat network zone (7,966 m² in Gateshead, HNZ data from 2026-10). See docs/specs/582_cityCentreMinArea.md
   os_data_absent_grid_squares: # 100km squares specific OS products publish no data for (remote islets and NI-overlap squares on the BNG, the tool is GB-only). Keyed by the product folder name in the S3 path. The input preflight check skips these square/product combinations. Verified 2026-08-18 against the GB wide gpkg copies (opmplc_gb/opgrsp_gb/oproad_gb.gpkg).
     opmplc_essh_gb: ["NQ", "NV", "SA", "SB"]
     opgrsp_essh_gb: ["HW", "HX", "NQ", "NV", "OV", "SA", "SB"]
@@ -280,7 +280,7 @@ metadata:
       "median_estimated_energy_consumption_12_months_kwh_per_m2": "Median estimated energy consumption in 12 months (in kWh/m2) of properties within the cluster"
       "median_outdoor_space_m2": "The median across all UPRNs in the cluster of the maximum contiguous outdoor area in metres squared per property."
       "in_hn_zone": "Whether any properties within the cluster are in DESNZ heat network zones or LHEES heat network zones. You can refer to https://www.gov.uk/government/publications/heat-network-zone-opportunity-reports and to https://www.gov.scot/publications/local-heat-energy-efficiency-strategies-delivery-plans-guidance/"
-      "in_city_centre": "Whether any properties within the cluster are in a location classified into one of the following Spatial Signatures Framework pen portraits/signature types https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/transform/city_centres.py#L10-L17. Only city centre areas of {CITY_CENTRE_MIN_AREA_M2} m² or more are used; touching areas are merged before this size test."
+      "in_city_centre": "Whether any properties within the cluster are in a location classified into one of the following Spatial Signatures Framework pen portraits/signature types https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/transform/city_centres.py#L10-L17. The model uses only city centre areas of {CITY_CENTRE_MIN_AREA_M2} m² or more. It merges touching areas before it checks their size."
       "within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline": "Whether any properties within the cluster are within {COASTLINE_DISTANCE_THRESHOLD_M}m of the coastline"
       "in_protected_area": "Whether any properties within the cluster are in building conservation areas for England and Wales, or Scottish World Heritage sites."
       "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load": "Whether the cluster is within a {ANCHOR_LOAD_RADIUS}m radius of an anchor load (a location with high heat demand, e.g. a school or hospital). See a full list of anchor load types in https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/cluster/cluster.py#L28-L46"

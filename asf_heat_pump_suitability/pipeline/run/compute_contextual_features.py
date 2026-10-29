@@ -597,6 +597,8 @@ if __name__ == "__main__":
         boundary=boundary_gdf,
         signature_types=city_centres.CITY_CENTRE_TYPES,
     )
+    # Remove small city centre areas. After this step, each row is one merged
+    # city centre area, not one Spatial Signatures polygon.
     spatial_signatures_gdf = city_centres.filter_gdf_city_centre_min_area(
         city_centres_gdf=spatial_signatures_gdf, min_area_m2=CITY_CENTRE_MIN_AREA_M2
     )
