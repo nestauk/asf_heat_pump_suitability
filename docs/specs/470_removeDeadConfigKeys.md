@@ -33,6 +33,7 @@ branch and PR, and updates this spec.
      `.gpkg` files in the same folder with `geo_utils.concat_gdfs` (see
      decision 5).
    - the 18 dead `data_source` keys that the issue lists
+   - `constant.sampling_areas.la_names` (see decision 8)
 2. Correct `run_manifest.stage_input_keys` so that each stage lists the inputs
    it reads (see decision 6):
    - `add_features`: remove `geodata.gb_code_points`,
@@ -108,10 +109,12 @@ branch and PR, and updates this spec.
    when the NSUL lookup replaced it for UPRN-to-postcode matching.
    `load_gdf_code_points` in `getters/load_geodata.py` has no caller, but
    it stays with the key.
-8. **Keep `constant.sampling_areas.la_names` for now.** No code reads it.
-   It names the 6 sampling LAs that `sampling_areas.grid_squares` covers,
-   and `grid_squares` is live (`train_model.py`). Ask the reviewers in the
-   Phase 1 PR (see Open questions).
+8. **Remove `constant.sampling_areas.la_names`.** No code reads it. A
+   comment on `sampling_areas.grid_squares` keeps the 6 LA names, and
+   `grid_squares` is live (`train_model.py`). The research script
+   `sample_buildings_for_labelling.py` was its reader, but that script still
+   uses the config shape from before January 2026 (`f60dfd05`), so it is
+   broken. The reviewer chose this option in the Phase 1 PR review.
 
 ## Alternatives considered
 
@@ -138,15 +141,7 @@ branch and PR, and updates this spec.
 - Phases 2 to 4 on this branch
 - The legacy standalone scripts (`grid_capacity.py`, the INSPIRE scripts,
   `ref_calculate_garden_size.py`) and their `data_source` keys
-- Hard-coded S3 paths and magic numbers in pipeline code
-- Research scripts that read keys that do not exist (Phase 3 lists them in a
-  follow-up issue)
-
-## Open questions
-
-- Phase 1 PR, for the reviewers: remove `constant.sampling_areas.la_names`
-  and keep the 6 LA names as a comment on `grid_squares`, or keep the key?
-  No code reads it. The research script `sample_buildings_for_labelling.py`
+- Hard-c script `sample_buildings_for_labelling.py`
   was its reader, but that script still uses the config shape from before
   January 2026 (`f60dfd05`), so it is broken.
 
