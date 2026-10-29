@@ -79,5 +79,5 @@ The cluster effect is about 12 times the direct effect, because a small area tha
 - [ ] `in_city_centre` uses the same filtered areas as the layer.
 - [ ] HNZ geometries in the layer do not change.
 - [ ] The `in_city_centre` metadata description states the minimum area.
-- [ ] Local run of `compute_contextual_features.py` (no `--save`): Babergh has no city centre areas; Gateshead has two (about 3.2 ha and 374 ha).
+- [ ] Local run of `compute_contextual_features.py` (no `--save`): Babergh has no city centre areas; Gateshead has three (about 0.77 ha, 3.2 ha and 374 ha).
 - [ ] `uv run pytest` passes.
