@@ -30,6 +30,7 @@ import warnings
 from asf_heat_pump_suitability import config
 from asf_heat_pump_suitability.utils import manifest_utils, save_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
+from asf_heat_pump_suitability.pipeline.transform import barriers
 
 ANCHOR_RADIUS = config["constant"]["anchor_radius"]
 
@@ -67,6 +68,11 @@ COMMUNAL = TECH_TYPES["communal"]
 COMMUNAL_ORIGIN = config["constant"]["communal_origin"]
 
 ANCHOR_REASSIGNMENT_MAPPING = {NETWORKED: COMMUNAL}
+
+ROAD_TYPES = ["A Road", "B Road", "Motorway", "Minor Road"]
+
+# Jitter: the distance in metres (0.1 mm) that each extra copy of a Voronoi seed moves east. It makes all seeds unique.
+DUPLICATE_SEED_JITTER_M = 1e-4
 
 
 def generate_gdf_clusters(
@@ -320,27 +326,18 @@ def extend_edges_gdf(
             num_pts = int(np.ceil(exterior.length / spacing))
             # Return a list of points at each segment-distance-interval along the exterior edge of the building
             pts = [exterior.interpolate(i * spacing) for i in range(num_pts)]
-            # Add corner vertices of building into list, dropping the last one which is a duplicate of the starting point
-            pts.extend(Point(coord) for coord in exterior.coords[:-1])
+            # Add the corners of the building. Skip the first corner, because interpolate(0) already added it.
+            # Skip the last coordinate too, because it is a copy of the first corner.
+            pts.extend(Point(coord) for coord in exterior.coords[1:-1])
             all_points.extend(pts)
             all_building_ids.extend([building_id] * len(pts))
 
     print(f"Generated {len(all_points)} points.")
     # Extract a flat (N, 2) float64 array of all point coordinates
     coords_arr = shapely.get_coordinates(np.array(all_points))
-
     # ordered=True (below) requires every input coordinate to be unique — GEOS raises GEOSException otherwise.
-    # Buildings can (rarely) share corner coordinates (e.g. shared walls), so duplicates can exist.
-    # To combat this we jitter duplicates by a 0.1mm x-offset so both buildings keep their seed points.
-
-    # Returns the index of the first occurrence of each unique coordinate pair
-    _, first_occ = np.unique(coords_arr, axis=0, return_index=True)
-    # Mark every position that is NOT a first occurrence as a duplicate
-    is_dup = np.ones(len(coords_arr), dtype=bool)
-    is_dup[first_occ] = False
-    # Offset each duplicate's x coordinate by a unique multiple of 0.1mm - this should not affect the overall shape of buildings significantly.
-    # (progressive multiples ensure jittered points don't collide with each other)
-    coords_arr[is_dup, 0] += np.arange(1, is_dup.sum() + 1) * 1e-4
+    # Buildings can (rarely) share coordinates (e.g. shared walls), so duplicate seeds can exist.
+    coords_arr = _jitter_arr_duplicate_coords(coords_arr)
 
     # Convert to a Multipoint collection for Voronoi
     coords = MultiPoint(coords_arr)
@@ -393,6 +390,41 @@ def extend_edges_gdf(
         geometry="geometry",
         crs=gdf.crs,
     )
+
+
+def _jitter_arr_duplicate_coords(coords_arr: np.ndarray) -> np.ndarray:
+    """
+    Move each extra copy of a coordinate east, so that every copy keeps its own Voronoi cell.
+
+    The first copy of a coordinate (in input order) does not move. The second copy moves 1 x DUPLICATE_SEED_JITTER_M
+    metres east, the third copy moves 2 x DUPLICATE_SEED_JITTER_M metres east, and so on. Each copy of one point gets
+    a different distance, so the copies cannot land on each other.
+
+    Args:
+        coords_arr (np.ndarray): (N, 2) array of x, y seed coordinates in metres.
+
+    Returns:
+        np.ndarray: copy of `coords_arr` with the duplicate coordinates moved.
+
+    Raises:
+        ValueError: if duplicate coordinates remain after the move.
+    """
+    # Give each copy of a coordinate its copy number: 0 for the first copy, 1 for the second, and so on.
+    # cumcount numbers the rows of each group (rows with the same x and y) in input order.
+    copy_number = (
+        pd.DataFrame(coords_arr).groupby([0, 1], sort=False).cumcount().to_numpy()
+    )
+
+    jittered_arr = coords_arr.copy()
+    jittered_arr[:, 0] += copy_number * DUPLICATE_SEED_JITTER_M
+
+    n_duplicates = pd.DataFrame(jittered_arr).duplicated().sum()
+    if n_duplicates:
+        raise ValueError(
+            f"{n_duplicates} duplicate Voronoi seed coordinates remain after the jitter. "
+            "voronoi_polygons(ordered=True) needs unique seeds."
+        )
+    return jittered_arr
 
 
 def _clip_gdf_voronoi_cells_polygon_buffer(
@@ -457,10 +489,8 @@ def overlay_gdf_physical_barriers(
     Returns:
         gpd.GeoDataFrame: domestic building cells with overlapping physical barriers removed
     """
-    # # Filter to domestic building Voronois only
     # Add a temporary ID for each Voronoi cell
     cell_id_col = "_internal_cell_fragment_id"
-
     voronoi_gdf = voronoi_gdf.assign(**{cell_id_col: np.arange(len(voronoi_gdf))})
 
     # Get the largest intersecting Voronoi cell for each domestic building.
@@ -618,71 +648,6 @@ def sjoin_gdf_max_intersection(
         .copy()
         .drop(columns=["area", "max_intersection"])
     )
-
-
-def load_transform_gdf_polygon_barriers(
-    grid_squares: Optional[List[str]],
-) -> gpd.GeoDataFrame:
-    """
-    Load physical barriers with (Multi)Polygon geometries for the specified grid squares, these include:
-    - Green space
-    - Water bodies
-    - Tidal boundaries
-    - Woodland
-
-    Additionally, load physical barriers with (Multi)LineString geometries - railways, and roads of the following types:
-    "A Road", "B Road", "Motorway", "Minor Road"- for the specified grid squares. A buffer is added around each
-    geometry to cover the width of the road / railway.
-
-    Args:
-        grid_squares (Optional[List[str]]): names of grid squares in OS mapping for regions of Great Britain to be loaded.
-        Find grid square information at: https://www.ordnancesurvey.co.uk/documents/resources/guide-to-nationalgrid.pdf
-
-    Returns:
-        gpd.GeoDataFrame: physical barriers with (Multi)Polygon geometries
-    """
-    # Polygons
-    forest_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="woodland", grid_squares=grid_squares
-    )
-
-    greenspace_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="greenspace_site", grid_squares=grid_squares
-    )
-
-    surface_water_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="surface_water_area", grid_squares=grid_squares
-    )
-
-    tidal_water_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="tidal_water", grid_squares=grid_squares
-    )
-
-    # Linestrings
-    roads_gdf = load_geodata.load_gdf_os_openroad(grid_squares=grid_squares)
-    barrier_road_types = ["A Road", "B Road", "Motorway", "Minor Road"]
-    barrier_roads_gdf = roads_gdf[roads_gdf["function"].isin(barrier_road_types)]
-
-    railways_gdf = load_geodata.load_gdf_os_openmap_layer(
-        layer="railway_track", grid_squares=grid_squares
-    )
-
-    line_overlays = [barrier_roads_gdf, railways_gdf]
-    line_overlay_gdf = pd.concat([gdf[["geometry"]] for gdf in line_overlays])
-
-    # TODO make more specific for different road types
-    # Add buffer assumed to be width of road / railway (3.5m total - 1.75m either side)
-    line_overlay_gdf["geometry"] = line_overlay_gdf.geometry.buffer(1.75)
-
-    overlays = [
-        forest_gdf,
-        greenspace_gdf,
-        tidal_water_gdf,
-        surface_water_gdf,
-        line_overlay_gdf,
-    ]
-
-    return pd.concat([gdf[["geometry"]] for gdf in overlays])
 
 
 def reassign_gdf_communal_networked(
@@ -1005,8 +970,8 @@ if __name__ == "__main__":
     )
 
     # Load and transform physical barriers for clusters
-    polygon_overlay_gdf = load_transform_gdf_polygon_barriers(
-        local_authority_dict["grid_squares"]
+    polygon_overlay_gdf = barriers.load_transform_gdf_polygon_barriers(
+        local_authority_dict["grid_squares"], road_types=ROAD_TYPES
     )
 
     combined_anchor_gdf = load_transform_anchor_property_gdfs(
