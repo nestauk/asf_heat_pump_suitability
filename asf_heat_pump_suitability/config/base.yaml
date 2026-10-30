@@ -96,6 +96,7 @@ constant:
   threshold:
     m2_per_predicted_UPRN: 261.608136 # Identified by analysis in /research/exploratory/domestic_filtering/domestic_building_identification_threshold_selection.py
     outdoor_space_threshold_m2: 30
+    city_centre_min_area_m2: 8000 # Smallest city centre area to keep, in m². The value is about the same area as the smallest DESNZ heat network zone (7,966 m² in Gateshead, HNZ data from 2026-10). See docs/specs/582_cityCentreMinArea.md
   os_data_absent_grid_squares: # 100km squares specific OS products publish no data for (remote islets and NI-overlap squares on the BNG, the tool is GB-only). Keyed by the product folder name in the S3 path. The input preflight check skips these square/product combinations. Verified 2026-08-18 against the GB wide gpkg copies (opmplc_gb/opgrsp_gb/oproad_gb.gpkg).
     opmplc_essh_gb: ["NQ", "NV", "SA", "SB"]
     opgrsp_essh_gb: ["HW", "HX", "NQ", "NV", "OV", "SA", "SB"]
@@ -219,12 +220,13 @@ output:
     block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/block_of_flats_building_classifier.pkl"
     training_data:
       # Sample for modelling
-      sample_for_block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.parquet"
-      per_labeller_sample_for_block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{labeller}_UNLABELLED_GB_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
+      sample_for_block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/UNLABELLED_{local_authorities}_buildings_containing_flats_sample_n{l}_seed{seed}.parquet"
+      per_labeller_sample_for_block_of_flats_model: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{labeller}_UNLABELLED_{local_authorities}_buildings_containing_flats_sample_n{l}_seed{seed}.kml"
       enriched_buildings: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{local_authorities}_enriched_buildings_with_flats.parquet"
       enriched_buildings_with_geoms: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{local_authorities}_enriched_buildings_with_flats_and_geometries.parquet"
       first_labelling: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/first_round_confident_LABELLED_buildings_containing_flats_sample_n806.parquet"
       labelled_dir: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/labelled_data/"
+      model_data: "s3://asf-local-heat-planning-tool/outputs/models/block_of_flats_classifier/{release_date}/{local_authorities}_model_feature_data.parquet"
   log:
     pipeline_failure: "s3://asf-local-heat-planning-tool/outputs/logs/pipeline_failure/{release_date}/{local_authorities}_pipeline_failures.csv"
   # Where compare_versions.py --save uploads each comparison's report, plots
@@ -234,7 +236,7 @@ output:
 
 # Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of properties and contextual information about properties within the clusters and surrounding neighbourhood
 metadata:
-  "License": "This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0), https://creativecommons.org/licenses/by-nc-sa/4.0/ \n Notwithstanding the foregoing, UK-based low-carbon heating suppliers shall be entitled to use this dataset for internal commercial planning and installations of low-carbon heating technologies. All other terms of the CC BY-NC-SA 4.0 license remain in effect, including (without limitation) requirements in respect of attribution and the requirement to share any adapted versions of this dataset under the same license terms. See 'Data sources and attributions' for attribution requirements."
+  "License": "This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0), https://creativecommons.org/licenses/by-nc-sa/4.0/ \n Notwithstanding the foregoing, UK-based low-carbon heating suppliers shall be entitled to use this dataset for internal commercial planning and installations of low-carbon heating technologies. All other terms of the CC BY-NC-SA 4.0 license remain in effect, including (without limitation) requirements in respect of attribution and the requirement to share any adapted versions of this dataset under the same license terms. Please follow the attribution requirements in this link: https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme"
   "Development stage": "Beta - this dataset is in early stages of development and may change regularly."
   "Data sources and attributions": "Please follow the attribution instructions in this link: https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme"
   "GitHub repository": "https://github.com/nestauk/asf_heat_pump_suitability"
@@ -278,7 +280,7 @@ metadata:
       "median_estimated_energy_consumption_12_months_kwh_per_m2": "Median estimated energy consumption in 12 months (in kWh/m2) of properties within the cluster"
       "median_outdoor_space_m2": "The median across all UPRNs in the cluster of the maximum contiguous outdoor area in metres squared per property."
       "in_hn_zone": "Whether any properties within the cluster are in DESNZ heat network zones or LHEES heat network zones. You can refer to https://www.gov.uk/government/publications/heat-network-zone-opportunity-reports and to https://www.gov.scot/publications/local-heat-energy-efficiency-strategies-delivery-plans-guidance/"
-      "in_city_centre": "Whether any properties within the cluster are in a location classified into one of the following Spatial Signatures Framework pen portraits/signature types https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/transform/city_centres.py#L10-L17"
+      "in_city_centre": "Whether any properties within the cluster are in a location classified into one of the following Spatial Signatures Framework pen portraits/signature types https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/transform/city_centres.py#L10-L17. The model uses only city centre areas of {CITY_CENTRE_MIN_AREA_M2} m² or more. It merges touching areas before it checks their size."
       "within_{COASTLINE_DISTANCE_THRESHOLD_M}m_coastline": "Whether any properties within the cluster are within {COASTLINE_DISTANCE_THRESHOLD_M}m of the coastline"
       "in_protected_area": "Whether any properties within the cluster are in building conservation areas for England and Wales, or Scottish World Heritage sites."
       "within_{ANCHOR_LOAD_RADIUS}m_from_anchor_load": "Whether the cluster is within a {ANCHOR_LOAD_RADIUS}m radius of an anchor load (a location with high heat demand, e.g. a school or hospital). See a full list of anchor load types in https://github.com/nestauk/asf_heat_pump_suitability/blob/f069ae3f6b94db5648da7ccb2c07fbfa3bef4fbc/asf_heat_pump_suitability/pipeline/cluster/cluster.py#L28-L46"

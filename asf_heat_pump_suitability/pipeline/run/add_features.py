@@ -171,6 +171,24 @@ if __name__ == "__main__":
         id_col="ID",
     )
 
+    # Nearest neighbour features, using buildings containing flats as neighbours (as in model training)
+    flats_buildings_gdf = buildings_gdf[["ID", "geometry"]].merge(
+        building_features_df.filter(
+            pl.col("n_flats") > 0, pl.col("n_domestic_uprns") > 0
+        )
+        .select(["ID", "n_flats"])
+        .to_pandas(),
+        how="inner",
+        on="ID",
+    )
+    building_features_df = building_features_df.join(
+        feature_engineering.generate_df_nearest_neighbour_features(
+            gdf=flats_buildings_gdf, id_col="ID"
+        ),
+        how="left",
+        on="ID",
+    ).with_columns(pl.col("n_flats_nearest", "nn_distance_m").fill_null(-100))
+
     # TODO make this robust by automatically loading same labelled data used to train model
     labelled_df = pl.read_parquet(
         config["data"]["processed"]["manually_labelled_block_of_flats"].format(
