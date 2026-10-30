@@ -37,15 +37,15 @@ def filter_gdf_city_centre_min_area(
     city_centres_gdf = geo_utils.verify_gdf_crs(city_centres_gdf)
     # Merge touching polygons before checking the size.
     # Then a small polygon that is part of a large city centre stays.
-    city_centre_parts_gdf = (
+    merged_city_centres_gdf = (
         city_centres_gdf[["source_annotation", "geometry"]]
         .dissolve(by="source_annotation", as_index=False)
         .explode(ignore_index=True)
     )
 
-    is_large_enough = city_centre_parts_gdf.area >= min_area_m2
+    is_large_enough = merged_city_centres_gdf.area >= min_area_m2
 
-    return city_centre_parts_gdf[is_large_enough].reset_index(drop=True)
+    return merged_city_centres_gdf[is_large_enough].reset_index(drop=True)
 
 
 def extend_df_city_centre_labels(
