@@ -1,4 +1,4 @@
-# Pipeline
+# How to run the pipeline
 
 This directory contains the code that turns raw input datasets into the final outputs of the project: for each local
 authority, the most suitable low-carbon heating technology for every property, grouped into clusters of buildings, with
