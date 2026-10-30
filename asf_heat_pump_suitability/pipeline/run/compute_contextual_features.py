@@ -48,6 +48,7 @@ COMMUNAL_ORIGIN = config["constant"]["communal_origin"]
 COASTLINE_DISTANCE_THRESHOLD_M = config["constant"]["coastline"][
     "distance_from_coastline_threshold_m"
 ]
+CITY_CENTRE_MIN_AREA_M2 = config["constant"]["threshold"]["city_centre_min_area_m2"]
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -517,6 +518,10 @@ def create_json_contextual_features_metadata(
             ANCHOR_LOAD_RADIUS=ANCHOR_LOAD_RADIUS
         )
     )
+    # Replace with formatted value
+    cluster_descriptions["in_city_centre"] = cluster_descriptions[
+        "in_city_centre"
+    ].format(CITY_CENTRE_MIN_AREA_M2=CITY_CENTRE_MIN_AREA_M2)
 
     geojson_file = {
         "type": "FeatureCollection",
@@ -592,6 +597,11 @@ if __name__ == "__main__":
         detail_level=detail_level,
         boundary=boundary_gdf,
         signature_types=city_centres.CITY_CENTRE_TYPES,
+    )
+    # Remove small city centre areas. After this step, each row is one merged
+    # city centre area, not one Spatial Signatures polygon.
+    spatial_signatures_gdf = city_centres.filter_gdf_city_centre_min_area(
+        city_centres_gdf=spatial_signatures_gdf, min_area_m2=CITY_CENTRE_MIN_AREA_M2
     )
 
     print("Computing contextual features for clusters...")
