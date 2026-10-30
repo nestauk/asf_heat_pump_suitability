@@ -518,6 +518,7 @@ def create_json_contextual_features_metadata(
             ANCHOR_LOAD_RADIUS=ANCHOR_LOAD_RADIUS
         )
     )
+    # Replace with formatted value
     cluster_descriptions["in_city_centre"] = cluster_descriptions[
         "in_city_centre"
     ].format(CITY_CENTRE_MIN_AREA_M2=CITY_CENTRE_MIN_AREA_M2)

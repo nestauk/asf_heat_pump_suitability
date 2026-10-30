@@ -1,5 +1,5 @@
 """
-Functions to label UPRNs in city centre areas and to remove city centre areas that are too small.
+Functions to label UPRNs within city centre areas and to remove city centre areas that are too small.
 """
 
 import geopandas as gpd
@@ -24,18 +24,18 @@ def filter_gdf_city_centre_min_area(
     """
     Remove city centre areas that are smaller than a minimum area.
 
-    The function merges touching polygons first. Each separate area after the merge is one "part".
+    The function merges touching polygons first. Each separate area after the merge is referred to as a 'city centre area'.
 
     Args:
         city_centres_gdf (gpd.GeoDataFrame): city centre polygons with `source_annotation` and `geometry`
-        min_area_m2 (float): smallest area of a part to keep, in m²
+        min_area_m2 (float): smallest area of a city centre area to keep, in m²
 
     Returns:
-        gpd.GeoDataFrame: one row for each part that stays, with `source_annotation` and `geometry`
-            (EPSG:27700). Empty, with the same columns, if no part stays.
+        gpd.GeoDataFrame: one row for each city centre area that stays, with `source_annotation` and `geometry`
+            (EPSG:27700). Empty, with the same columns, if no city centre area stays.
     """
     city_centres_gdf = geo_utils.verify_gdf_crs(city_centres_gdf)
-    # Merge touching polygons before the size test.
+    # Merge touching polygons before checking the size.
     # Then a small polygon that is part of a large city centre stays.
     city_centre_parts_gdf = (
         city_centres_gdf[["source_annotation", "geometry"]]
