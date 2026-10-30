@@ -4,7 +4,7 @@ This directory contains the code that turns raw input datasets into the final ou
 authority, the most suitable low-carbon heating technology for every property, grouped into clusters of buildings, with
 contextual information about each cluster.
 
-Setup instructions (environment, AWS access) are in the [main README](../../README.md#setup). All commands below are
+Setup instructions are in the [main README](../../README.md#setup). All commands below are
 run from the repository root, and read from and save to S3.
 
 ## Contents
