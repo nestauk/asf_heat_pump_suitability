@@ -24,12 +24,16 @@ run from the repository root, and read from and save to S3.
 ┌─── occasional set up scripts ───┐
 │  optimise_inputs.py             │  speeds up loading of large input datasets
 │  block_of_flats/train_model.py  │  trains the block of flats classifier
-└───┬─────────────────────────────┘
-    ▼
- uprns.py → add_features.py → decision_tree.py → cluster.py → compute_contextual_features.py
-                                                                          │
-                                                                          ▼
-                                                      compare_versions.py (optional check)
+└────────────────┬────────────────┘
+                 ▼
+┌─── run end to end with ──────────────────────────────────────────────────────────────────────────────────────────────┐
+│  1. uprns.py  →  2. add_features.py  →  3. decision_tree.py  →  4. cluster.py  →  5. compute_contextual_features.py  │
+│  To run the five key scripts above in order, run:                                                                    │
+│    pipeline.py (locally)   or   orbit_pipeline.py (remotely, in batches; calls pipeline.py)                          │
+└───────────────────────────────────────────────────────────┬──────────────────────────────────────────────────────────┘
+                                                            ▼
+                                          compare_versions.py (optional check;
+                                          add --compare to pipeline.py / orbit_pipeline.py to run it automatically)
 ```
 
 There are five key stages of the pipeline which are shown in the table below. These can be run end-to-end in order with the `pipeline.py` script for a given local authority. Each stage reads the previous stage's output from S3, so they must be run in this order. Outputs are saved to a dated release directory (`YYYYMMDD`) with the local authority name on S3.
@@ -46,7 +50,7 @@ the previous release and check for changes.
 | ----- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1     | [`transform/uprns.py`](transform/uprns.py)                                 | Filters all OS UPRNs down to domestic UPRNs.                                                                                                                                                                                              |
 | 2     | [`run/add_features.py`](run/add_features.py)                               | Adds features to each UPRN (is flat, in block of flats, in listed building, off-gas, near coast, in protected area, outdoor space (m2), EPC-derived info).                                                                                |
-| 3     | [`transform/decision_tree.py`](transform/decision_tree.py)                 | Applies the decision tree to give each UPRN its most suitable heating technology, then aggregates to one technology per building.                                                                                                           |
+| 3     | [`transform/decision_tree.py`](transform/decision_tree.py)                 | Applies the decision tree to give each UPRN its most suitable heating technology, then aggregates to one technology per building.                                                                                                         |
 | 4     | [`cluster/cluster.py`](cluster/cluster.py)                                 | Groups neighbouring buildings with the same technology into clusters.                                                                                                                                                                     |
 | 5     | [`run/compute_contextual_features.py`](run/compute_contextual_features.py) | Summarises information for each cluster (tenure, EPC ratings, outdoor space, listed buildings, solar PV, etc.) and creates the final GeoJSON, including heat network zone, city centre, and ward boundary layers. Metadata is also added. |
 
