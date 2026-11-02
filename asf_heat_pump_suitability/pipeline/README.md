@@ -1,8 +1,8 @@
 # How to run the pipeline
 
-This directory contains the code that turns raw input datasets into the final outputs of the project: for each local
+This directory contains the code that turns raw input datasets into Nesta's local heat planning dataset: for each local
 authority, the most suitable low-carbon heating technology for every property, grouped into clusters of buildings, with
-contextual information about each cluster.
+contextual information about each cluster and additional context data layers.
 
 Setup instructions are in the [main README](../../README.md#setup). All commands below are
 run from the repository root, and read from and save to S3.
@@ -46,7 +46,7 @@ the previous release and check for changes.
 | ----- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1     | [`transform/uprns.py`](transform/uprns.py)                                 | Filters all OS UPRNs down to domestic UPRNs.                                                                                                                                                                                              |
 | 2     | [`run/add_features.py`](run/add_features.py)                               | Adds features to each UPRN (is flat, in block of flats, in listed building, off-gas, near coast, in protected area, outdoor space (m2), EPC-derived info).                                                                                |
-| 3     | [`transform/decision_tree.py`](transform/decision_tree.py)                 | Applies the decision tree to give each UPRN its most suitable heating technology, then aggregates to one solution per building.                                                                                                           |
+| 3     | [`transform/decision_tree.py`](transform/decision_tree.py)                 | Applies the decision tree to give each UPRN its most suitable heating technology, then aggregates to one technology per building.                                                                                                           |
 | 4     | [`cluster/cluster.py`](cluster/cluster.py)                                 | Groups neighbouring buildings with the same technology into clusters.                                                                                                                                                                     |
 | 5     | [`run/compute_contextual_features.py`](run/compute_contextual_features.py) | Summarises information for each cluster (tenure, EPC ratings, outdoor space, listed buildings, solar PV, etc.) and creates the final GeoJSON, including heat network zone, city centre, and ward boundary layers. Metadata is also added. |
 
@@ -78,8 +78,7 @@ python asf_heat_pump_suitability/pipeline/run/pipeline.py \
 
 [`run/orbit_pipeline.py`](run/orbit_pipeline.py) is for running many local authorities at once. It splits the local
 authorities into chunks and launches one [`orbit`](https://github.com/nestauk/orbit) job per chunk (with 8 CPUs, 60GB memory
-each), where each job runs `pipeline.py` for that chunk's local authorities. When the jobs have been launched, it
-combines the error logs from all chunks into a single file on S3.
+each), where each job runs `pipeline.py` for that chunk's local authorities.
 
 `orbit` is for Nesta staff only, and needs to be installed with `make install install-orbit` (see the main README).
 
@@ -229,7 +228,7 @@ grid squares a local authority covers, which saves run time and memory. Outputs 
 It only needs to be run when the raw input datasets are updated, not for every pipeline run.
 
 ```bash
-# All datasets, all grid squares
+# All datasets, all grid squares (i.e. GB coverage)
 python asf_heat_pump_suitability/pipeline/run/optimise_inputs.py
 
 # Specific grid squares only (e.g. to re-process or test)
