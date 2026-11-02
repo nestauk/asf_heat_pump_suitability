@@ -1,4 +1,4 @@
-# asf_heat_pump_suitability/config
+# Data sources, attributions, and licenses
 
 ## Attribution
 
