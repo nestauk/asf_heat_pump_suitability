@@ -108,12 +108,12 @@ python asf_heat_pump_suitability/pipeline/run/orbit_pipeline.py \
 It takes the same `--local_authorities`, `--model_release`, `--release_date`, `--prod`, `--compare`, `--trigger` and
 `--old_release_date` arguments as `pipeline.py`, which are passed on to every chunk. It also has:
 
-| Argument                | Description                                                                               |
-| ----------------------- | ----------------------------------------------------------------------------------------- |
-| `--local_authorities`   | Use `GB` instead of names to run every local authority in Great Britain.                  |
-| `--size`                | Number of local authorities in each chunk. If omitted, everything runs in a single chunk. |
-| `--is_number_of_chunks` | Treat `--size` as the number of chunks rather than the size of each chunk.                |
-| `-o` / `--orbit_args`   | Extra arguments to pass to `orbit`, e.g. `-o on-demand`.                                  |
+| Argument                 | Description                                                                               |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| `--local_authorities`    | Use `GB` instead of names to run every local authority in Great Britain.                  |
+| `--size`                 | Number of local authorities in each chunk. If omitted, everything runs in a single chunk. |
+| `--is_number_of_chunks`  | Treat `--size` as the number of chunks rather than the size of each chunk.                |
+| `--orbit_args` (or `-o`) | Extra arguments to pass to `orbit`, e.g. `-o on-demand`.                                  |
 
 With `--prod`, the launcher also reads `front_end_s3_bucket` and `front_end_staging_s3_path` from your `.env` file and
 passes them to the jobs, because `.env` is not uploaded to `orbit`.
@@ -200,7 +200,7 @@ the console. With `--save`, these are also uploaded to the new release's `compar
 python asf_heat_pump_suitability/pipeline/validate/compare_versions.py \
     --stage decision_tree --local_authority plymouth
 
-# Compare a specific release against the latest earlier one
+# Compare a specific release against the latest earlier one (e.g. below will compare the specified release date with any earlier version)
 python asf_heat_pump_suitability/pipeline/validate/compare_versions.py \
     --stage decision_tree --local_authority plymouth \
     --new_release_date 20260722
