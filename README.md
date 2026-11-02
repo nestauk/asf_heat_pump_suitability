@@ -1,14 +1,17 @@
-# ASF Heat Pump Suitability
+# Nesta's local heat planning data
 
-### Version 2.0.0 (in progress)
+### Version 2.0.0
 
-V2.0.0 of the `asf_heat_pump_suitability` repository generates the underlying data for Nesta's local heat planning tool aiming to:
+V2.0.0 of the `asf_heat_pump_suitability` repository generates the underlying data for [Nesta's local heat planning tool](https://clean-heat-playbook.nesta.org.uk/lhp) aiming to:
 
-- cluster groups of properties by technology - grouping similar neighbouring properties by the most suitable low-carbon heating technologies\*
-- provide additional key information for each cluster about properties, households, and the area they are located in
+- identify the most suitable low-carbon heating technology category\* for clusters of neighbouring domestic properties
+- provide contextual information about the properties in each cluster and its neighbourhood
+- add context layers, including location of anchor loads, ward boundaries, heat network zones and city centres
 
 \*Low-carbon heating technologies include **individual heat sources**, **networked ground source heat pumps** (also
-known as **shared ground loops**), **communal heat sources** and **district heat networks**. You can read ead more about this work [here](https://www.nesta.org.uk/project-updates/a-tool-to-support-local-clean-heat-planning/)
+known as **shared ground loops**), **communal heat sources** and **district heat networks**.
+
+Read the full methodology for Nesta's local heat planning data [here](https://media.nesta.org.uk/documents/full_methodology_README.pdf).
 
 ### Version 1.0.0
 
