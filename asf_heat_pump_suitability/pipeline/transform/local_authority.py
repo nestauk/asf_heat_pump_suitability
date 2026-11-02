@@ -85,19 +85,21 @@ def resolve_list_la_names(la_names: str | list[str]) -> list:
 
 def make_str_slug(name: str | list[str]) -> str:
     """
-    Convert an official ONS place name to a URL-safe hyphenated slug for saving data.
+    Convert an official ONS place name, or a list of names, to a URL-safe slug for saving data.
 
-    Rules applied in order:
+    Rules applied to each name in order:
     1. Lowercase the name.
     2. Strip apostrophes and other single-quote characters.
-    3. Replace any run of non-alphanumeric characters with a single hyphen.
-    4. Strip leading/trailing hyphens.
+    3. Replace any run of non-alphanumeric characters with a single underscore.
+    4. Strip leading/trailing underscores.
+
+    A list of names is then joined with hyphens.
 
     Args:
         name (str | list[str]): string e.g. an official ONS place name ("King's Lynn and West Norfolk") or a list of strings (e.g. ["Glasgow", "Midlothian"]).
 
     Returns:
-        str: URL-safe slug (e.g. "kings_lynn_and_west_norfolk" or "glasgow_midlothian")
+        str: URL-safe slug (e.g. "kings_lynn_and_west_norfolk", or "glasgow-midlothian" for a list)
     """
     # Convert a single string to a 1-element list so the rest of the logic is identical
     names = [name] if isinstance(name, str) else name

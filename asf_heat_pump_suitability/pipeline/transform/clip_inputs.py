@@ -312,7 +312,7 @@ if __name__ == "__main__":
     args = parse_arguments()
 
     GEOSPATIAL_FILES_TO_PROCESS = [
-        {"path": config["data"]["geodata"]["uk_osopen_uprn"], "layer": None},
+        {"path": config["data"]["geodata"]["uk_osopen_uprn_raw"], "layer": None},
         {"path": config["data"]["geodata"]["UK_poi_locations"], "layer": "poi_uk"},
         {"path": config["data"]["geodata"]["gb_code_points"], "layer": "codepoint"},
         {
@@ -344,7 +344,7 @@ if __name__ == "__main__":
         },
     ]
 
-    COUNTRY_MAP_FILE_TO_PROCESS = config["data"]["geodata"]["gb_uprn_country_mapping"]
+    COUNTRY_MAP_FILE_TO_PROCESS = config["data"]["geodata"]["gb_uprn_lookup"]
 
     reference_uprn_df = None
 
@@ -353,13 +353,13 @@ if __name__ == "__main__":
     )
 
     for file_info in GEOSPATIAL_FILES_TO_PROCESS:
-        clipped_df = clip_df_and_save_dataset(
+        clipped_df = clip_gdf_and_save_dataset(
             input_filepath=file_info["path"],
             boundary_geometry=boundary_gdf,
             layer=file_info["layer"],
             save_output=args.save,
         )
-        if file_info["path"] == config["data"]["geodata"]["uk_osopen_uprn"]:
+        if file_info["path"] == config["data"]["geodata"]["uk_osopen_uprn_raw"]:
             print(
                 "Saving clipped OS Open UPRNs in memory to filter EPC and country mapping data with..."
             )
