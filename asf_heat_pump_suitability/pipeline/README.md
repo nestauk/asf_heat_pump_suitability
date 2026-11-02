@@ -10,7 +10,7 @@ run from the repository root, and read from and save to S3.
 ## Contents
 
 - [How the pipeline fits together](#how-the-pipeline-fits-together)
-- [1. Run the whole pipeline](#1-run-the-whole-pipeline)
+- [1. Run the central pipeline](#1-run-the-central-pipeline)
   - [Option A: `pipeline.py` (locally)](#option-a-pipelinepy-locally)
   - [Option B: `orbit_pipeline.py` (remotely, in batches)](#option-b-orbit_pipelinepy-remotely-in-batches)
 - [2. Run each stage individually](#2-run-each-stage-individually)
@@ -36,15 +36,12 @@ run from the repository root, and read from and save to S3.
                                           add --compare to pipeline.py / orbit_pipeline.py to run it automatically)
 ```
 
-There are five key stages of the pipeline which are shown in the table below. These can be run end-to-end in order with the `pipeline.py` script for a given local authority. Each stage reads the previous stage's output from S3, so they must be run in this order. Outputs are saved to a dated release directory (`YYYYMMDD`) with the local authority name on S3.
-
-There are two set-up scripts that need to be run occasionally under different conditions:
+Before running the five key stages of the pipeline, there are two set-up scripts that need to be run occasionally under different conditions:
 
 1. `optimise_inputs.py` - must be run when input files are updated with new versions. This partitions large datasets by grid square and converts files to more efficient file types.
 2. `block_of_flats/train_model.py` - must be run when the block of flats classifier model is updated or new labelled data is added.
 
-Finally, there is a validation script, `compare_versions.py`, which can be run optionally after completing any key stage of the pipeline to compare the outputs of that stage to
-the previous release and check for changes.
+There are five key stages of the pipeline which are shown in the table below. These can be run end-to-end in order with the `pipeline.py` script for a given local authority. Each stage reads the previous stage's output from S3, so they must be run in this order. Outputs are saved to a dated release directory (`YYYYMMDD`) with the local authority name on S3.
 
 | Stage | Script                                                                     | What it does                                                                                                                                                                                                                              |
 | ----- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -54,11 +51,16 @@ the previous release and check for changes.
 | 4     | [`cluster/cluster.py`](cluster/cluster.py)                                 | Groups neighbouring buildings with the same technology into clusters.                                                                                                                                                                     |
 | 5     | [`run/compute_contextual_features.py`](run/compute_contextual_features.py) | Summarises information for each cluster (tenure, EPC ratings, outdoor space, listed buildings, solar PV, etc.) and creates the final GeoJSON, including heat network zone, city centre, and ward boundary layers. Metadata is also added. |
 
-## 1. Run the whole pipeline
+Finally, there is a validation script, `compare_versions.py`, which can be run optionally after completing any key stage of the pipeline to compare the outputs of that stage to
+the previous release and check for changes.
+
+## 1. Run the central pipeline
+
+The five key stages shown in the table above form the central pipeline to generate Nesta's local heat planning data. This can be run end-to-end either locally (option A) or remotely in batches (option B).
 
 ### Option A: `pipeline.py` (locally)
 
-[`run/pipeline.py`](run/pipeline.py) runs the five key stages in sequence for each local authority you give it and saves
+[`run/pipeline.py`](run/pipeline.py) runs the five key stages shown in the table above in sequence for each local authority you give it and saves
 every stage's outputs to S3. If a stage fails for a local authority, that local authority is skipped and the pipeline
 moves on to the next one. At the end, any errors or warnings are written to a CSV log on S3.
 
@@ -82,9 +84,9 @@ python asf_heat_pump_suitability/pipeline/run/pipeline.py \
 
 [`run/orbit_pipeline.py`](run/orbit_pipeline.py) is for running many local authorities at once. It splits the local
 authorities into chunks and launches one [`orbit`](https://github.com/nestauk/orbit) job per chunk (with 8 CPUs, 60GB memory
-each), where each job runs `pipeline.py` for that chunk's local authorities.
+each), where each job runs `pipeline.py` for that chunk's local authorities. Outputs from each stage are saved to S3.
 
-`orbit` is for Nesta staff only, and needs to be installed with `make install install-orbit` (see the main README).
+`orbit` is for Nesta staff only, and needs to be installed with `make install install-orbit` ([see the main README for setup instructions](https://github.com/nestauk/asf_heat_pump_suitability#setup)).
 
 ```bash
 # Specific local authorities, run together as a single chunk
