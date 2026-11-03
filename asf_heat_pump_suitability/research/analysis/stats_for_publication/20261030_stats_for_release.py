@@ -57,16 +57,23 @@ def calculate_pc_x_per_group(
     df: pl.DataFrame, x: str, group: str, by_nation: bool = False
 ) -> pl.DataFrame:
     """
-    Calculate percentage of a given feature (x) per group in the.
+    Calculate the percentage of a feature's (x) total that falls into each group, and print it.
+
+    For example, with x="n_UPRNs" and group="assigned_tech", this gives the number and
+    percentage of UPRNs assigned to each technology.
 
     Args:
-        df (pl.DataFrame): dataframe containing
-        x (str): feature to calculate percentage of.
-        group (str): group by
-        by_nation (bool): calculate results for each nation separately.
+        df (pl.DataFrame): local authority counts of numerical features, containing columns `x` and `group` (and "nation" if
+        `by_nation` is True).
+        x (str): numeric column to sum and take percentages of.
+        group (str): categorical column to group by, e.g. "assigned_tech". `x` is summed within each value of this column (e.g.
+        each technology) and reported as a percentage of the total.
+        by_nation (bool): if `True`, percentages are relative to each nation's total rather than the GB total. Default `False`
+        to calculate percentages at GB level.
 
     Returns:
-        pl.DataFrame: aggregated dataframe
+        pl.DataFrame: one row per group (per nation and group if `by_nation`), with the summed `x`, the total, and the percentage of
+        either the GB or by-nation total
     """
     if by_nation:
         agg_df = df.with_columns(pl.col(x).sum().over("nation").alias(f"{x}_in_nation"))
