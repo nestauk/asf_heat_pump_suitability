@@ -11,9 +11,42 @@ from tqdm import tqdm
 import pandas as pd
 import polars as pl
 import geopandas as gpd
-from typing import defaultdict
-from asf_heat_pump_suitability.utils import s3_utils
-from asf_heat_pump_suitability.pipeline.transform import local_authority
+from asf_heat_pump_suitability.getters import load_data
+from asf_heat_pump_suitability.pipeline.transform import local_authority, uprns
+from asf_heat_pump_suitability.pipeline.model.block_of_flats import sample_for_labelling
+
+# %%
+# Rural urban classification
+ru_lookup_df = load_data.load_df_uprn_lookup(
+    columns=[
+        "UPRN",
+        "PCDS",
+        "ruc21ind",
+    ],
+)
+
+scotland_ru_lookup_df = sample_for_labelling.load_df_scotland_postcode_lookup()
+
+ru_lookup_df = (
+    (
+        ru_lookup_df.join(
+            scotland_ru_lookup_df, how="left", left_on="PCDS", right_on="Postcode"
+        )
+    )
+    .with_columns(
+        pl.when(pl.col("ruc21ind").is_in(["UN1", "UF1", "1", "2"]))
+        .then(pl.lit("Urban"))
+        .when(
+            pl.col("ruc21ind").is_in(
+                ["RLN1", "RLF1", "3", "4", "RSN1", "RSF1", "5", "6"]
+            )
+        )
+        .then(pl.lit("Rural"))
+        .otherwise(None)
+        .alias("urban_rural")
+    )
+    .select(["UPRN", "urban_rural"])
+)
 
 # %%
 date = "20261030"
@@ -28,24 +61,62 @@ for nation_code, nation_name in nations.items():
     la_names = local_authority.load_list_la_names(nation=nation_code)
     # Ensure names are consistent with file names
     resolved_las = local_authority.resolve_list_la_names(la_names)
-    for la in tqdm(la_names):
-        # Load LA contextual features dataset
+    for la in tqdm(resolved_las):
         slug = local_authority.make_str_slug(la)
+
+        # Load UPRNs dataset
+        uprns_df = pl.read_parquet(
+            f"s3://asf-local-heat-planning-tool/outputs/data/{slug}/{date}/{slug}_domestic_uprns.parquet"
+        ).join(ru_lookup_df.select(["UPRN", "urban_rural"]), how="left", on="UPRN")
+        uprns_gdf = uprns.generate_gdf_uprn_coords(
+            df=uprns_df, usecols=["UPRN", "urban_rural"]
+        ).to_crs(epsg=27700)[["UPRN", "urban_rural", "geometry"]]
+
+        # Load LA contextual features dataset
         output_gdf = gpd.read_file(
             f"s3://asf-local-heat-planning-tool/outputs/data/{slug}/{date}/{slug}_clusters_contextual_features_5m.geojson"
-        )
+        ).to_crs(epsg=27700)
         # Remove non-cluster layers
         output_gdf = output_gdf[
             output_gdf["layer"] == "clusters_with_contextual_features"
         ]
+
+        # Map urban / rural label to cluster
+        cluster_to_uprn_gdf = output_gdf.sjoin(
+            uprns_gdf, how="left", predicate="contains"
+        ).drop(columns="index_right")
+        ruc_mapping_df = (
+            pl.from_pandas(cluster_to_uprn_gdf.drop(columns="geometry"))
+            .group_by("cluster_id")
+            .agg(
+                pl.col("urban_rural").max().alias("urban_rural_max"),
+                pl.col("urban_rural").n_unique().alias("n_unique"),
+            )
+            .with_columns(
+                pl.when(pl.col("n_unique") > 2)
+                .then(pl.lit("mixed"))
+                .otherwise(pl.col("urban_rural_max"))
+                .alias("urban_rural")
+            )
+            .select(["cluster_id", "urban_rural"])
+            .to_pandas()
+        )
+
+        output_gdf = output_gdf.merge(ruc_mapping_df, how="left", on="cluster_id")
+
         # Collate numeric columns
-        cols = ["assigned_tech"] + [
+        cols = ["assigned_tech", "urban_rural"] + [
             col
             for col in output_gdf.select_dtypes(include="number").columns
             if not col.startswith("perc_")
         ]
         # Calculate sum of each numeric feature per assigned tech
-        summary_df = output_gdf[cols].groupby("assigned_tech").agg("sum").reset_index()
+        summary_df = (
+            output_gdf[cols]
+            .groupby(["assigned_tech", "urban_rural"])
+            .agg("sum")
+            .reset_index()
+        )
         summary_df[["local_authority", "nation"]] = la, nation_name
         results.append(summary_df)
 
@@ -54,7 +125,7 @@ results_df = pl.from_pandas(pd.concat(results))
 
 # %%
 def calculate_pc_x_per_group(
-    df: pl.DataFrame, x: str, group: str, by_nation: bool = False
+    df: pl.DataFrame, x: str, group: str | list, by_nation: bool = False
 ) -> pl.DataFrame:
     """
     Calculate the percentage of a feature's (x) total that falls into each group, and print it.
@@ -76,23 +147,24 @@ def calculate_pc_x_per_group(
         either the GB or by-nation total
     """
     if by_nation:
+        if isinstance(group, str):
+            group = [group]
         agg_df = (
             df.with_columns(pl.col(x).sum().over("nation").alias(f"{x}_in_nation"))
-            .group_by(["nation", group])
+            .group_by(["nation"] + group)
             .agg(pl.col(x).sum(), pl.col(f"{x}_in_nation").first())
             .with_columns(
                 (pl.col(x) / pl.col(f"{x}_in_nation") * 100).alias(f"pc_{x}_in_nation")
             )
-            .sort(by=["nation", group])
+            .sort(by=["nation"] + group)
         )
     else:
-        agg_df = df
         agg_df = (
             df.with_columns(pl.col(x).sum().alias(f"total_{x}"))
             .group_by(group)
             .agg(pl.col(x).sum(), pl.col(f"total_{x}").first())
             .with_columns((pl.col(x) / pl.col(f"total_{x}") * 100).alias(f"pc_{x}"))
-            .sort(by="nation")
+            .sort(by=group)
         )
 
     # Show full numbers without scientific notation and with commas
@@ -106,9 +178,21 @@ def calculate_pc_x_per_group(
 
 
 # %%
+def print_individual_solutions(df: pl.DataFrame) -> pl.DataFrame:
+    with pl.Config(
+        set_fmt_float="full",
+        thousands_separator=True,
+    ):
+        print(df.filter(pl.col("assigned_tech") == "Individual solution"))
+
+
+# %%
 # What is the number of homes across GB suitable for heat pumps (individual solutions)?
 # For all of GB
 calculate_pc_x_per_group(df=results_df, x="n_UPRNs", group="assigned_tech")
+calculate_pc_x_per_group(
+    df=results_df, x="n_UPRNs", group=["assigned_tech", "urban_rural"]
+)
 
 # %%
 # What is the number of homes across GB suitable for heat pumps (individual solutions)?
@@ -117,11 +201,12 @@ by_nation_df = calculate_pc_x_per_group(
     df=results_df, x="n_UPRNs", group="assigned_tech", by_nation=True
 )
 
-with pl.Config(
-    set_fmt_float="full",
-    thousands_separator=True,
-):
-    print(by_nation_df.filter(pl.col("assigned_tech") == "Individual solution"))
+ruc_by_nation_df = calculate_pc_x_per_group(
+    df=results_df, x="n_UPRNs", group=["assigned_tech", "urban_rural"], by_nation=True
+)
+
+print_individual_solutions(by_nation_df)
+print_individual_solutions(ruc_by_nation_df)
 
 # %%
 # What is the % of homes in social housing that could be suitable for heat pumps (individual solutions)?
@@ -137,11 +222,15 @@ by_nation_df = calculate_pc_x_per_group(
     df=results_df, x="tenure_rental_(social)", group="assigned_tech", by_nation=True
 )
 
-with pl.Config(
-    set_fmt_float="full",
-    thousands_separator=True,
-):
-    print(by_nation_df.filter(pl.col("assigned_tech") == "Individual solution"))
+ruc_by_nation_df = calculate_pc_x_per_group(
+    df=results_df,
+    x="tenure_rental_(social)",
+    group=["assigned_tech", "urban_rural"],
+    by_nation=True,
+)
+
+print_individual_solutions(by_nation_df)
+print_individual_solutions(ruc_by_nation_df)
 
 # %%
 # What is the % of homes with unknown tenure?
