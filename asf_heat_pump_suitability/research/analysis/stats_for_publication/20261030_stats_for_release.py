@@ -11,6 +11,7 @@ from tqdm import tqdm
 import pandas as pd
 import polars as pl
 import geopandas as gpd
+import polars.selectors as cs
 from asf_heat_pump_suitability.getters import load_data
 from asf_heat_pump_suitability.pipeline.transform import local_authority, uprns
 from asf_heat_pump_suitability.pipeline.model.block_of_flats import sample_for_labelling
@@ -265,3 +266,48 @@ with pl.Config(
     thousands_separator=True,
 ):
     print(agg_df)
+
+# %%
+# Of the homes suitable for an individual solution, what percentage of them are social housing?
+
+# Filter to individual solutions only
+individual_df = results_df.filter(
+    (
+        (pl.col("assigned_tech") == "Individual solution")
+        | (pl.col("assigned_tech") == "Individual or Networked heat pump")
+    ),
+)
+
+# Breakdown of tenure in individual solutions for all GB
+cols = [col for col in individual_df.columns if col.startswith("tenure")]
+sum_df = individual_df.select(cols).sum()
+
+with pl.Config(
+    set_fmt_float="full",
+    thousands_separator=True,
+):
+    print("Counts of tenure most suitable for individual solutions:")
+    print(sum_df)
+
+print("\nPercentage of tenure most suitable for individual solutions:")
+print((sum_df / sum_df.sum_horizontal()) * 100)
+
+# %%
+# Per nation
+sum_df = individual_df.group_by("nation").agg(pl.col(cols).sum())
+
+with pl.Config(
+    set_fmt_float="full",
+    thousands_separator=True,
+):
+    print("Count of tenure most suitable for individual solutions by nation:")
+    print(sum_df)
+
+print("\nPercentage of tenure most suitable for individual solutions by nation:")
+print(
+    sum_df.with_columns(
+        (pl.col(c) / pl.sum_horizontal(cols) * 100).round(2) for c in cols
+    )
+)
+
+# %%
