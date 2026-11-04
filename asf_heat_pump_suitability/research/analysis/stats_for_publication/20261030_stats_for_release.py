@@ -76,21 +76,23 @@ def calculate_pc_x_per_group(
         either the GB or by-nation total
     """
     if by_nation:
-        agg_df = df.with_columns(pl.col(x).sum().over("nation").alias(f"{x}_in_nation"))
         agg_df = (
-            agg_df.group_by(["nation", group])
+            df.with_columns(pl.col(x).sum().over("nation").alias(f"{x}_in_nation"))
+            .group_by(["nation", group])
             .agg(pl.col(x).sum(), pl.col(f"{x}_in_nation").first())
             .with_columns(
                 (pl.col(x) / pl.col(f"{x}_in_nation") * 100).alias(f"pc_{x}_in_nation")
             )
-            .sort(by="nation")
+            .sort(by=["nation", group])
         )
     else:
-        agg_df = df.with_columns(pl.col(x).sum().alias(f"total_{x}"))
+        agg_df = df
         agg_df = (
-            agg_df.group_by(group)
+            df.with_columns(pl.col(x).sum().alias(f"total_{x}"))
+            .group_by(group)
             .agg(pl.col(x).sum(), pl.col(f"total_{x}").first())
             .with_columns((pl.col(x) / pl.col(f"total_{x}") * 100).alias(f"pc_{x}"))
+            .sort(by="nation")
         )
 
     # Show full numbers without scientific notation and with commas
@@ -140,3 +142,37 @@ with pl.Config(
     thousands_separator=True,
 ):
     print(by_nation_df.filter(pl.col("assigned_tech") == "Individual solution"))
+
+# %%
+# What is the % of homes with unknown tenure?
+# For all of GB
+total_uprns = results_df["n_UPRNs"].sum()
+total_unknown = results_df["tenure_unknown"].sum()
+print(
+    f"Percentage of properties in GB with unknown tenure: {total_unknown / total_uprns * 100}"
+)
+
+# %%
+# What is the % of homes with unknown tenure?
+# Per nation
+agg_df = (
+    results_df.with_columns(
+        pl.col("n_UPRNs").sum().over("nation").alias("n_UPRNs_per_nation")
+    )
+    .group_by("nation")
+    .agg(
+        pl.col("tenure_unknown").sum().alias("n_tenure_unknown"),
+        pl.col("n_UPRNs_per_nation").first(),
+    )
+    .with_columns(
+        (pl.col("n_tenure_unknown") / pl.col("n_UPRNs_per_nation") * 100).alias(
+            "pc_tenure_unknown"
+        )
+    )
+)
+
+with pl.Config(
+    set_fmt_float="full",
+    thousands_separator=True,
+):
+    print(agg_df)
