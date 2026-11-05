@@ -274,3 +274,5 @@ python asf_heat_pump_suitability/pipeline/model/block_of_flats/train_model.py \
 
 The training data needs to exist before the model is trained. [`sample_for_labelling.py`](model/block_of_flats/sample_for_labelling.py) draws a sample of buildings containing flats
 and saves it for manual labelling. The manually labelled data must then be saved to the appropriate S3 location for model training.
+
+See the [block of flats model README](model/block_of_flats/README.md) for the full sampling, labelling, feature and training process.
