@@ -11,7 +11,6 @@ from tqdm import tqdm
 import pandas as pd
 import polars as pl
 import geopandas as gpd
-import polars.selectors as cs
 from asf_heat_pump_suitability.getters import load_data
 from asf_heat_pump_suitability.pipeline.transform import local_authority, uprns
 from asf_heat_pump_suitability.pipeline.model.block_of_flats import sample_for_labelling
@@ -50,7 +49,7 @@ ru_lookup_df = (
 )
 
 # %%
-date = "20261030"
+release_date = "20261030"
 
 nations = {"E": "England", "S": "Scotland", "W": "Wales"}
 
@@ -67,7 +66,7 @@ for nation_code, nation_name in nations.items():
 
         # Load UPRNs dataset
         uprns_df = pl.read_parquet(
-            f"s3://asf-local-heat-planning-tool/outputs/data/{slug}/{date}/{slug}_domestic_uprns.parquet"
+            f"s3://asf-local-heat-planning-tool/outputs/data/{slug}/{release_date}/{slug}_domestic_uprns.parquet"
         ).join(ru_lookup_df.select(["UPRN", "urban_rural"]), how="left", on="UPRN")
         uprns_gdf = uprns.generate_gdf_uprn_coords(
             df=uprns_df, usecols=["UPRN", "urban_rural"]
@@ -75,7 +74,7 @@ for nation_code, nation_name in nations.items():
 
         # Load LA contextual features dataset
         output_gdf = gpd.read_file(
-            f"s3://asf-local-heat-planning-tool/outputs/data/{slug}/{date}/{slug}_clusters_contextual_features_5m.geojson"
+            f"s3://asf-local-heat-planning-tool/outputs/data/{slug}/{release_date}/{slug}_clusters_contextual_features_5m.geojson"
         ).to_crs(epsg=27700)
         # Remove non-cluster layers
         output_gdf = output_gdf[
@@ -179,12 +178,28 @@ def calculate_pc_x_per_group(
 
 
 # %%
-def print_individual_solutions(df: pl.DataFrame) -> pl.DataFrame:
+def print_tech_solutions(df: pl.DataFrame, tech: str | list[str]) -> pl.DataFrame:
+    """
+    Print dataframe filtered to a given tech type in full format with thousands separators.
+
+    Args:
+        df (pl.DataFrame): dataframe to filter with `assigned_tech` column
+        tech (str | list[str]): technology type(s) to filter dataframe to
+
+    Returns:
+        pl.DataFrame: filtered dataframe
+    """
     with pl.Config(
         set_fmt_float="full",
         thousands_separator=True,
     ):
-        print(df.filter(pl.col("assigned_tech") == "Individual solution"))
+        if isinstance(tech, str):
+            tech_df = df.filter(pl.col("assigned_tech") == tech)
+        else:
+            tech_df = df.filter(pl.col("assigned_tech").is_in(tech))
+
+        print(tech_df)
+        return tech_df
 
 
 # %%
@@ -206,8 +221,8 @@ ruc_by_nation_df = calculate_pc_x_per_group(
     df=results_df, x="n_UPRNs", group=["assigned_tech", "urban_rural"], by_nation=True
 )
 
-print_individual_solutions(by_nation_df)
-print_individual_solutions(ruc_by_nation_df)
+print_tech_solutions(by_nation_df, tech="Individual solution")
+print_tech_solutions(ruc_by_nation_df, tech="Individual solution")
 
 # %%
 # What is the % of homes in social housing that could be suitable for heat pumps (individual solutions)?
@@ -230,8 +245,8 @@ ruc_by_nation_df = calculate_pc_x_per_group(
     by_nation=True,
 )
 
-print_individual_solutions(by_nation_df)
-print_individual_solutions(ruc_by_nation_df)
+print_tech_solutions(by_nation_df, tech="Individual solution")
+print_tech_solutions(ruc_by_nation_df, tech="Individual solution")
 
 # %%
 # What is the % of homes with unknown tenure?
@@ -289,7 +304,7 @@ with pl.Config(
     print("Counts of tenure most suitable for individual solutions:")
     print(sum_df)
 
-print("\nPercentage of tenure most suitable for individual solutions:")
+print("\nDistribution of tenure for homes most suitable for individual solutions:")
 print((sum_df / sum_df.sum_horizontal()) * 100)
 
 # %%
@@ -303,7 +318,9 @@ with pl.Config(
     print("Count of tenure most suitable for individual solutions by nation:")
     print(sum_df)
 
-print("\nPercentage of tenure most suitable for individual solutions by nation:")
+print(
+    "\nDistribution of tenure for homes most suitable for individual solutions by nation:"
+)
 print(
     sum_df.with_columns(
         (pl.col(c) / pl.sum_horizontal(cols) * 100).round(2) for c in cols
