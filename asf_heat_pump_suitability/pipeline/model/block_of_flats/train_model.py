@@ -211,9 +211,11 @@ def predict_class_block_of_flats(
     Predict binary class (block of flats / not) on buildings using trained Random Forest Classifier model. Features required:
         - n_UPRNs
         - n_flats
+        - n_domestic_uprns
         - building_area_m2
         - building_perimeter_m
         - proportion_flats
+        - domestic_proportion_flats
         - UPRNs_per_building_m2
         - concave_hull_area_m2
         - uprns_per_hull_area_m2
