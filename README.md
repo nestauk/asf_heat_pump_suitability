@@ -19,8 +19,10 @@ V1.0.0 of the `asf_heat_pump_suitability` contains the code used to calculate he
 super output areas (LSOAs) in England and Wales and Data Zones in Scotland using domestic EPC data and supplementary sources. Scores are
 weight-adjusted for LSOAs where possible to reduce bias.
 
-You can see [heat pump suitability scores across Great Britain in this map](https://heatpumpsuitability.dap-tools.uk/) for
-air source heat pumps, ground source heat pumps, shared group loops, and heat networks. You can read more about this work [here](https://www.nesta.org.uk/project/mapping-heat-pump-suitability-across-great-britain/). Please note that following the shift in our methodology to what we've developing in v2.0.0, the underlying data and associated map are no longer being updated. The map will be decommissioned in the near future.
+Suitability scores were calculated per LSOA for each technology type of: air source heat pumps, ground source heat pumps,
+shared group loops, and heat networks. You can read more about this work [here](https://www.nesta.org.uk/project/mapping-heat-pump-suitability-across-great-britain/). Previously, these data were used to
+produce a heat pump suitability map of Great Britain. Please note that following the shift in our methodology to v2.0.0,
+the map has been decommissioned and the data is no longer updated.
 
 Source code for v1.0.0 is available under [Releases](https://github.com/nestauk/asf_heat_pump_suitability/releases).
 
