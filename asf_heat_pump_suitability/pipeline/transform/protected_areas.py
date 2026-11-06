@@ -2,7 +2,7 @@ import geopandas as gpd
 import pandas as pd
 import polars as pl
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.getters import load_data, load_geodata
+from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 
 
 def load_transform_df_uprn_in_protected_area(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
@@ -126,7 +126,7 @@ def generate_df_conservation_area_data_availability(
         pl.DataFrame: building conservation area data availability per LAD in England and Wales
     """
     cons_areas_gdf = transform_gdf_building_cons_areas()
-    council_bounds = load_data.load_gdf_ons_council_bounds()
+    council_bounds = load_boundaries.load_gdf_local_authority_boundaries()
 
     # Join conservation areas to their councils
     df = council_bounds.sjoin(cons_areas_gdf, how="left", predicate="intersects")[
