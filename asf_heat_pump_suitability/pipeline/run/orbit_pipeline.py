@@ -46,23 +46,26 @@ from asf_heat_pump_suitability.pipeline.run.pipeline import (
 from asf_heat_pump_suitability.utils import save_utils
 
 
-def chunk_list_strings(arr: np.array, n: int, size: bool) -> List[List[str]]:
+def chunk_list_strings(
+    arr: np.array, n: int, number_of_chunks: bool
+) -> List[List[str]]:
     """
     Split an array of strings into chunks for processing.
 
     Args:
         arr (np.array): array of strings to chunk.
-        n (int): size of chunks if `size` set to `True` otherwise, number of chunks.
-        size (bool): set to `True` if `n` represents size of chunks, or `False` if `n` represents number of chunks.
+        n (int): number of chunks if `number_of_chunks` set to `True` otherwise, size of chunks.
+        number_of_chunks (bool): set to `True` if `n` represents number of chunks, or `False` if `n` represents size of chunks.
 
     Returns:
         List[List[str]]: list of lists of strings
     """
-    if not size:
-        # Calculate how many items per chunk
-        n = math.ceil(len(arr) / n)
+    # array_split takes the number of chunks (unequal splitting allowed), so convert from chunk size if needed
+    n = n if number_of_chunks else math.ceil(len(arr) / n)
     chunks = [list(l) for l in np.array_split(arr, n)]
-    print(f"{len(chunks)} chunks to process. Each approx. {n} items long.")
+    print(
+        f"{len(chunks)} chunks to process. Each approx. {math.ceil(len(arr) / len(chunks))} items long."
+    )
 
     return chunks
 
@@ -101,7 +104,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--size",
         help="Number of chunks for batch processing if `--number_of_chunks` passed, otherwise size of chunks for batch processing.",
-        required=False,
+        required=True,
         type=int,
     )
 
@@ -181,7 +184,9 @@ if __name__ == "__main__":
         local_authorities = local_authority.load_list_la_names(nation="GB")
 
     chunks = chunk_list_strings(
-        np.asarray(local_authorities), n=args.size, size=args.is_number_of_chunks
+        np.asarray(local_authorities),
+        n=args.size,
+        number_of_chunks=args.is_number_of_chunks,
     )
 
     compare_flags = ["--compare"] if args.compare else []
