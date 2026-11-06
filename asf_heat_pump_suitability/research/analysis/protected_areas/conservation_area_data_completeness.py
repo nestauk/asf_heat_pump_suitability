@@ -14,7 +14,7 @@ import polars as pl
 import geopandas as gpd
 import pandas as pd
 import matplotlib.pyplot as plt
-from asf_heat_pump_suitability.getters import load_data, load_geodata
+from asf_heat_pump_suitability.getters import load_boundaries, load_geodata
 from asf_heat_pump_suitability.pipeline.transform import protected_areas
 
 # %% [markdown]
@@ -37,7 +37,7 @@ full_cons_areas_gdf["in_conservation_area_ew"] = True
 
 # %%
 # Load geospatial boundaries of local authorities
-council_bounds = load_data.load_gdf_ons_council_bounds()
+council_bounds = load_boundaries.load_gdf_local_authority_boundaries()
 
 # %% [markdown]
 # Because this analysis is focussing on conservation area data availability for Local Authority Districts (councils), the steps below are meant to join the conservation areas to their local authorities. I tried out a couple of different join methods and this one seemed to produce the best results when comparing to our count data.
