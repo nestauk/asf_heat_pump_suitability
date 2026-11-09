@@ -1,15 +1,15 @@
 # %% [markdown]
-# ## Calculate proportion of listed buildings that are flats
+# ## Calculate proportion of listed buildings that are in blocks of flats
 #
 # This notebook calculates the total number of listed buildings containing domestic properties in GB. It calculates:
 # 1. The number and proportion of listed buildings which are classified as blocks of flats by our model.
 # 2. The number and proportion of listed buildings in which >80% are flats according to our predictions.
 #
 # Caveats and assumptions:
-# - The count of buildings may be underestimated as the building footprints used in this analysis sometimes contain multiple buildings within a single footprint.
-# - The listed buildings geospatial datasets used to identify listed buildings may not be complete.
+# - We don't have unique identifiers for buildings, only for building footprints. This means that the count of buildings may be underestimated as the building footprints used in this analysis sometimes contain multiple buildings within a single footprint.
+# - The listed buildings geospatial datasets used to identify listed buildings may not be complete. These are: listed building polygons published by Historic England (accessed August 2024, URL: https://opendata-historicengland.hub.arcgis.com/datasets/historicengland::national-heritage-list-for-england-nhle/about?layer=3); listed buildings in Scotland published by the Scottish Government (accessed September 2024, URL: https://www.data.gov.uk/dataset/722b93f3-75fd-47ce-9f06-0efcfa010ecf/listed-buildings36); and listed buildings published by the Welsh Government (accessed August 2024, URL: https://datamap.gov.wales/layers/inspire-wg:Cadw_ListedBuildings).
 # - The methodology used here for identifying listed buildings may result in neighbouring buildings being mislabelled as listed in some cases.
-# - The model to classify building footprints as a block of flats or not is primarily designed for application of the LHPT's decision tree. For this use case we define a block of flats as: "a residential building with 3 or more storeys divided into several separate individual properties (e.g. tower blocks, tenements, 3 or more storeys of flats above shops and large mansions converted into 3 or more storeys of flats)." This means that small blocks of flats (e.g. 2-storey social housing blocks) will not be included in this definition. Find more information in section 2.b of the methodology README https://media.nesta.org.uk/documents/full_methodology_README.pdf .
+# - The model to classify building footprints as a block of flats or not has been primarily designed for application of the LHPT's decision tree for identifying the most suitable low carbon heating tech for each building. For that use case we defined a block of flats as: "a residential building with 3 or more storeys divided into several separate individual properties (e.g. tower blocks, tenements, 3 or more storeys of flats above shops and large mansions converted into 3 or more storeys of flats)." This means that small blocks of flats (e.g. 2-storey social housing blocks) will not be included in this definition. At the time of publication, the model has an F1 score on the positive class (blocks of flats) of 0.71 on an unseen test set. Find more information and evaluation metrics of the in section 2.b of the methodology README https://media.nesta.org.uk/documents/full_methodology_README.pdf .
 # - Flats may be located within purpose-built blocks within converted houses or other buildings. A UPRN is considered to represent a flat if it is labelled by our pipeline as domestic and is located at the exact same coordinates as any other domestic UPRN. This is based on the assumption that UPRNs in the exact same location share an address point (e.g. a front door) and so are most likely to represent flats.
 
 # %%
