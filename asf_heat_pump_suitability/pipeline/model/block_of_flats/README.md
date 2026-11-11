@@ -15,20 +15,22 @@ We trained a random forest binary classifier model which labels building footpri
 
 ## 1. Scripts
 
-The block of flats classifier model is generated and trained with the [`train_model.py`](train_model.py) script. The model is trained from a manually labelled sample, an unlabelled version of which is produced with the [`sample_for_labelling.py`](sample_for_labelling.py) script. Sampling only needs to be run in the case that you wish to generate new data for manual labelling, and training needs to be run when there is new labelled data or the modelling methodology changes. Every pipeline run then loads an existing trained model to label buildings, using `--model_release` (see [`pipeline/README.md`](../../README.md)).
+The block of flats classifier model is generated and trained with the [`train_model.py`](train_model.py) script. The model is trained from a manually labelled sample of building footprints. The unlabelled sample is produced with the [`sample_for_labelling.py`](sample_for_labelling.py) script.
 
-| Script                                               | What it does                                                                                                                                                |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`sample_for_labelling.py`](sample_for_labelling.py) | Draws a stratified sample of buildings containing flats, assigns train/test split, and saves it as one KML file per labeller, for manual labelling.         |
-| [`train_model.py`](train_model.py)                   | Trains and evaluates the classifier, using functions to preprocess the data from `labelled_data.py` and to engineer features form `feature_engineering.py`. |
+Sampling only needs to be run in the case that you wish to generate new data for manual labelling, and training needs to be run when there is new labelled data or the modelling methodology changes. Every pipeline run then loads an existing trained model to label buildings, using `--model_release` (see [`pipeline/README.md`](../../README.md)).
+
+| Script                                               | What it does                                                                                                                                                                                 |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`sample_for_labelling.py`](sample_for_labelling.py) | Draws a stratified sample of building footprints containing 2 or more properties which are flats, assigns train/test split, and saves it as one KML file per labeller, for manual labelling. |
+| [`train_model.py`](train_model.py)                   | Trains and evaluates the classifier, using functions to preprocess the data from `labelled_data.py` and to engineer features form `feature_engineering.py`.                                  |
 
 ## 2. Sampling data for manual labelling
 
-The `sample_for_labelling.py`(sample_for_labelling.py) script produces a stratified sample (with padding of smaller groups) of a desired sample size. This script outputs a `KML` file which can be uploaded to Google MyMaps for manual labelling.
+The `sample_for_labelling.py`(sample_for_labelling.py) script produces a stratified sample (with padding of smaller groups) of a desired sample size. This script outputs one `KML` file per labeller which can be uploaded to Google MyMaps for manual labelling.
 
 The labelled dataset aims to represent the diversity of buildings containing flats across Great Britain. It samples according to a set of primary strata and secondary constraints to sample against which we assumed would give us a representative sample of the true population.
 
-Train/validation and test sets of data for the model were created up front in the sampling process in order to train the model for real-world application.
+Train/validation and hold-out test sets of data for the model were created up front in the sampling process in order to train the model for real-world application.
 
 ### How to run the sampling
 
@@ -41,16 +43,16 @@ python asf_heat_pump_suitability/pipeline/model/block_of_flats/sample_for_labell
     --map_uprns_to_building --save
 ```
 
-| Argument                        | Required | Description                                                                                                                                           |
-| ------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--labellers`                   | Yes      | Names of the people who will label the sample.                                                                                                        |
-| `--labeller_counts`             | No       | Number of buildings each labeller should label, in the same order as `--labellers`. Needed with `--save`, which saves one KML file per labeller.      |
-| `--local_authorities`           | No       | Local authorities to sample from. Defaults to `GB` (all of Great Britain).                                                                            |
-| `--release_date`                | No       | `YYYYMMDD` release of the domestic UPRNs (from `uprns.py`) to use. Defaults to today.                                                                 |
-| `--seed`                        | No       | Random seed. Defaults to 7.                                                                                                                           |
-| `--target_n`                    | No       | Target number of buildings in the sample. Defaults to 3000.                                                                                           |
-| `-m`, `--map_uprns_to_building` | No       | Generate the UPRN to building ID mapping from scratch and save it. Needs to be set the first time, because the training step reads the saved mapping. |
-| `--save`                        | No       | Save outputs to S3, including the sample and the KML files for labelling. Without this, nothing is saved.                                             |
+| Argument                        | Required | Description                                                                                                                                                                                                      |
+| ------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--labellers`                   | Yes      | Names of the people who will label the sample.                                                                                                                                                                   |
+| `--labeller_counts`             | No       | Number of buildings each labeller should label, in the same order as `--labellers`. Needed with `--save`, which saves one KML file per labeller.                                                                 |
+| `--local_authorities`           | No       | Local authorities to sample from. Defaults to `GB` (all of Great Britain).                                                                                                                                       |
+| `--release_date`                | No       | `YYYYMMDD` release of the domestic UPRNs (from `uprns.py`) to use. Defaults to today.                                                                                                                            |
+| `--seed`                        | No       | Random seed. Defaults to 7.                                                                                                                                                                                      |
+| `--target_n`                    | No       | Target number of buildings in the sample. Defaults to 3000.                                                                                                                                                      |
+| `-m`, `--map_uprns_to_building` | No       | Generate the UPRN to building ID mapping from scratch and save it. Needs to be set every time a new version of the UPRNs data is generated for the relevant Local Authority. Otherwise, loads the saved mapping. |
+| `--save`                        | No       | Save outputs to S3, including the sample and the KML files for labelling. Without this, nothing is saved.                                                                                                        |
 
 Outputs are saved to `outputs/models/block_of_flats_classifier/<release_date>/` on S3 (paths are set in
 [`config/base.yaml`](../../../config/base.yaml)). Outputs are:
@@ -65,9 +67,9 @@ After the sample is produced, labellers manually assign one of 24 labels to each
 
 ### How to record and save labels
 
-Each labeller opens their KML file in Google MyMaps and renames each building polygon to its two-letter label followed by the confidence digit, for example `TB1` (towerblock with confidence 1). The `building_id` in the polygon description must be kept, because it is used to link the label back to the building.
+Each labeller opens their KML file in Google MyMaps and renames each building polygon to its two-letter label followed by the confidence digit, for example `TB1` (tower block with confidence 1). The `building_id` in the polygon description must be kept because it is used to link the label back to the building.
 
-The labelled KML files are saved to the `labelled_data/` directory of the block of flats classifier directory on S3 (`labelled_dir` in [`config/base.yaml`](../../../config/base.yaml)). All `.kml` files in that directory are loaded for training.
+The labelled KML files must be manually saved to the `labelled_data/` directory of the block of flats classifier directory on S3 (`labelled_dir` in [`config/base.yaml`](../../../config/base.yaml)). All `.kml` files in that directory are loaded for training.
 
 ## 4. Model training and evaluation
 
@@ -96,4 +98,4 @@ With `--save`, the following are saved to S3:
 
 ## 5. Model application
 
-The trained model is applied to the subset of buildings containing any domestic UPRNs and at least one flat to classify them into 'block of flats' and 'non-blocks'. All buildings containing any domestic UPRNs with zero flats are assigned the label 'non-block'. This happens in [`add_features.py`](../../run/add_features.py) which loads the trained model using `--model_release`.
+The trained model is applied to the subset of buildings containing any domestic UPRNs and at least two domestic flats to classify them into 'block of flats' and 'non-blocks'. All buildings containing any domestic UPRNs with fewer than two flats are assigned the label 'non-block'. This happens in [`add_features.py`](../../run/add_features.py) which loads the trained model using `--model_release`.
