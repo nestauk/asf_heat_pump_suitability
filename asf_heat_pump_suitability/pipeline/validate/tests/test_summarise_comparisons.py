@@ -344,26 +344,16 @@ def test_top_change_names_every_metric_over_the_limit(df_summary):
     ), "Metrics with the same value should be named together, not twice"
     assert "| no change |" in lines["uprns"], "A row with no change should say so"
 
-    # Two different techs that change by the same share are both named.
+
+def test_top_change_names_both_metrics_equal_by_chance():
+    """Two different techs that change by the same share are both named."""
     summary = _load_fixture("decision_tree_east_lothian_20261013_vs_20261014.json")
+    # The "(null)" tech now changes by 2 of 9,831, like the largest tech.
     summary["tech_counts"][0].update({"n_old": 9831, "n_new": 9833, "n_delta": 2})
     row = summarise_comparisons.generate_dict_flat_summary(summary=summary)
-    row.update(
-        local_authority="east_lothian",
-        stage="decision_tree",
-        status="compared",
-        json_path=f"{EL_DIR}/x.json",
-        n_json_files=1,
-        unused_json_paths=[],
-    )
-    markdown = summarise_comparisons.generate_str_summary_markdown(
-        df_summary=summarise_comparisons.generate_df_comparison_summary(rows=[row]),
-        release_date=RELEASE_DATE,
-        la_slugs=["east_lothian"],
-        n_top_changes=1,
-        min_rel_change=0.5,
-    )
-    assert (
+    assert summarise_comparisons._generate_str_metric_cell(
+        row=row, min_rel_change=0.5
+    ) == (
         "tech:(null) (9,831 -> 9,833) = "
         "tech:Individual or Networked heat pump (9,831 -> 9,833)"
-    ) in markdown, "Two different metrics with the same value should both be named"
+    ), "Two different metrics with the same value should both be named"
