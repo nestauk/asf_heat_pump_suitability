@@ -124,7 +124,12 @@ records the design decisions and why we made them.
    S3 path of each per-LA report it names. The top changes list **every**
    compared row whose `max_rel_change` is at least
    `compare_versions.summary_min_rel_change` (0.01, so 1%), with no cap,
-   and at least `compare_versions.summary_n_top_changes` rows (10).
+   and at least `compare_versions.summary_n_top_changes` rows (10). Each
+   listed row names its largest metric and also every other metric at or
+   over the limit, for example `clusters; also rows 1.99%`. A metric with
+   the same value as the largest one is not named again (in the `cluster`
+   stage, one row is one cluster). Added 2026-11-11: the largest metric
+   alone hid a second large change in the same row.
    _Rationale:_ the parquet is for analysis in polars. The markdown is the
    view for people, so they do not need to open the nested column. A fixed
    top N (20 at first) cut by rank: it hid a large change at rank 21 and
