@@ -312,3 +312,33 @@ def test_top_changes_list_every_row_over_the_limit_and_at_least_n(
         f"Expected {expected_rows} top-change rows: every row at or over "
         f"{min_rel_change:.2%}, and at least {n_top_changes}"
     )
+
+
+def test_top_change_names_every_metric_over_the_limit(df_summary):
+    """A top-change row lists each other metric at or over the limit, once."""
+    markdown = summarise_comparisons.generate_str_summary_markdown(
+        df_summary=df_summary,
+        release_date=RELEASE_DATE,
+        la_slugs=["east_lothian", "midlothian"],
+        n_top_changes=1,
+        min_rel_change=0.00005,
+    )
+    lines = {
+        stage: next(
+            line
+            for line in markdown.splitlines()
+            if line.startswith(f"| east_lothian | {stage} |")
+        )
+        for stage in ("decision_tree", "cluster")
+    }
+    # decision_tree: 2 of 9,831 UPRNs (0.0203%) and 2 of 34,992 (0.00572%)
+    # changed tech, and both reach the 0.005% limit.
+    assert (
+        "tech:Individual or Networked heat pump (9,831 -> 9,833); also "
+        "tech:Individual solution (34,992 -> 34,990) 0.00572%"
+    ) in lines["decision_tree"], "The second tech over the limit should be listed"
+    # cluster: one row is one cluster, so rows and clusters give the same
+    # change. It should be named once, not twice.
+    assert (
+        "also" not in lines["cluster"]
+    ), "A metric with the same value as the largest one should not be listed again"

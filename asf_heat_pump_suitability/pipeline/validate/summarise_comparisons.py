@@ -208,9 +208,9 @@ def get_bool_stage_output_exists(
     return True
 
 
-def generate_tuple_max_rel_change(row: dict) -> tuple[float | None, str | None]:
+def generate_list_tuple_rel_changes(row: dict) -> list[tuple[float, str]]:
     """
-    Find the largest relative change in one flattened summary row.
+    List every relative change in one flattened summary row.
 
     A metric whose old value is 0 or null is not used.
 
@@ -219,10 +219,9 @@ def generate_tuple_max_rel_change(row: dict) -> tuple[float | None, str | None]:
             `generate_dict_flat_summary`
 
     Returns:
-        tuple[float | None, str | None]: the largest absolute relative change
-            and the name of its metric (e.g. "rows", "removed_share",
-            "missing_share", "tech:Networked heat pump"), or (None, None)
-            when no metric has a value
+        list[tuple[float, str]]: one (absolute relative change, metric name)
+            tuple for each metric with a value, e.g. (0.0237, "rows") or
+            (0.0605, "tech:Networked heat pump")
     """
     changes = []
     for metric in RELATIVE_CHANGE_METRICS:
@@ -245,9 +244,30 @@ def generate_tuple_max_rel_change(row: dict) -> tuple[float | None, str | None]:
                     f"{TECH_METRIC_PREFIX}{tech['assigned_tech']}",
                 )
             )
-    # max() keeps the first metric of a tie, so the order above sets which
-    # metric is named when changes are equal (e.g. all 0).
-    return max(changes, key=lambda change: change[0], default=(None, None))
+    return changes
+
+
+def generate_tuple_max_rel_change(row: dict) -> tuple[float | None, str | None]:
+    """
+    Find the largest relative change in one flattened summary row.
+
+    Args:
+        row (dict): one row of the summary table, as from
+            `generate_dict_flat_summary`
+
+    Returns:
+        tuple[float | None, str | None]: the largest absolute relative change
+            and the name of its metric, or (None, None) when no metric has a
+            value
+    """
+    # max() keeps the first metric of a tie, so the order of
+    # generate_list_tuple_rel_changes sets which metric is named when changes
+    # are equal (e.g. all 0).
+    return max(
+        generate_list_tuple_rel_changes(row=row),
+        key=lambda change: change[0],
+        default=(None, None),
+    )
 
 
 def generate_dict_flat_summary(summary: dict) -> dict:
@@ -384,22 +404,58 @@ def get_str_summary_scope(la_slugs: list[str], is_gb: bool) -> str:
     return f"{len(slugs)}_las_{slugs[0]}_to_{slugs[-1]}"
 
 
-def _generate_str_metric_cell(row: dict) -> str:
+def _generate_str_metric_name(row: dict, metric: str) -> str:
     """
-    Name a row's largest change, with the old and new counts for a tech.
+    Name one metric of a row, with the old and new counts for a tech.
 
     Args:
         row (dict): one row of the summary table
+        metric (str): a metric name of the row, e.g. "rows" or
+            "tech:Networked heat pump"
 
     Returns:
         str: the metric name, e.g. "tech:Networked heat pump (10 -> 12)"
     """
-    metric = row["max_rel_change_metric"]
     if not metric.startswith(TECH_METRIC_PREFIX):
         return metric
     tech_label = metric.removeprefix(TECH_METRIC_PREFIX)
     tech = next(t for t in row["tech_counts"] if t["assigned_tech"] == tech_label)
     return f"{metric} ({tech['n_old']:,} -> {tech['n_new']:,})"
+
+
+def _generate_str_metric_cell(row: dict, min_rel_change: float) -> str:
+    """
+    Name a row's largest change, and each other change at or over the limit.
+
+    Args:
+        row (dict): one row of the summary table
+        min_rel_change (float): change, as a share, at or over which a second
+            metric is also named
+
+    Returns:
+        str: e.g. "rows; also area_m2 4.00%"
+    """
+    largest = row["max_rel_change"]
+    others = sorted(
+        (
+            (change, metric)
+            for change, metric in generate_list_tuple_rel_changes(row=row)
+            if metric != row["max_rel_change_metric"] and change >= min_rel_change
+            # A change equal to the largest one is the same fact again, e.g.
+            # rows and clusters in the cluster stage, where one row is one
+            # cluster.
+            and change != largest
+        ),
+        reverse=True,
+    )
+    cell = _generate_str_metric_name(row=row, metric=row["max_rel_change_metric"])
+    if others:
+        cell += "; also " + ", ".join(
+            f"{_generate_str_metric_name(row=row, metric=metric)} "
+            f"{change * 100:.3g}%"
+            for change, metric in others
+        )
+    return cell
 
 
 def generate_str_summary_markdown(
@@ -483,7 +539,7 @@ def generate_str_summary_markdown(
         metric = (
             "-"
             if row["max_rel_change_metric"] is None
-            else _generate_str_metric_cell(row=row)
+            else _generate_str_metric_cell(row=row, min_rel_change=min_rel_change)
         )
         report_path = row["json_path"].removesuffix(".json") + ".md"
         lines.append(
