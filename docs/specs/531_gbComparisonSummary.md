@@ -2,7 +2,7 @@
 title: Build a GB summary table from the comparison JSON files
 status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/531
-pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/539
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/605 (part 1), https://github.com/nestauk/asf_heat_pump_suitability/pull/539 (part 2)
 asana:
 created: 2026-10-14
 ---
@@ -171,7 +171,7 @@ records the design decisions and why we made them.
 The work is split in two PRs (2026-11-11), along the two questions of the
 issue. Each PR has its own tests.
 
-- **PR A, run health** (branch `531_summaryRunHealth`, base `dev`). It
+- **PR A, run health** (PR #605, branch `531_summaryRunHealth`, base `dev`). It
   answers "did every LA and stage run?": decisions 1 to 5, 8, 10 and 11, and
   the run-health parts of decision 9. Rows are sorted by status, then LA,
   then stage.
