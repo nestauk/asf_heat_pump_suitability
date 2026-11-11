@@ -47,21 +47,21 @@ from asf_heat_pump_suitability.utils import save_utils
 
 
 def chunk_list_strings(
-    arr: np.array, n: int, number_of_chunks: bool
+    arr: np.array, n: int, is_number_of_chunks: bool
 ) -> List[List[str]]:
     """
     Split an array of strings into chunks for processing.
 
     Args:
         arr (np.array): array of strings to chunk.
-        n (int): number of chunks if `number_of_chunks` set to `True` otherwise, size of chunks.
-        number_of_chunks (bool): set to `True` if `n` represents number of chunks, or `False` if `n` represents size of chunks.
+        n (int): number of chunks if `is_number_of_chunks` set to `True` otherwise, size of chunks.
+        is_number_of_chunks (bool): set to `True` if `n` represents number of chunks, or `False` if `n` represents size of chunks.
 
     Returns:
         List[List[str]]: list of lists of strings
     """
     # array_split takes the number of chunks (unequal splitting allowed), so convert from chunk size if needed
-    n = n if number_of_chunks else math.ceil(len(arr) / n)
+    n = n if is_number_of_chunks else math.ceil(len(arr) / n)
     chunks = [list(l) for l in np.array_split(arr, n)]
     print(
         f"{len(chunks)} chunks to process. Each approx. {math.ceil(len(arr) / len(chunks))} items long."
@@ -103,7 +103,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--size",
-        help="Number of chunks for batch processing if `--number_of_chunks` passed, otherwise size of chunks for batch processing.",
+        help="Number of chunks for batch processing if `--is_number_of_chunks` passed, otherwise size of chunks for batch processing.",
         required=True,
         type=int,
     )
@@ -186,7 +186,7 @@ if __name__ == "__main__":
     chunks = chunk_list_strings(
         np.asarray(local_authorities),
         n=args.size,
-        number_of_chunks=args.is_number_of_chunks,
+        is_number_of_chunks=args.is_number_of_chunks,
     )
 
     compare_flags = ["--compare"] if args.compare else []
