@@ -1,14 +1,17 @@
-# ASF Heat Pump Suitability
+# Nesta's local heat planning data
 
-### Version 2.0.0 (in progress)
+### Version 2.0.0
 
-V2.0.0 of the `asf_heat_pump_suitability` repository generates the underlying data for Nesta's local heat planning tool aiming to:
+V2.0.0 of the `asf_heat_pump_suitability` repository generates the underlying data for [Nesta's local heat planning tool](https://clean-heat-playbook.nesta.org.uk/lhp) aiming to:
 
-- cluster groups of properties by technology - grouping similar neighbouring properties by the most suitable low-carbon heating technologies\*
-- provide additional key information for each cluster about properties, households, and the area they are located in
+- identify the most suitable low-carbon heating technology category\* for clusters of neighbouring domestic properties
+- provide contextual information about the properties in each cluster and its neighbourhood
+- add context layers, including location of anchor loads, ward boundaries, heat network zones and city centres
 
 \*Low-carbon heating technologies include **individual heat sources**, **networked ground source heat pumps** (also
-known as **shared ground loops**), **communal heat sources** and **district heat networks**. You can read ead more about this work [here](https://www.nesta.org.uk/project-updates/a-tool-to-support-local-clean-heat-planning/)
+known as **shared ground loops**), **communal heat sources** and **district heat networks**.
+
+Read the full methodology for Nesta's local heat planning data [here](https://media.nesta.org.uk/documents/full_methodology_README.pdf).
 
 ### Version 1.0.0
 
@@ -16,8 +19,10 @@ V1.0.0 of the `asf_heat_pump_suitability` contains the code used to calculate he
 super output areas (LSOAs) in England and Wales and Data Zones in Scotland using domestic EPC data and supplementary sources. Scores are
 weight-adjusted for LSOAs where possible to reduce bias.
 
-You can see [heat pump suitability scores across Great Britain in this map](https://heatpumpsuitability.dap-tools.uk/) for
-air source heat pumps, ground source heat pumps, shared group loops, and heat networks. You can read more about this work [here](https://www.nesta.org.uk/project/mapping-heat-pump-suitability-across-great-britain/). Please note that following the shift in our methodology to what we've developing in v2.0.0, the underlying data and associated map are no longer being updated. The map will be decommissioned in the near future.
+Suitability scores were calculated per LSOA for each technology type of: air source heat pumps, ground source heat pumps,
+shared group loops, and heat networks. You can read more about this work [here](https://www.nesta.org.uk/project/mapping-heat-pump-suitability-across-great-britain/). Previously, these data were used to
+produce a heat pump suitability map of Great Britain. Please note that following the shift in our methodology to v2.0.0,
+the map has been decommissioned and the data is no longer updated.
 
 Source code for v1.0.0 is available under [Releases](https://github.com/nestauk/asf_heat_pump_suitability/releases).
 
@@ -58,6 +63,7 @@ asf_heat_pump_suitability
 │    ├─ model/ - modules to engineer features and train models
 │    ├─ run/ - main scripts to run the pipeline
 │    ├─ transform/ - modules to process input datasets, files named by feature (e.g. `uprns.py`)
+│    ├─ validate/ - modules to validate input and output datasets
 │    ├─ README.md - instructions to run pipeline
 ├───research/
 │    Any exploratory or analytical work; each piece of work should have its own subdir within either the `exploratory` or `analysis folders
@@ -72,12 +78,15 @@ asf_heat_pump_suitability
 A comprehensive table of citations for data used in this analysis can be found in [asf_heat_pump_suitability/config/README.md](https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme). See attributions below.
 
 - Contains public sector information licensed under the [Open Government Licence v.3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
-- The data for this research include data provided by the Geographic Data Service (GeoDS), a Smart Data Research UK Investment: ES/Z504464/1.
+- The data for this research include data provided by the Geographic Data Service (GeoDS), a Smart Data Research UK Investment: ES/Z504464/1. Data licensed under [Community Database License Agreement – Permissive v2 (CDLA)](https://cdla.dev/permissive-2-0/).
 - Contains Ordnance Survey data. © Crown copyright and database right 2026.
 - Contains Royal Mail data © Royal Mail copyright and database right 2026.
 - Contains GeoPlace data © Local Government Information House Limited copyright and database right 2026.
 - Contains Historic Environment Scotland and Ordnance Survey data © Historic Environment Scotland - Scottish Charity No. SC045925 © Crown copyright and database right 2026
 - Contains public sector information from Plymouth City Council licensed under the [Open Government Licence v.3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+- Contains NRS data © Crown copyright and database right 2026. Inclusion of Postcode Address File (PAF) information.
+- (C) Crown copyright. Contains data supplied by National Records of Scotland.
+- Contains data from Fleischmann and Arribas-Bel, 2021, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - This information is subject to Crown copyright and database rights 2026 and is reproduced with the permission of HM Land Registry. See INSPIRE index polygons [conditions of use](https://use-land-property-data.service.gov.uk/datasets/inspire#conditions).
 - This work uses HM Land Registry's INSPIRE Index Polygons service. This information is subject to Crown copyright and database rights 2026 and is reproduced with the permission of HM Land Registry. The polygons (including the associated geometry, namely x, y co-ordinates) are subject to Crown copyright and database rights 2026 Ordnance Survey AC0000851063.
 - This work uses designated Historic Asset GIS Data, The Welsh Historic Environment Service (Cadw), 2026, licensed under the [Open Government Licence v.3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
@@ -90,7 +99,7 @@ This work uses code modified from [fieldmaps/edge-extender](https://github.com/f
 
 ## License
 
-This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
+This dataset is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License ([CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)). Notwithstanding the foregoing, UK-based low-carbon heating suppliers shall be entitled to use this dataset for internal commercial planning and installations of low-carbon heating technologies. All other terms of the CC BY-NC-SA 4.0 license remain in effect, including (without limitation) requirements in respect of attribution and the requirement to share any adapted versions of this dataset under the same license terms. Please follow the attribution requirements listed in the [config/README](https://github.com/nestauk/asf_heat_pump_suitability/tree/dev/asf_heat_pump_suitability/config#readme).
 
 ## Contributor guidelines and style guide
 

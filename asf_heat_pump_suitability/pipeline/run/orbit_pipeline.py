@@ -46,25 +46,41 @@ from asf_heat_pump_suitability.pipeline.run.pipeline import (
 from asf_heat_pump_suitability.utils import save_utils
 
 
-def chunk_list_strings(arr: np.array, n: int, size: bool) -> List[List[str]]:
+def chunk_list_strings(
+    arr: np.array, n: int, is_number_of_chunks: bool
+) -> List[List[str]]:
     """
     Split an array of strings into chunks for processing.
 
     Args:
         arr (np.array): array of strings to chunk.
-        n (int): size of chunks if `size` set to `True` otherwise, number of chunks.
-        size (bool): set to `True` if `n` represents size of chunks, or `False` if `n` represents number of chunks.
+        n (int): number of chunks if `is_number_of_chunks` set to `True` otherwise, size of chunks.
+        is_number_of_chunks (bool): set to `True` if `n` represents number of chunks, or `False` if `n` represents size of chunks.
 
     Returns:
         List[List[str]]: list of lists of strings
     """
-    if not size:
-        # Calculate how many items per chunk
-        n = math.ceil(len(arr) / n)
+    # array_split takes the number of chunks (unequal splitting allowed), so convert from chunk size if needed
+    n = n if is_number_of_chunks else math.ceil(len(arr) / n)
     chunks = [list(l) for l in np.array_split(arr, n)]
-    print(f"{len(chunks)} chunks to process. Each approx. {n} items long.")
+    print(
+        f"{len(chunks)} chunks to process. Each approx. {math.ceil(len(arr) / len(chunks))} items long."
+    )
 
     return chunks
+
+
+def validate_str_cli_arguments(args: List[str]) -> List[str]:
+    """
+    Add a '--' prefix to each argument that does not already have one.
+
+    Args:
+        args (List[str]): arguments to pass to `orbit`.
+
+    Returns:
+        List[str]: arguments prefixed with '--'
+    """
+    return [a if a.startswith("--") else "--" + a for a in args]
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -87,8 +103,8 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--size",
-        help="Number of chunks for batch processing if `--number_of_chunks` passed, otherwise size of chunks for batch processing.",
-        required=False,
+        help="Number of chunks for batch processing if `--is_number_of_chunks` passed, otherwise size of chunks for batch processing.",
+        required=True,
         type=int,
     )
 
@@ -118,6 +134,15 @@ def parse_arguments() -> argparse.Namespace:
         default=False,
     )
 
+    parser.add_argument(
+        "-o",
+        "--orbit_args",
+        help="Optional command line arguments to pass to `orbit`, e.g. '--on-demand'.",
+        required=False,
+        type=str,
+        nargs="+",
+    )
+
     # The comparison flags are checked here, so a bad flag
     # stops before any Orbit job starts.
     add_compare_arguments(parser=parser)
@@ -139,6 +164,9 @@ if __name__ == "__main__":
 
     args = parse_arguments()
     additional_flags = ["--prod"] if args.prod else []
+    if args.orbit_args:
+        additional_flags.extend(validate_str_cli_arguments(args.orbit_args))
+
     if args.prod:
         # .env is not uploaded to orbit, so pass the front-end S3 location to the jobs explicitly
         load_dotenv()
@@ -156,7 +184,9 @@ if __name__ == "__main__":
         local_authorities = local_authority.load_list_la_names(nation="GB")
 
     chunks = chunk_list_strings(
-        np.asarray(local_authorities), n=args.size, size=args.is_number_of_chunks
+        np.asarray(local_authorities),
+        n=args.size,
+        is_number_of_chunks=args.is_number_of_chunks,
     )
 
     compare_flags = ["--compare"] if args.compare else []

@@ -4,7 +4,11 @@ import regex as re
 import logging
 from tqdm import tqdm
 import warnings
-from asf_heat_pump_suitability.getters import base_getters, load_data, load_geodata
+from asf_heat_pump_suitability.getters import (
+    base_getters,
+    load_geodata,
+    load_boundaries,
+)
 from asf_heat_pump_suitability.utils import geo_utils
 
 
@@ -52,7 +56,7 @@ def transform_gdf_council_bounds(
     Returns:
         gpd.GeoDataFrame: dataframe of council (LAD) names with geometries in CRS British National Grid
     """
-    council_bounds = load_data.load_gdf_ons_council_bounds()
+    council_bounds = load_boundaries.load_gdf_local_authority_boundaries()
     council_bounds = council_bounds[use_cols]
     council_bounds["council_name_std"] = _standardise_list_council_names(
         council_bounds[ladnm_col]

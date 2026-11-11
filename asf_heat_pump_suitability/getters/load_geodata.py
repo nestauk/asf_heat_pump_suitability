@@ -310,12 +310,7 @@ def load_gdf_spatial_signatures_gb(
             )
         if isinstance(boundary, gpd.GeoDataFrame):
             boundary = geo_utils.verify_gdf_crs(gdf=boundary)
-            gdf = gdf.sjoin(
-                boundary[["geometry"]], how="inner", predicate="intersects"
-            ).drop(columns="index_right")
-        else:
-
-            gdf = gdf[gdf["geometry"].intersects(boundary)]
+        gdf = gdf.clip(boundary)
         if gdf.empty:
             warnings.warn("No spatial signatures found within given boundary.")
 
@@ -326,9 +321,7 @@ def load_gdf_spatial_signatures_gb(
             select_las=local_authorities_list
         )
 
-        gdf = gdf.sjoin(
-            boundary_gdf[["geometry"]], how="inner", predicate="intersects"
-        ).drop(columns="index_right")
+        gdf = gdf.clip(boundary_gdf)
         if gdf.empty:
             warnings.warn(
                 f"No spatial signatures found for Local Authority: {local_authority}."
