@@ -315,12 +315,12 @@ def test_top_changes_list_every_row_over_the_limit_and_at_least_n(
 
 
 def test_top_change_names_every_metric_over_the_limit(df_summary):
-    """A top-change row lists each other metric at or over the limit, once."""
+    """A top-change row names every metric at or over the limit, equal ones together."""
     markdown = summarise_comparisons.generate_str_summary_markdown(
         df_summary=df_summary,
         release_date=RELEASE_DATE,
         la_slugs=["east_lothian", "midlothian"],
-        n_top_changes=1,
+        n_top_changes=5,
         min_rel_change=0.00005,
     )
     lines = {
@@ -329,7 +329,7 @@ def test_top_change_names_every_metric_over_the_limit(df_summary):
             for line in markdown.splitlines()
             if line.startswith(f"| east_lothian | {stage} |")
         )
-        for stage in ("decision_tree", "cluster")
+        for stage in ("decision_tree", "cluster", "uprns")
     }
     # decision_tree: 2 of 9,831 UPRNs (0.0203%) and 2 of 34,992 (0.00572%)
     # changed tech, and both reach the 0.005% limit.
@@ -337,8 +337,33 @@ def test_top_change_names_every_metric_over_the_limit(df_summary):
         "tech:Individual or Networked heat pump (9,831 -> 9,833); also "
         "tech:Individual solution (34,992 -> 34,990) 0.00572%"
     ) in lines["decision_tree"], "The second tech over the limit should be listed"
-    # cluster: one row is one cluster, so rows and clusters give the same
-    # change. It should be named once, not twice.
+    # cluster: one row is one cluster, so rows and clusters have the same
+    # change. Both are named, once, together.
     assert (
-        "also" not in lines["cluster"]
-    ), "A metric with the same value as the largest one should not be listed again"
+        "| rows = clusters |" in lines["cluster"]
+    ), "Metrics with the same value should be named together, not twice"
+    assert "| no change |" in lines["uprns"], "A row with no change should say so"
+
+    # Two different techs that change by the same share are both named.
+    summary = _load_fixture("decision_tree_east_lothian_20261013_vs_20261014.json")
+    summary["tech_counts"][0].update({"n_old": 9831, "n_new": 9833, "n_delta": 2})
+    row = summarise_comparisons.generate_dict_flat_summary(summary=summary)
+    row.update(
+        local_authority="east_lothian",
+        stage="decision_tree",
+        status="compared",
+        json_path=f"{EL_DIR}/x.json",
+        n_json_files=1,
+        unused_json_paths=[],
+    )
+    markdown = summarise_comparisons.generate_str_summary_markdown(
+        df_summary=summarise_comparisons.generate_df_comparison_summary(rows=[row]),
+        release_date=RELEASE_DATE,
+        la_slugs=["east_lothian"],
+        n_top_changes=1,
+        min_rel_change=0.5,
+    )
+    assert (
+        "tech:(null) (9,831 -> 9,833) = "
+        "tech:Individual or Networked heat pump (9,831 -> 9,833)"
+    ) in markdown, "Two different metrics with the same value should both be named"

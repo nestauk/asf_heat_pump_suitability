@@ -423,37 +423,60 @@ def _generate_str_metric_name(row: dict, metric: str) -> str:
     return f"{metric} ({tech['n_old']:,} -> {tech['n_new']:,})"
 
 
+def _generate_str_metric_names(row: dict, metrics: list[str]) -> str:
+    """
+    Join the names of metrics that have the same change.
+
+    Args:
+        row (dict): one row of the summary table
+        metrics (list[str]): metric names of the row
+
+    Returns:
+        str: the names joined with " = ", e.g. "rows = clusters"
+    """
+    return " = ".join(
+        _generate_str_metric_name(row=row, metric=metric) for metric in metrics
+    )
+
+
 def _generate_str_metric_cell(row: dict, min_rel_change: float) -> str:
     """
     Name a row's largest change, and each other change at or over the limit.
 
+    Metrics with the same value are named together, e.g. "rows = clusters",
+    so no value is shown twice and no metric is hidden.
+
     Args:
         row (dict): one row of the summary table
-        min_rel_change (float): change, as a share, at or over which a second
-            metric is also named
+        min_rel_change (float): change, as a share, at or over which a smaller
+            change is also named
 
     Returns:
-        str: e.g. "rows; also area_m2 4.00%"
+        str: e.g. "rows = clusters; also area_m2 4.00%", or "no change"
     """
     largest = row["max_rel_change"]
+    if largest == 0:
+        return "no change"
+    # Same value, same group: e.g. rows and clusters in the cluster stage
+    # (one row is one cluster), or two techs that change by the same share.
+    # Grouping, not dropping, keeps a metric that is equal only by chance.
+    metrics_by_change = {}
+    for change, metric in generate_list_tuple_rel_changes(row=row):
+        metrics_by_change.setdefault(change, []).append(metric)
+
+    cell = _generate_str_metric_names(row=row, metrics=metrics_by_change[largest])
     others = sorted(
         (
-            (change, metric)
-            for change, metric in generate_list_tuple_rel_changes(row=row)
-            if metric != row["max_rel_change_metric"] and change >= min_rel_change
-            # A change equal to the largest one is the same fact again, e.g.
-            # rows and clusters in the cluster stage, where one row is one
-            # cluster.
-            and change != largest
+            (change, metrics)
+            for change, metrics in metrics_by_change.items()
+            if min_rel_change <= change < largest
         ),
         reverse=True,
     )
-    cell = _generate_str_metric_name(row=row, metric=row["max_rel_change_metric"])
     if others:
         cell += "; also " + ", ".join(
-            f"{_generate_str_metric_name(row=row, metric=metric)} "
-            f"{change * 100:.3g}%"
-            for change, metric in others
+            f"{_generate_str_metric_names(row=row, metrics=metrics)} {change * 100:.3g}%"
+            for change, metrics in others
         )
     return cell
 
