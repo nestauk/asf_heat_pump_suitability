@@ -2,7 +2,7 @@
 title: Build a GB summary table from the comparison JSON files
 status: in-review
 github_issue: https://github.com/nestauk/asf_heat_pump_suitability/issues/531
-pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/539
+pr: https://github.com/nestauk/asf_heat_pump_suitability/pull/605 (part 1), https://github.com/nestauk/asf_heat_pump_suitability/pull/539 (part 2)
 asana:
 created: 2026-10-14
 ---
@@ -166,13 +166,22 @@ records the design decisions and why we made them.
     The name must be readable, so a hash of the LA list was rejected. Sorting
     makes the name the same for any order of the LAs.
 
-### Branch and stacking
+### Delivery in two PRs
 
-The branch `531_gbComparisonSummary` is made from
-`526_compareVersionsInPipeline` (PR #534). The stack is #521 -> #534 ->
-#531. The reader needs the `comparisons_dir` config key and the JSON keys
-that #534 adds. The PR targets `526_compareVersionsInPipeline` and is
-retargeted when #534 merges.
+The work is split in two PRs (2026-11-11), along the two questions of the
+issue. Each PR has its own tests.
+
+- **PR A, run health** (PR #605, branch `531_summaryRunHealth`, base `dev`). It
+  answers "did every LA and stage run?": decisions 1 to 5, 8, 10 and 11, and
+  the run-health parts of decision 9. Rows are sorted by status, then LA,
+  then stage.
+- **PR B, rank the changes** (PR #539, branch `531_gbComparisonSummary`,
+  stacked on A). It answers "which LAs changed most?": decisions 6 and 7,
+  the `max_rel_change` columns, and the "Top changes" part of decision 9 with
+  its two config settings.
+
+#534 (the JSON writer) merged into `dev` on 2026-10-27, so A needs no other
+open PR.
 
 ## Alternatives considered
 
