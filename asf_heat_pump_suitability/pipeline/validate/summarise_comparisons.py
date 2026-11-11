@@ -208,7 +208,7 @@ def get_bool_stage_output_exists(
     return True
 
 
-def generate_list_tuple_rel_changes(row: dict) -> list[tuple[float, str]]:
+def generate_list_tuple_rel_changes(row: dict) -> list[tuple[float, str, str]]:
     """
     List every relative change in one flattened summary row.
 
@@ -219,55 +219,37 @@ def generate_list_tuple_rel_changes(row: dict) -> list[tuple[float, str]]:
             `generate_dict_flat_summary`
 
     Returns:
-        list[tuple[float, str]]: one (absolute relative change, metric name)
-            tuple for each metric with a value, e.g. (0.0237, "rows") or
-            (0.0605, "tech:Networked heat pump")
+        list[tuple[float, str, str]]: one tuple for each metric with a value:
+            the absolute relative change, the metric name and the name to
+            show in the markdown, e.g. (0.0237, "rows", "rows") or
+            (0.0605, "tech:Networked heat pump",
+            "tech:Networked heat pump (29,800 -> 31,602)")
     """
     changes = []
     for metric in RELATIVE_CHANGE_METRICS:
         if row[f"{metric}_old"]:
-            changes.append((abs(row[f"{metric}_delta"]) / row[f"{metric}_old"], metric))
+            change = abs(row[f"{metric}_delta"]) / row[f"{metric}_old"]
+            changes.append((change, metric, metric))
     for metric in SHARE_METRICS:
         if row[metric] is not None:
-            changes.append((abs(row[metric]), metric))
+            changes.append((abs(row[metric]), metric, metric))
     # The share of UPRNs with no cluster is already relative, so its change
     # is used as it is. A ratio of the small missing counts would be unstable.
     # A version is null when its add_features output is missing.
     if row["missing_share_old"] is not None and row["missing_share_new"] is not None:
         share_change = row["missing_share_new"] - row["missing_share_old"]
-        changes.append((abs(share_change), "missing_share"))
+        changes.append((abs(share_change), "missing_share", "missing_share"))
     for tech in row["tech_counts"] or []:
         if tech["n_old"]:
+            metric = f"{TECH_METRIC_PREFIX}{tech['assigned_tech']}"
             changes.append(
                 (
                     abs(tech["n_delta"]) / tech["n_old"],
-                    f"{TECH_METRIC_PREFIX}{tech['assigned_tech']}",
+                    metric,
+                    f"{metric} ({tech['n_old']:,} -> {tech['n_new']:,})",
                 )
             )
     return changes
-
-
-def generate_tuple_max_rel_change(row: dict) -> tuple[float | None, str | None]:
-    """
-    Find the largest relative change in one flattened summary row.
-
-    Args:
-        row (dict): one row of the summary table, as from
-            `generate_dict_flat_summary`
-
-    Returns:
-        tuple[float | None, str | None]: the largest absolute relative change
-            and the name of its metric, or (None, None) when no metric has a
-            value
-    """
-    # max() keeps the first metric of a tie, so the order of
-    # generate_list_tuple_rel_changes sets which metric is named when changes
-    # are equal (e.g. all 0).
-    return max(
-        generate_list_tuple_rel_changes(row=row),
-        key=lambda change: change[0],
-        default=(None, None),
-    )
 
 
 def generate_dict_flat_summary(summary: dict) -> dict:
@@ -301,8 +283,13 @@ def generate_dict_flat_summary(summary: dict) -> dict:
         row.update(
             {f"{key}_{version}": values.get(key) for key in MISSING_CLUSTERS_KEYS}
         )
-    row["max_rel_change"], row["max_rel_change_metric"] = generate_tuple_max_rel_change(
-        row=row
+    # max() keeps the first metric of a tie, so the order of
+    # generate_list_tuple_rel_changes sets which metric is named when changes
+    # are equal (e.g. all 0).
+    row["max_rel_change"], row["max_rel_change_metric"], _ = max(
+        generate_list_tuple_rel_changes(row=row),
+        key=lambda change: change[0],
+        default=(None, None, None),
     )
     return row
 
@@ -404,41 +391,6 @@ def get_str_summary_scope(la_slugs: list[str], is_gb: bool) -> str:
     return f"{len(slugs)}_las_{slugs[0]}_to_{slugs[-1]}"
 
 
-def _generate_str_metric_name(row: dict, metric: str) -> str:
-    """
-    Name one metric of a row, with the old and new counts for a tech.
-
-    Args:
-        row (dict): one row of the summary table
-        metric (str): a metric name of the row, e.g. "rows" or
-            "tech:Networked heat pump"
-
-    Returns:
-        str: the metric name, e.g. "tech:Networked heat pump (10 -> 12)"
-    """
-    if not metric.startswith(TECH_METRIC_PREFIX):
-        return metric
-    tech_label = metric.removeprefix(TECH_METRIC_PREFIX)
-    tech = next(t for t in row["tech_counts"] if t["assigned_tech"] == tech_label)
-    return f"{metric} ({tech['n_old']:,} -> {tech['n_new']:,})"
-
-
-def _generate_str_metric_names(row: dict, metrics: list[str]) -> str:
-    """
-    Join the names of metrics that have the same change.
-
-    Args:
-        row (dict): one row of the summary table
-        metrics (list[str]): metric names of the row
-
-    Returns:
-        str: the names joined with " = ", e.g. "rows = clusters"
-    """
-    return " = ".join(
-        _generate_str_metric_name(row=row, metric=metric) for metric in metrics
-    )
-
-
 def _generate_str_metric_cell(row: dict, min_rel_change: float) -> str:
     """
     Name a row's largest change, and each other change at or over the limit.
@@ -447,37 +399,30 @@ def _generate_str_metric_cell(row: dict, min_rel_change: float) -> str:
     so no value is shown twice and no metric is hidden.
 
     Args:
-        row (dict): one row of the summary table
+        row (dict): one compared row of the summary table
         min_rel_change (float): change, as a share, at or over which a smaller
             change is also named
 
     Returns:
         str: e.g. "rows = clusters; also area_m2 4.00%", or "no change"
     """
-    largest = row["max_rel_change"]
-    if largest == 0:
+    if row["max_rel_change"] == 0:
         return "no change"
     # Same value, same group: e.g. rows and clusters in the cluster stage
     # (one row is one cluster), or two techs that change by the same share.
     # Grouping, not dropping, keeps a metric that is equal only by chance.
-    metrics_by_change = {}
-    for change, metric in generate_list_tuple_rel_changes(row=row):
-        metrics_by_change.setdefault(change, []).append(metric)
-
-    cell = _generate_str_metric_names(row=row, metrics=metrics_by_change[largest])
-    others = sorted(
-        (
-            (change, metrics)
-            for change, metrics in metrics_by_change.items()
-            if min_rel_change <= change < largest
-        ),
-        reverse=True,
-    )
-    if others:
-        cell += "; also " + ", ".join(
-            f"{_generate_str_metric_names(row=row, metrics=metrics)} {change * 100:.3g}%"
-            for change, metrics in others
-        )
+    labels_by_change = {}
+    for change, _, label in generate_list_tuple_rel_changes(row=row):
+        labels_by_change.setdefault(change, []).append(label)
+    (_, largest_labels), *others = sorted(labels_by_change.items(), reverse=True)
+    cell = " = ".join(largest_labels)
+    also = [
+        f"{' = '.join(labels)} {change * 100:.3g}%"
+        for change, labels in others
+        if change >= min_rel_change
+    ]
+    if also:
+        cell += "; also " + ", ".join(also)
     return cell
 
 
@@ -552,18 +497,13 @@ def generate_str_summary_markdown(
         "|---|---|---|---|---|---|",
     ]
     for row in df_top.iter_rows(named=True):
-        # Significant figures, not fixed decimals, so a small real change
-        # (e.g. 4 of 87,822 UPRNs) does not show as 0.
-        change = (
-            "-"
-            if row["max_rel_change"] is None
-            else f"{row['max_rel_change'] * 100:.3g}%"
-        )
-        metric = (
-            "-"
-            if row["max_rel_change_metric"] is None
-            else _generate_str_metric_cell(row=row, min_rel_change=min_rel_change)
-        )
+        if row["max_rel_change"] is None:
+            change = metric = "-"
+        else:
+            # Significant figures, not fixed decimals, so a small real change
+            # (e.g. 4 of 87,822 UPRNs) does not show as 0.
+            change = f"{row['max_rel_change'] * 100:.3g}%"
+            metric = _generate_str_metric_cell(row=row, min_rel_change=min_rel_change)
         report_path = row["json_path"].removesuffix(".json") + ".md"
         lines.append(
             f"| {row['local_authority']} | {row['stage']} | "
