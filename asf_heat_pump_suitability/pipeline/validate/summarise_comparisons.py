@@ -54,8 +54,10 @@ N_TOP_CHANGES = config["compare_versions"]["summary_n_top_changes"]
 MIN_REL_CHANGE = config["compare_versions"]["summary_min_rel_change"]
 # Sort order of the statuses: compared rows first, then the rows with no JSON.
 STATUSES = ["compared", "comparison missing", "stage failed"]
-# Up to this many LAs, the file name lists every LA slug.
-MAX_LAS_NAMED_IN_SCOPE = 3
+# Only for the output file names, not a limit on the LAs in a summary. The
+# file name of a summary with up to this many LAs lists every LA slug. A
+# summary with more LAs is named by its count and its first and last slug.
+MAX_LAS_IN_FILE_NAME = 3
 
 # JSON keys with a fixed set of sub-keys, flattened into one column each,
 # with the column type.
@@ -381,12 +383,12 @@ def get_str_summary_scope(la_slugs: list[str], is_gb: bool) -> str:
 
     Returns:
         str: "gb", the sorted slugs joined with "__" for up to
-            `MAX_LAS_NAMED_IN_SCOPE` LAs, or "{n}_las_{first}_to_{last}"
+            `MAX_LAS_IN_FILE_NAME` LAs, or "{n}_las_{first}_to_{last}"
     """
     if is_gb:
         return "gb"
     slugs = sorted(la_slugs)
-    if len(slugs) <= MAX_LAS_NAMED_IN_SCOPE:
+    if len(slugs) <= MAX_LAS_IN_FILE_NAME:
         return "__".join(slugs)
     return f"{len(slugs)}_las_{slugs[0]}_to_{slugs[-1]}"
 
