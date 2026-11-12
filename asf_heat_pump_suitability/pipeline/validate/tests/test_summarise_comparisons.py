@@ -370,7 +370,7 @@ def test_top_change_names_both_metrics_equal_by_chance():
 
 
 def test_reader_keys_match_what_compare_versions_writes():
-    """The keys the reader flattens are exactly the keys the writer writes."""
+    """The keys this script reads are exactly the keys compare_versions writes."""
     # One small output with every column the writer reads: UPRNs with a tech,
     # in two clusters of the clusters layer.
     df = pl.DataFrame(
