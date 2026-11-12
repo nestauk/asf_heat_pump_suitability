@@ -51,9 +51,7 @@ STAGES = list(STAGE_OUTPUT_DATASETS)
 SUMMARY_DIR = config["output"]["compare_versions_summary"]
 # Sort order of the statuses: compared rows first, then the rows with no JSON.
 STATUSES = ["compared", "comparison missing", "stage failed"]
-# Only for the output file names, not a limit on the LAs in a summary. The
-# file name of a summary with up to this many LAs lists every LA slug. A
-# summary with more LAs is named by its count and its first and last slug.
+# Up to this many LAs, the output file name lists every LA slug.
 MAX_LAS_IN_FILE_NAME = 3
 
 # JSON keys with a fixed set of sub-keys, flattened into one column each,
