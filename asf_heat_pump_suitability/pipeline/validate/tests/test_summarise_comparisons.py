@@ -67,6 +67,12 @@ def df_summary(mocker):
     East Lothian has the five real JSONs, plus an older second add_features
     JSON. Midlothian has no JSON; of its stage outputs, only the cluster
     output exists.
+
+    Args:
+        mocker (pytest_mock.MockerFixture): mocks the S3 stage-output check
+
+    Returns:
+        pl.DataFrame: the summary table, 10 rows
     """
     el_files = [
         _comparison_file(
@@ -158,15 +164,14 @@ def test_summary_flattens_the_keys_each_stage_has(df_summary):
         "which this stage has not, should give null columns"
     )
 
-    techs = (
-        df_summary.filter(pl.col("stage") == "decision_tree")
-        .filter(pl.col("local_authority") == "east_lothian")
-        .explode("tech_counts")
-        .unnest("tech_counts")
-    )
-    assert techs.filter(pl.col("assigned_tech") == "Individual solution")[
-        "n_delta"
-    ].to_list() == [-2], "tech_counts should explode to one row for each tech"
+    tech_counts = _row(df_summary, "east_lothian", "decision_tree")["tech_counts"]
+    assert [tech["n_delta"] for tech in tech_counts] == [
+        0,
+        0,
+        2,
+        -2,
+        0,
+    ], "tech_counts should be kept as one nested cell with each tech's counts"
 
 
 def test_summary_uses_the_newest_of_two_json_files(df_summary):
@@ -185,10 +190,15 @@ def test_summary_uses_the_newest_of_two_json_files(df_summary):
 
 def test_summary_lists_compared_rows_first_in_pipeline_order(df_summary):
     """Compared rows come first, then the rest; each LA's stages in pipeline order."""
+    # The rows in reverse order (Midlothian first, stages backwards), so the
+    # test passes only if the table is really sorted.
+    df = summarise_comparisons.generate_df_comparison_summary(
+        rows=df_summary.reverse().to_dicts()
+    )
     assert (
-        df_summary["status"].to_list()[:5] == ["compared"] * 5
+        df["status"].to_list()[:5] == ["compared"] * 5
     ), "All compared rows should come before the rows with no JSON"
-    assert df_summary["stage"].to_list()[:5] == list(
+    assert df["stage"].to_list()[:5] == list(
         compare_versions.STAGE_OUTPUT_DATASETS
     ), "An LA's stages should be in pipeline order"
 
