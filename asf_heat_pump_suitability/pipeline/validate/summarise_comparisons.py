@@ -43,6 +43,7 @@ from asf_heat_pump_suitability.pipeline.transform.local_authority import (
 )
 from asf_heat_pump_suitability.pipeline.validate.compare_versions import (
     COMPARISONS_DIR,
+    SUMMARY_SCHEMA_VERSION,
     STAGE_OUTPUT_DATASETS,
     get_str_stage_output_path,
 )
@@ -313,6 +314,10 @@ def generate_list_dict_la_rows(
     Returns:
         list[dict]: one row for each stage, with the columns of
             `SUMMARY_SCHEMA`
+
+    Raises:
+        ValueError: if a JSON used has a schema_version other than
+            `SUMMARY_SCHEMA_VERSION`
     """
     rows = []
     for stage in STAGES:
@@ -328,11 +333,20 @@ def generate_list_dict_la_rows(
             "unused_json_paths": [file["path"] for file in stage_files[1:]],
         }
         if stage_files:
+            newest = stage_files[0]
+            # The version comes from compare_versions, so a new JSON layout
+            # stops the run here and does not give empty columns.
+            if newest["summary"]["schema_version"] != SUMMARY_SCHEMA_VERSION:
+                raise ValueError(
+                    f"{newest['path']} has schema_version "
+                    f"{newest['summary']['schema_version']}, but this script reads "
+                    f"version {SUMMARY_SCHEMA_VERSION} only."
+                )
             # Every JSON is a real comparison: compare_versions writes none
             # when there is no older release.
             row["status"] = "compared"
-            row["json_path"] = stage_files[0]["path"]
-            row.update(generate_dict_flat_summary(summary=stage_files[0]["summary"]))
+            row["json_path"] = newest["path"]
+            row.update(generate_dict_flat_summary(summary=newest["summary"]))
         elif get_bool_stage_output_exists(
             stage=stage, local_authority=local_authority, release_date=release_date
         ):
