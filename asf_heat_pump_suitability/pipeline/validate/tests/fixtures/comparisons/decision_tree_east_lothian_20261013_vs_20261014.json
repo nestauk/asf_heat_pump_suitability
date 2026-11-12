@@ -1,0 +1,58 @@
+{
+  "schema_version": 2,
+  "stage": "decision_tree",
+  "local_authority": "east_lothian",
+  "release_date_old": "20261013",
+  "release_date_new": "20261014",
+  "trigger": null,
+  "counts": {
+    "rows_old": 58674,
+    "rows_new": 58674,
+    "rows_delta": 0,
+    "uprns_old": 58674,
+    "uprns_new": 58674,
+    "uprns_delta": 0
+  },
+  "uprn_churn": {
+    "n_added": 0,
+    "n_removed": 0,
+    "n_retained": 58674,
+    "removed_share": 0.0,
+    "added_share": 0.0,
+    "n_null_old": 0,
+    "n_null_new": 0
+  },
+  "tech_counts": [
+    {
+      "assigned_tech": "(null)",
+      "n_old": 291,
+      "n_new": 291,
+      "n_delta": 0
+    },
+    {
+      "assigned_tech": "Communal solution",
+      "n_old": 5691,
+      "n_new": 5691,
+      "n_delta": 0
+    },
+    {
+      "assigned_tech": "Individual or Networked heat pump",
+      "n_old": 9831,
+      "n_new": 9833,
+      "n_delta": 2
+    },
+    {
+      "assigned_tech": "Individual solution",
+      "n_old": 34992,
+      "n_new": 34990,
+      "n_delta": -2
+    },
+    {
+      "assigned_tech": "Networked heat pump",
+      "n_old": 7869,
+      "n_new": 7869,
+      "n_delta": 0
+    }
+  ],
+  "tolerance_warnings": []
+}

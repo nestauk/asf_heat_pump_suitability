@@ -233,6 +233,9 @@ output:
   # and JSON. It is inside the new release's folder, so the comparison files
   # sit next to the outputs they describe, and go if that release is deleted.
   compare_versions: "s3://asf-local-heat-planning-tool/outputs/data/{local_authority}/{release_date}/compare_versions"
+  # Where summarise_comparisons.py --save uploads the summary table and
+  # markdown of all the LAs' comparisons for one release.
+  compare_versions_summary: "s3://asf-local-heat-planning-tool/outputs/compare_versions/{release_date}"
 
 # Metadata generated for each local authority dataset with the assigned low-carbon heating technology for clusters of properties and contextual information about properties within the clusters and surrounding neighbourhood
 metadata:
