@@ -36,9 +36,10 @@ records the design decisions and why we made them.
    jobs and then runs this summary is issue #536.
 
 2. **The expected rows are the expected LAs x the five comparison stages.**
-   The LAs come from `config["data"]["processed"]["valid_la_names"]`
-   (`LAD23NM`, as `orbit_pipeline.py --local_authorities GB` reads them) or
-   from `--local_authorities`. They are made into slugs with
+   For `GB` the LAs come from `local_authority.load_list_la_names(nation="GB")`,
+   the same function `orbit_pipeline.py --local_authorities GB` calls (350
+   LAs in England, Wales and Scotland). Otherwise they come from
+   `--local_authorities`. They are made into slugs with
    `make_str_slug`. The stages are the keys of
    `config["compare_versions"]["stage_output_datasets"]`.
    _Rationale:_ the table must show an LA that has no files at all. A list
