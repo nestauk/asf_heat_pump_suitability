@@ -227,3 +227,71 @@ def test_summary_markdown_gives_run_health(df_summary):
     ]
     for line in expected_lines:
         assert line in markdown, f"The markdown should contain the line {line!r}"
+
+
+def test_reader_keys_match_what_compare_versions_writes():
+    """The keys the reader flattens are exactly the keys the writer writes."""
+    # One small output with every column the writer reads: UPRNs with a tech,
+    # in two clusters of the clusters layer.
+    df = pl.DataFrame(
+        {
+            "UPRN": [1, 2, 3],
+            "assigned_tech": ["A", "B", "A"],
+            "cluster_id": ["HP_1", "HP_1", "HP_2"],
+            "n_UPRNs": [2.0, 1.0, 0.0],
+            "layer": [compare_versions.CLUSTER_LAYER] * 3,
+        }
+    )
+    df_areas = pl.DataFrame(
+        {"area_m2": [10.0, 20.0, 30.0], "layer": [compare_versions.CLUSTER_LAYER] * 3}
+    )
+    # Between them, these two stages write every key of the JSON.
+    written = {}
+    for stage in ("decision_tree", "compute_contextual_features"):
+        written.update(
+            compare_versions.generate_dict_comparison_summary(
+                stage=stage,
+                local_authority="east_lothian",
+                trigger=None,
+                release_date_old="20261013",
+                release_date_new=RELEASE_DATE,
+                df_old=df,
+                df_new=df.head(2),
+                df_areas_old=df_areas,
+                df_areas_new=df_areas,
+                df_uprns_old=df.select("UPRN"),
+                df_uprns_new=df.select("UPRN"),
+            )
+        )
+    for key, sub_keys in summarise_comparisons.FLAT_KEYS.items():
+        assert set(written[key]) == set(sub_keys), (
+            f"compare_versions writes {sorted(written[key])} under {key!r}, "
+            f"but the reader expects {sorted(sub_keys)}"
+        )
+    assert set(written["uprns_missing_clusters"]["new"]) == set(
+        summarise_comparisons.MISSING_CLUSTERS_KEYS
+    ), "The missing-cluster keys written and read should be the same"
+    tech_fields = {
+        field.name
+        for field in summarise_comparisons.SUMMARY_SCHEMA["tech_counts"].inner.fields
+    }
+    assert (
+        set(written["tech_counts"][0]) == tech_fields
+    ), "The tech_counts fields written and read should be the same"
+
+
+def test_summary_stops_on_a_json_of_another_schema_version(mocker):
+    """A JSON with a layout the reader does not know stops the run."""
+    mocker.patch.object(
+        summarise_comparisons, "get_bool_stage_output_exists", return_value=False
+    )
+    summary = _load_fixture("uprns_east_lothian_20261013_vs_20261014.json")
+    summary["schema_version"] = 3
+    with pytest.raises(ValueError, match="schema_version 3"):
+        summarise_comparisons.generate_list_dict_la_rows(
+            local_authority="east_lothian",
+            release_date=RELEASE_DATE,
+            comparison_files=[
+                _comparison_file(path=f"{EL_DIR}/uprns.json", summary=summary, minute=1)
+            ],
+        )
