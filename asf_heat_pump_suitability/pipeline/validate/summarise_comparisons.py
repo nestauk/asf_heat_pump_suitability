@@ -1,5 +1,6 @@
 """
-Summarise the comparison JSON files of many local authorities for one release.
+Summarise the comparison JSON files of many local authorities for one release
+(the outputs of one pipeline run, in a folder named by its date).
 
 `pipeline.py --compare` writes one comparison JSON for each LA and stage to
 `outputs/data/{la}/{release_date}/compare_versions/`. This script reads them
@@ -11,8 +12,9 @@ for the given LAs and gives one row for each LA and stage, with a status:
 - stage failed: no JSON and no stage output for the release
 
 Rows are sorted by status, then LA, then stage. The script writes a parquet
-table and a markdown summary named for the LAs they cover, `comparison_summary_{scope}.parquet` and `.md`. Pass
---save to also upload both to `outputs/compare_versions/{release_date}/` on S3.
+table and a markdown summary, named for the LAs they cover:
+`comparison_summary_{scope}.parquet` and `.md`. Pass --save to also upload
+both to `outputs/compare_versions/{release_date}/` on S3.
 
 Run it by hand after the Orbit jobs of a release finish.
 
@@ -56,8 +58,8 @@ STATUSES = ["compared", "comparison missing", "stage failed"]
 # Up to this many LAs, the output file name lists every LA slug.
 MAX_LAS_IN_FILE_NAME = 3
 
-# JSON keys with a fixed set of sub-keys, flattened into one column each,
-# with the column type.
+# JSON keys that each hold a small dict of numbers. Each number becomes one
+# column of the summary table, with the type given here.
 FLAT_KEYS = {
     "counts": {
         "rows_old": pl.Int64,
@@ -87,8 +89,9 @@ FLAT_KEYS = {
         "area_m2_delta": pl.Float64,
     },
 }
-# Sub-keys of each version ("old", "new") in uprns_missing_clusters, with the
-# column type.
+# The numbers in uprns_missing_clusters, with their type. The JSON gives each
+# number for the old and the new release, so each becomes two columns, e.g.
+# uprns_missing_old and uprns_missing_new.
 MISSING_CLUSTERS_KEYS = {
     "uprns_in": pl.Int64,
     "uprns_in_clusters": pl.Int64,
@@ -139,7 +142,7 @@ def load_list_dict_comparison_files(
     Load all comparison JSON files of one LA and release from S3.
 
     Args:
-        local_authority (str): LA slug used in output paths
+        local_authority (str): LA slug used in output paths (e.g. east_lothian)
         release_date (str): release date, YYYYMMDD
 
     Returns:
@@ -153,20 +156,21 @@ def load_list_dict_comparison_files(
     )
     fs = s3fs.S3FileSystem()
     try:
-        objects = fs.ls(comparisons_dir, detail=True)
+        s3_files = fs.ls(comparisons_dir, detail=True)
     except FileNotFoundError:
-        # An LA with no comparison for the release has no comparisons folder.
+        # An LA with no comparison for the release has no compare_versions
+        # folder.
         return []
     files = []
-    for obj in objects:
-        if not obj["name"].endswith(".json"):
+    for s3_file in s3_files:
+        if not s3_file["name"].endswith(".json"):
             continue
-        with fs.open(obj["name"]) as f:
+        with fs.open(s3_file["name"]) as f:
             summary = json.load(f)
         files.append(
             {
-                "path": f"s3://{obj['name']}",
-                "last_modified": obj["LastModified"],
+                "path": f"s3://{s3_file['name']}",
+                "last_modified": s3_file["LastModified"],
                 "summary": summary,
             }
         )
@@ -201,7 +205,7 @@ def get_bool_stage_output_exists(
 
 def generate_dict_flat_summary(summary: dict) -> dict:
     """
-    Flatten one comparison JSON into the columns of the summary table.
+    Turn one comparison JSON into one row of the summary table.
 
     A JSON has only the keys that apply to its stage. The columns of the
     other keys are null.
@@ -467,7 +471,7 @@ if __name__ == "__main__":
     args = parse_arguments()
     release_date = save_utils.get_str_release_date(args.release_date)
     # Stops on a name that is not an LA, so a typo is not reported as
-    # "stage failed". Gives None for GB, in any case.
+    # "stage failed". It gives None for GB, in upper or lower case.
     resolved_la_names = resolve_list_la_names(la_names=args.local_authorities)
     is_gb = resolved_la_names is None
     # The same GB list as orbit_pipeline.py, so a summary expects the LAs a GB
