@@ -394,10 +394,11 @@ compare_versions:
     cluster: "tech_clusters"
     compute_contextual_features: "clusters_tech_contextual_info"
   decision_tree_buildings_dataset: "buildings_most_suitable_tech"
-  # The "top changes" list of the summary markdown shows every compared row
-  # whose largest relative change (a share: 0.01 = 1%) is at least
-  # summary_min_rel_change, with no cap, and at least summary_n_top_changes
-  # rows. It only chooses what the markdown lists; nothing is flagged.
+  # The "Top changes" section of the summary markdown lists every compared row
+  # with a change of summary_min_rel_change or more (0.01 = 1%). If fewer rows
+  # reach it, the next largest changes are added until there are
+  # summary_n_top_changes rows. These values only choose what the markdown
+  # lists. They do not flag anything.
   # First values: change them after two GB runs.
   summary_min_rel_change: 0.01
   summary_n_top_changes: 10

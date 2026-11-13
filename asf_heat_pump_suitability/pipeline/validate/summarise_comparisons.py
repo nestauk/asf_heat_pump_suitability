@@ -454,18 +454,20 @@ def generate_str_summary_markdown(
     """
     Write the summary table as a short markdown report for people.
 
-    The top changes list every compared row whose max_rel_change is at least
-    `min_rel_change`, with no cap, and at least `n_top_changes` rows.
+    The "Top changes" section lists every compared row with a change of
+    `min_rel_change` or more. If fewer rows than `n_top_changes` reach it,
+    the next largest changes are added until there are `n_top_changes` rows.
+    E.g. with 1% and 10: if 671 rows change by 1% or more, it lists 671 rows.
+    If 3 rows do, it lists 10.
 
     Args:
         df_summary (pl.DataFrame): summary table, as from
             `generate_df_comparison_summary`
         release_date (str): release date, YYYYMMDD
         la_slugs (list[str]): slugs of every LA in the run
-        n_top_changes (int): least number of compared rows to list as top
-            changes
-        min_rel_change (float): max_rel_change, as a share, at or over which
-            every compared row is listed
+        n_top_changes (int): minimum number of rows in "Top changes"
+        min_rel_change (float): change (0.01 = 1%) at or over which a row is
+            always in "Top changes"
 
     Returns:
         str: the markdown report
