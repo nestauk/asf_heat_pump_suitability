@@ -188,8 +188,8 @@ def test_summary_uses_the_newest_of_two_json_files(df_summary):
     ), "The JSON written last should be used and the other one listed"
 
 
-def test_summary_lists_compared_rows_first_in_pipeline_order(df_summary):
-    """Compared rows come first, then the rest; each LA's stages in pipeline order."""
+def test_summary_is_sorted_by_largest_relative_change(df_summary):
+    """Compared rows come first, largest change first; the rest come after."""
     # The rows in reverse order (Midlothian first, stages backwards), so the
     # test passes only if the table is really sorted.
     df = summarise_comparisons.generate_df_comparison_summary(
@@ -198,9 +198,60 @@ def test_summary_lists_compared_rows_first_in_pipeline_order(df_summary):
     assert (
         df["status"].to_list()[:5] == ["compared"] * 5
     ), "All compared rows should come before the rows with no JSON"
-    assert df["stage"].to_list()[:5] == list(
-        compare_versions.STAGE_OUTPUT_DATASETS
-    ), "An LA's stages should be in pipeline order"
+    changes = df["max_rel_change"].to_list()[:5]
+    assert changes == sorted(
+        changes, reverse=True
+    ), "Compared rows should be sorted by max_rel_change, largest first"
+    top = df.row(0, named=True)
+    assert (top["stage"], top["max_rel_change_metric"]) == (
+        "decision_tree",
+        "tech:Individual or Networked heat pump",
+    ), "East Lothian's top change is 2 of 9,831 UPRNs moving tech"
+    assert top["max_rel_change"] == pytest.approx(
+        2 / 9831
+    ), "max_rel_change should be |n_delta| / n_old of that tech"
+
+
+@pytest.mark.parametrize(
+    "stage, key, edit, expected_metric",
+    [
+        # 50 new UPRNs with no tech, none before: no relative change, skipped.
+        (
+            "decision_tree",
+            "tech_counts",
+            {"n_old": 0, "n_new": 50, "n_delta": 50},
+            "tech:Individual or Networked heat pump",
+        ),
+        # Same total, but half the old UPRNs replaced: churn beats the techs.
+        ("decision_tree", "uprn_churn", {"removed_share": 0.5}, "removed_share"),
+        # Clusters and area flat, but 12% of UPRNs now have no cluster (0.5%
+        # before): the change in missing_share wins.
+        (
+            "compute_contextual_features",
+            "uprns_missing_clusters",
+            {"missing_share": 0.12},
+            "missing_share",
+        ),
+    ],
+)
+def test_max_rel_change_skips_zero_old_values_and_uses_shares(
+    stage, key, edit, expected_metric
+):
+    """A metric with old = 0 is not used; changes in shares count as changes."""
+    summary = _load_fixture(f"{stage}_east_lothian_20261013_vs_20261014.json")
+    # The first tech_counts entry is the "(null)" tech. The missing-cluster
+    # edit is made to the new version.
+    if key == "tech_counts":
+        target = summary[key][0]
+    elif key == "uprns_missing_clusters":
+        target = summary[key]["new"]
+    else:
+        target = summary[key]
+    target.update(edit)
+    row = summarise_comparisons.generate_dict_flat_summary(summary=summary)
+    assert (
+        row["max_rel_change_metric"] == expected_metric
+    ), f"The largest change should be {expected_metric}"
 
 
 @pytest.mark.parametrize(
@@ -223,12 +274,14 @@ def test_summary_scope_names_the_las_covered(la_slugs, is_gb, expected):
     ), f"The scope for {la_slugs} should be {expected}"
 
 
-def test_summary_markdown_gives_run_health(df_summary):
-    """The markdown shows the status counts for each stage and in all."""
+def test_summary_markdown_gives_run_health_and_top_changes(df_summary):
+    """The markdown shows the status counts and the top changes."""
     markdown = summarise_comparisons.generate_str_summary_markdown(
         df_summary=df_summary,
         release_date=RELEASE_DATE,
         la_slugs=["east_lothian", "midlothian"],
+        n_top_changes=3,
+        min_rel_change=0.5,
     )
     expected_lines = [
         # Run-health table: stage, compared, comparison missing, stage failed
@@ -237,6 +290,69 @@ def test_summary_markdown_gives_run_health(df_summary):
     ]
     for line in expected_lines:
         assert line in markdown, f"The markdown should contain the line {line!r}"
+    assert (
+        "| 0.0203% | tech:Individual or Networked heat pump (9,831 -> 9,833)"
+        in markdown
+        and f"{EL_DIR}/decision_tree_east_lothian_20261013_vs_20261014.md" in markdown
+    ), "The top change should show its size to 3 significant figures, the tech counts and the per-LA report path"
+
+
+@pytest.mark.parametrize(
+    "n_top_changes, min_rel_change, expected_rows",
+    [
+        # East Lothian's changes: 0.0203%, 0.0186%, 0.0092%, 0, 0.
+        # Two rows reach 0.01%, so both are listed although the floor is 1.
+        (1, 0.0001, 2),
+        # No row reaches 50%, so the floor of 3 rows still applies.
+        (3, 0.5, 3),
+    ],
+)
+def test_top_changes_list_every_row_over_the_limit_and_at_least_n(
+    df_summary, n_top_changes, min_rel_change, expected_rows
+):
+    """Top changes have no cap above the limit, and a floor of rows below it."""
+    markdown = summarise_comparisons.generate_str_summary_markdown(
+        df_summary=df_summary,
+        release_date=RELEASE_DATE,
+        la_slugs=["east_lothian", "midlothian"],
+        n_top_changes=n_top_changes,
+        min_rel_change=min_rel_change,
+    )
+    assert markdown.count("| east_lothian | ") == expected_rows, (
+        f"Expected {expected_rows} top-change rows: every row at or over "
+        f"{min_rel_change:.2%}, and at least {n_top_changes}"
+    )
+
+
+def test_top_change_names_every_metric_over_the_limit(df_summary):
+    """A top-change row names every metric at or over the limit, equal ones together."""
+    markdown = summarise_comparisons.generate_str_summary_markdown(
+        df_summary=df_summary,
+        release_date=RELEASE_DATE,
+        la_slugs=["east_lothian", "midlothian"],
+        n_top_changes=5,
+        min_rel_change=0.00005,
+    )
+    lines = {
+        stage: next(
+            line
+            for line in markdown.splitlines()
+            if line.startswith(f"| east_lothian | {stage} |")
+        )
+        for stage in ("decision_tree", "cluster", "uprns")
+    }
+    # decision_tree: 2 of 9,831 UPRNs (0.0203%) and 2 of 34,992 (0.00572%)
+    # changed tech, and both reach the 0.005% limit.
+    assert (
+        "tech:Individual or Networked heat pump (9,831 -> 9,833); also "
+        "tech:Individual solution (34,992 -> 34,990) 0.00572%"
+    ) in lines["decision_tree"], "The second tech over the limit should be listed"
+    # cluster: one row is one cluster, so rows and clusters have the same
+    # change. Both are named, once, together.
+    assert (
+        "| rows = clusters |" in lines["cluster"]
+    ), "Metrics with the same value should be named together, not twice"
+    assert "| no change |" in lines["uprns"], "A row with no change should say so"
 
 
 def test_reader_keys_match_what_compare_versions_writes():

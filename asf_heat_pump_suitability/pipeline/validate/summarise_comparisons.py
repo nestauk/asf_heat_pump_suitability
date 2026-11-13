@@ -11,10 +11,10 @@ for the given LAs and gives one row for each LA and stage, with a status:
   The comparison failed, did not run, or had no older release to compare with
 - stage failed: no JSON and no stage output for the release
 
-Rows are sorted by status, then LA, then stage. The script writes a parquet
-table and a markdown summary, named for the LAs they cover:
-`comparison_summary_{scope}.parquet` and `.md`. Pass --save to also upload
-both to `outputs/compare_versions/{release_date}/` on S3.
+Compared rows are sorted by their largest relative change since the older
+release. The script writes a parquet table and a markdown summary, named for
+the LAs they cover: `comparison_summary_{scope}.parquet` and `.md`. Pass
+--save to also upload both to `outputs/compare_versions/{release_date}/` on S3.
 
 Run it by hand after the Orbit jobs of a release finish.
 
@@ -53,6 +53,8 @@ from asf_heat_pump_suitability.utils import save_utils
 
 STAGES = list(STAGE_OUTPUT_DATASETS)
 SUMMARY_DIR = config["output"]["compare_versions_summary"]
+N_TOP_CHANGES = config["compare_versions"]["summary_n_top_changes"]
+MIN_REL_CHANGE = config["compare_versions"]["summary_min_rel_change"]
 # Sort order of the statuses: compared rows first, then the rows with no JSON.
 STATUSES = ["compared", "comparison missing", "stage failed"]
 # Up to this many LAs, the output file name lists every LA slug.
@@ -98,12 +100,20 @@ MISSING_CLUSTERS_KEYS = {
     "uprns_missing": pl.Int64,
     "missing_share": pl.Float64,
 }
+# Metrics whose change is taken relative to the old value, from the
+# {metric}_old and {metric}_delta columns.
+RELATIVE_CHANGE_METRICS = ["rows", "uprns", "clusters", "area_m2"]
+SHARE_METRICS = ["removed_share", "added_share"]
+TECH_METRIC_PREFIX = "tech:"
+
 # The columns of the summary table. They are fixed, so a run with only
 # missing rows still has every column.
 SUMMARY_SCHEMA = {
     "local_authority": pl.String,
     "stage": pl.String,
     "status": pl.String,
+    "max_rel_change": pl.Float64,
+    "max_rel_change_metric": pl.String,
     "schema_version": pl.Int64,
     "release_date_old": pl.String,
     "release_date_new": pl.String,
@@ -203,6 +213,50 @@ def get_bool_stage_output_exists(
     return True
 
 
+def generate_list_tuple_rel_changes(row: dict) -> list[tuple[float, str, str]]:
+    """
+    List every relative change in one flattened summary row.
+
+    A metric whose old value is 0 or null is not used.
+
+    Args:
+        row (dict): one row of the summary table, as from
+            `generate_dict_flat_summary`
+
+    Returns:
+        list[tuple[float, str, str]]: one tuple for each metric with a value:
+            the absolute relative change, the metric name and the name to
+            show in the markdown, e.g. (0.0237, "rows", "rows") or
+            (0.0605, "tech:Networked heat pump",
+            "tech:Networked heat pump (29,800 -> 31,602)")
+    """
+    changes = []
+    for metric in RELATIVE_CHANGE_METRICS:
+        if row[f"{metric}_old"]:
+            change = abs(row[f"{metric}_delta"]) / row[f"{metric}_old"]
+            changes.append((change, metric, metric))
+    for metric in SHARE_METRICS:
+        if row[metric] is not None:
+            changes.append((abs(row[metric]), metric, metric))
+    # The share of UPRNs with no cluster is already relative, so its change
+    # is used as it is. A ratio of the small missing counts would be unstable.
+    # A version is null when its add_features output is missing.
+    if row["missing_share_old"] is not None and row["missing_share_new"] is not None:
+        share_change = row["missing_share_new"] - row["missing_share_old"]
+        changes.append((abs(share_change), "missing_share", "missing_share"))
+    for tech in row["tech_counts"] or []:
+        if tech["n_old"]:
+            metric = f"{TECH_METRIC_PREFIX}{tech['assigned_tech']}"
+            changes.append(
+                (
+                    abs(tech["n_delta"]) / tech["n_old"],
+                    metric,
+                    f"{metric} ({tech['n_old']:,} -> {tech['n_new']:,})",
+                )
+            )
+    return changes
+
+
 def generate_dict_flat_summary(summary: dict) -> dict:
     """
     Turn one comparison JSON into one row of the summary table.
@@ -215,7 +269,7 @@ def generate_dict_flat_summary(summary: dict) -> dict:
 
     Returns:
         dict: one value for each column of `SUMMARY_SCHEMA` that a JSON
-            gives
+            gives, with max_rel_change and max_rel_change_metric
     """
     row = {
         "schema_version": summary["schema_version"],
@@ -234,6 +288,14 @@ def generate_dict_flat_summary(summary: dict) -> dict:
         row.update(
             {f"{key}_{version}": values.get(key) for key in MISSING_CLUSTERS_KEYS}
         )
+    # max() keeps the first metric of a tie, so the order of
+    # generate_list_tuple_rel_changes sets which metric is named when changes
+    # are equal (e.g. all 0).
+    row["max_rel_change"], row["max_rel_change_metric"], _ = max(
+        generate_list_tuple_rel_changes(row=row),
+        key=lambda change: change[0],
+        default=(None, None, None),
+    )
     return row
 
 
@@ -301,9 +363,10 @@ def generate_list_dict_la_rows(
 
 def generate_df_comparison_summary(rows: list[dict]) -> pl.DataFrame:
     """
-    Make the summary table, sorted by status, then LA, then stage.
+    Make the summary table, sorted by the largest relative change.
 
-    Compared rows come first. Rows with no JSON come after them.
+    Compared rows come first, largest change first. Rows with no JSON come
+    after them.
 
     Args:
         rows (list[dict]): summary rows, as from `generate_list_dict_la_rows`
@@ -315,9 +378,14 @@ def generate_df_comparison_summary(rows: list[dict]) -> pl.DataFrame:
     # An Enum sorts in the order of its categories, so statuses and stages
     # sort in list order, not alphabetically.
     return pl.DataFrame(rows, schema=SUMMARY_SCHEMA).sort(
-        pl.col("status").cast(pl.Enum(STATUSES)),
-        "local_authority",
-        pl.col("stage").cast(pl.Enum(STAGES)),
+        [
+            pl.col("status").cast(pl.Enum(STATUSES)),
+            "max_rel_change",
+            "local_authority",
+            pl.col("stage").cast(pl.Enum(STAGES)),
+        ],
+        descending=[False, True, False, False],
+        nulls_last=True,
     )
 
 
@@ -341,19 +409,65 @@ def get_str_summary_scope(la_slugs: list[str], is_gb: bool) -> str:
     return f"{len(slugs)}_las_{slugs[0]}_to_{slugs[-1]}"
 
 
+def _generate_str_metric_cell(row: dict, min_rel_change: float) -> str:
+    """
+    Name a row's largest change, and each other change at or over the limit.
+
+    Metrics with the same value are named together, e.g. "rows = clusters",
+    so no value is shown twice and no metric is hidden.
+
+    Args:
+        row (dict): one compared row of the summary table
+        min_rel_change (float): change, as a share, at or over which a smaller
+            change is also named
+
+    Returns:
+        str: e.g. "rows = clusters; also area_m2 4%", or "no change"
+    """
+    if row["max_rel_change"] == 0:
+        return "no change"
+    # Same value, same group: e.g. rows and clusters in the cluster stage
+    # (one row is one cluster), or two techs that change by the same share.
+    # Grouping, not dropping, keeps a metric that is equal only by chance.
+    labels_by_change = {}
+    for change, _, label in generate_list_tuple_rel_changes(row=row):
+        labels_by_change.setdefault(change, []).append(label)
+    (_, largest_labels), *others = sorted(labels_by_change.items(), reverse=True)
+    cell = " = ".join(largest_labels)
+    also = [
+        f"{' = '.join(labels)} {change * 100:.3g}%"
+        for change, labels in others
+        if change >= min_rel_change
+    ]
+    if also:
+        cell += "; also " + ", ".join(also)
+    return cell
+
+
 def generate_str_summary_markdown(
     df_summary: pl.DataFrame,
     release_date: str,
     la_slugs: list[str],
+    n_top_changes: int,
+    min_rel_change: float,
 ) -> str:
     """
     Write the summary table as a short markdown report for people.
+
+    The "Top changes" section lists every compared row with a change of
+    `min_rel_change` or more. If fewer rows than `n_top_changes` reach it,
+    the next largest changes are added until there are `n_top_changes` rows.
+    E.g. with 1% and 10: if 671 rows change by 1% or more, it lists 671 rows.
+    If 3 rows do, it lists 10.
 
     Args:
         df_summary (pl.DataFrame): summary table, as from
             `generate_df_comparison_summary`
         release_date (str): release date, YYYYMMDD
         la_slugs (list[str]): slugs of every LA in the run
+        n_top_changes (int): minimum number of rows in "Top changes"
+        min_rel_change (float): change (0.01 = 1%) at or over which a row is
+            always in "Top changes"
 
     Returns:
         str: the markdown report
@@ -385,6 +499,37 @@ def generate_str_summary_markdown(
             f"| {row['local_authority']} | {row['stage']} | {row['status']} |"
             for row in df_missing.iter_rows(named=True)
         ]
+
+    df_compared = df_summary.filter(pl.col("status") == "compared")
+    # The rows are sorted by max_rel_change, so the rows over the limit are the
+    # first n_over rows.
+    n_over = (df_compared["max_rel_change"] >= min_rel_change).sum()
+    df_top = df_compared.head(max(n_top_changes, n_over))
+    lines += [
+        "",
+        "## Top changes",
+        "",
+        f"{n_over} compared rows have a change of {min_rel_change * 100:.3g}% "
+        f"or more since the older release. All are listed, and at least "
+        f"{n_top_changes} rows.",
+        "",
+        "| LA | stage | releases | change | metric | report |",
+        "|---|---|---|---|---|---|",
+    ]
+    for row in df_top.iter_rows(named=True):
+        if row["max_rel_change"] is None:
+            change = metric = "-"
+        else:
+            # Significant figures, not fixed decimals, so a small real change
+            # (e.g. 4 of 87,822 UPRNs) does not show as 0.
+            change = f"{row['max_rel_change'] * 100:.3g}%"
+            metric = _generate_str_metric_cell(row=row, min_rel_change=min_rel_change)
+        report_path = row["json_path"].removesuffix(".json") + ".md"
+        lines.append(
+            f"| {row['local_authority']} | {row['stage']} | "
+            f"{row['release_date_old']} -> {row['release_date_new']} | "
+            f"{change} | {metric} | {report_path} |"
+        )
 
     warnings = [
         f"- {row['local_authority']} {row['stage']}: {warning}"
@@ -504,6 +649,8 @@ if __name__ == "__main__":
             df_summary=df_summary,
             release_date=release_date,
             la_slugs=la_slugs,
+            n_top_changes=N_TOP_CHANGES,
+            min_rel_change=MIN_REL_CHANGE,
         )
     )
     logging.info("Summary written to %s and %s", parquet_path, markdown_path)
