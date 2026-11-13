@@ -422,7 +422,7 @@ def _generate_str_metric_cell(row: dict, min_rel_change: float) -> str:
             change is also named
 
     Returns:
-        str: e.g. "rows = clusters; also area_m2 4.00%", or "no change"
+        str: e.g. "rows = clusters; also area_m2 4%", or "no change"
     """
     if row["max_rel_change"] == 0:
         return "no change"
