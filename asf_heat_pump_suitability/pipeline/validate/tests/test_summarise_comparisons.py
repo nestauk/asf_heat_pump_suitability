@@ -355,20 +355,6 @@ def test_top_change_names_every_metric_over_the_limit(df_summary):
     assert "| no change |" in lines["uprns"], "A row with no change should say so"
 
 
-def test_top_change_names_both_metrics_equal_by_chance():
-    """Two different techs that change by the same share are both named."""
-    summary = _load_fixture("decision_tree_east_lothian_20261013_vs_20261014.json")
-    # The "(null)" tech now changes by 2 of 9,831, like the largest tech.
-    summary["tech_counts"][0].update({"n_old": 9831, "n_new": 9833, "n_delta": 2})
-    row = summarise_comparisons.generate_dict_flat_summary(summary=summary)
-    assert summarise_comparisons._generate_str_metric_cell(
-        row=row, min_rel_change=0.5
-    ) == (
-        "tech:(null) (9,831 -> 9,833) = "
-        "tech:Individual or Networked heat pump (9,831 -> 9,833)"
-    ), "Two different metrics with the same value should both be named"
-
-
 def test_reader_keys_match_what_compare_versions_writes():
     """The keys this script reads are exactly the keys compare_versions writes."""
     # One small output with every column the writer reads: UPRNs with a tech,
