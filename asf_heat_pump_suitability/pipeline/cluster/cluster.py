@@ -28,7 +28,7 @@ from asf_heat_pump_suitability.pipeline.transform import local_authority
 import libpysal
 import warnings
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.utils import manifest_utils, save_utils
+from asf_heat_pump_suitability.utils import manifest_utils, save_utils, geo_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 from asf_heat_pump_suitability.pipeline.transform import barriers
 
@@ -108,6 +108,10 @@ def generate_gdf_clusters(
     """
     gdfs = []
 
+    buildings_gdf = geo_utils.assign_gdf_unique_geom_id(
+        gdf=buildings_gdf, id_col="persistent_building_id"
+    )
+
     # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
     for boundary in boundary_gdf["geometry"].unique():
         # This will retain buildings which straddle an LA boundary.
@@ -162,19 +166,20 @@ def generate_gdf_clusters(
     # communal clusters with different origins separate; dropna=False retains the
     # non-communal cells, whose communal_origin is null.
     clusters_gdf = (
-        cells_gdf.dissolve(by=["assigned_tech", "communal_origin"], dropna=False)
+        cells_gdf.dissolve(
+            by=["assigned_tech", "communal_origin"], dropna=False, aggfunc=list
+        )
         .explode()
-        .reset_index()[["assigned_tech", "communal_origin", "geometry"]]
+        .reset_index()[
+            ["persistent_building_id", "assigned_tech", "communal_origin", "geometry"]
+        ]
     )
 
-    # Create an ID for each geometry that starts with the tech code and ends with a unique number
-    # e.g. COM_1, COM_2, etc.
-    clusters_gdf["cluster_id"] = clusters_gdf.groupby("assigned_tech").cumcount()
-
+    # Create an ID for each geometry that starts with the tech code; then a unique hash; then the local authority slug
     clusters_gdf["cluster_id"] = (
         clusters_gdf["assigned_tech"].map(TECH_CODES)
         + "_"
-        + (clusters_gdf["cluster_id"] + 1).astype(str)
+        + clusters_gdf["persistent_building_id"].apply(concat_str_unique_hash)
         + "_"
         + local_authorities_slug
     )
@@ -255,6 +260,12 @@ def generate_gdf_clusters(
         )
 
     return clusters_gdf
+
+
+def concat_str_unique_hash(hex_points: list) -> str:
+    s = "".join(hex_points)
+    hash_object = hashlib.md5(s.encode())
+    return hash_object.hexdigest()[-12:]
 
 
 def sjoin_gdf_buildings_to_clusters(
@@ -382,7 +393,7 @@ def extend_edges_gdf(
         polygon_gdf=gdf, voronoi_gdf=voronoi_gdf, buffer=buffer, id_col=building_id_col
     )
 
-    # Return Voronoi cell geometries per building with original building ID
+    # Return Voronoi cell geometries per building with original building ID and persistent ID
     return gpd.GeoDataFrame(
         gdf.drop(columns=["geometry"])
         .merge(clipped_voronoi_gdf, how="inner", on=building_id_col)
