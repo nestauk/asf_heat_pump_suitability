@@ -162,37 +162,8 @@ def generate_gdf_clusters(
         reassigned_lookup["communal_origin"]
     )
 
-    # Create cluster geometries. Dissolving on (assigned_tech, communal_origin) keeps
-    # communal clusters with different origins separate; dropna=False retains the
-    # non-communal cells, whose communal_origin is null.
-    clusters_gdf = (
-        cells_gdf.dissolve(by=["assigned_tech", "communal_origin"], dropna=False)
-        .explode()
-        .reset_index()[["assigned_tech", "communal_origin", "geometry"]]
-    )
-
-    # Collect the persistent building IDs inside each cluster and generate unique persistent hash for each cluster
-    cell_points_gdf = gpd.GeoDataFrame(
-        cells_gdf[["persistent_building_id"]],
-        geometry=cells_gdf.representative_point(),
-        crs=cells_gdf.crs,
-    )
-
-    clusters_gdf["persistent_building_id"] = (
-        clusters_gdf[["geometry"]]
-        .sjoin(cell_points_gdf, how="left", predicate="contains")
-        .groupby(level=0)["persistent_building_id"]
-        # Sort so the hash does not change because of different row orders on different runs
-        .agg(sorted)
-    )
-
-    # Create an ID for each geometry that starts with the tech code; then a unique hash; then the local authority slug
-    clusters_gdf["cluster_id"] = (
-        clusters_gdf["assigned_tech"].map(TECH_CODES)
-        + "_"
-        + clusters_gdf["persistent_building_id"].apply(concat_str_unique_hash)
-        + "_"
-        + local_authorities_slug
+    clusters_gdf = dissolve_gdf_cells_to_clusters(
+        cells_gdf=cells_gdf, slug=local_authorities_slug
     )
 
     # Join boolean flag and reassigning anchor IDs for each building contained in the cluster back to the cluster to aggregate.
@@ -838,6 +809,7 @@ def reassign_gdf_near_anchor_properties(
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types and `communal_origin`.
         combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_load_id`
         radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' if they were assigned N-GSHP by the decision tree.
+
     Returns:
         gpd.GeoDataFrame: one row per building, with `assigned_tech` now reading communal if the building is in
         radius of an anchor property and was assigned N-GSHP by the decision tree, and `reassigning_anchor_load_ids` with matching
@@ -893,6 +865,46 @@ def reassign_gdf_near_anchor_properties(
     # add column with True if near anchor, False if not
     tech_gdf[f"within_{radius}m_from_anchor_load"] = near_anchor
     return tech_gdf
+
+
+def dissolve_gdf_cells_to_clusters(
+    cells_gdf: gpd.GeoDataFrame, slug: str
+) -> gpd.GeoDataFrame:
+    """"""
+    # Create cluster geometries. Dissolving on (assigned_tech, communal_origin) keeps
+    # communal clusters with different origins separate; dropna=False retains the
+    # non-communal cells, whose communal_origin is null.
+    clusters_gdf = (
+        cells_gdf.dissolve(by=["assigned_tech", "communal_origin"], dropna=False)
+        .explode()
+        .reset_index()[["assigned_tech", "communal_origin", "geometry"]]
+    )
+
+    # Collect the persistent building IDs inside each cluster and generate unique persistent hash for each cluster
+    cell_points_gdf = gpd.GeoDataFrame(
+        cells_gdf[["persistent_building_id"]],
+        geometry=cells_gdf.representative_point(),
+        crs=cells_gdf.crs,
+    )
+
+    clusters_gdf["persistent_building_id"] = (
+        clusters_gdf[["geometry"]]
+        .sjoin(cell_points_gdf, how="left", predicate="contains")
+        .groupby(level=0)["persistent_building_id"]
+        # Sort so the hash does not change because of different row orders on different runs
+        .agg(sorted)
+    )
+
+    # Create an ID for each geometry that starts with the tech code; then a unique hash; then the local authority slug
+    clusters_gdf["cluster_id"] = (
+        clusters_gdf["assigned_tech"].map(TECH_CODES)
+        + "_"
+        + clusters_gdf["persistent_building_id"].apply(concat_str_unique_hash)
+        + "_"
+        + slug
+    )
+
+    return clusters_gdf
 
 
 def map_df_uprns_to_clusters(
