@@ -166,13 +166,24 @@ def generate_gdf_clusters(
     # communal clusters with different origins separate; dropna=False retains the
     # non-communal cells, whose communal_origin is null.
     clusters_gdf = (
-        cells_gdf.dissolve(
-            by=["assigned_tech", "communal_origin"], dropna=False, aggfunc=list
-        )
+        cells_gdf.dissolve(by=["assigned_tech", "communal_origin"], dropna=False)
         .explode()
-        .reset_index()[
-            ["persistent_building_id", "assigned_tech", "communal_origin", "geometry"]
-        ]
+        .reset_index()[["assigned_tech", "communal_origin", "geometry"]]
+    )
+
+    # Collect the persistent building IDs inside each cluster and generate unique persistent hash for each cluster
+    cell_points_gdf = gpd.GeoDataFrame(
+        cells_gdf[["persistent_building_id"]],
+        geometry=cells_gdf.representative_point(),
+        crs=cells_gdf.crs,
+    )
+
+    clusters_gdf["persistent_building_id"] = (
+        clusters_gdf[["geometry"]]
+        .sjoin(cell_points_gdf, how="left", predicate="contains")
+        .groupby(level=0)["persistent_building_id"]
+        # Sort so the hash does not change because of different row orders on different runs
+        .agg(sorted)
     )
 
     # Create an ID for each geometry that starts with the tech code; then a unique hash; then the local authority slug
