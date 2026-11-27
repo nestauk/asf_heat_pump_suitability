@@ -106,46 +106,17 @@ def generate_gdf_clusters(
              -`f"within_{radius}m_from_anchor_load"` flag flagging whether the cluster is within a certain radius from an anchor load
              -`reassigning_anchor_load_ids` listing the anchors that caused buildings in the cluster to be reassigned 'communal', nearest first, where it applies; null for clusters with none.
     """
-    gdfs = []
-
     buildings_gdf = geo_utils.assign_gdf_unique_geom_id(
         gdf=buildings_gdf, id_col="persistent_building_id"
     )
 
-    # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
-    for boundary in boundary_gdf["geometry"].unique():
-        # This will retain buildings which straddle an LA boundary.
-        # The result is that these buildings can appear in one cluster in one LA, and a different cluster in a
-        # neighbouring LA, as clustering occurs at LA-level.
-        bounded_tech_gdf = tech_gdf[tech_gdf.intersects(boundary)]
-        voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
-
-        # One cell per building
-        cells_gdf = overlay_gdf_physical_barriers(
-            voronoi_gdf=voronoi_gdf,
-            tech_gdf=bounded_tech_gdf,
-            polygon_overlay_gdf=polygon_overlay_gdf,
-            id_col=id_col,
-        )
-        # TODO No reassignment based on neighbouring cells - TBC if wanted by user testing
-        # gdfs.append(reassign_gdf_communal_networked(cells_gdf))
-        gdfs.append(cells_gdf)
-
-    # Concatenate all boundary geodataframes together to get a geodataframe of all cells for the whole area of interest
-    if len(gdfs) > 1:
-        cells_gdf = pd.concat(gdfs)
-    else:
-        cells_gdf = gdfs[0]
-
-    # TODO move to proper testing when sample test set available
-    if len(cells_gdf) != len(tech_gdf):
-        n_cells = len(cells_gdf)
-        n_buildings = len(tech_gdf)
-        warnings.warn(
-            f"The number of cells and the number of buildings are different when they should be the same. "
-            f"There is a problem with the clustering. N cells: {n_cells}; N buildings: {n_buildings}",
-            UserWarning,
-        )
+    cells_gdf = generate_gdf_clipped_voronoi_cells(
+        buildings_gdf=buildings_gdf,
+        boundary_gdf=boundary_gdf,
+        tech_gdf=tech_gdf,
+        polygon_overlay_gdf=polygon_overlay_gdf,
+        id_col=id_col,
+    )
 
     # Tech reassignment for building footprints within a certain distance of anchor properties.
     # reassigned_gdf contains all buildings in original tech_gdf
@@ -167,7 +138,7 @@ def generate_gdf_clusters(
         cells_gdf=cells_gdf, slug=local_authorities_slug
     )
 
-    # Join boolean flag and reassigning anchor IDs for each building contained in the cluster back to the cluster to aggregate.
+    # Join boolean flag and reassigned anchor IDs for each building contained in the cluster back to the cluster to aggregate.
     # After this join, clusters_gdf has one row per building, not per cluster: each cluster's row repeats once for every
     # building it contains. The groupby below collapses it back to one row per cluster.
     clusters_gdf = clusters_gdf.sjoin(
@@ -268,6 +239,53 @@ def sjoin_gdf_buildings_to_clusters(
     # Reduce the size of the building footprints slightly so they can be completely contained within the cluster cells
     buffered_buildings_gdf["geometry"] = buffered_buildings_gdf["geometry"].buffer(-0.1)
     return buffered_buildings_gdf.sjoin(clusters_gdf, how="left", predicate="within")
+
+
+def generate_gdf_clipped_voronoi_cells(
+    buildings_gdf: gpd.GeoDataFrame,
+    boundary_gdf: gpd.GeoDataFrame,
+    tech_gdf: gpd.GeoDataFrame,
+    polygon_overlay_gdf: gpd.GeoDataFrame,
+    id_col: str,
+) -> gpd.GeoDataFrame:
+    """"""
+    gdfs = []
+    # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
+    for boundary in boundary_gdf["geometry"].unique():
+        # This will retain buildings which straddle an LA boundary.
+        # The result is that these buildings can appear in one cluster in one LA, and a different cluster in a
+        # neighbouring LA, as clustering occurs at LA-level.
+        bounded_tech_gdf = tech_gdf[tech_gdf.intersects(boundary)]
+        voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
+
+        # One cell per building
+        cells_gdf = overlay_gdf_physical_barriers(
+            voronoi_gdf=voronoi_gdf,
+            tech_gdf=bounded_tech_gdf,
+            polygon_overlay_gdf=polygon_overlay_gdf,
+            id_col=id_col,
+        )
+        # TODO No reassignment based on neighbouring cells - TBC if wanted by user testing
+        # gdfs.append(reassign_gdf_communal_networked(cells_gdf))
+        gdfs.append(cells_gdf)
+
+    # Concatenate all boundary geodataframes together to get a geodataframe of all cells for the whole area of interest
+    if len(gdfs) > 1:
+        cells_gdf = pd.concat(gdfs)
+    else:
+        cells_gdf = gdfs[0]
+
+    # TODO move to proper testing when sample test set available
+    if len(cells_gdf) != len(tech_gdf):
+        n_cells = len(cells_gdf)
+        n_buildings = len(tech_gdf)
+        warnings.warn(
+            f"The number of cells and the number of buildings are different when they should be the same. "
+            f"There is a problem with the clustering. N cells: {n_cells}; N buildings: {n_buildings}",
+            UserWarning,
+        )
+
+    return cells_gdf
 
 
 def extend_edges_gdf(
