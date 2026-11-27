@@ -28,7 +28,7 @@ from asf_heat_pump_suitability.pipeline.transform import local_authority
 import libpysal
 import warnings
 from asf_heat_pump_suitability import config
-from asf_heat_pump_suitability.utils import manifest_utils, save_utils
+from asf_heat_pump_suitability.utils import manifest_utils, save_utils, geo_utils
 from asf_heat_pump_suitability.getters import load_geodata, load_boundaries
 from asf_heat_pump_suitability.pipeline.transform import barriers
 
@@ -108,6 +108,10 @@ def generate_gdf_clusters(
     """
     gdfs = []
 
+    buildings_gdf = assign_gdf_unique_geom_id(
+        gdf=buildings_gdf, id_col="persistent_building_id"
+    )
+
     # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
     for boundary in boundary_gdf["geometry"].unique():
         # This will retain buildings which straddle an LA boundary.
@@ -143,7 +147,8 @@ def generate_gdf_clusters(
             UserWarning,
         )
 
-    # Tech reassignment for building footprints within a certain distance of anchor properties
+    # Tech reassignment for building footprints within a certain distance of anchor properties.
+    # reassigned_gdf contains all buildings in original tech_gdf
     reassigned_gdf = reassign_gdf_near_anchor_properties(
         tech_gdf=tech_gdf,
         combined_anchor_gdf=combined_anchor_gdf,
@@ -158,25 +163,8 @@ def generate_gdf_clusters(
         reassigned_lookup["communal_origin"]
     )
 
-    # Create cluster geometries. Dissolving on (assigned_tech, communal_origin) keeps
-    # communal clusters with different origins separate; dropna=False retains the
-    # non-communal cells, whose communal_origin is null.
-    clusters_gdf = (
-        cells_gdf.dissolve(by=["assigned_tech", "communal_origin"], dropna=False)
-        .explode()
-        .reset_index()[["assigned_tech", "communal_origin", "geometry"]]
-    )
-
-    # Create an ID for each geometry that starts with the tech code and ends with a unique number
-    # e.g. COM_1, COM_2, etc.
-    clusters_gdf["cluster_id"] = clusters_gdf.groupby("assigned_tech").cumcount()
-
-    clusters_gdf["cluster_id"] = (
-        clusters_gdf["assigned_tech"].map(TECH_CODES)
-        + "_"
-        + (clusters_gdf["cluster_id"] + 1).astype(str)
-        + "_"
-        + local_authorities_slug
+    clusters_gdf = dissolve_gdf_cells_to_clusters(
+        cells_gdf=cells_gdf, slug=local_authorities_slug
     )
 
     # Join boolean flag and reassigning anchor IDs for each building contained in the cluster back to the cluster to aggregate.
@@ -255,6 +243,21 @@ def generate_gdf_clusters(
         )
 
     return clusters_gdf
+
+
+def concat_str_unique_hash(hex_points: list) -> str:
+    """
+    Concatenate list of hexadecimal strings into a single string to convert to an MD5 hash.
+
+    Args:
+        hex_points (list): list of hexadecimal strings
+
+    Returns:
+        str: MD5 hash of concatenated hexadecimal strings
+    """
+    s = "".join(hex_points)
+    hash_object = hashlib.md5(s.encode())
+    return hash_object.hexdigest()[-12:]
 
 
 def sjoin_gdf_buildings_to_clusters(
@@ -382,7 +385,7 @@ def extend_edges_gdf(
         polygon_gdf=gdf, voronoi_gdf=voronoi_gdf, buffer=buffer, id_col=building_id_col
     )
 
-    # Return Voronoi cell geometries per building with original building ID
+    # Return Voronoi cell geometries per building with original building ID and persistent ID
     return gpd.GeoDataFrame(
         gdf.drop(columns=["geometry"])
         .merge(clipped_voronoi_gdf, how="inner", on=building_id_col)
@@ -425,6 +428,36 @@ def _jitter_arr_duplicate_coords(coords_arr: np.ndarray) -> np.ndarray:
             "voronoi_polygons(ordered=True) needs unique seeds."
         )
     return jittered_arr
+
+
+def assign_gdf_unique_geom_id(gdf: gpd.GeoDataFrame, id_col: str) -> gpd.GeoDataFrame:
+    """
+    Assign unique hexadecimal string ID to each geometry in a GeoDataFrame derived from a representative point within
+    each geometry. Geometries in the GeoDataFrame should not significantly overlap.
+
+    Args:
+        gdf (gpd.GeoDataFrame): polygons to generate persistent IDs for
+        id_col (str): name of new ID column to assign to `gdf`
+
+    Returns:
+        gpd.GeoDataFrame: original `gdf` with new `id_col` containing persistent hash IDs derived from geometries
+    """
+    representative_points = gdf.representative_point()
+
+    if representative_points.duplicated().sum() > 0:
+        # Extract a flat (N, 2) float64 array of all point coordinates
+        coords = shapely.get_coordinates(np.array(representative_points))
+
+        # Add jitter to remove duplicate representative points
+        coords = _jitter_arr_duplicate_coords(coords)
+
+        representative_points = gpd.GeoSeries(
+            gpd.points_from_xy(coords[:, 0], coords[:, 1]), crs="EPSG:27700"
+        )
+
+    gdf[id_col] = representative_points.to_wkb(hex=True)
+    assert gdf[id_col].nunique() == len(gdf), "Duplicate IDs generated"
+    return gdf
 
 
 def _clip_gdf_voronoi_cells_polygon_buffer(
@@ -816,6 +849,7 @@ def reassign_gdf_near_anchor_properties(
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types and `communal_origin`.
         combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_load_id`
         radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' if they were assigned N-GSHP by the decision tree.
+
     Returns:
         gpd.GeoDataFrame: one row per building, with `assigned_tech` now reading communal if the building is in
         radius of an anchor property and was assigned N-GSHP by the decision tree, and `reassigning_anchor_load_ids` with matching
@@ -871,6 +905,61 @@ def reassign_gdf_near_anchor_properties(
     # add column with True if near anchor, False if not
     tech_gdf[f"within_{radius}m_from_anchor_load"] = near_anchor
     return tech_gdf
+
+
+def dissolve_gdf_cells_to_clusters(
+    cells_gdf: gpd.GeoDataFrame, slug: str
+) -> gpd.GeoDataFrame:
+    """
+    Dissolve Voronoi cells into clusters: cells which are touching and share the same technology type (and
+    `communal_origin` where tech type is `communal_solutions`) are dissolved into one cluster. Clusters are assigned a
+    unique `cluster_id`.
+
+    Args:
+        cells_gdf (gpd.GeoDataFrame): Voronoi cells of buildings with/out clipping to overlaid barriers
+        slug (str): local authority slug
+
+    Returns:
+        gpd.GeoDataFrame: one row (and geometry) per cluster
+    """
+    # Get a representative point for each Voronoi cell and pair it to the persistent building ID
+    cell_points_gdf = gpd.GeoDataFrame(
+        cells_gdf[["persistent_building_id"]],
+        geometry=cells_gdf.representative_point(),
+        crs=cells_gdf.crs,
+    )
+
+    # Create cluster geometries. Dissolving on (assigned_tech, communal_origin) keeps communal clusters with different
+    # origins separate; dropna=False retains the non-communal cells, whose communal_origin is null.
+    clusters_gdf = (
+        cells_gdf.dissolve(by=["assigned_tech", "communal_origin"], dropna=False)
+        .explode()
+        .reset_index()[["assigned_tech", "communal_origin", "geometry"]]
+        # Set index as initial cluster ID
+        .rename_axis("cluster")
+    )
+
+    # Get the persistent building IDs inside each cluster in a sorted list
+    clusters_gdf["persistent_building_id"] = (
+        clusters_gdf[["geometry"]]
+        .sjoin(cell_points_gdf, how="left", predicate="contains")
+        .groupby("cluster")["persistent_building_id"]
+        # Sort the IDs so the final hash does not change because of different row orders on different runs
+        .agg(sorted)
+    )
+
+    # Create an ID for each cluster that starts with the tech code; then a unique hash; then the local authority slug
+    clusters_gdf["cluster_id"] = (
+        clusters_gdf["assigned_tech"].map(TECH_CODES)
+        + "_"
+        # Generate a unique persistent hash for each cluster - this will only change if the buildings (and / or their
+        # geometries) inside the cluster change
+        + clusters_gdf["persistent_building_id"].apply(concat_str_unique_hash)
+        + "_"
+        + slug
+    )
+
+    return clusters_gdf.drop(columns=["persistent_building_id"])
 
 
 def map_df_uprns_to_clusters(

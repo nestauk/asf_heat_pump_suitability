@@ -14,6 +14,7 @@ from asf_heat_pump_suitability import PROJECT_DIR
 from asf_heat_pump_suitability.pipeline.cluster.cluster import (
     DUPLICATE_SEED_JITTER_M,
     _jitter_arr_duplicate_coords,
+    assign_gdf_unique_geom_id,
     extend_edges_gdf,
     filter_gdf_anchors_to_save,
     generate_gdf_clusters,
@@ -831,6 +832,64 @@ class TestJitterArrDuplicateCoords:
         )
         with pytest.raises(ValueError, match="duplicate"):
             _jitter_arr_duplicate_coords(coords)
+
+
+class TestAssignGdfUniqueGeomId:
+    """Tests for `assign_gdf_unique_geom_id`."""
+
+    @staticmethod
+    def _square(x, y):
+        """A 10m square footprint with its south-west corner at (x, y)."""
+        return Polygon([(x, y), (x + 10, y), (x + 10, y + 10), (x, y + 10)])
+
+    def test_unique_representative_points_give_unchanged_ids(self):
+        """Test four polygons with distinct representative points get IDs equal to the hex WKB of those points."""
+        gdf = gpd.GeoDataFrame(
+            geometry=[self._square(400000 + 20 * i, 400000) for i in range(4)],
+            crs="EPSG:27700",
+        )
+        expected_ids = gdf.representative_point().to_wkb(hex=True)
+
+        results = assign_gdf_unique_geom_id(gdf.copy(), id_col="geom_id")
+
+        assert (
+            results["geom_id"].nunique() == 4
+        ), "four polygons with distinct representative points must get four distinct IDs"
+        assert results["geom_id"].equals(
+            expected_ids
+        ), "with no duplicate representative points, IDs must be the unjittered representative points"
+
+    def test_duplicate_representative_points_are_jittered_to_unique_ids(self):
+        """Test two polygons sharing a representative point are given different IDs, and the other two are unaffected."""
+        # B01 and B02 are identical footprints, so they share a representative point
+        gdf = gpd.GeoDataFrame(
+            geometry=[
+                self._square(400000, 400000),
+                self._square(400000, 400000),
+                self._square(400020, 400000),
+                self._square(400040, 400000),
+            ],
+            crs="EPSG:27700",
+        )
+        points = gdf.representative_point()
+        assert (
+            points.duplicated().sum() == 1
+        ), "test setup must give exactly one pair of polygons sharing a representative point"
+
+        results = assign_gdf_unique_geom_id(gdf.copy(), id_col="geom_id")
+
+        assert (
+            results["geom_id"].nunique() == 4
+        ), "polygons sharing a representative point must still get distinct IDs"
+
+        unjittered_ids = points.to_wkb(hex=True)
+        assert (
+            results["geom_id"].iloc[[0, 2, 3]].tolist()
+            == unjittered_ids.iloc[[0, 2, 3]].tolist()
+        ), "the first copy of the shared point and the polygons with unique points must keep their unjittered IDs"
+        assert (
+            results["geom_id"].iloc[1] != unjittered_ids.iloc[1]
+        ), "the second copy of the shared point must be given a jittered ID"
 
 
 class TestOverlayGdfPhysicalBarriers:
