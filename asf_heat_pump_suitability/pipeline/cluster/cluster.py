@@ -910,7 +910,18 @@ def reassign_gdf_near_anchor_properties(
 def dissolve_gdf_cells_to_clusters(
     cells_gdf: gpd.GeoDataFrame, slug: str
 ) -> gpd.GeoDataFrame:
-    """"""
+    """
+    Dissolve Voronoi cells into clusters: cells which are touching and share the same technology type (and
+    `communal_origin` where tech type is `communal_solutions`) are dissolved into one cluster. Clusters are assigned a
+    unique `cluster_id`.
+
+    Args:
+        cells_gdf (gpd.GeoDataFrame): Voronoi cells of buildings with/out clipping to overlaid barriers
+        slug (str): local authority slug
+
+    Returns:
+        gpd.GeoDataFrame: one row (and geometry) per cluster
+    """
     # Get a representative point for each Voronoi cell and pair it to the persistent building ID
     cell_points_gdf = gpd.GeoDataFrame(
         cells_gdf[["persistent_building_id"]],
@@ -948,7 +959,7 @@ def dissolve_gdf_cells_to_clusters(
         + slug
     )
 
-    return clusters_gdf
+    return clusters_gdf.drop(columns=["persistent_building_id"])
 
 
 def map_df_uprns_to_clusters(
