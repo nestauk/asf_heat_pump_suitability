@@ -217,6 +217,15 @@ def generate_gdf_clusters(
 
 
 def concat_str_unique_hash(hex_points: list) -> str:
+    """
+    Concatenate list of hexadecimal strings into a single string to convert to an MD5 hash.
+
+    Args:
+        hex_points (list): list of hexadecimal strings
+
+    Returns:
+        str: MD5 hash of concatenated hexadecimal strings
+    """
     s = "".join(hex_points)
     hash_object = hashlib.md5(s.encode())
     return hash_object.hexdigest()[-12:]
@@ -437,6 +446,36 @@ def _jitter_arr_duplicate_coords(coords_arr: np.ndarray) -> np.ndarray:
             "voronoi_polygons(ordered=True) needs unique seeds."
         )
     return jittered_arr
+
+
+def assign_gdf_unique_geom_id(gdf: gpd.GeoDataFrame, id_col: str) -> gpd.GeoDataFrame:
+    """
+    Assign unique hexadecimal string ID to each geometry in a GeoDataFrame derived from a representative point within
+    each geometry. Geometries in the GeoDataFrame should not significantly overlap.
+
+    Args:
+        gdf (gpd.GeoDataFrame): polygons to generate persistent IDs for
+        id_col (str): name of new ID column to assign to `gdf`
+
+    Returns:
+        gpd.GeoDataFrame: original `gdf` with new `id_col` containing persistent hash IDs derived from geometries
+    """
+    representative_points = gdf.representative_point()
+
+    if representative_points.duplicated().sum() > 0:
+        # Extract a flat (N, 2) float64 array of all point coordinates
+        coords = shapely.get_coordinates(np.array(representative_points))
+
+        # Add jitter to remove duplicate representative points
+        coords = _jitter_arr_duplicate_coords(coords)
+
+        representative_points = gpd.GeoSeries(
+            gpd.points_from_xy(coords[:, 0], coords[:, 1]), crs="EPSG:27700"
+        )
+
+    gdf[id_col] = representative_points.to_wkb(hex=True)
+    assert gdf[id_col].nunique() == len(gdf), "Duplicate IDs generated"
+    return gdf
 
 
 def _clip_gdf_voronoi_cells_polygon_buffer(
@@ -890,7 +929,18 @@ def reassign_gdf_near_anchor_properties(
 def dissolve_gdf_cells_to_clusters(
     cells_gdf: gpd.GeoDataFrame, slug: str
 ) -> gpd.GeoDataFrame:
-    """"""
+    """
+    Dissolve Voronoi cells into clusters: cells which are touching and share the same technology type (and
+    `communal_origin` where tech type is `communal_solutions`) are dissolved into one cluster. Clusters are assigned a
+    unique `cluster_id`.
+
+    Args:
+        cells_gdf (gpd.GeoDataFrame): Voronoi cells of buildings with/out clipping to overlaid barriers
+        slug (str): local authority slug
+
+    Returns:
+        gpd.GeoDataFrame: one row (and geometry) per cluster
+    """
     # Get a representative point for each Voronoi cell and pair it to the persistent building ID
     cell_points_gdf = gpd.GeoDataFrame(
         cells_gdf[["persistent_building_id"]],
@@ -928,7 +978,7 @@ def dissolve_gdf_cells_to_clusters(
         + slug
     )
 
-    return clusters_gdf
+    return clusters_gdf.drop(columns=["persistent_building_id"])
 
 
 def map_df_uprns_to_clusters(

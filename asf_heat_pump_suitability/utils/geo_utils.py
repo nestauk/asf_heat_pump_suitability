@@ -247,8 +247,3 @@ def convert_gdf_to_df(gdf: gpd.GeoDataFrame) -> pl.DataFrame:
     assert gdf.geom_type.unique() == "Point"
     gdf[["X", "Y"]] = gdf.get_coordinates()
     return pl.from_pandas(gdf.drop(columns="geometry"))
-
-
-def assign_gdf_unique_geom_id(gdf: gpd.GeoDataFrame, id_col: str) -> gpd.GeoDataFrame:
-    gdf[id_col] = gdf.representative_point().to_wkb(hex=True)
-    return gdf
