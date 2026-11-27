@@ -147,7 +147,8 @@ def generate_gdf_clusters(
             UserWarning,
         )
 
-    # Tech reassignment for building footprints within a certain distance of anchor properties
+    # Tech reassignment for building footprints within a certain distance of anchor properties.
+    # reassigned_gdf contains all buildings in original tech_gdf
     reassigned_gdf = reassign_gdf_near_anchor_properties(
         tech_gdf=tech_gdf,
         combined_anchor_gdf=combined_anchor_gdf,
@@ -871,34 +872,38 @@ def dissolve_gdf_cells_to_clusters(
     cells_gdf: gpd.GeoDataFrame, slug: str
 ) -> gpd.GeoDataFrame:
     """"""
-    # Create cluster geometries. Dissolving on (assigned_tech, communal_origin) keeps
-    # communal clusters with different origins separate; dropna=False retains the
-    # non-communal cells, whose communal_origin is null.
-    clusters_gdf = (
-        cells_gdf.dissolve(by=["assigned_tech", "communal_origin"], dropna=False)
-        .explode()
-        .reset_index()[["assigned_tech", "communal_origin", "geometry"]]
-    )
-
-    # Collect the persistent building IDs inside each cluster and generate unique persistent hash for each cluster
+    # Get a representative point for each Voronoi cell and pair it to the persistent building ID
     cell_points_gdf = gpd.GeoDataFrame(
         cells_gdf[["persistent_building_id"]],
         geometry=cells_gdf.representative_point(),
         crs=cells_gdf.crs,
     )
 
+    # Create cluster geometries. Dissolving on (assigned_tech, communal_origin) keeps communal clusters with different
+    # origins separate; dropna=False retains the non-communal cells, whose communal_origin is null.
+    clusters_gdf = (
+        cells_gdf.dissolve(by=["assigned_tech", "communal_origin"], dropna=False)
+        .explode()
+        .reset_index()[["assigned_tech", "communal_origin", "geometry"]]
+        # Set index as initial cluster ID
+        .rename_axis("cluster")
+    )
+
+    # Get the persistent building IDs inside each cluster in a sorted list
     clusters_gdf["persistent_building_id"] = (
         clusters_gdf[["geometry"]]
         .sjoin(cell_points_gdf, how="left", predicate="contains")
-        .groupby(level=0)["persistent_building_id"]
-        # Sort so the hash does not change because of different row orders on different runs
+        .groupby("cluster")["persistent_building_id"]
+        # Sort the IDs so the final hash does not change because of different row orders on different runs
         .agg(sorted)
     )
 
-    # Create an ID for each geometry that starts with the tech code; then a unique hash; then the local authority slug
+    # Create an ID for each cluster that starts with the tech code; then a unique hash; then the local authority slug
     clusters_gdf["cluster_id"] = (
         clusters_gdf["assigned_tech"].map(TECH_CODES)
         + "_"
+        # Generate a unique persistent hash for each cluster - this will only change if the buildings (and / or their
+        # geometries) inside the cluster change
         + clusters_gdf["persistent_building_id"].apply(concat_str_unique_hash)
         + "_"
         + slug
