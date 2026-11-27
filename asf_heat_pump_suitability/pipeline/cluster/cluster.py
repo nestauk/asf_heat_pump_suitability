@@ -106,46 +106,17 @@ def generate_gdf_clusters(
              -`f"within_{radius}m_from_anchor_load"` flag flagging whether the cluster is within a certain radius from an anchor load
              -`reassigning_anchor_load_ids` listing the anchors that caused buildings in the cluster to be reassigned 'communal', nearest first, where it applies; null for clusters with none.
     """
-    gdfs = []
-
     buildings_gdf = assign_gdf_unique_geom_id(
         gdf=buildings_gdf, id_col="persistent_building_id"
     )
 
-    # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
-    for boundary in boundary_gdf["geometry"].unique():
-        # This will retain buildings which straddle an LA boundary.
-        # The result is that these buildings can appear in one cluster in one LA, and a different cluster in a
-        # neighbouring LA, as clustering occurs at LA-level.
-        bounded_tech_gdf = tech_gdf[tech_gdf.intersects(boundary)]
-        voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
-
-        # One cell per building
-        cells_gdf = overlay_gdf_physical_barriers(
-            voronoi_gdf=voronoi_gdf,
-            tech_gdf=bounded_tech_gdf,
-            polygon_overlay_gdf=polygon_overlay_gdf,
-            id_col=id_col,
-        )
-        # TODO No reassignment based on neighbouring cells - TBC if wanted by user testing
-        # gdfs.append(reassign_gdf_communal_networked(cells_gdf))
-        gdfs.append(cells_gdf)
-
-    # Concatenate all boundary geodataframes together to get a geodataframe of all cells for the whole area of interest
-    if len(gdfs) > 1:
-        cells_gdf = pd.concat(gdfs)
-    else:
-        cells_gdf = gdfs[0]
-
-    # TODO move to proper testing when sample test set available
-    if len(cells_gdf) != len(tech_gdf):
-        n_cells = len(cells_gdf)
-        n_buildings = len(tech_gdf)
-        warnings.warn(
-            f"The number of cells and the number of buildings are different when they should be the same. "
-            f"There is a problem with the clustering. N cells: {n_cells}; N buildings: {n_buildings}",
-            UserWarning,
-        )
+    cells_gdf = generate_gdf_clipped_voronoi_cells(
+        buildings_gdf=buildings_gdf,
+        boundary_gdf=boundary_gdf,
+        tech_gdf=tech_gdf,
+        polygon_overlay_gdf=polygon_overlay_gdf,
+        id_col=id_col,
+    )
 
     # Tech reassignment for building footprints within a certain distance of anchor properties.
     # reassigned_gdf contains all buildings in original tech_gdf
@@ -163,62 +134,14 @@ def generate_gdf_clusters(
         reassigned_lookup["communal_origin"]
     )
 
+    # Cluster cells based on tech type (and `communal_origin` for `communal_solutions`)
     clusters_gdf = dissolve_gdf_cells_to_clusters(
         cells_gdf=cells_gdf, slug=local_authorities_slug
     )
 
-    # Join boolean flag and reassigning anchor IDs for each building contained in the cluster back to the cluster to aggregate.
-    # After this join, clusters_gdf has one row per building, not per cluster: each cluster's row repeats once for every
-    # building it contains. The groupby below collapses it back to one row per cluster.
-    clusters_gdf = clusters_gdf.sjoin(
-        reassigned_gdf[
-            [
-                f"within_{radius}m_from_anchor_load",
-                "reassigning_anchor_load_ids",
-                "reassigning_anchor_load_distances",
-                "geometry",
-            ]
-        ],
-        how="left",
-        predicate="contains",
-    ).drop(columns="index_right")
-
-    # Unique IDs of the anchors that caused a building in the cluster to be reassigned, nearest first: each anchor is
-    # placed by its distance to the nearest building it reassigned in the cluster, ties in ID order. Null when none did.
-    reassigning_anchor_load_ids = (
-        clusters_gdf.dropna(subset="reassigning_anchor_load_ids")[
-            [
-                "cluster_id",
-                "reassigning_anchor_load_ids",
-                "reassigning_anchor_load_distances",
-            ]
-        ]
-        .explode(["reassigning_anchor_load_ids", "reassigning_anchor_load_distances"])
-        .sort_values(
-            ["reassigning_anchor_load_distances", "reassigning_anchor_load_ids"]
-        )
-        .drop_duplicates(["cluster_id", "reassigning_anchor_load_ids"])
-        .groupby("cluster_id")["reassigning_anchor_load_ids"]
-        .agg(list)
-    )
-
-    # At this point we have multiple rows of each cluster geometry with one row for every building within the cluster.
-    # We need to flatten the cluster geometries to one row per cluster, aggregating the within_anchor_radius boolean flag.
-    # Selecting `max` of the boolean will mean any clusters containing one building within the anchor radius will be labelled as within the radius.
-    # clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max").reset_index()
-    clusters_gdf = (
-        clusters_gdf.groupby(by="cluster_id")
-        .agg(
-            {
-                "geometry": "first",
-                "assigned_tech": "first",
-                "communal_origin": "first",
-                f"within_{radius}m_from_anchor_load": "max",
-            }
-        )
-        .join(reassigning_anchor_load_ids)
-        .reset_index()
-        .set_geometry(col="geometry", crs=clusters_gdf.crs)
+    # Join list of anchor load IDs within radius to clusters reassigned `communal_solutions` due to anchor proximity
+    clusters_gdf = assign_gdf_anchor_ids_to_reassigned_clusters(
+        clusters_gdf=clusters_gdf, reassigned_gdf=reassigned_gdf, radius=radius
     )
 
     # TODO move to testing when sample set available
@@ -277,6 +200,65 @@ def sjoin_gdf_buildings_to_clusters(
     # Reduce the size of the building footprints slightly so they can be completely contained within the cluster cells
     buffered_buildings_gdf["geometry"] = buffered_buildings_gdf["geometry"].buffer(-0.1)
     return buffered_buildings_gdf.sjoin(clusters_gdf, how="left", predicate="within")
+
+
+def generate_gdf_clipped_voronoi_cells(
+    buildings_gdf: gpd.GeoDataFrame,
+    boundary_gdf: gpd.GeoDataFrame,
+    tech_gdf: gpd.GeoDataFrame,
+    polygon_overlay_gdf: gpd.GeoDataFrame,
+    id_col: str,
+) -> gpd.GeoDataFrame:
+    """
+    Clip Voronoi cells of domestic building footprints to overlaid barrier polygons.
+
+    Args:
+        buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
+        boundary_gdf (gpd.GeoDataFrame): boundaries of Local Authorities to generate clusters for.
+        tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
+        polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
+        id_col (str): building ID column. Default "ID".
+
+    Returns:
+        gpd.GeoDataFrame: Voronoi cells of domestic building footprints clipped to overlaid barrier polygons.
+    """
+    gdfs = []
+    # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
+    for boundary in boundary_gdf["geometry"].unique():
+        # This will retain buildings which straddle an LA boundary.
+        # The result is that these buildings can appear in one cluster in one LA, and a different cluster in a
+        # neighbouring LA, as clustering occurs at LA-level.
+        bounded_tech_gdf = tech_gdf[tech_gdf.intersects(boundary)]
+        voronoi_gdf = extend_edges_gdf(gdf=buildings_gdf, boundary=boundary)
+
+        # One cell per building
+        cells_gdf = overlay_gdf_physical_barriers(
+            voronoi_gdf=voronoi_gdf,
+            tech_gdf=bounded_tech_gdf,
+            polygon_overlay_gdf=polygon_overlay_gdf,
+            id_col=id_col,
+        )
+        # TODO No reassignment based on neighbouring cells - TBC if wanted by user testing
+        # gdfs.append(reassign_gdf_communal_networked(cells_gdf))
+        gdfs.append(cells_gdf)
+
+    # Concatenate all boundary geodataframes together to get a geodataframe of all cells for the whole area of interest
+    if len(gdfs) > 1:
+        cells_gdf = pd.concat(gdfs)
+    else:
+        cells_gdf = gdfs[0]
+
+    # TODO move to proper testing when sample test set available
+    if len(cells_gdf) != len(tech_gdf):
+        n_cells = len(cells_gdf)
+        n_buildings = len(tech_gdf)
+        warnings.warn(
+            f"The number of cells and the number of buildings are different when they should be the same. "
+            f"There is a problem with the clustering. N cells: {n_cells}; N buildings: {n_buildings}",
+            UserWarning,
+        )
+
+    return cells_gdf
 
 
 def extend_edges_gdf(
@@ -840,15 +822,16 @@ def reassign_gdf_near_anchor_properties(
     radius: float,
 ) -> gpd.GeoDataFrame:
     """
-    Reassign building tech type to communal if within a given radius of an anchor load property, if assigned N-GSHP by the decision tree.
-    Buildings getting their technology reassigned due to anchor-proximity get `communal_origin` updated to reflect that,
-    and `reassigning_anchor_load_ids`: the IDs of every anchor load within the radius, nearest first, since each one alone would
-    cause the reassignment. Buildings already communal keep their original value of `communal_origin`.
+    Reassign building tech type to communal if within a given radius of an anchor load property if assigned N-GSHP by the decision tree.
+    Buildings whose technology is reassigned due to anchor-proximity get `communal_origin` updated to `anchor_proximity`.
+    These buildings also get assigned `reassigning_anchor_load_ids`: the IDs of every anchor load within the radius, nearest first.
 
     Args:
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types and `communal_origin`.
-        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_load_id`
-        radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' if they were assigned N-GSHP by the decision tree.
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data
+        with building footprints and `anchor_load_id`
+        radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of
+        'communal solutions' if they were assigned N-GSHP by the decision tree.
 
     Returns:
         gpd.GeoDataFrame: one row per building, with `assigned_tech` now reading communal if the building is in
@@ -896,7 +879,7 @@ def reassign_gdf_near_anchor_properties(
         COMMUNAL_ORIGIN["anchor_proximity"],
         tech_gdf["communal_origin"],
     )
-    # Only reassigned buildings keep the anchors' identifiers, with the distance to each one.
+    # Only reassigned buildings keep the anchors' identifiers with the distance to each one.
     # generate_gdf_clusters uses the distances to put each cluster's anchor IDs nearest first,
     # then drops them: the distances are not in the saved outputs.
     tech_gdf = tech_gdf.join(
@@ -905,6 +888,80 @@ def reassign_gdf_near_anchor_properties(
     # add column with True if near anchor, False if not
     tech_gdf[f"within_{radius}m_from_anchor_load"] = near_anchor
     return tech_gdf
+
+
+def assign_gdf_anchor_ids_to_reassigned_clusters(
+    clusters_gdf: gpd.GeoDataFrame, reassigned_gdf: gpd.GeoDataFrame, radius: float
+) -> gpd.GeoDataFrame:
+    """
+    Assign anchor load IDs to clusters which were reassigned to communal solutions due to anchor load proximity, in
+    `reassigning_anchor_load_ids` column. Anchor load IDs appear in order from closest to furthest from cluster within
+    the radius.
+
+    Args:
+        clusters_gdf (gpd.GeoDataFrame): clusters with geometries
+        reassigned_gdf (gpd.GeoDataFrame): building footprints with [`within_{radius}m_from_anchor_load`, `reassigning_anchor_load_ids`, `reassigning_anchor_load_distances`] columns
+        radius (float): radius in metres around anchor property within which communal solutions should be assigned
+
+    Returns:
+        gpd.GeoDataFrame: cluster geometries with `reassigning_anchor_load_ids` containing list of anchor load IDs within radius for clusters
+        which were reassigned `communal_solutions` tech type due to anchor proximity
+    """
+    # Join boolean flag and reassigning anchor IDs for each building contained in the cluster back to the cluster
+    # to aggregate. This will result in one row per building.
+    clusters_gdf = clusters_gdf.sjoin(
+        reassigned_gdf[
+            [
+                f"within_{radius}m_from_anchor_load",
+                "reassigning_anchor_load_ids",
+                "reassigning_anchor_load_distances",
+                "geometry",
+            ]
+        ],
+        how="left",
+        predicate="contains",
+    ).drop(columns="index_right")
+
+    # Get unique IDs of the anchors for each cluster, with cluster_id as index
+    reassigning_anchor_load_ids = (
+        # Drop buildings (and therefore clusters) with no anchor-proximity reassignment
+        clusters_gdf.dropna(subset="reassigning_anchor_load_ids")[
+            [
+                "cluster_id",
+                "reassigning_anchor_load_ids",
+                "reassigning_anchor_load_distances",
+            ]
+        ]
+        # One row per (anchor, building) pair - the same anchor can appear multiple times
+        .explode(["reassigning_anchor_load_ids", "reassigning_anchor_load_distances"])
+        # Sort from closest to furthest pair, then by ID for ties
+        .sort_values(
+            ["reassigning_anchor_load_distances", "reassigning_anchor_load_ids"]
+        )
+        # Drop duplicate anchor loads per cluster (keeping the closest one)
+        .drop_duplicates(["cluster_id", "reassigning_anchor_load_ids"])
+        # Get a list of anchor load IDs for each cluster in order of distance from the cluster
+        .groupby("cluster_id")["reassigning_anchor_load_ids"].agg(list)
+    )
+
+    # Group by cluster_id to get one row per cluster again.
+    # Join the list of anchor properties to each cluster, where relevant.
+    clusters_gdf = (
+        clusters_gdf.groupby(by="cluster_id")
+        .agg(
+            {
+                "geometry": "first",
+                "assigned_tech": "first",
+                "communal_origin": "first",
+                f"within_{radius}m_from_anchor_load": "max",
+            }
+        )
+        .join(reassigning_anchor_load_ids)
+        .reset_index()
+        .set_geometry(col="geometry", crs=clusters_gdf.crs)
+    )
+
+    return clusters_gdf
 
 
 def dissolve_gdf_cells_to_clusters(
