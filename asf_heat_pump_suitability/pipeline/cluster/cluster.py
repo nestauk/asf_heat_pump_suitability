@@ -108,7 +108,7 @@ def generate_gdf_clusters(
     """
     gdfs = []
 
-    buildings_gdf = geo_utils.assign_gdf_unique_geom_id(
+    buildings_gdf = assign_gdf_unique_geom_id(
         gdf=buildings_gdf, id_col="persistent_building_id"
     )
 
