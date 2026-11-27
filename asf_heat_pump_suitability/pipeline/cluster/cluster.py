@@ -819,15 +819,16 @@ def reassign_gdf_near_anchor_properties(
     radius: float,
 ) -> gpd.GeoDataFrame:
     """
-    Reassign building tech type to communal if within a given radius of an anchor load property, if assigned N-GSHP by the decision tree.
-    Buildings getting their technology reassigned due to anchor-proximity get `communal_origin` updated to reflect that,
-    and `reassigning_anchor_load_ids`: the IDs of every anchor load within the radius, nearest first, since each one alone would
-    cause the reassignment. Buildings already communal keep their original value of `communal_origin`.
+    Reassign building tech type to communal if within a given radius of an anchor load property if assigned N-GSHP by the decision tree.
+    Buildings whose technology is reassigned due to anchor-proximity get `communal_origin` updated to `anchor_proximity`.
+    These buildings also get assigned `reassigning_anchor_load_ids`: the IDs of every anchor load within the radius, nearest first.
 
     Args:
         tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types and `communal_origin`.
-        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data, with building footprints and `anchor_load_id`
-        radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of 'communal solutions' if they were assigned N-GSHP by the decision tree.
+        combined_anchor_gdf (gpd.GeoDataFrame): combined anchor property lists from important buildings and POI data
+        with building footprints and `anchor_load_id`
+        radius (float): distance in metres around an anchor, within which buildings will be assigned tech type of
+        'communal solutions' if they were assigned N-GSHP by the decision tree.
 
     Returns:
         gpd.GeoDataFrame: one row per building, with `assigned_tech` now reading communal if the building is in
@@ -875,7 +876,7 @@ def reassign_gdf_near_anchor_properties(
         COMMUNAL_ORIGIN["anchor_proximity"],
         tech_gdf["communal_origin"],
     )
-    # Only reassigned buildings keep the anchors' identifiers, with the distance to each one.
+    # Only reassigned buildings keep the anchors' identifiers with the distance to each one.
     # generate_gdf_clusters uses the distances to put each cluster's anchor IDs nearest first,
     # then drops them: the distances are not in the saved outputs.
     tech_gdf = tech_gdf.join(
