@@ -246,6 +246,15 @@ def generate_gdf_clusters(
 
 
 def concat_str_unique_hash(hex_points: list) -> str:
+    """
+    Concatenate list of hexadecimal strings into a single string to convert to an MD5 hash.
+
+    Args:
+        hex_points (list): list of hexadecimal strings
+
+    Returns:
+        str: MD5 hash of concatenated hexadecimal strings
+    """
     s = "".join(hex_points)
     hash_object = hashlib.md5(s.encode())
     return hash_object.hexdigest()[-12:]
@@ -419,6 +428,36 @@ def _jitter_arr_duplicate_coords(coords_arr: np.ndarray) -> np.ndarray:
             "voronoi_polygons(ordered=True) needs unique seeds."
         )
     return jittered_arr
+
+
+def assign_gdf_unique_geom_id(gdf: gpd.GeoDataFrame, id_col: str) -> gpd.GeoDataFrame:
+    """
+    Assign unique hexadecimal string ID to each geometry in a GeoDataFrame derived from a representative point within
+    each geometry. Geometries in the GeoDataFrame should not significantly overlap.
+
+    Args:
+        gdf (gpd.GeoDataFrame): polygons to generate persistent IDs for
+        id_col (str): name of new ID column to assign to `gdf`
+
+    Returns:
+        gpd.GeoDataFrame: original `gdf` with new `id_col` containing persistent hash IDs derived from geometries
+    """
+    representative_points = gdf.representative_point()
+
+    if representative_points.duplicated().sum() > 0:
+        # Extract a flat (N, 2) float64 array of all point coordinates
+        coords = shapely.get_coordinates(np.array(representative_points))
+
+        # Add jitter to remove duplicate representative points
+        coords = _jitter_arr_duplicate_coords(coords)
+
+        representative_points = gpd.GeoSeries(
+            gpd.points_from_xy(coords[:, 0], coords[:, 1]), crs="EPSG:27700"
+        )
+
+    gdf[id_col] = representative_points.to_wkb(hex=True)
+    assert gdf[id_col].nunique() == len(gdf), "Duplicate IDs generated"
+    return gdf
 
 
 def _clip_gdf_voronoi_cells_polygon_buffer(
