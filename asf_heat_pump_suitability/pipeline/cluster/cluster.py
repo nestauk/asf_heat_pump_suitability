@@ -134,13 +134,13 @@ def generate_gdf_clusters(
         reassigned_lookup["communal_origin"]
     )
 
+    # Cluster cells based on tech type (and `communal_origin` for `communal_solutions`)
     clusters_gdf = dissolve_gdf_cells_to_clusters(
         cells_gdf=cells_gdf, slug=local_authorities_slug
     )
 
-    # Join boolean flag and reassigned anchor IDs for each building contained in the cluster back to the cluster to aggregate.
-    # After this join, clusters_gdf has one row per building, not per cluster: each cluster's row repeats once for every
-    # building it contains. The groupby below collapses it back to one row per cluster.
+    # Join boolean flag and reassigning anchor IDs for each building contained in the cluster back to the cluster
+    # to aggregate. This will result in one row per building.
     clusters_gdf = clusters_gdf.sjoin(
         reassigned_gdf[
             [
@@ -154,9 +154,9 @@ def generate_gdf_clusters(
         predicate="contains",
     ).drop(columns="index_right")
 
-    # Unique IDs of the anchors that caused a building in the cluster to be reassigned, nearest first: each anchor is
-    # placed by its distance to the nearest building it reassigned in the cluster, ties in ID order. Null when none did.
+    # Get unique IDs of the anchors for each cluster, with cluster_id as index
     reassigning_anchor_load_ids = (
+        # Drop buildings (and therefore clusters) with no anchor-proximity reassignment
         clusters_gdf.dropna(subset="reassigning_anchor_load_ids")[
             [
                 "cluster_id",
@@ -164,19 +164,20 @@ def generate_gdf_clusters(
                 "reassigning_anchor_load_distances",
             ]
         ]
+        # One row per (anchor, building) pair - the same anchor can appear multiple times
         .explode(["reassigning_anchor_load_ids", "reassigning_anchor_load_distances"])
+        # Sort from closest to furthest pair, then by ID for ties
         .sort_values(
             ["reassigning_anchor_load_distances", "reassigning_anchor_load_ids"]
         )
+        # Drop duplicate anchor loads per cluster (keeping the closest one)
         .drop_duplicates(["cluster_id", "reassigning_anchor_load_ids"])
-        .groupby("cluster_id")["reassigning_anchor_load_ids"]
-        .agg(list)
+        # Get a list of anchor load IDs for each cluster in order of distance from the cluster
+        .groupby("cluster_id")["reassigning_anchor_load_ids"].agg(list)
     )
 
-    # At this point we have multiple rows of each cluster geometry with one row for every building within the cluster.
-    # We need to flatten the cluster geometries to one row per cluster, aggregating the within_anchor_radius boolean flag.
-    # Selecting `max` of the boolean will mean any clusters containing one building within the anchor radius will be labelled as within the radius.
-    # clusters_gdf = clusters_gdf.dissolve(by="cluster_id", aggfunc="max").reset_index()
+    # Group by cluster_id to get one row per cluster again.
+    # Join the list of anchor properties to each cluster, where relevant.
     clusters_gdf = (
         clusters_gdf.groupby(by="cluster_id")
         .agg(
