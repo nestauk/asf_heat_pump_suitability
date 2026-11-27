@@ -106,7 +106,7 @@ def generate_gdf_clusters(
              -`f"within_{radius}m_from_anchor_load"` flag flagging whether the cluster is within a certain radius from an anchor load
              -`reassigning_anchor_load_ids` listing the anchors that caused buildings in the cluster to be reassigned 'communal', nearest first, where it applies; null for clusters with none.
     """
-    buildings_gdf = geo_utils.assign_gdf_unique_geom_id(
+    buildings_gdf = assign_gdf_unique_geom_id(
         gdf=buildings_gdf, id_col="persistent_building_id"
     )
 
