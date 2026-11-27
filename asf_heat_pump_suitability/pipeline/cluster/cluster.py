@@ -209,7 +209,19 @@ def generate_gdf_clipped_voronoi_cells(
     polygon_overlay_gdf: gpd.GeoDataFrame,
     id_col: str,
 ) -> gpd.GeoDataFrame:
-    """"""
+    """
+    Clip Voronoi cells of domestic building footprints to overlaid barrier polygons.
+
+    Args:
+        buildings_gdf (gpd.GeoDataFrame): all building footprint polygons for area of interest, including domestic and non-domestic.
+        boundary_gdf (gpd.GeoDataFrame): boundaries of Local Authorities to generate clusters for.
+        tech_gdf (gpd.GeoDataFrame): domestic building footprints with assigned tech types.
+        polygon_overlay_gdf (gpd.GeoDataFrame): physical barriers with (Multi)Polygon geometries to separate clusters by.
+        id_col (str): building ID column. Default "ID".
+
+    Returns:
+        gpd.GeoDataFrame: Voronoi cells of domestic building footprints clipped to overlaid barrier polygons.
+    """
     gdfs = []
     # Create Voronoi polygons and overlay physical barriers for all local authority boundaries
     for boundary in boundary_gdf["geometry"].unique():
